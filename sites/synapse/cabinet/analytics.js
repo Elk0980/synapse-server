@@ -154,6 +154,8 @@ const dataMark = (kind, date) => {
     snapshot: `СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
     mixed: `LIVE + СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
     manual: "РУЧНОЙ ВВОД",
+    "live-manual": "LIVE + РУЧНОЙ ВВОД",
+    "snapshot-manual": `СНИМОК${date ? ` от ${snapshotDate(date)}` : ""} + РУЧНОЙ ВВОД`,
     none: "НЕТ ДАННЫХ"
   };
   return `<span class="data-mark" data-kind="${kind}">${labels[kind]}</span>`;
@@ -297,7 +299,13 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   }).join("");
   const tableRows = platforms.map((platform) => {
     const noExpenses = expensesUnavailable || platform.expenses === null || platform.expenses === undefined;
-    const kind = platform.hasExternal ? "snapshot" : platform.rows.length ? "live" : "none";
+    /* LIVE — только если по площадке реально пришли визиты, клики или заявки CRM. Строка, где есть
+       лишь расход, введённый вручную, получает «РУЧНОЙ ВВОД» (spec 111). */
+    const received = platform.rows.some((row) => [row.leads, row.visits, row.clicks, row.sales, row.revenue]
+      .some((value) => Number(value) > 0));
+    const manual = !noExpenses;
+    const base = platform.hasExternal ? "snapshot" : received ? "live" : "none";
+    const kind = !manual ? base : base === "none" ? "manual" : `${base}-manual`;
     const clickTargets = platform.rows.flatMap((row) => Object.entries(row.clicksByTarget || {}))
       .map(([target, count]) => `${target}: ${count}`).join(" · ");
     return `<tr><td>${escapeHTML(platform.platform.label)}</td><td>${formatMetric(platform.pageViews)}</td>

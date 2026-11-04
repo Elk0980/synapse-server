@@ -114,3 +114,17 @@ test('расход из формы уходит в выбранную компа
     assert.equal(post.options.body.amount,450);
   }finally{f.close();}
 });
+
+test('строка только с ручным расходом помечена «РУЧНОЙ ВВОД», а не LIVE',async()=>{
+  const f=fixture({dashboard:{expensesScope:'company',summary:{expenses:1500,revenue:3000,romi:100},
+    sourceStats:[row('yandex-direct',{expenses:1000,romi:-100}),
+      row('vk',{leads:1,sales:1,revenue:3000,expenses:500,romi:500}),row('2gis',{leads:2})]}});
+  try{
+    await f.render();
+    const mark=label=>f.platformRow(label).cells[9].textContent.trim();
+    assert.equal(mark('Поисковая реклама'),'РУЧНОЙ ВВОД','только расход — не LIVE');
+    assert.equal(mark('ВКонтакте'),'LIVE + РУЧНОЙ ВВОД');
+    assert.equal(mark('2ГИС'),'LIVE');
+    assert.equal(mark('TikTok'),'НЕТ ДАННЫХ');
+  }finally{f.close();}
+});
