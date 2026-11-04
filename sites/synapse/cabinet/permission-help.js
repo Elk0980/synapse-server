@@ -7,6 +7,7 @@ const describe=code=>catalog[code]||{code,group:'Другие права',label:
 function ensureStyle(){
  if(document.getElementById('permission-help-style'))return;
  const style=document.createElement('style');style.id='permission-help-style';style.textContent=`
+ .account-access-list:has(>.permission-group){max-height:none;overflow:visible}
  .permission-group{min-width:0;margin:10px 0;padding:10px;border:1px solid #64748b55;border-radius:10px}
  .permission-group legend{font-weight:600}.permission-item{display:flex;flex-wrap:wrap;align-items:start;gap:6px;margin:8px 0;min-width:0;overflow-wrap:anywhere}
  .permission-item label,.permission-name{flex:1;min-width:0;display:flex;align-items:start;gap:8px}.permission-copy{min-width:0}
@@ -31,7 +32,7 @@ function markup(codes,options={}){
  for(const code of codes){const group=describe(code).group;if(!groups.has(group)){const field=document.createElement('fieldset');field.className='permission-group';const legend=document.createElement('legend');legend.textContent=group;field.append(legend);groups.set(group,field);root.append(field);}groups.get(group).append(row(code,options));}
  return root.innerHTML;
 }
-function show(button,open){const help=document.getElementById(button.getAttribute('aria-describedby'));if(help){help.hidden=!open;button.setAttribute('aria-expanded',String(open));}}
+function show(button,open){const help=document.getElementById(button.getAttribute('aria-describedby'));if(help){help.hidden=!open;button.setAttribute('aria-expanded',String(open));if(open)help.scrollIntoView?.({block:'nearest'});}}
 const pin=button=>{const open=button.dataset.pinned!=='true';button.dataset.pinned=String(open);show(button,open);};
 const buttonOf=event=>event.target.closest?.('.permission-help-button');
 document.addEventListener('click',event=>{const button=buttonOf(event);if(button)pin(button);});
