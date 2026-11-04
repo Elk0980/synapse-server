@@ -228,7 +228,7 @@ const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authSto
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
 // Контент → Съёмка: дубли частями с продолжением; монтажёр работает по сессии кабинета. Лимиты — приватный файл тома (нет — по умолчанию).
-const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,
+const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,providers:hughProviders,
   config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});

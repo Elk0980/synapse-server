@@ -49,3 +49,37 @@
   открывается pdf-lib. Суфлёр 390/1440: без горизонтальной прокрутки, 0 ошибок страницы.
   Снимки вне git: `scratchpad/shots/c-prompter/*`, `scratchpad/shots/c/share.{png,pdf}`.
 - В jsdom canvas нет — кнопки PNG/PDF показывают честный отказ (проверено тестом).
+
+## (г) раскадровка и эскиз — 05.11
+- `node --test ops/content/shooting-sketch.test.js`: 2/2 PASS — вызов `https://api.openai.com/v1/images/generations`
+  (`gpt-image-1`, 1024×1536, quality low) ключом из `runtimeProviders()` (заглушка `sk-SAMPLE`), файл эскиза
+  только своей компании (чужая — 404), лимит 2/сутки на компанию → 429, нет ключа → 503 без запроса,
+  403 «organization must be verified» → «нет права … Нужно от Влада», неофициальный хост не используется.
+  Вместе с `shooting.test.js`, `company-modules-access`, `compose-contract` — 13/13 PASS.
+- `node --test sites/synapse/cabinet/shooting-board.test.cjs`: 2/2 PASS — черновик из сценария (3 кадра,
+  вставка → «крупный план», реквизит в «важное»), сохранение `revision 0` с правкой ракурса, эскиз кадра 1
+  с репликой, пометка «🧪 ТЕСТОВАЯ ВЕРСИЯ» на каждом кадре; без ключа кнопки выключены, причина видна.
+- Playwright 390/1440, вкладка «Раскадровка»: без горизонтальной прокрутки, 0 ошибок. Снимки вне git:
+  `scratchpad/shots/d-board/*`.
+- Реальная генерация в OpenAI НЕ выполнялась (ключ не трогали): право ключа на изображения не проверено.
+
+## (г) доработка и сверка с контрактом А — 05.11, ~01:30 Бангкок
+- `node --test ops/content/shooting-sketch.test.js`: 3/3 PASS — новый тест: ключ из окружения сервера
+  (`HUGH_FALLBACK_OPENAI_*`, вымышленный `sk-ENV-SAMPLE`) не попадает ни в статус, ни в ответ кабинету;
+  3 одновременных нажатия при лимите 2 → 2 запроса в OpenAI, третье 429 `SKETCH_LIMIT`; в описании нет «кафе».
+- `node --test sites/synapse/cabinet/shooting.test.cjs` (jsdom): 5/5 PASS — новый тест: без `csrfToken` загрузка идёт
+  через `ctx.api.raw` (POST/PATCH `shooting/uploads[/9]`, CSRF модуль не подставляет), ошибка 413 → повтор того же файла
+  завершается (раньше блокировался), `onRoute` список ↔ карточка без повторного запроса CRM, без обоих — кнопки выключены.
+- Все тесты «Съёмки»: 20/20 PASS; вместе с `company-modules-access`, `compose-contract`, `hugh-fallback` — 60/60 PASS.
+  `node --check ops/content/server.js` — OK; `tools/spec-kit/gate.py check` — status ok, 48 файлов.
+- Playwright (Chromium), заглушка API: список, карточка и вкладка «Раскадровка» при 390 и 1440 px —
+  scrollWidth = clientWidth (390/390, 1440/1440), ошибок страницы 0; бейдж «🧪 ТЕСТОВАЯ ВЕРСИЯ» на каждом из 7 кадров,
+  без ключа кнопки эскиза выключены. Снимки вне git: `scratchpad/shots/v-final*/`.
+- Суфлёр после правок не менялся; его снимки 390/1440 — из (в).
+
+## Цепочка после правок 503 — 05.11, ~02:20 Бангкок
+- 505/506/512 перестроены поверх нового 503 (конфликты только в specs и одной строке `server.js`).
+- Адаптер `api.raw` приведён к сигнатуре из комментария 481 (`raw(method, path, body, headers)` → Response),
+  тест передаёт Upload-Offset и не подставляет CSRF. Все тесты «Съёмки» 21/21, регрессия 82/82 PASS.
+- Оболочка А на 02:20 ещё не отдаёт `ctx.csrfToken`/`api.raw` (ветка claude/night98-a-shell, T7 открыта):
+  в живом составе кнопки загрузки пока выключены с причиной; включение проверено только в jsdom.
