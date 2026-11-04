@@ -33,13 +33,11 @@
 - `POST /content/shooting/reels/:ideaId/sketch` `{frame}` — эскиз (PR г).
 
 Монтажёр (`Authorization: Bearer <ключ>`, без cookie и CSRF, `?companyCode=`):
-- `GET /content/shooting/editor/reels/:ideaId/takes` — дубли (stored).
-- `GET /content/shooting/editor/files/:id` — поток дубля (Range).
-- `POST /content/shooting/editor/uploads` `{ideaId, name, size, mime, fingerprint}` — только
-  `kind=draft`; `PATCH /content/shooting/editor/uploads/:id` — те же куски.
-- `PUT /content/shooting/editor/reels/:ideaId/status` `{status:'editing'|'draft'}`.
-Конфиг: `/data/shooting.json` `{editors:[{name, keySha256, companies:[…]}], companyQuotaBytes,
-minFreeBytes, minFreePercent, sketchDailyLimit}`; нет файла — API монтажёра выключен.
+Монтажёр отдельного API не имеет: Claude-агент монтажа работает через сессию кабинета пользователя с
+`autoposting.edit` своей компании — `GET /reels/:ideaId`, `GET /files/:id`, `POST /uploads {kind:'draft'}`,
+`PUT /reels/:ideaId/status {status:'editing'|'draft'}`.
+Конфиг (необязательный, без ключей): `/data/shooting.json` `{companyQuotaBytes, minFreeBytes, minFreePercent,
+sketchDailyLimit, uploadTtlHours (24), maxOpenUploads (12)}`; нет файла — значения по умолчанию.
 
 ## Проверки
 `node --test ops/content/shooting*.test.js`, jsdom `sites/synapse/cabinet/shooting*.test.cjs`,

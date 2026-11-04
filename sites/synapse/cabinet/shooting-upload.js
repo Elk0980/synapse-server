@@ -23,7 +23,7 @@
     return body;
   }
 
-  /* base — '/content/shooting' или '/content/shooting/editor'; headers — CSRF или ключ монтажёра. */
+  /* base — '/content/shooting'; headers — CSRF сессии кабинета (монтажёр работает по той же сессии). */
   async function upload({file, ideaId, frame = null, kind = 'take', companyCode, headers = {}, base = '/content/shooting',
     onProgress = () => {}, signal, fetchImpl = globalThis.fetch.bind(globalThis), retries = 8, backoffMs = 1000}) {
     const query = `companyCode=${encodeURIComponent(companyCode)}`;

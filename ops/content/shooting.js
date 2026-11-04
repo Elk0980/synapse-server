@@ -18,27 +18,26 @@ const BY_EXT = Object.freeze({'.mov': 'video/quicktime', '.qt': 'video/quicktime
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png'});
 const STATUSES = ['approved', 'shot', 'editing', 'draft'];
 const BOARD_FIELDS = ['shot', 'angle', 'transition', 'notes'];
-const DEFAULTS = Object.freeze({companyQuotaBytes: 40 * GiB, minFreeBytes: 5 * GiB, minFreePercent: 15, sketchDailyLimit: 20});
+const DEFAULTS = Object.freeze({companyQuotaBytes: 40 * GiB, minFreeBytes: 5 * GiB, minFreePercent: 15, sketchDailyLimit: 20,
+  uploadTtlHours: 24, maxOpenUploads: 12});
+const SWEEP_MS = 10 * 60 * 1000;
 
 const fail = (status, message, extra) => { throw Object.assign(new Error(message), {status}, extra ? {details: extra} : {}); };
 const text = (value, max) => String(value ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').trim().slice(0, max);
 const gb = (bytes) => (Math.max(0, bytes) / GiB).toFixed(1).replace('.', ',') + ' ГБ';
 const company = (code) => { if (!Object.hasOwn(COMPANIES, code || '')) fail(404, 'Компания не найдена'); return code; };
 const ideaId = (value) => { if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(String(value ?? ''))) fail(400, 'Некорректный рилс'); return String(value); };
-const sha = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
 function readShootingConfig(file) {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const editors = (Array.isArray(raw.editors) ? raw.editors : []).filter((item) => item && /^[a-f0-9]{64}$/.test(item.keySha256)
-      && Array.isArray(item.companies)).map((item) => ({name: text(item.name || 'Монтажёр', 80), keySha256: item.keySha256,
-      companies: item.companies.filter((code) => Object.hasOwn(COMPANIES, code))}));
-    const number = (key) => Number.isSafeInteger(raw[key]) && raw[key] >= 0 ? raw[key] : DEFAULTS[key];
-    return {editors, companyQuotaBytes: number('companyQuotaBytes'), minFreeBytes: number('minFreeBytes'),
-      minFreePercent: Math.min(90, number('minFreePercent')), sketchDailyLimit: number('sketchDailyLimit')};
+    const number = (key, min = 0) => Number.isSafeInteger(raw[key]) && raw[key] >= min ? raw[key] : DEFAULTS[key];
+    return {companyQuotaBytes: number('companyQuotaBytes'), minFreeBytes: number('minFreeBytes'),
+      minFreePercent: Math.min(90, number('minFreePercent')), sketchDailyLimit: number('sketchDailyLimit'),
+      uploadTtlHours: Math.min(168, number('uploadTtlHours', 1)), maxOpenUploads: Math.min(100, number('maxOpenUploads', 1))};
   } catch {
-    // Нет файла или он повреждён: API монтажёра выключен, лимиты по умолчанию.
-    return {...DEFAULTS, editors: []};
+    // Нет файла или он повреждён: лимиты по умолчанию. Ключей в файле нет.
+    return {...DEFAULTS};
   }
 }
 
@@ -53,12 +52,13 @@ function signatureOk(mime, head) {
 }
 
 function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, readJson, sendJson,
-  config = {...DEFAULTS, editors: []}, storage = createLocalStorage(path.join(assetsDir, 'shooting')), now = () => new Date(), providers = null, fetchImpl}) {
+  config = {...DEFAULTS}, storage = createLocalStorage(path.join(assetsDir, 'shooting')), now = () => new Date(), providers = null, fetchImpl}) {
   db.exec(`CREATE TABLE IF NOT EXISTS shooting_uploads(
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_code TEXT NOT NULL, idea_id TEXT NOT NULL, frame INTEGER,
       kind TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, disk_key TEXT NOT NULL UNIQUE,
       fingerprint TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, sha256 TEXT, created_by TEXT NOT NULL,
-      created_at TEXT NOT NULL, completed_at TEXT);
+      created_at TEXT NOT NULL, completed_at TEXT, touched_at TEXT);
+    CREATE INDEX IF NOT EXISTS shooting_uploads_open ON shooting_uploads(status, company_code);
     CREATE INDEX IF NOT EXISTS shooting_uploads_idea ON shooting_uploads(company_code, idea_id, id);
     CREATE TABLE IF NOT EXISTS shooting_reels(
       company_code TEXT NOT NULL, idea_id TEXT NOT NULL, status TEXT, board TEXT NOT NULL DEFAULT '[]',
@@ -66,6 +66,23 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
   const busy = new Set();
   const sketches = createSketches({db, storage, providers, fetchImpl, dailyLimit: config.sketchDailyLimit ?? DEFAULTS.sketchDailyLimit, now});
   const iso = () => now().toISOString();
+  const limits = {...DEFAULTS, ...config};
+  let sweptAt = 0;
+  /* Брошенные загрузки: без нового куска дольше срока — недокачанный файл удаляется, сессия
+     помечается «истекла» и перестаёт занимать квоту. Повтор того же файла начнёт новую сессию. */
+  function sweep(force = false) {
+    const at = now().getTime();
+    if (!force && at - sweptAt < SWEEP_MS) return 0;
+    sweptAt = at;
+    const edge = new Date(at - limits.uploadTtlHours * 3600000).toISOString();
+    const stale = db.prepare("SELECT * FROM shooting_uploads WHERE status='uploading' AND COALESCE(touched_at, created_at) < ?").all(edge)
+      .filter((item) => !busy.has(item.id));
+    for (const item of stale) {
+      try { storage.remove(item.company_code, item.disk_key); } catch { /* файл уже удалён */ }
+      db.prepare("UPDATE shooting_uploads SET status='expired', completed_at=? WHERE id=? AND status='uploading'").run(iso(), item.id);
+    }
+    return stale.length;
+  }
 
   function cabinet(request, code, edit) {
     company(code);
@@ -77,17 +94,7 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
       if (!allowed('autoposting.edit')) fail(403, 'Нет права загружать материалы и менять съёмку');
       requireCsrf(request, session);
     }
-    return {kind: 'user', name: text(user.displayName || user.login, 80), canEdit: allowed('autoposting.edit')};
-  }
-  function editor(request, code) {
-    const match = /^Bearer\s+([A-Za-z0-9._~-]{24,200})$/.exec(String(request.headers.authorization || ''));
-    if (!match) fail(401, 'Нужен ключ монтажёра');
-    const digest = Buffer.from(sha(match[1]), 'hex');
-    const found = config.editors.find((item) => crypto.timingSafeEqual(Buffer.from(item.keySha256, 'hex'), digest));
-    if (!found) fail(401, 'Ключ монтажёра не распознан');
-    company(code);
-    if (!found.companies.includes(code)) fail(403, 'Ключ монтажёра не относится к этой компании');
-    return {kind: 'editor', name: found.name, canEdit: false};
+    return {kind: 'user', name: text(user.displayName || user.login, 80), canEdit: allowed('autoposting.edit'), owner: user.role === 'owner'};
   }
 
   const row = (code, id) => {
@@ -95,26 +102,34 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     if (!found) fail(404, 'Материал не найден');
     return found;
   };
-  const view = (item, prefix = '/content/shooting') => ({id: item.id, ideaId: item.idea_id, frame: item.frame, kind: item.kind,
+  const view = (item) => ({id: item.id, ideaId: item.idea_id, frame: item.frame, kind: item.kind,
     name: item.name, mime: item.mime, size: item.size, status: item.status, createdBy: item.created_by,
     createdAt: item.created_at, completedAt: item.completed_at, sha256: item.sha256, chunkBytes: CHUNK,
     offset: item.status === 'uploading' ? storage.size(item.company_code, item.disk_key) : item.status === 'stored' ? item.size : 0,
-    fileUrl: item.status === 'stored' ? `${prefix}/files/${item.id}?companyCode=${encodeURIComponent(item.company_code)}` : null});
+    fileUrl: item.status === 'stored' ? `/content/shooting/files/${item.id}?companyCode=${encodeURIComponent(item.company_code)}` : null});
 
-  /* Место проверяется ДО приёма байтов: квота компании и резерв диска с учётом ещё не
-     докачанных сессий всех компаний. Сервер заполнен примерно на 81 %, поэтому резерв строгий. */
-  function storageInfo(code, extra = 0) {
+  /* Место проверяется ДО приёма байтов и перед каждым куском. Квота компании резервирует заявленный
+     размер своих незавершённых сессий; общий резерв диска считает фактические байты (их уже нет в
+     disk.free) плюс недокачанный остаток только СВОЕЙ компании — чужие брошенные сессии не мешают.
+     Сервер заполнен примерно на 81 %, поэтому резерв строгий. Цифры диска видит только владелец. */
+  const reserveOf = (disk) => Math.max(limits.minFreeBytes, Math.ceil(disk.total * limits.minFreePercent / 100));
+  function storageInfo(code, extra = 0, actor = {owner: false}) {
     const used = db.prepare("SELECT COALESCE(SUM(size),0) n FROM shooting_uploads WHERE company_code=? AND status IN ('stored','uploading')").get(code).n;
-    const pending = db.prepare("SELECT company_code, disk_key, size FROM shooting_uploads WHERE status='uploading'").all()
-      .reduce((sum, item) => sum + Math.max(0, item.size - storage.size(item.company_code, item.disk_key)), 0);
-    const disk = storage.disk();
-    const reserve = Math.max(config.minFreeBytes, Math.ceil(disk.total * config.minFreePercent / 100));
+    const open = db.prepare("SELECT disk_key, size FROM shooting_uploads WHERE company_code=? AND status='uploading'").all(code);
+    const pending = open.reduce((sum, item) => sum + Math.max(0, item.size - storage.size(code, item.disk_key)), 0);
+    const disk = storage.disk(), reserve = reserveOf(disk);
     const freeAfter = disk.free - pending - extra;
-    let reason = '';
-    if (used + extra > config.companyQuotaBytes) reason = `Место для съёмки компании закончилось: занято ${gb(used)} из ${gb(config.companyQuotaBytes)}. Удалите лишние дубли или попросите администратора увеличить квоту. Загрузка не начата.`;
-    else if (freeAfter < reserve) reason = `На сервере мало свободного места: свободно ${gb(disk.free - pending)}, а после загрузки должно остаться не меньше ${gb(reserve)}. Загрузка не начата — сообщите администратору Synapse.`;
-    return {usedBytes: used, quotaBytes: config.companyQuotaBytes, freeBytes: Math.max(0, disk.free - pending), reserveBytes: reserve,
-      maxFileBytes: MAX_FILE, chunkBytes: CHUNK, canUpload: !reason, reason, adapter: storage.kind};
+    let reason = '', refusal = '';
+    if (used + extra > limits.companyQuotaBytes) refusal = 'STORAGE_FULL', reason = `Место для съёмки компании закончилось: занято ${gb(used)} из ${gb(limits.companyQuotaBytes)}. Удалите лишние дубли или попросите администратора увеличить квоту. Загрузка не начата.`;
+    else if (extra && open.length >= limits.maxOpenUploads) refusal = 'TOO_MANY_OPEN', reason = `Открыто ${open.length} незавершённых загрузок компании (предел ${limits.maxOpenUploads}). Докачайте или удалите их; брошенные загрузки удаляются через ${limits.uploadTtlHours} ч.`;
+    else if (freeAfter < reserve) refusal = 'STORAGE_FULL', reason = actor.owner
+      ? `На сервере мало свободного места: свободно ${gb(disk.free - pending)}, а после загрузки должно остаться не меньше ${gb(reserve)}. Загрузка не начата.`
+      : 'На сервере не хватает места для этой загрузки. Загрузка не начата — сообщите владельцу кабинета.';
+    const info = {usedBytes: used, quotaBytes: limits.companyQuotaBytes, openUploads: open.length, maxOpenUploads: limits.maxOpenUploads,
+      uploadTtlHours: limits.uploadTtlHours, maxFileBytes: MAX_FILE, chunkBytes: CHUNK, canUpload: !reason, reason, refusal,
+      server: freeAfter >= reserve ? 'enough' : 'low'};
+    if (actor.owner) Object.assign(info, {freeBytes: Math.max(0, disk.free - pending), reserveBytes: reserve, adapter: storage.kind});
+    return info;
   }
 
   function createUpload(code, body, actor, kinds) {
@@ -136,16 +151,18 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
         AND status='uploading' ORDER BY id DESC LIMIT 1`).get(code, idea, fingerprint, size, kind);
       if (open) return {status: 200, upload: view(open)};
     }
-    const space = storageInfo(code, size);
-    if (!space.canUpload) fail(507, space.reason, {code: 'STORAGE_FULL', storage: space});
+    sweep(true);
+    const space = storageInfo(code, size, actor);
+    if (!space.canUpload) fail(space.refusal === 'TOO_MANY_OPEN' ? 429 : 507, space.reason, {code: space.refusal, storage: space});
     const result = db.prepare(`INSERT INTO shooting_uploads(company_code,idea_id,frame,kind,name,mime,size,disk_key,fingerprint,status,created_by,created_at)
       VALUES(?,?,?,?,?,?,?,?,?,'uploading',?,?)`).run(code, idea, frame, kind, name, mime, size, crypto.randomBytes(16).toString('hex'),
       fingerprint, actor.name, iso());
     return {status: 201, upload: view(db.prepare('SELECT * FROM shooting_uploads WHERE id=?').get(result.lastInsertRowid))};
   }
 
-  async function appendChunk(request, code, id) {
+  async function appendChunk(request, code, id, actor) {
     const item = row(code, id);
+    if (item.status === 'expired') fail(410, `Загрузка не продолжалась дольше ${limits.uploadTtlHours} ч и удалена. Выберите файл заново.`, {code: 'UPLOAD_EXPIRED'});
     if (item.status !== 'uploading') fail(409, 'Загрузка уже завершена', {upload: view(item)});
     if (!/^application\/offset\+octet-stream\b/i.test(String(request.headers['content-type'] || ''))) fail(415, 'Ожидался кусок файла');
     const offset = Number(request.headers['upload-offset']);
@@ -155,7 +172,12 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     const limit = Math.min(MAX_CHUNK, item.size - offset);
     if (Number.isFinite(length) && length > limit) fail(413, 'Кусок больше допустимого');
     if (busy.has(item.id)) fail(409, 'Этот файл уже принимается в другом окне', {upload: view(item)});
+    // Перед каждым куском: после него на диске должен остаться резерв. Иначе пауза без потери принятого.
+    const disk = storage.disk();
+    if (disk.free - limit < reserveOf(disk)) fail(507, actor.owner ? `На сервере осталось ${gb(disk.free)} — ниже резерва ${gb(reserveOf(disk))}. Загрузка на паузе.`
+      : 'На сервере не хватает места. Загрузка на паузе — принятая часть сохранена, сообщите владельцу кабинета.', {code: 'STORAGE_FULL', upload: view(item)});
     busy.add(item.id);
+    db.prepare('UPDATE shooting_uploads SET touched_at=? WHERE id=?').run(iso(), item.id);
     try {
       await storage.append(code, item.disk_key, offset, request, limit);
       if (storage.size(code, item.disk_key) === item.size) {
@@ -240,45 +262,17 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     const reply = (status, body) => { sendJson(response, status, body, {'cache-control': 'no-store'}); return true; };
     const method = request.method;
     let match;
-    if (route.startsWith('/editor/')) {
-      const actor = editor(request, code), rest = route.slice('/editor'.length);
-      if ((match = /^\/reels\/([^/]+)\/takes$/.exec(rest)) && method === 'GET') {
-        const takes = db.prepare("SELECT * FROM shooting_uploads WHERE company_code=? AND idea_id=? AND kind='take' AND status='stored' ORDER BY frame IS NULL, frame, id")
-          .all(code, ideaId(match[1])).map((item) => view(item, '/content/shooting/editor'));
-        return reply(200, {companyCode: code, ideaId: match[1], takes});
-      }
-      if ((match = /^\/files\/(\d+)$/.exec(rest)) && ['GET', 'HEAD'].includes(method)) {
-        const item = row(code, match[1]);
-        if (item.kind !== 'take') fail(404, 'Материал не найден');
-        return sendFile(request, response, item);
-      }
-      if (rest === '/uploads' && method === 'POST') {
-        const result = createUpload(code, await readJson(request), actor, ['draft']);
-        return reply(result.status, {upload: result.upload});
-      }
-      if ((match = /^\/uploads\/(\d+)$/.exec(rest))) {
-        const item = row(code, match[1]);
-        if (item.kind !== 'draft') fail(404, 'Материал не найден');
-        if (method === 'GET') return reply(200, {upload: view(item)});
-        if (method === 'PATCH') return reply(200, {upload: await appendChunk(request, code, match[1])});
-      }
-      if ((match = /^\/reels\/([^/]+)\/status$/.exec(rest)) && method === 'PUT') {
-        const body = await readJson(request);
-        if (!['editing', 'draft'].includes(body.status)) fail(400, 'Монтажёр ставит только editing или draft');
-        return reply(200, {reel: setStatus(code, ideaId(match[1]), body.status, actor)});
-      }
-      fail(404, 'Адрес не найден');
-    }
     const write = !['GET', 'HEAD'].includes(method);
     const actor = cabinet(request, code, write);
+    sweep();
     if (route === '/reels' && method === 'GET') {
       const ids = db.prepare(`SELECT idea_id FROM shooting_uploads WHERE company_code=? AND status='stored'
         UNION SELECT idea_id FROM shooting_reels WHERE company_code=?`).all(code, code).map((item) => item.idea_id);
-      return reply(200, {companyCode: code, canEdit: actor.canEdit, storage: storageInfo(code),
+      return reply(200, {companyCode: code, canEdit: actor.canEdit, storage: storageInfo(code, 0, actor),
         reels: Object.fromEntries(ids.map((id) => [id, summary(code, id)]))});
     }
     if ((match = /^\/reels\/([^/]+)$/.exec(route)) && method === 'GET') {
-      return reply(200, {companyCode: code, canEdit: actor.canEdit, storage: storageInfo(code), ...reelDetail(code, ideaId(match[1]))});
+      return reply(200, {companyCode: code, canEdit: actor.canEdit, storage: storageInfo(code, 0, actor), ...reelDetail(code, ideaId(match[1]))});
     }
     if ((match = /^\/reels\/([^/]+)\/board$/.exec(route)) && method === 'PUT') {
       return reply(200, saveBoard(code, ideaId(match[1]), await readJson(request), actor));
@@ -296,7 +290,7 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     }
     if ((match = /^\/uploads\/(\d+)$/.exec(route))) {
       if (method === 'GET') return reply(200, {upload: view(row(code, match[1]))});
-      if (method === 'PATCH') return reply(200, {upload: await appendChunk(request, code, match[1])});
+      if (method === 'PATCH') return reply(200, {upload: await appendChunk(request, code, match[1], actor)});
       if (method === 'DELETE') {
         const item = row(code, match[1]);
         if (busy.has(item.id)) fail(409, 'Файл сейчас принимается');
@@ -308,7 +302,7 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     if ((match = /^\/files\/(\d+)$/.exec(route)) && ['GET', 'HEAD'].includes(method)) return sendFile(request, response, row(code, match[1]));
     fail(404, 'Адрес не найден');
   }
-  return {handle, storageInfo};
+  return {handle, storageInfo, sweep};
 }
 
 module.exports = {createShooting, readShootingConfig, signatureOk, MAX_FILE, CHUNK, MAX_CHUNK};

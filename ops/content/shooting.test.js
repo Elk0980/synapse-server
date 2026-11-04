@@ -5,7 +5,7 @@ const {DatabaseSync} = require('node:sqlite');
 const {createShooting} = require('./shooting');
 const {createLocalStorage} = require('./shooting-storage');
 
-const GiB = 1024 ** 3, KEY = 'editor-key-SAMPLE-0123456789abcdef';
+const GiB = 1024 ** 3;
 const MOV = (size, fill = 7) => { const b = Buffer.alloc(size, fill); b.writeUInt32BE(20, 0); b.write('ftypqt  ', 4, 'ascii'); return b; };
 const users = {
   1: {id: 1, role: 'owner', login: 'owner', sessionVersion: 1, companyCodes: [], permissions: []},
@@ -14,13 +14,12 @@ const users = {
   4: {id: 4, role: 'editor', login: 'alvi', sessionVersion: 1, companyCodes: ['alvi'], permissions: ['autoposting.view', 'autoposting.edit']},
 };
 
-async function setup(t, {disk = {free: 500 * GiB, total: 1000 * GiB}, config = {}} = {}) {
+async function setup(t, {disk = {free: 500 * GiB, total: 1000 * GiB}, config = {}, clock = {at: Date.parse('2026-11-05T00:00:00Z')}} = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shooting-'));
   const db = new DatabaseSync(':memory:');
   const storage = createLocalStorage(path.join(dir, 'shooting'), {statfs: () => ({bavail: disk.free / 4096, bsize: 4096, blocks: disk.total / 4096})});
-  const service = createShooting({db, assetsDir: dir, storage,
-    config: {companyQuotaBytes: 40 * GiB, minFreeBytes: 5 * GiB, minFreePercent: 15, sketchDailyLimit: 2,
-      editors: [{name: 'Claude монтаж', keySha256: crypto.createHash('sha256').update(KEY).digest('hex'), companies: ['avokado']}], ...config},
+  const service = createShooting({db, assetsDir: dir, storage, now: () => new Date(clock.at),
+    config: {companyQuotaBytes: 40 * GiB, minFreeBytes: 5 * GiB, minFreePercent: 15, sketchDailyLimit: 2, uploadTtlHours: 24, maxOpenUploads: 12, ...config},
     authStore: {getById: (id) => users[id]},
     requireSession: (req) => { const id = Number(req.headers['x-test-user']); if (!users[id]) throw Object.assign(new Error('Вход'), {status: 401}); return {user: {id, sessionVersion: 1}, csrf: 'csrf'}; },
     requireCsrf: (req, session) => { if (req.headers['x-csrf-token'] !== session.csrf) throw Object.assign(new Error('CSRF'), {status: 403}); },
@@ -42,7 +41,7 @@ async function setup(t, {disk = {free: 500 * GiB, total: 1000 * GiB}, config = {
   };
   const chunk = (id, offset, bytes, options = {}) => call('PATCH', `/uploads/${id}`, {...options, raw: bytes,
     headers: {'content-type': 'application/offset+octet-stream', 'upload-offset': String(offset), ...(options.headers || {})}});
-  return {base, call, chunk, db, dir, server};
+  return {base, call, chunk, db, dir, server, disk, clock};
 }
 
 test('загрузка частями продолжается после обрыва куска и после «перезагрузки» страницы', async (t) => {
@@ -94,7 +93,7 @@ test('отказ по месту до приёма байтов: резерв д
   const full = await setup(t, {disk: {free: 16 * GiB, total: 100 * GiB}});
   const refused = await full.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'big.mov', size: 1.8 * GiB | 0}});
   assert.equal(refused.status, 507); assert.equal(refused.body.details.code, 'STORAGE_FULL');
-  assert.match(refused.body.error, /мало свободного места.*Загрузка не начата/);
+  assert.match(refused.body.error, /не хватает места.*Загрузка не начата/);
   assert.equal(full.db.prepare('SELECT COUNT(*) n FROM shooting_uploads').get().n, 0);
   const quota = await setup(t, {config: {companyQuotaBytes: 10000}});
   assert.equal((await quota.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'a.mov', size: 6000}})).status, 201);
@@ -114,27 +113,57 @@ test('подмена содержимого отклоняется; раскад
   assert.equal((await s.call('PUT', '/reels/reel-a/board', {user: 3, body: {revision: 1, frames: []}})).status, 403);
 });
 
-test('API монтажёра: только дубли своей компании на чтение, черновик в ту же карточку', async (t) => {
+test('монтажёр — Claude-агент по сессии с autoposting.edit своей компании: дубли, черновик, «в монтаже»; без отдельного ключа', async (t) => {
   const s = await setup(t), take = MOV(4000), draft = MOV(3000, 9);
   const {body: {upload}} = await s.call('POST', '/uploads', {body: {ideaId: 'reel-a', frame: 1, name: 'take.mov', size: take.length}});
   await s.chunk(upload.id, 0, take);
-  const bearer = {authorization: `Bearer ${KEY}`};
-  const ed = (method, route, options = {}) => s.call(method, `/editor${route}`, {user: 0, csrf: false, ...options, headers: {...bearer, ...(options.headers || {})}});
-  const takes = await ed('GET', '/reels/reel-a/takes');
-  assert.equal(takes.status, 200); assert.equal(takes.body.takes.length, 1); assert.match(takes.body.takes[0].fileUrl, /^\/content\/shooting\/editor\/files\//);
-  assert.equal((await ed('GET', `/files/${upload.id}`)).body.length, take.length);
-  assert.equal((await ed('GET', '/reels/reel-a/takes', {code: 'alvi'})).status, 403);
-  assert.equal((await ed('GET', '/reels/reel-a/takes', {headers: {authorization: 'Bearer wrong-key-000000000000000000'}})).status, 401);
-  assert.equal((await ed('DELETE', `/uploads/${upload.id}`)).status, 404, 'монтажёр не удаляет');
-  assert.equal((await ed('POST', '/uploads', {body: {ideaId: 'reel-a', kind: 'take', name: 'd.mp4', size: 10}})).status, 403);
-  assert.equal((await ed('PUT', '/reels/reel-a/status', {body: {status: 'editing'}})).body.reel.status, 'editing');
-  const created = await ed('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'draft.mp4', size: draft.length}});
+  const card = await s.call('GET', '/reels/reel-a');
+  assert.equal(card.body.uploads[0].kind, 'take');
+  assert.equal((await s.call('GET', card.body.uploads[0].fileUrl.replace('/content/shooting', '').replace(/\?.*$/, ''))).body.length, take.length);
+  assert.equal((await s.call('PUT', '/reels/reel-a/status', {body: {status: 'editing'}})).body.reel.status, 'editing');
+  const created = await s.call('POST', '/uploads', {body: {ideaId: 'reel-a', kind: 'draft', name: 'draft.mp4', size: draft.length}});
   assert.equal(created.body.upload.kind, 'draft');
-  const done = await ed('PATCH', `/uploads/${created.body.upload.id}`, {raw: draft, headers: {'content-type': 'application/offset+octet-stream', 'upload-offset': '0'}});
-  assert.equal(done.body.upload.status, 'stored');
-  assert.equal((await ed('GET', `/files/${created.body.upload.id}`)).status, 404, 'черновик не отдаётся как дубль');
-  const card = await s.call('GET', '/reels/reel-a', {user: 3});
-  assert.deepEqual(card.body.uploads.map((item) => item.kind), ['take', 'draft']); assert.equal(card.body.reel.status, 'editing');
-  await s.call('PUT', '/reels/reel-a/status', {body: {status: 'draft'}});
-  assert.equal((await s.call('GET', '/reels', {user: 3})).body.reels['reel-a'].status, 'draft');
+  assert.equal((await s.chunk(created.body.upload.id, 0, draft)).body.upload.status, 'stored');
+  assert.deepEqual((await s.call('GET', '/reels/reel-a', {user: 3})).body.uploads.map((item) => item.kind), ['take', 'draft']);
+  assert.equal((await s.call('GET', '/editor/reels/reel-a/takes', {headers: {authorization: 'Bearer anything-0000000000000000000'}})).status, 404, 'маршрутов по ключу нет');
+  assert.equal((await s.call('GET', '/reels/reel-a', {user: 0, headers: {authorization: 'Bearer anything-0000000000000000000'}})).status, 401);
+  assert.equal((await s.call('PUT', '/reels/reel-a/status', {user: 3, body: {status: 'draft'}})).status, 403, 'без autoposting.edit монтажёр не работает');
+  assert.equal((await s.call('PUT', '/reels/reel-a/status', {user: 4, code: 'alvi', body: {status: 'draft'}})).body.reel.status, 'draft');
+  assert.equal((await s.call('GET', '/reels/reel-a', {user: 3})).body.reel.status, 'editing', 'статус Алви не трогает Авокадо');
+});
+
+test('безопасность места: брошенные загрузки истекают через 24 ч, предел открытых, чужие сессии не блокируют, диск видит только владелец', async (t) => {
+  const s = await setup(t, {disk: {free: 20 * GiB, total: 100 * GiB}, config: {maxOpenUploads: 2}});
+  const big = 1.8 * GiB | 0, file = MOV(10000);
+  // Алви бросает две недокачанные сессии по 1,8 ГБ — Авокадо по-прежнему загружает (резерв 15 ГБ).
+  assert.equal((await s.call('POST', '/uploads', {user: 4, code: 'alvi', body: {ideaId: 'r', name: 'a1.mov', size: big}})).status, 201);
+  assert.equal((await s.call('POST', '/uploads', {user: 4, code: 'alvi', body: {ideaId: 'r', name: 'a2.mov', size: big}})).status, 201);
+  const third = await s.call('POST', '/uploads', {user: 4, code: 'alvi', body: {ideaId: 'r', name: 'a3.mov', size: 100}});
+  assert.equal(third.status, 429); assert.equal(third.body.details.code, 'TOO_MANY_OPEN');
+  const mine = await s.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'b.mov', size: file.length}});
+  assert.equal(mine.status, 201, 'чужие брошенные сессии не занимают общий резерв');
+  await s.chunk(mine.body.upload.id, 0, file.subarray(0, 4000));
+  // Владелец видит цифры диска, остальные — только «хватает / не хватает».
+  const smm = (await s.call('GET', '/reels')).body.storage, owner = (await s.call('GET', '/reels', {user: 1})).body.storage;
+  assert.equal(smm.server, 'enough'); assert.equal('freeBytes' in smm, false); assert.equal('reserveBytes' in smm, false); assert.equal('adapter' in smm, false);
+  assert.equal(typeof owner.freeBytes, 'number'); assert.equal(typeof owner.reserveBytes, 'number');
+  // Диск заполнился во время загрузки: кусок не принимается, принятое сохраняется; цифр у не-владельца нет.
+  s.disk.free = 15 * GiB;
+  const paused = await s.chunk(mine.body.upload.id, 4000, file.subarray(4000));
+  assert.equal(paused.status, 507); assert.equal(paused.body.details.upload.offset, 4000); assert.doesNotMatch(paused.body.error, /ГБ/);
+  const low = await s.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'c.mov', size: 1000}});
+  assert.equal(low.status, 507); assert.doesNotMatch(low.body.error, /\d/); assert.equal('freeBytes' in low.body.details.storage, false);
+  assert.match((await s.call('POST', '/uploads', {user: 1, body: {ideaId: 'reel-a', name: 'c.mov', size: 1000}})).body.error, /ГБ/);
+  s.disk.free = 20 * GiB;
+  // Через 24 ч без кусков сессии истекают: файлы удалены, квота и предел освобождены.
+  s.clock.at += 25 * 3600000;
+  assert.equal((await s.call('GET', '/reels', {user: 4, code: 'alvi'})).body.storage.openUploads, 0);
+  const rows = s.db.prepare('SELECT company_code, status FROM shooting_uploads ORDER BY id').all().map((r) => `${r.company_code}:${r.status}`);
+  assert.deepEqual(rows, ['alvi:expired', 'alvi:expired', 'avokado:expired']);
+  assert.equal(fs.readdirSync(path.join(s.dir, 'shooting', 'avokado')).length, 0, 'недокачанный файл удалён');
+  const gone = await s.chunk(mine.body.upload.id, 4000, file.subarray(4000));
+  assert.equal(gone.status, 410); assert.equal(gone.body.details.code, 'UPLOAD_EXPIRED');
+  const fresh = await s.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'b.mov', size: file.length}});
+  assert.equal(fresh.status, 201); assert.notEqual(fresh.body.upload.id, mine.body.upload.id);
+  assert.equal((await s.call('GET', '/reels')).body.storage.usedBytes, file.length, 'квота считает только живые сессии');
 });

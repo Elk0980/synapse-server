@@ -37,15 +37,17 @@
     }
     destroy() { this.alive = false; this.prompter?.close?.(); if (current === this) current = null; }
     /* Байты загрузки: CSRF из контекста (контракт А) или api.raw оболочки, который сам добавляет
-       companyCode и CSRF. Нет ни того ни другого — кнопки выключены с понятной причиной. */
+       companyCode, CSRF и signal. Нет ни того ни другого — кнопки выключены с понятной причиной. */
     transport() {
       if (this.csrf) return {headers: {'X-CSRF-Token': this.csrf}};
       const raw = this.ctx.api?.raw;
       if (typeof raw !== 'function') return null;
-      return {headers: {}, fetchImpl: async (url, init) => {
+      // Сигнатура из просьбы к А (комментарий 481 в №98): raw(method, path, body, headers, params) → Response.
+      return {headers: {}, fetchImpl: async (url, init = {}) => {
         const target = String(url).replace(/^\/content\//, '').split('?')[0];
+        const {'X-CSRF-Token': _csrf, ...headers} = init.headers || {};
         try {
-          const result = await raw(target, init);
+          const result = await raw(init.method || 'GET', target, init.body, headers);
           return result && typeof result.json === 'function' ? result : {ok: true, status: 200, json: async () => result};
         } catch (error) {
           if (!error?.status) throw error;

@@ -109,10 +109,10 @@ test('контракт А: без csrfToken байты идут через api.r
   const p = page({path: 'r-first'}), root = p.d.getElementById('m'), raws = [];
   delete p.ctx.csrfToken;
   let fails = 1;
-  p.ctx.api.raw = async (target, init) => {
-    raws.push([target, init.method || 'GET', init.headers['X-CSRF-Token']]);
-    if (init.method === 'PATCH' && fails-- > 0) throw Object.assign(new Error('Слишком большой кусок'), {status: 413});
-    const done = init.method === 'PATCH';
+  p.ctx.api.raw = async (method, target, body, headers) => {
+    raws.push([target, method, headers['X-CSRF-Token'], headers['upload-offset']]);
+    if (method === 'PATCH' && fails-- > 0) throw Object.assign(new Error('Слишком большой кусок'), {status: 413});
+    const done = method === 'PATCH';
     return {ok: true, status: 200, json: async () => ({upload: {id: 9, offset: done ? 5 : 0, size: 5, status: done ? 'stored' : 'uploading', chunkBytes: 5}})};
   };
   const def = p.registered['content-shooting'];
@@ -125,6 +125,7 @@ test('контракт А: без csrfToken байты идут через api.r
   view.startUpload(file, 1); await settle();
   assert.deepEqual(raws.map(([t, m]) => `${m} ${t}`), ['POST shooting/uploads', 'PATCH shooting/uploads/9', 'POST shooting/uploads', 'PATCH shooting/uploads/9']);
   assert.ok(raws.every(([, , csrf]) => csrf === undefined), 'CSRF добавляет оболочка, модуль его не подделывает');
+  assert.equal(raws[1][3], '0', 'Upload-Offset передаётся оболочке');
   assert.equal(p.w.SbShooting.view.active.size, 0, 'повтор того же файла после ошибки завершился');
   const crmCalls = p.calls.filter(([kind]) => kind === 'crm').length;
   def.onRoute({path: ''});
