@@ -1,0 +1,4 @@
+{
+  "assets": ["content-settings"],
+  "styles": ["shell", "content-settings"]
+}

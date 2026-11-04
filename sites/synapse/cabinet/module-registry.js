@@ -211,52 +211,73 @@
     };
   })();
 
-  /* Свежая версия ассетов оболочки. Автовыпуск статики обновляет cabinet/**, но не cabinet.html,
-     поэтому ?v= в нём остаётся прежним и браузер может держать старый JS модулей.
-     cabinet/shell-version.json ({"commit": "<sha>"}) пишет автовыпуск после успешной выкладки;
-     его читаем с cache: 'no-store'. Если файла нет или он некорректный, остаётся прежняя ?v.
-     Списки берутся из shellAssets/shellStyles в cabinet.html; сам реестр не перезагружается. */
-  const ASSET = /^[a-z0-9][a-z0-9-]{0,63}$/;
+  /* Модули и версия оболочки без правки cabinet.html (автовыпуск обновляет cabinet/**, но не cabinet.html).
+     /cabinet/shell-modules.json {"assets": [...], "styles": [...]} — список модулей (лежит в git).
+     /cabinet/shell-version.json {"commit": "<sha>"} — версия; пишет автовыпуск после успешной выкладки.
+     Оба читаются с cache: 'no-store'. Нет списка — запасной shellAssets/shellStyles из cabinet.html;
+     нет версии — прежняя ?v. Грузятся только имена ^[a-z][a-z0-9-]{1,47}$ из /cabinet/ того же origin.
+     Уже загруженный файл с той же версией не грузится второй раз; сам реестр не перезагружается. */
   const COMMIT = /^[0-9a-f]{7,40}$/;
-  function shellLists() {
-    /* global shellAssets, shellStyles */
-    const read = (get) => { try { const list = get(); return Array.isArray(list) ? list : []; } catch { return []; } };
-    const safe = (list) => list.filter((name) => typeof name === 'string' && ASSET.test(name));
-    return {
-      assets: safe(read(() => (typeof shellAssets === 'undefined' ? [] : shellAssets))).filter((name) => name !== 'module-registry'),
-      styles: safe(read(() => (typeof shellStyles === 'undefined' ? [] : shellStyles)))
-    };
+  const MAX_SHELL_FILES = 64;
+  const names = (list) => (Array.isArray(list) ? [...new Set(list.filter((name) => typeof name === 'string' && ID.test(name)))] : [])
+    .filter((name) => name !== 'module-registry').slice(0, MAX_SHELL_FILES);
+  function fallbackLists() {
+    /* global shellAssets, shellStyles — списки cabinet.html (классический скрипт, общая область) */
+    let assets = null, styles = null;
+    try { assets = typeof shellAssets === 'undefined' ? null : shellAssets; } catch { assets = null; }
+    try { styles = typeof shellStyles === 'undefined' ? null : shellStyles; } catch { styles = null; }
+    return Array.isArray(assets) || Array.isArray(styles) ? { assets: names(assets), styles: names(styles) } : null;
   }
-  async function readShellVersion() {
+  async function readJson(path) {
     try {
-      const response = await fetch('cabinet/shell-version.json', { cache: 'no-store', credentials: 'same-origin' });
-      if (!response.ok) return '';
+      const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) return null;
       const data = await response.json();
-      return typeof data?.commit === 'string' && COMMIT.test(data.commit) ? data.commit : '';
-    } catch { return ''; }
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    } catch { return null; }
   }
+  function shellUrl(name, extension, version) {
+    const url = new URL(`/cabinet/${name}.${extension}`, location.href);
+    url.searchParams.set('v', version);
+    return url.origin === location.origin && url.pathname === `/cabinet/${name}.${extension}` ? url : null;
+  }
+  const sameFile = (href, name, extension) => {
+    try { const url = new URL(href, location.href); return url.origin === location.origin && url.pathname === `/cabinet/${name}.${extension}`; } catch { return false; }
+  };
   async function refreshShellAssets() {
-    const fallback = String(window.SB_CABINET_ASSET_VERSION || '');
-    const lists = shellLists();
-    if (!lists.assets.length && !lists.styles.length) return { version: fallback, reloaded: [] };
-    const commit = await readShellVersion();
-    if (!commit || commit === fallback) return { version: fallback, reloaded: [] };
+    const fallbackVersion = String(window.SB_CABINET_ASSET_VERSION || '');
+    const fallback = fallbackLists();
+    if (!fallback) return { version: fallbackVersion, source: 'none', loaded: [] };   // не кабинет (стенды тестов)
+    const [modules, versionFile] = await Promise.all([readJson('/cabinet/shell-modules.json'), readJson('/cabinet/shell-version.json')]);
+    const fromJson = modules && (Array.isArray(modules.assets) || Array.isArray(modules.styles));
+    const lists = fromJson ? { assets: names(modules.assets), styles: names(modules.styles) } : fallback;
+    const commit = typeof versionFile?.commit === 'string' && COMMIT.test(versionFile.commit) ? versionFile.commit : '';
+    const version = commit || fallbackVersion;
     if (document.readyState === 'loading') await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    const loaded = [];
     lists.styles.forEach((name) => {
-      const old = [...document.querySelectorAll('link[rel="stylesheet"]')].filter((link) => (link.getAttribute('href') || '').startsWith(`cabinet/${name}.css?`)).pop();
+      const url = shellUrl(name, 'css', version);
+      if (!url) return;
+      const links = [...document.querySelectorAll('link[rel="stylesheet"]')].filter((link) => sameFile(link.getAttribute('href') || '', name, 'css'));
+      if (links.some((link) => new URL(link.getAttribute('href'), location.href).href === url.href)) return;
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = `cabinet/${name}.css?v=${commit}`;
-      link.addEventListener('load', () => old?.remove(), { once: true });   // при ошибке остаётся прежний стиль
-      if (old) old.after(link); else document.head.append(link);
+      link.href = url.pathname + url.search;
+      link.addEventListener('load', () => links.forEach((old) => old.remove()), { once: true });   // при ошибке прежний стиль остаётся
+      if (links.length) links[links.length - 1].after(link); else document.head.append(link);
+      loaded.push(`${name}.css`);
     });
     lists.assets.forEach((name) => {
+      const url = shellUrl(name, 'js', version);
+      if (!url) return;
+      if ([...document.querySelectorAll('script[src]')].some((script) => new URL(script.getAttribute('src'), location.href).href === url.href)) return;
       const script = document.createElement('script');
-      script.src = `cabinet/${name}.js?v=${commit}`;
+      script.src = url.pathname + url.search;
       script.async = false;                                               // порядок списка сохраняется
       document.body.append(script);
+      loaded.push(`${name}.js`);
     });
-    return { version: commit, reloaded: lists.assets };
+    return { version, source: fromJson ? 'shell-modules.json' : 'cabinet.html', loaded };
   }
 
   const registry = {
@@ -282,8 +303,8 @@
     chat: dock
   };
   window.SynapseModules = registry;
-  // Повторная загрузка модуля свежей версией = повторная регистрация (определение заменяется, экран перемонтируется).
-  registry.shellVersion = refreshShellAssets().catch((error) => { console.error(error); return { version: String(window.SB_CABINET_ASSET_VERSION || ''), reloaded: [] }; });
+  // Новые модули из shell-modules.json и свежие версии прежних: повторная загрузка = повторная регистрация.
+  registry.shellVersion = refreshShellAssets().catch((error) => { console.error(error); return { version: String(window.SB_CABINET_ASSET_VERSION || ''), source: 'error', loaded: [] }; });
   // Модуль, загруженный раньше реестра, может оставить очередь: window.SynapseModulesQueue = [[id, def], …].
   (Array.isArray(window.SynapseModulesQueue) ? window.SynapseModulesQueue : []).forEach(([id, definition]) => {
     try { registry.register(id, definition); } catch (error) { console.error(error); }
