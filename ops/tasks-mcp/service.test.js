@@ -136,7 +136,7 @@ test('отсутствующий канон не создаёт сессию; к
   const payload = result.body.result.structuredContent;
   assert.equal(payload.session_id, 'fixture-session');
   assert.deepEqual(payload.documents.map(document => document.path), ['CONSTITUTION.md','DIRECTION.md','SITE.md']);
-  assert.ok(payload.rules.some(rule => rule.includes('maker ≠ checker')));
+  assert.deepEqual(payload.rules, ['SAMPLE fixture', 'SAMPLE fixture']);
   assert.equal(f.calls.length, 1);
   result = await f.rpc('tools/call', {name:'doc_read',arguments:{path:'SITE.md'}});
   assert.equal(result.body.result.structuredContent.text, 'SAMPLE fixture');
@@ -235,4 +235,42 @@ test('CRM читает допустимый большой ответ и отм�
   }), {headers:{'content-length':String(MAX_CRM_RESPONSE_BYTES + 1)}}));
   await assert.rejects(declared('tasks_list',{}),error => error.status === 502);
   assert.equal(cancelled,2);
+});
+
+
+test('приватная карта: полный канон, fallback и обновление открытой сессии без перезапуска', async t => {
+  const f = await fixture(t);
+  const call = async () => (await f.rpc('tools/call', {name:'session_start',
+    arguments:{agent:'SAMPLE агент',kind:'codex',request:'неизвестная тема'}})).body.result;
+  const map = {version:'SAMPLE-map-1', rules_version:'SAMPLE-rules-1',
+    always:[{doc:'RULES.md',why:'SAMPLE обязательно'}], rules:[],
+    fallback:{read:['REFERENCE.md'],why:'SAMPLE справочник'}};
+  await fs.writeFile(path.join(f.docsDir,'MAP.json'),JSON.stringify(map));
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE канон 1');
+  let result = await call();
+  assert.equal(result.isError,true);
+  assert.equal(f.calls.length,0);
+  await fs.writeFile(path.join(f.docsDir,'REFERENCE.md'),'SAMPLE справочник');
+  let payload = (await call()).structuredContent;
+  assert.deepEqual(payload.rules,['SAMPLE канон 1']);
+  assert.equal(payload.rules_version,'SAMPLE-rules-1');
+  assert.equal(payload.rules_changed,null);
+  assert.deepEqual(payload.documents.map(d=>d.path),['RULES.md','REFERENCE.md']);
+  assert.equal((await call()).structuredContent.rules_changed,false);
+  map.rules_version = 'SAMPLE-rules-2';
+  await fs.writeFile(path.join(f.docsDir,'MAP.json'),JSON.stringify(map));
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE канон 2');
+  payload = (await call()).structuredContent;
+  assert.equal(payload.session_id,'fixture-session');
+  assert.equal(payload.rules_changed,true);
+  assert.match(payload.rules_notice,/Правила изменились/);
+  assert.deepEqual(payload.rules_documents,[{path:'RULES.md',text:'SAMPLE канон 2'}]);
+  const revision = payload.rules_revision;
+  // Изменение текста тоже обнаруживается, даже если поставщик забыл сменить версию.
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE исправленный канон');
+  payload = (await call()).structuredContent;
+  assert.equal(payload.rules_changed,true);
+  assert.notEqual(payload.rules_revision,revision);
+  const read = await f.rpc('tools/call',{name:'doc_read',arguments:{path:'REFERENCE.md'}});
+  assert.equal(read.body.result.structuredContent.text,'SAMPLE справочник');
 });

@@ -5,8 +5,8 @@ const path = require('node:path');
 const {createHash, timingSafeEqual} = require('node:crypto');
 const {McpServer} = require('@modelcontextprotocol/server');
 const {NodeStreamableHTTPServerTransport} = require('@modelcontextprotocol/node');
-const {TOOLS, SESSION_RULES} = require('./tools');
-const {sessionDocuments, readDocument} = require('./documents');
+const {TOOLS} = require('./tools');
+const {sessionContext, readDocument} = require('./documents');
 const MAX_BODY_BYTES = 128 * 1024;
 const MAX_CRM_RESPONSE_BYTES = 32 * 1024 * 1024;
 const fail = (status, message) => { throw Object.assign(new Error(message), {status}); };
@@ -90,7 +90,7 @@ function crmClient(config, fetchImpl = fetch) {
   };
 }
 
-function mcpServer(config, callCrm) {
+function mcpServer(config, callCrm, revisions) {
   const server = new McpServer({name:'synapse-tasks', version:'1.0.0'}, {
     instructions:'Единый реестр задач Owner. Начните с session_start, прочитайте карту через doc_read, обновляйте задачи и завершайте session_end.'
   });
@@ -100,8 +100,15 @@ function mcpServer(config, callCrm) {
         let result;
         if (tool.name === 'doc_read') result = await readDocument(config.docsDir, args.path);
         else if (tool.name === 'session_start') {
-          const documents = await sessionDocuments(config.docsDir, args.request);
-          result = {...await callCrm(tool.name, args), rules:SESSION_RULES, documents};
+          const context = await sessionContext(config.docsDir, args.request);
+          const key = JSON.stringify([args.kind, args.agent.toLocaleLowerCase('ru')]);
+          const previous = revisions.get(key);
+          result = {...await callCrm(tool.name, args), ...context,
+            rules_changed:previous === undefined ? null : previous !== context.rules_revision,
+            rules_notice:previous && previous !== context.rules_revision ?
+              'Правила изменились, перечитайте полный текст.' : 'Прочитайте полный текст правил перед работой.'};
+          if (revisions.size >= 1000 && !revisions.has(key)) revisions.delete(revisions.keys().next().value);
+          revisions.set(key, context.rules_revision);
         } else result = await callCrm(tool.name, args);
         return {content:[{type:'text', text:JSON.stringify(result)}], structuredContent:result};
       } catch (error) {
@@ -132,6 +139,7 @@ async function readBody(request) {
 }
 
 function createTasksMcpServer(config, {fetchImpl, callCrm = crmClient(config, fetchImpl)} = {}) {
+  const revisions = new Map();
   const expected = createHash('sha256').update(`/mcp/${config.token}`).digest();
   const publicUrl = new URL(config.publicOrigin);
   const server = http.createServer(async (request, response) => {
@@ -161,7 +169,7 @@ function createTasksMcpServer(config, {fetchImpl, callCrm = crmClient(config, fe
         return sendJson(response, 415, {error:'Требуется application/json'});
       }
       const body = await readBody(request);
-      instance = mcpServer(config, callCrm);
+      instance = mcpServer(config, callCrm, revisions);
       transport = new NodeStreamableHTTPServerTransport({sessionIdGenerator:undefined, enableJsonResponse:true});
       await instance.connect(transport);
       await transport.handleRequest(request, response, body);
