@@ -127,11 +127,52 @@ test('401 открывает вход, пароль при ошибке сохр
   assert.equal(form.elements.password.value,'private-input');assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
 });
 test('owner создаёт human_executor только по явной форме, без отправки приглашения',async t=>{
-  const f=fixture(t,{owner:true});await flush();assert.equal(f.byId('tab-owner').hidden,false);
-  const form=f.byId('member-create-form');form.elements.displayName.value='Новый исполнитель';form.elements.login.value='worker_new';form.elements.password.value='long-enough-password';
+  const f=fixture(t,{owner:true,handler:async(route,options)=>route==='/content/people/members'&&options.method==='POST'?response({member:{id:8},temporaryPassword:'one-time-secret',expiresAt:'2026-11-07T12:00:00Z'}):undefined});await flush();assert.equal(f.byId('tab-owner').hidden,false);
+  const form=f.byId('member-create-form');form.elements.displayName.value='Новый исполнитель';form.elements.login.value='worker_new';assert.equal(form.elements.password,undefined);
   form.dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();const call=f.calls.find(call=>call.options.method==='POST');
-  assert.equal(call.route,'/content/people/members');assert.deepEqual(JSON.parse(call.options.body),{companyCode:'alvi',displayName:'Новый исполнитель',login:'worker_new',password:'long-enough-password',staffRole:'human_executor'});
-  assert.equal(form.elements.password.value,'');assert.equal(f.calls.some(call=>/invite|send/.test(call.route)),false);
+  assert.equal(call.route,'/content/people/members');assert.deepEqual(JSON.parse(call.options.body),{companyCode:'alvi',displayName:'Новый исполнитель',login:'worker_new',staffRole:'human_executor'});
+  assert.equal(f.byId('temporary-password').querySelectorAll('output').length,1);assert.match(f.byId('temporary-password').textContent,/one-time-secret/);assert.match(f.byId('temporary-password').textContent,/Действует до/);
+  f.byId('temporary-password').querySelector('button').click();assert.equal(f.byId('temporary-password').textContent,'');
+  assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);assert.equal(f.calls.some(call=>/invite|send/.test(call.route)),false);
+});
+test('новый временный пароль очищается при смене проекта, выходе и уходе со страницы',async t=>{
+  const f=fixture(t,{owner:true,handler:async route=>route.endsWith('/temp-password')?response({temporaryPassword:'reset-secret',expiresAt:'2026-11-07T12:00:00Z'}):undefined});await flush();
+  const reset=()=>[...f.byId('member-list').querySelectorAll('button')].find(button=>button.textContent==='Новый временный пароль').click();
+  reset();await flush();const call=f.calls.find(call=>call.route.endsWith('/temp-password'));
+  assert.deepEqual(JSON.parse(call.options.body),{companyCode:'alvi'});assert.equal(call.options.headers['x-csrf-token'],'csrf-test');assert.match(f.byId('temporary-password').textContent,/reset-secret/);
+  f.byId('company').value='avokado';f.byId('company').dispatchEvent(new f.w.Event('change'));assert.equal(f.byId('temporary-password').textContent,'');await flush();
+  reset();await flush();f.w.dispatchEvent(new f.w.PageTransitionEvent('pagehide'));assert.equal(f.byId('temporary-password').textContent,'');
+  reset();await flush();f.byId('logout').click();await flush();assert.equal(f.byId('temporary-password').textContent,'');assert.equal(f.byId('workspace').hidden,true);
+});
+test('поздний сброс пароля не заменяет результат последней операции',async t=>{
+  let release;const delayed=new Promise(resolve=>{release=resolve;});
+  const f=fixture(t,{owner:true,handler:async(route,options)=>{
+    if(route==='/content/people/members?companyCode=alvi')return response({members:[{id:7,displayName:'Первый',login:'one'},{id:8,displayName:'Второй',login:'two'}]});
+    if(route.endsWith('/7/temp-password'))return delayed;
+    if(route.endsWith('/8/temp-password'))return response({temporaryPassword:'current-secret'});
+  }});await flush();const buttons=[...f.byId('member-list').querySelectorAll('button')].filter(button=>button.textContent==='Новый временный пароль');
+  buttons[0].click();buttons[1].click();await flush();release(response({temporaryPassword:'outdated-secret'}));await flush();
+  assert.equal(f.byId('temporary-password').querySelector('output').textContent,'current-secret');assert.equal(f.byId('temporary-password').textContent.includes('outdated-secret'),false);
+});
+const restricted=()=>response({error:'Нужно сменить пароль',details:{mustChangePassword:true,csrfToken:'restricted-csrf'}},403);
+test('первый вход и повторное открытие требуют личный пароль; проверка и смена используют CSRF',async t=>{
+  let changed=false,rejectPassword=false;const f=fixture(t,{handler:async(route,options)=>{
+    if(route==='/content/people/context'&&!changed)return restricted();
+    if(route==='/content/password'){if(rejectPassword)return response({error:'Новый пароль должен отличаться от временного.'},400);changed=true;return response({ok:true});}
+  }});await flush();assert.equal(f.byId('password-panel').hidden,false);assert.equal(f.byId('workspace').hidden,true);assert.equal(f.byId('logout').hidden,false);
+  await f.w.SynapsePeople.initialize();assert.equal(f.byId('password-panel').hidden,false);assert.equal(f.calls.some(call=>call.route.startsWith('/content/people/tasks')),false);
+  const form=f.byId('password-form'),submit=async()=>{form.dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();};
+  form.elements.password.value='short';form.elements.confirmation.value='short';await submit();assert.match(f.byId('password-error').textContent,/10 символов/);
+  form.elements.password.value='personal-password';form.elements.confirmation.value='different-password';await submit();assert.match(f.byId('password-error').textContent,/не совпадают/);assert.equal(f.calls.some(call=>call.route==='/content/password'),false);
+  form.elements.confirmation.value='personal-password';rejectPassword=true;await submit();assert.match(f.byId('password-error').textContent,/отличаться/);assert.equal(form.elements.password.value,'personal-password');
+  rejectPassword=false;await submit();const call=f.calls.find(call=>call.route==='/content/password');assert.equal(call.options.headers['x-csrf-token'],'restricted-csrf');assert.deepEqual(JSON.parse(call.options.body),{password:'personal-password'});
+  assert.equal(f.byId('password-panel').hidden,true);assert.equal(f.byId('workspace').hidden,false);assert.equal(form.elements.password.value,'');assert.equal(form.elements.confirmation.value,'');assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
+});
+test('любой restricted 403 скрывает открытый кабинет, выход обходит операции push и очищает поля',async t=>{
+  let restrictedNow=false,pushLookups=0;const f=fixture(t,{setup:w=>Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistration:async()=>{pushLookups++;}}}),handler:async route=>restrictedNow&&route.startsWith('/content/people/tasks/')?restricted():undefined});await flush();
+  restrictedNow=true;f.byId('task-list').querySelector('button').click();await flush();assert.equal(f.byId('workspace').hidden,true);assert.equal(f.byId('password-panel').hidden,false);assert.equal(f.byId('task-list').textContent,'');
+  f.byId('password-form').elements.password.value='private-draft';f.byId('password-form').elements.confirmation.value='private-draft';f.byId('logout').click();await flush();
+  assert.equal(pushLookups,0);const call=f.calls.find(call=>call.route==='/content/logout');assert.equal(call.options.headers['x-csrf-token'],'restricted-csrf');assert.equal(f.byId('password-panel').hidden,true);assert.equal(f.byId('login-panel').hidden,false);assert.equal(f.byId('password-form').elements.password.value,'');assert.equal(f.byId('password-form').elements.confirmation.value,'');
 });
 test('push подключается только явной кнопкой, отказ разрешения не создаёт подписку',async t=>{
   let permissions=0,registrations=0;

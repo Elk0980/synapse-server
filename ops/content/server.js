@@ -117,6 +117,7 @@ function publicIdentity(identity) {
     userId: identity.id, login: identity.login, displayName: identity.displayName,
     author: identity.displayName, role: identity.role, companies: identity.companies,
     permissions: identity.permissions,
+    mustChangePassword: identity.mustChangePassword,
     sites: identity.companies.map((company) => company.contentSiteId).filter(Boolean),
   };
 }
@@ -149,7 +150,8 @@ function sessionData(request) {
     const token = JSON.parse(Buffer.from(payload, 'base64url').toString());
     if (token.exp < Math.floor(Date.now() / 1000)) return null;
     const current = authStore.getById(token.uid);
-    if (!current || current.sessionVersion !== token.sessionVersion) return null;
+    if (!current || current.sessionVersion !== token.sessionVersion ||
+        (current.mustChangePassword && !(Date.parse(current.tempPasswordExpiresAt) > Date.now()))) return null;
     return { user: current, csrf: token.csrf };
   } catch { return null; }
 }
@@ -371,6 +373,7 @@ function requireAuth(request, site) {
   let identity;
   if (!given) identity = sessionData(request)?.user;
   if (!identity) fail(401, given ? 'Неверный ключ доступа' : 'Требуется вход в кабинет или ключ доступа');
+  if (identity.mustChangePassword) passwordRequired(sessionData(request));
   if (identity.id && site && identity.role !== 'owner' && !identity.companyCodes.includes(CONTENT_COMPANIES[site])) {
     fail(403, 'У вашей учётной записи нет доступа к этому сайту');
   }
@@ -500,7 +503,13 @@ const siteStore = createSiteStore(db, authStore, saveVersion);
 function requireSession(request) {
   const session = sessionData(request);
   if (!session) fail(401, 'Требуется вход в кабинет');
+  if (session.user.mustChangePassword) passwordRequired(session);
   return session;
+}
+
+function passwordRequired(session) {
+  throw Object.assign(Error('Нужно сменить пароль'), {status:403,
+    details:{mustChangePassword:true,csrfToken:session.csrf}});
 }
 
 function requirePermission(request, permission, companyCode, obscure = false) {
@@ -837,6 +846,19 @@ const server = http.createServer(async (request, response) => {
     }
     const url = new URL(request.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);
+    // A fresh database-backed check also protects aliases and open tabs before dispatch.
+    const restricted=sessionData(request);
+    if(restricted?.user.mustChangePassword && !(
+      request.method==='POST' && ['/content/password','/content/logout'].includes(url.pathname)))passwordRequired(restricted);
+    if(url.pathname==='/content/password'&&request.method==='POST') {
+      if(!restricted)fail(401,'Требуется вход в кабинет');
+      requireCsrf(request,restricted);
+      const body=await readJson(request);
+      if(Object.keys(body).join(',')!=='password')fail(400,'Переданы лишние поля');
+      const current=authStore.setOwnPassword(restricted.user.id,restricted.user.sessionVersion,body.password);
+      return reply(200,{ok:true},{'cache-control':'private, no-store',
+        'set-cookie':`synapse_session=${makeSession(current)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL}`});
+    }
 
     // Локальный обработчик Хью: свой ключ, проверка до чтения тела, только известные маршруты.
     if (url.pathname.startsWith('/content/project-chat-worker/')) {
@@ -993,7 +1015,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readJson(request);
       const login = String(body.login || '').trim().toLowerCase();
       const identity = authStore.getByLogin(login);
-      if (!identity || !verifyPassword(String(body.password || ''), identity.passwordHash)) {
+      if (!identity || (identity.mustChangePassword && !(Date.parse(identity.tempPasswordExpiresAt)>now)) ||
+          !verifyPassword(String(body.password || ''), identity.passwordHash)) {
         failures.push(now); loginFailures.set(ip, failures);
         const error = new Error('Неверный логин или пароль');
         error.status = 401;
@@ -1120,7 +1143,9 @@ const server = http.createServer(async (request, response) => {
       if (request.method === 'GET') return reply(200, {members: companyTeam.list(session.user.id, url.searchParams.get('companyCode'))});
       if (request.method === 'POST') {
         requireCsrf(request, session);
-        return reply(201, companyTeam.create(session.user.id, await readJson(request)));
+        const body=await readJson(request);
+        if(body.staffRole==='human_executor')fail(400,'Создайте временный доступ через /cabinet/people.html');
+        return reply(201, companyTeam.create(session.user.id, body));
       }
       fail(405, 'Метод не поддерживается');
     }
@@ -1398,6 +1423,8 @@ const server = http.createServer(async (request, response) => {
     fail(404, 'Не найдено');
   } catch (error) {
     const status = error.status || 500;
+    const current=sessionData(request);
+    if(status===403&&current?.user.mustChangePassword)error.details={mustChangePassword:true,csrfToken:current.csrf};
     if (status === 401 || status === 403) logAuthorizationDenial(request, error);
     if (status >= 500) console.error(error);
     reply(status, { error: error.message, details: error.details || undefined });
