@@ -42,6 +42,10 @@ class ConfigurationError(b.BackupError):
     """Permanent inventory/policy error: the service must not retry it forever."""
 
 
+class NightComplete(b.BackupError):
+    """The timer may start a new night; automatic restarts must stop now."""
+
+
 def fail(code):
     raise b.BackupError(code)
 
@@ -421,6 +425,9 @@ def _facts(metadata):
 
 def inventory(c):
     """Reuse accepted root/mount/link policy. No hidden exclusions are added."""
+    def budget():
+        return min(30, time_left(c['_night_deadline'])) if '_night_deadline' in c else 30
+    budget()
     roots = [checked_path(Path(x).absolute()).resolve() for x in c['roots']]
     output, scratch = checked_path(Path(c['output']).absolute()), checked_path(Path(c['scratch_dir']).absolute())
     if not roots or any(not p.is_dir() or p == Path('/') for p in roots):
@@ -434,8 +441,8 @@ def inventory(c):
     maximum, bound = int(c['max_single_sqlite_bytes']), int(c['max_bundle_bytes'])
     if min(maximum, bound) <= 0:
         raise ConfigurationError('NO_SPACE_SERVER')
-    ids = b.run(['docker', 'ps', '-q'], capture_output=True, text=True, timeout=30).stdout.split()
-    metadata = json.loads(b.run(['docker', 'inspect', *ids], capture_output=True, timeout=30).stdout) if ids else []
+    ids = b.run(['docker', 'ps', '-q'], capture_output=True, text=True, timeout=budget()).stdout.split()
+    metadata = json.loads(b.run(['docker', 'inspect', *ids], capture_output=True, timeout=budget()).stdout) if ids else []
     if {x['Name'].lstrip('/') for x in metadata} != set(c['containers']):
         raise ConfigurationError('CREATE_FAILED')
     for item in metadata:
@@ -445,7 +452,12 @@ def inventory(c):
                 raise ConfigurationError('CREATE_FAILED')
     entries, databases, total = [], set(), 0
     for root in roots:
-        for path in sorted(root.rglob('*')):
+        paths = []
+        for path in root.rglob('*'):
+            budget()
+            paths.append(path)
+        for path in sorted(paths):
+            budget()
             if path.is_symlink():
                 try:
                     b.link_target(path, roots)
@@ -472,7 +484,8 @@ def inventory(c):
     images = sorted({x['Image'] for x in metadata})
     if not images:
         raise ConfigurationError('CREATE_FAILED')
-    sizes = json.loads(b.run(['docker', 'image', 'inspect', *images], capture_output=True, timeout=30).stdout)
+    sizes = json.loads(b.run(['docker', 'image', 'inspect', *images], capture_output=True, timeout=budget()).stdout)
+    budget()
     total += sum(x['Size'] for x in sizes)
     if total * 1.1 > bound:
         raise ConfigurationError('NO_SPACE_SERVER')
@@ -649,27 +662,102 @@ def retire_interrupted_sessions(output, gid):
                 path.unlink()
 
 
+def bangkok_day(name=None):
+    if name is None:
+        value = dt.datetime.now(dt.timezone.utc)
+    else:
+        if not isinstance(name, str) or not b.ID.fullmatch(name):
+            fail('BAD_RECEIPT')
+        try:
+            value = dt.datetime.strptime(name[8:], '%Y%m%dT%H%M%SZ').replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            fail('BAD_RECEIPT')
+    return value.astimezone(dt.timezone(dt.timedelta(hours=7))).date().isoformat()
+
+
+def night_window():
+    now = dt.datetime.now(dt.timezone(dt.timedelta(hours=7)))
+    end = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    return 1 <= now.hour < 6, max(0.0, (end - now).total_seconds())
+
+
+def server_daily_success(c, output, gid):
+    """No success inference from a FIFO EOF or a server-only receipt."""
+    marker = output / '.daily-success.json'
+    today = bangkok_day()
+    if marker.exists() or marker.is_symlink():
+        saved = read_metadata(marker)
+        if (saved.get('day') == today and saved.get('transport') == TRANSPORT
+                and isinstance(saved.get('id'), str) and b.ID.fullmatch(saved['id'])
+                and bangkok_day(saved.get('id')) == today
+                and re.fullmatch('[a-f0-9]{64}', saved.get('receipt_sha', ''))):
+            return True
+    if not c.get('board_endpoint_file'):
+        return False
+    for path in sorted(output.iterdir(), reverse=True):
+        if not b.ID.fullmatch(path.name) or bangkok_day(path.name) != today:
+            continue
+        directory = _session(output, path.name)
+        state = _reader_state(directory)
+        receipt_path = directory / 'receipt.json'
+        if state.get('state') != 'COMMITTED' or not receipt_path.exists():
+            continue
+        receipt = read_metadata(receipt_path)
+        _validate_receipt(receipt, path.name, c['max_bundle_bytes'])
+        digest = b.sha(receipt_path)
+        try:
+            confirmed = b.board_report.acknowledged(c, path.name, digest)
+        except Exception:
+            return False  # PENDING/unknown is not a successful backup.
+        if confirmed:
+            atomic_metadata(marker, {'transport': TRANSPORT, 'day': today,
+                                     'id': path.name, 'receipt_sha': digest}, gid)
+            return True
+    return False
+
+
 def produce(c):
     if os.name == 'nt' or os.geteuid() != 0 or c.get('transport') != TRANSPORT or c.get('reviewed_inventory') is not True:
         raise ConfigurationError('CREATE_FAILED')
     os.umask(0o077)
+    output, gid = _prepare_output(c)
+    # COMMITTED is not D-side success: a reader can have received a truncated
+    # stream. Only an exact, authenticated D-side ACK may suppress this day.
+    with b.lock(output / '.writer.lock'):
+        if server_daily_success(c, output, gid):
+            raise NightComplete('DAILY_SUCCESS_ALREADY_ACKNOWLEDGED')
+        active, remaining = night_window()
+        if not active:
+            if remaining == 0:
+                publish(c, output, {'phase': 'night-summary', 'result': 'ERROR', 'error': 'NO_BACKUP'})
+            raise NightComplete('WAIT_NEXT_NIGHT')
+    c = dict(c, _night_deadline=time.monotonic() + remaining)
     # Strict links, roots, inventory and capacity are checked before advertising.
     try:
-        inv = inventory(c)
-    except (KeyError, TypeError, FileNotFoundError, NotADirectoryError) as error:
-        raise ConfigurationError('CREATE_FAILED') from error
-    scratch_base = checked_path(Path(c['scratch_dir']).absolute())
-    root_entry(scratch_base, 'directory')
-    if stat.S_IMODE(scratch_base.stat().st_mode) != 0o700:
-        raise ConfigurationError('UNSAFE_DESTINATION')
-    if shutil.disk_usage(scratch_base).free < inv['max_snapshot'] + MARGIN:
-        raise ConfigurationError('NO_SPACE_SERVER')
-    # A power loss can leave private SQLite scratch. Never create a SECOND base
-    # or blindly delete an unconfirmed old worker's files on automatic restart.
-    if any(scratch_base.glob('stream-sqlite-*')):
-        raise ConfigurationError('STALE_SQLITE_SCRATCH_REVIEW_REQUIRED')
-    output, gid = _prepare_output(c)
+        try:
+            inv = inventory(c)
+        except (KeyError, TypeError, FileNotFoundError, NotADirectoryError) as error:
+            raise ConfigurationError('CREATE_FAILED') from error
+        scratch_base = checked_path(Path(c['scratch_dir']).absolute())
+        root_entry(scratch_base, 'directory')
+        if stat.S_IMODE(scratch_base.stat().st_mode) != 0o700:
+            raise ConfigurationError('UNSAFE_DESTINATION')
+        if shutil.disk_usage(scratch_base).free < inv['max_snapshot'] + MARGIN:
+            raise ConfigurationError('NO_SPACE_SERVER')
+        # A power loss can leave private SQLite scratch. Never create a SECOND
+        # base or blindly delete an unconfirmed old worker's files on restart.
+        if any(scratch_base.glob('stream-sqlite-*')):
+            raise ConfigurationError('STALE_SQLITE_SCRATCH_REVIEW_REQUIRED')
+    except Exception as error:
+        # Output is already checked/owned. Report permanent preflight failures
+        # before exit78; no-reader/timeouts remain quiet in the publisher.
+        code = str(error) if isinstance(error, b.BackupError) and re.fullmatch('[A-Z0-9_]+', str(error)) else 'CREATE_FAILED'
+        publish(c, output, {'phase': 'create-stream', 'result': 'ERROR', 'error': code})
+        raise
     with b.lock(output / '.writer.lock'):
+        active, remaining = night_window()
+        if not active:
+            raise NightComplete('WAIT_NEXT_NIGHT')
         retire_interrupted_sessions(output, gid)
         cleanup_sessions(output)
         name = 'synapse-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
@@ -677,7 +765,7 @@ def produce(c):
         directory.mkdir(mode=0o750)
         os.chown(directory, 0, gid)
         directory.chmod(0o750)
-        deadline = time.monotonic() + duration(c, 'stream_total_seconds', 21600, 21600)
+        deadline = time.monotonic() + min(remaining, duration(c, 'stream_total_seconds', 21600, 21600))
         state = {'schema': 1, 'transport': TRANSPORT, 'id': name, 'state': 'OFFERED',
                  'created_at': time.time(), 'expires_at': time.time() + time_left(deadline),
                  'max_total_bytes': inv['bound'], 'files': {x: {'state': 'WAITING'} for x in b.FILES}}
@@ -746,6 +834,8 @@ def produce(c):
             state.update(state='FAILED', error=code)
             atomic_metadata(directory / META, state, gid)
             status['error'] = code
+            if code not in {'STREAM_TIMEOUT', 'STREAM_STALLED', 'STREAM_DISCONNECTED', 'STREAM_INTERRUPTED'}:
+                publish(c, output, status)
             raise
         finally:
             owned.close()
@@ -758,9 +848,10 @@ def produce(c):
                 state.update(state='FAILED', error='CREATE_FAILED')
                 atomic_metadata(directory / META, state, gid)
             b.write_json(output / 'status.json', status)
-            # This phase never emits the D-side BACKUP58_ACK.
-            status['board'] = 'OK' if b.board_report.publish(c, output, status) else 'PENDING'
-            b.write_json(output / 'status.json', status)
+            # Offers/no-reader/retries are local state, not board reports. Only
+            # the verified D-side pull publishes the authoritative ACK.
+            if not night_window()[0] and not server_daily_success(c, output, gid):
+                publish(c, output, {'phase': 'night-summary', 'result': 'ERROR', 'error': 'NO_BACKUP'})
 
 
 def _reader_state(directory):
@@ -913,15 +1004,15 @@ def _local_root(root):
 
 
 def cleanup_local(root):
-    stage = checked_path(root) / '.stream-partials'
-    if not stage.exists():
-        return
-    checked_path(stage)
-    for path in stage.iterdir():
-        if not b.ID.fullmatch(path.name) or path.is_symlink() or not path.is_dir():
-            fail('UNSAFE_DESTINATION')
-        if time.time() - path.stat().st_mtime > 86400:
-            shutil.rmtree(path)
+    for label in ['.stream-partials', '.stream-quarantine']:
+        stage = checked_path(root) / label
+        if not stage.exists():
+            continue
+        checked_path(stage)
+        for path in stage.iterdir():
+            _owned_stage(root, path, label)
+            if time.time() - path.stat().st_mtime > 86400:
+                shutil.rmtree(path)
 
 
 def _outside_private_paths(c, root):
@@ -960,17 +1051,207 @@ def _staged_complete(stage):
     return b.validate_bundle(stage)
 
 
+def _owned_stage(root, stage, label='.stream-partials'):
+    checked_path(stage)
+    if stage.parent != root / label or not b.ID.fullmatch(stage.name) or not stage.is_dir():
+        fail('UNSAFE_DESTINATION')
+    for path in stage.iterdir():
+        if path.name not in {META, 'receipt.json', *b.FILES, '.receipt.tmp', META + '.tmp', 'receipt.json.tmp'} or path.is_symlink() or not path.is_file():
+            fail('UNSAFE_DESTINATION')
+        if path.name.endswith('.tmp') and path.stat().st_nlink != 1:
+            fail('UNSAFE_DESTINATION')
+
+
+def quarantine(root, stage):
+    """Retain invalid OWN ciphertext, never reopen/append its consumed FIFO."""
+    root = checked_path(root)
+    _owned_stage(root, stage)
+    destination = root / '.stream-quarantine'
+    checked_path(destination)
+    destination.mkdir(mode=0o700, exist_ok=True)
+    b.private_dir(destination)
+    target = destination / stage.name
+    if target.exists() or target.is_symlink():
+        fail('UNSAFE_DESTINATION')
+    os.replace(stage, target)
+
+
+def _canonical_receipt(path, receipt):
+    """Match the root/serve bytes exactly, so the D-side ACK hash matches."""
+    checked_path(path)
+    data = json.dumps(receipt, ensure_ascii=False, sort_keys=True).encode() + b'\n'
+    if len(data) > META_LIMIT:
+        fail('BAD_RECEIPT')
+    temporary = path.with_name('.receipt.tmp')
+    with temporary.open('xb') as out:
+        out.write(data)
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(temporary, path)
+
+
+def _valid_stage(c, root, stage, receipt=None):
+    _owned_stage(root, stage)
+    if any((stage / name).exists() for name in ['.receipt.tmp', META + '.tmp', 'receipt.json.tmp']):
+        quarantine(root, stage)
+        fail('BAD_SHA')  # Own interrupted metadata writes are not resumable.
+    try:
+        if receipt is not None:
+            _validate_receipt(receipt, stage.name, c['max_bundle_bytes'])
+            _canonical_receipt(stage / 'receipt.json', receipt)
+        value = _staged_complete(stage)
+        if value is not None:
+            _validate_receipt(value, stage.name, c['max_bundle_bytes'])
+        return value
+    except (OSError, ValueError, KeyError, TypeError):
+        quarantine(root, stage)
+        raise b.BackupError('BAD_SHA') from None
+
+
+def daily_success(c, root):
+    """Reuse only a promoted, checked copy CREATED on this Bangkok day."""
+    marker = checked_path(root / '.stream-success.json')
+    if not marker.exists():
+        return None
+    try:
+        if marker.stat().st_size > META_LIMIT:
+            fail('BAD_RECEIPT')
+        saved = json.loads(marker.read_text(encoding='utf-8'))
+        name = saved['id']
+        if saved.get('transport') != TRANSPORT or saved.get('day') != bangkok_day() or bangkok_day(name) != saved['day']:
+            return None
+        final = checked_path(root / name)
+        checked_path(final / 'receipt.json')
+        receipt = b.validate_bundle(final)
+        _validate_receipt(receipt, name, c['max_bundle_bytes'])
+        if b.sha(final / 'receipt.json') != saved['receipt_sha']:
+            fail('BAD_SHA')
+        return final, receipt
+    except (OSError, ValueError, KeyError, TypeError):
+        # A damaged/missing local final must not masquerade as today's success.
+        return None
+
+
+def mark_success(c, root, bundle):
+    """Only pull(), after weekly verification/promotion, may persist this gate."""
+    root, bundle = checked_path(root), checked_path(bundle)
+    if bundle.parent != root or not b.ID.fullmatch(bundle.name):
+        fail('UNSAFE_DESTINATION')
+    checked_path(bundle / 'receipt.json')
+    receipt = b.validate_bundle(bundle)
+    _validate_receipt(receipt, bundle.name, c['max_bundle_bytes'])
+    if bangkok_day(bundle.name) != bangkok_day():
+        return False  # Restoring yesterday's valid copy cannot suppress today.
+    path = checked_path(root / '.stream-success.json')
+    b.write_json(path, {'transport': TRANSPORT, 'day': bangkok_day(bundle.name),
+                        'id': bundle.name, 'receipt_sha': b.sha(bundle / 'receipt.json')})
+    return True
+
+
+def publish(c, root, status):
+    """Bounded stream-only outbox. Unknown sends are read back, never retried."""
+    quiet = {'NO_BACKUP', 'STREAM_TIMEOUT', 'STREAM_STALLED', 'STREAM_DISCONNECTED',
+             'STREAM_NEW_SESSION_REQUIRED', 'STREAM_INTERRUPTED', 'WAIT_NEXT_NIGHT'}
+    success = status.get('phase') == 'pull' and status.get('result') == 'OK'
+    safe = None
+    if success:
+        if not b.ID.fullmatch(status.get('id', '')) or re.fullmatch('[a-f0-9]{64}', status.get('receipt_sha', '')) is None:
+            return False
+        safe = {k: status[k] for k in ['phase', 'id', 'bytes', 'sha', 'result', 'receipt_sha']}
+    elif status.get('phase') == 'night-summary' or status.get('error') not in quiet:
+        safe = {'phase': 'night-summary' if status.get('phase') == 'night-summary' else 'pull',
+                'result': 'ERROR', 'date': bangkok_day(),
+                'error': status.get('error') if status.get('error') in b.board_report.ERRORS else 'PULL_OR_VERIFY_FAILED'}
+    try:
+        root = checked_path(root)
+        outbox = checked_path(root / '.stream-reports')
+        outbox.mkdir(mode=0o700, exist_ok=True)
+        b.private_dir(outbox)
+        entries = {}
+        for path in outbox.iterdir():
+            checked_path(path)
+            if re.fullmatch(r'[a-f0-9]{64}\.json', path.name) is None or not path.is_file() or path.stat().st_size > META_LIMIT:
+                return False
+            saved = json.loads(path.read_text(encoding='utf-8'))
+            if saved.get('state') not in ['pending', 'sending', 'sent'] or saved.get('marker') != 'BACKUP58_STREAM_REPORT ' + path.stem:
+                return False
+            entries[path] = saved
+        current = None
+        if safe is not None:
+            digest = hashlib.sha256(json.dumps(safe, sort_keys=True).encode()).hexdigest()
+            current = outbox / (digest + '.json')
+            if current not in entries and sum(x['state'] != 'sent' for x in entries.values()) < 32:
+                marker = 'BACKUP58_STREAM_REPORT ' + digest
+                if success:
+                    text = f"Копия за {bangkok_day(safe['id'])}: {safe['id']}; размер {safe['bytes']}; SHA OK; OK"
+                    text += '\n' + marker + '\n' + b.board_report.ACK + json.dumps(
+                        {'id': safe['id'], 'receipt_sha': safe['receipt_sha']}, sort_keys=True)
+                else:
+                    text = (f"Итог копии за {safe['date']}: нет подтверждённой копии"
+                            if safe['phase'] == 'night-summary' else f"Проверка копии за {safe['date']}: ERROR; {safe['error']}")
+                    text += '\n' + marker
+                entries[current] = {'marker': marker, 'text': text, 'state': 'pending'}
+                b.write_json(current, entries[current])
+        if c.get('board_endpoint_file') and any(x['state'] != 'sent' for x in entries.values()):
+            session_id = None
+            try:
+                try:
+                    session = b.board_report.rpc(c, 'session_start', {'agent': b.board_report.AUTHOR, 'kind': 'codex',
+                                                                    'request': 'Короткий отчёт резервного копирования №58'})
+                    session_id = session.get('session_id')
+                    for document in session.get('documents', []):
+                        b.board_report.rpc(c, 'doc_read', {'path': document['path']})
+                except Exception:
+                    pass
+                seen = {x.get('text', '') for x in b.board_report.comments(c) if x.get('author') == b.board_report.AUTHOR}
+                for path, saved in sorted(entries.items()):
+                    if saved['state'] == 'sent':
+                        continue
+                    if any(saved['marker'] in text for text in seen):
+                        saved['state'] = 'sent'
+                    elif saved['state'] == 'sending':
+                        continue
+                    else:
+                        saved['state'] = 'sending'
+                        b.write_json(path, saved)
+                        b.board_report.rpc(c, 'task_comment', {'task_id': 58, 'author': b.board_report.AUTHOR, 'text': saved['text']})
+                        saved['state'] = 'sent'
+                    b.write_json(path, saved)
+            finally:
+                if session_id:
+                    with contextlib.suppress(Exception):
+                        b.board_report.rpc(c, 'session_end', {'session_id': session_id,
+                            'summary': 'Отчёт резервного копирования №58; состояние в outbox', 'state': 'idle'})
+        # Only confirmed sent files are expendable. Never evict pending/sending,
+        # including unknown success delivery, merely to make room for a retry.
+        sent = sorted((p for p, x in entries.items() if x['state'] == 'sent'),
+                      key=lambda p: (p == current, p.stat().st_mtime), reverse=True)
+        for path in sent[8:]:
+            path.unlink()
+        return current in entries and entries[current]['state'] == 'sent'
+    except Exception:
+        return False
+
+
 def download(c, root):
     """Return staged cipher only. pull() runs its mandatory weekly check next."""
     root = checked_path(root)
     if checked_path(Path(c['destination']).absolute()).resolve() != root:
         fail('UNSAFE_DESTINATION')
     _outside_private_paths(c, root)
+    already = daily_success(c, root)
+    if already is not None:
+        return already
     stage_root = _local_root(root)
     cleanup_local(root)
     # A complete staged bundle survives failed weekly verification/unknown ACK.
     for path in sorted(stage_root.iterdir(), reverse=True):
-        receipt = _staged_complete(path)
+        try:
+            receipt = _valid_stage(c, root, path)
+        except b.BackupError as error:
+            if str(error) != 'BAD_SHA':
+                raise
+            continue  # Invalid own cipher is quarantined, not a sticky retry.
         if receipt:
             _validate_receipt(receipt, path.name, c['max_bundle_bytes'])
             if fresh_id(path.name):
@@ -984,12 +1265,29 @@ def download(c, root):
                 receipt = remote_json(c, f'get {path.name} receipt.json')
             except b.BackupError:
                 continue
-            _validate_receipt(receipt, path.name, c['max_bundle_bytes'])
-            b.write_json(path / 'receipt.json', receipt)
-            b.validate_bundle(path)
+            try:
+                _valid_stage(c, root, path, receipt)
+            except b.BackupError as error:
+                if str(error) != 'BAD_SHA':
+                    raise
+                continue
             return path, receipt
+    # A crash after promotion but before its daily marker is still recoverable
+    # during the day. pull() must reapply its weekly policy before marking OK.
+    for final in b.completed(root):
+        if bangkok_day(final.name) != bangkok_day():
+            continue
+        checked_path(final)
+        checked_path(final / 'receipt.json')
+        receipt = b.validate_bundle(final)
+        _validate_receipt(receipt, final.name, c['max_bundle_bytes'])
+        return final, receipt
+    if not night_window()[0]:
+        fail('WAIT_NEXT_NIGHT')  # No new FIFO may trigger daytime production.
     wait = time.monotonic() + duration(c, 'stream_offer_wait_seconds', 300, 1800)
     while True:
+        if not night_window()[0]:
+            fail('WAIT_NEXT_NIGHT')
         try:
             ids = remote_json(c, 'list')
         except b.BackupError:
@@ -999,6 +1297,9 @@ def download(c, root):
             fail('BAD_RECEIPT')
         if ids:
             name = max(ids)
+            if (root / '.stream-quarantine' / name).exists():
+                time.sleep(min(2, time_left(wait)))
+                continue
             if not fresh_id(name):
                 time.sleep(min(2, time_left(wait)))
                 continue
@@ -1033,9 +1334,12 @@ def download(c, root):
         b.write_json(pending / META, offer)
         used = 0
         for filename in b.FILES:
+            active, remaining = night_window()
+            if not active:
+                fail('WAIT_NEXT_NIGHT')
             path = pending / filename
             with path.open('xb') as out:
-                code = ssh_receive(c, f'get {name} {filename}', out, maximum - used, 3600)
+                code = ssh_receive(c, f'get {name} {filename}', out, maximum - used, min(3600, remaining))
                 out.flush()
                 os.fsync(out.fileno())
             used += path.stat().st_size
@@ -1053,9 +1357,7 @@ def download(c, root):
             if state.get('state') == 'FAILED':
                 fail('CREATE_FAILED')
             time.sleep(min(1, time_left(deadline)))
-    _validate_receipt(receipt, name, maximum)
-    b.write_json(pending / 'receipt.json', receipt)
-    b.validate_bundle(pending)
+    _valid_stage(c, root, pending, receipt)
     return pending, receipt
 
 

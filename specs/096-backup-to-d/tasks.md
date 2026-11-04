@@ -21,6 +21,8 @@
 - [ ] Проверить real age/старый restore и отрицательные сценарии list/get/пути/конкурентный читатель/бюджеты.
 - [x] Обновить RECOVERY, пройти Windows backup suite и Spec Kit gate; Linux CI отдельно.
 - [x] Пройти Linux FIFO/age/SQLite quota/link-race CI runtime745b363d:50/50; независимое Codex-review исправлений пройдено.
+- [x] Исправить замечания Claude577: окно01–06, daily/ACK gate, bounded reports, late-DONE/own-temp quarantine, существующий SSH recipient; Windows64/46PASS18SKIP.
+- [ ] Новый Linux CI64 и systemd verify для runtimeb1de32e; повторное ревью Claude окончательного head.
 - [x] Открыть draft PR525 с отдельной строкой Spec:; передать окончательный head независимому Claude через№58.
 - [ ] Независимая приёмка Claude окончательного head PR525.
 - [ ] После приёмки и разрешённой передачи сервера — отдельная live-проверка копии наD; не отмечать заранее.

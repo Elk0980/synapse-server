@@ -31,10 +31,10 @@ Docker/production/полная инвентаризация/копия на D/RT
 Начало05.11 01:25Бангкок. Ветка создана от main7678403e; primary checkout/production не менялись. ПравилаSpecKit1.0.0 прочитаны. Старые23теста выше относятся к архивному484 и не являются доказательством потока.
 
 Проверенный локально кандидат: `backup_stream.py` SHA256
-`745b363d96a1e898ff63a7ae0cfad74990fa47c92dcc70f6088bdcd14ee3830b`,
-`backup_v2.py` `779e3cb4c8dd7325a0ed180115a35c3342e4a136e1e5fa90f26e86d4eaec8168`.
-Windows Python3.14, настоящий age1.3.2: полный backup suite50 тестов,
-34PASS/16SKIP/0FAIL. Пропуски включают Linux FIFO, UID, quota, link-race,
+`b1de32e836e4e71179aa21ea9503742a32b0cedcf51a094fa0dbd257636f012d`,
+`backup_v2.py` `e303e62a3476c4fc9c2e4d1f498459676567785544e417244053f52688b36738`.
+Windows Python3.14, настоящий age1.3.2 и SSH fixture: полный backup suite64 теста,
+46PASS/18SKIP/0FAIL. Пропуски включают Linux FIFO, UID, quota, link-race,
 online producer и Docker sandbox; это НЕ пройденная Linux-проверка.
 Spec Kit gate check48файлов PASS, git diff --check PASS.
 
@@ -69,6 +69,18 @@ FIFO/age/SQLite quota и обе подмены пути.
 https://github.com/Elk0980/synapse-server/actions/runs/41897075699.
 Независимое узкое Codex-review исправления не нашло конкретных блокеров;
 производственная установка и приёмка Claude по-прежнему не выполнены.
+
+После непринятия Claude№58/577 добавлены окно01–06Бангкок, дневная метка
+только после promotion/weekly-политики, серверный gate только по точному
+ACK, canonical receipt SHA, ограниченный outbox и карантин late-DONE.
+Первый synthetic late-DONE тест воспроизвёл BAD_SHA на повторном pull
+старой версии; новый кандидат проходит свежий ID без24часового ожидания.
+Отдельно воспроизведён orphan `.receipt.tmp`; исправлены три известных
+временных имени с сохранением запрета ссылок/чужих файлов. Ранний fatal
+preflight после готового output сообщает ошибку и сохраняет exit78.
+Независимое повторное Codex-review этих исправлений — без новых P1.
+Новый Linux CI64 и проверка systemd units для этого runtime ещё ожидаются;
+предыдущие50/50 не относятся к новым ночным ограничениям.
 
 Не выполнены: production-установка, сегодняшняя копия
 наD, проверка реального состава/внешних ссылок, подключение отчётов,

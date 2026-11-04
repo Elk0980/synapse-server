@@ -365,6 +365,8 @@ def pull(c):
                 import backup_stream
                 dest = backup_stream.promote(c, root, dest)
             status.update(result="OK", receipt_sha=sha(dest / "receipt.json"))
+            if c.get("transport") == "stream-v1":
+                backup_stream.mark_success(c, root, dest)
         except Exception as error:
             status["error"] = str(error) if isinstance(error, BackupError) else "PULL_OR_VERIFY_FAILED"
             raise
@@ -380,7 +382,8 @@ def pull(c):
                 try:
                     write_json(state_path, status)
                 finally:
-                    status["board"] = "OK" if board_report.publish(c, root, status) else "PENDING"
+                    publisher = backup_stream.publish if c.get("transport") == "stream-v1" else board_report.publish
+                    status["board"] = "OK" if publisher(c, root, status) else "PENDING"
                 write_json(state_path, status)
         if status["board"] != "OK":
             raise BackupError("BOARD_REPORT_PENDING")
@@ -558,6 +561,8 @@ def main():
         import backup_stream
         try:
             backup_stream.produce(c)
+        except backup_stream.NightComplete:
+            raise SystemExit(75)
         except backup_stream.ConfigurationError:
             print("STREAM_CONFIG_REVIEW_REQUIRED", file=sys.stderr)
             raise SystemExit(78)

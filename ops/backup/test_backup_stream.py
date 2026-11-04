@@ -32,6 +32,12 @@ LINUX = sys.platform.startswith('linux')
 
 class StreamTests(unittest.TestCase):
     def setUp(self):
+        # Protocol/crypto fixtures have a fixed open production window. Separate
+        # tests exercise the real clock boundary and daytime refusal below.
+        self.real_night_window = s.night_window
+        self.window_patch = patch.object(s, 'night_window', return_value=(True, 18000.0))
+        self.window_patch.start()
+        self.addCleanup(self.window_patch.stop)
         parent = os.environ.get('SYNAPSE_BACKUP_TEST_TEMP')
         self.temporary = tempfile.TemporaryDirectory(prefix='stream-fixture-', dir=parent)
         self.root = Path(self.temporary.name).resolve()
@@ -92,13 +98,124 @@ class StreamTests(unittest.TestCase):
 
     def test_linux_ci_requires_real_crypto_tools(self):
         if LINUX and os.environ.get('CI'):
-            self.assertTrue(AGE and KEYGEN, 'Linux CI must install actual age and age-keygen')
+            self.assertTrue(AGE and KEYGEN and shutil.which('ssh-keygen'),
+                            'Linux CI must install actual age, age-keygen and ssh-keygen')
+
+    def test_real_bangkok_window_boundaries(self):
+        original = dt.datetime
+        zone = dt.timezone(dt.timedelta(hours=7))
+        for hour, minute, active, remaining in [(0,59,False,18060), (1,0,True,18000),
+                                                (5,59,True,60), (6,0,False,0), (12,0,False,0)]:
+            instant = original(2026,11,5,hour,minute,tzinfo=zone)
+            class Clock(original):
+                @classmethod
+                def now(cls, tz=None):
+                    return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+            with self.subTest(hour=hour,minute=minute), patch.object(s.dt, 'datetime', Clock):
+                self.assertEqual(self.real_night_window(), (active, remaining))
+
+    def test_daytime_incomplete_copy_never_requests_source_stream(self):
+        with patch.object(s, 'night_window', return_value=(False,0)), \
+             patch.object(s, 'remote_json', side_effect=AssertionError('No daytime offer request')), \
+             patch.object(s, 'ssh_receive', side_effect=AssertionError('No daytime source stream')):
+            with self.assertRaisesRegex(b.BackupError, 'WAIT_NEXT_NIGHT'):
+                s.download(self.c, self.dest)
+
+    def test_daytime_can_verify_an_already_complete_cipher_stage(self):
+        staged, receipt = self.download()
+        with patch.object(s, 'night_window', return_value=(False,0)), \
+             patch.object(s, 'remote_json', side_effect=AssertionError('No new source offer')), \
+             patch.object(s, 'ssh_receive', side_effect=AssertionError('No new source stream')):
+            same, checked = s.download(self.c, self.dest)
+        self.assertEqual((same, checked), (staged, receipt))
+
+    def test_verified_daily_copy_prevents_new_source_stream(self):
+        staged, receipt = self.download()
+        final = s.promote(self.c, self.dest, staged)
+        self.assertTrue(s.mark_success(self.c, self.dest, final))
+        self.calls.clear()
+        with patch.object(s, 'remote_json', side_effect=AssertionError('Already copied today')), \
+             patch.object(s, 'ssh_receive', side_effect=AssertionError('Already copied today')):
+            same, checked = s.download(self.c, self.dest)
+        self.assertEqual((same,checked), (final,receipt))
+        self.assertEqual(self.calls, [])
+        (final/b.FILES[0]).write_bytes(b'corrupt local cipher')
+        self.assertIsNone(s.daily_success(self.c, self.dest))
+
+    def test_yesterdays_recovery_cannot_be_marked_as_todays_success(self):
+        self.name = 'synapse-' + (dt.datetime.now(dt.timezone.utc)-dt.timedelta(days=1)).strftime('%Y%m%dT%H%M%SZ')
+        self.receipt = self.make_receipt()
+        self.offer = dict(self.offer,id=self.name)
+        staged, _ = self.download()
+        final = s.promote(self.c, self.dest, staged)
+        self.assertFalse(s.mark_success(self.c, self.dest, final))
+        self.assertIsNone(s.daily_success(self.c, self.dest))
+
+    def test_quiet_retries_create_no_board_messages(self):
+        with patch.object(b.board_report, 'rpc', side_effect=AssertionError('No retry comment')):
+            for index in range(8):
+                self.assertFalse(s.publish(self.c,self.dest,
+                    {'phase':'create-stream','id':str(index),'result':'ERROR','error':'STREAM_TIMEOUT'}))
+        self.assertEqual(list((self.dest/'.stream-reports').glob('*.json')), [])
+
+    def test_daily_error_deduplicates_and_unresolved_outbox_is_bounded(self):
+        for index in range(8):
+            self.assertFalse(s.publish(self.c,self.dest,
+                {'phase':'pull','id':str(index),'result':'ERROR','error':'BAD_SHA'}))
+        self.assertEqual(len(list((self.dest/'.stream-reports').glob('*.json'))), 1)
+        for index in range(40):
+            day = (dt.date(2026,1,1)+dt.timedelta(days=index)).isoformat()
+            with patch.object(s, 'bangkok_day', return_value=day):
+                self.assertFalse(s.publish(self.c,self.dest,
+                    {'phase':'pull','result':'ERROR','error':'BAD_SHA'}))
+        files = list((self.dest/'.stream-reports').glob('*.json'))
+        self.assertEqual(len(files), 32)
+        self.assertTrue(all(json.loads(p.read_text())['state']=='pending' for p in files))
+
+    def test_unknown_stream_report_is_read_back_without_duplicate_send(self):
+        c = dict(self.c, board_endpoint_file='explicit-fixture-endpoint')
+        sent, history = [], []
+        def rpc(config, method, args):
+            if method == 'task_comment':
+                sent.append(args)
+                raise TimeoutError('Delivery may have happened')
+            return {}
+        status = {'phase':'pull','result':'ERROR','error':'BAD_SHA'}
+        with patch.object(b.board_report, 'rpc', side_effect=rpc), \
+             patch.object(b.board_report, 'comments', side_effect=lambda c:history):
+            self.assertFalse(s.publish(c,self.dest,status))
+            self.assertFalse(s.publish(c,self.dest,status))
+            self.assertEqual(len(sent),1)
+            history.append({'author':b.board_report.AUTHOR,'text':sent[0]['text']})
+            self.assertTrue(s.publish(c,self.dest,status))
+            self.assertEqual(len(sent),1)
+
+    def test_confirmed_report_retention_never_evicts_unknown_delivery(self):
+        c = dict(self.c, board_endpoint_file='explicit-fixture-endpoint')
+        def rpc(config, method, args):
+            if method=='task_comment' and 'ERROR' in args['text']:
+                raise TimeoutError('Unknown failure delivery')
+            return {}
+        with patch.object(b.board_report, 'rpc', side_effect=rpc), \
+             patch.object(b.board_report, 'comments', return_value=[]):
+            self.assertFalse(s.publish(c,self.dest,{'phase':'pull','result':'ERROR','error':'BAD_SHA'}))
+            for index in range(12):
+                name = 'synapse-'+(dt.datetime.now(dt.timezone.utc)+dt.timedelta(seconds=index)).strftime('%Y%m%dT%H%M%SZ')
+                self.assertTrue(s.publish(c,self.dest,{'phase':'pull','id':name,'result':'OK',
+                    'bytes':10,'sha':'OK','receipt_sha':hashlib.sha256(str(index).encode()).hexdigest()}))
+        reports = [json.loads(p.read_text()) for p in (self.dest/'.stream-reports').glob('*.json')]
+        self.assertEqual(sum(x['state']=='sent' for x in reports),8)
+        self.assertEqual(sum(x['state']=='sending' for x in reports),1)
 
     def test_offer_has_no_final_sha_and_download_stages_without_promotion(self):
         staged, receipt = self.download()
         self.assertEqual(staged, self.dest / '.stream-partials' / self.name)
         self.assertFalse((self.dest / self.name).exists())
         self.assertEqual(b.validate_bundle(staged), receipt)
+        # ACK hashes the receipt bytes: preserve the producer/serve wire form,
+        # rather than reformatting parsed JSON differently on the PC.
+        self.assertEqual((staged/'receipt.json').read_bytes(),
+                         json.dumps(self.receipt, sort_keys=True).encode()+b'\n')
         self.assertNotIn('sha256', json.dumps(self.offer))
         self.assertEqual(self.calls.count(f'get {self.name} receipt.json'), 1)
         self.assertNotIn('result', receipt)
@@ -121,6 +238,51 @@ class StreamTests(unittest.TestCase):
         self.assertEqual(b.validate_bundle(staged), self.receipt)
         self.assertFalse((self.dest / self.name).exists())
 
+    def test_late_truncated_done_receipt_does_not_poison_next_fresh_offer(self):
+        original = self.name
+        def late_disconnect(c, command, target, maximum, timeout):
+            name = command.split()[-1]
+            target.write(self.payload[name][:-1] if name == b.FILES[0] else self.payload[name])
+            self.offer['files'][name]['state'] = 'DONE'
+            return 255
+        with self.assertRaisesRegex(b.BackupError, 'BAD_SHA'):
+            self.download(receive=late_disconnect)
+        self.assertFalse((self.dest / original).exists())
+        self.name = 'synapse-' + (dt.datetime.now(dt.timezone.utc)+dt.timedelta(seconds=1)).strftime('%Y%m%dT%H%M%SZ')
+        self.receipt = self.make_receipt()
+        self.offer = dict(self.offer, id=self.name,
+                          files={name:{'state':'WAITING'} for name in b.FILES})
+        self.calls.clear()
+        selected, receipt = self.download()
+        self.assertEqual(selected.name, self.name)
+        self.assertEqual(b.validate_bundle(selected), receipt)
+        self.assertNotIn(f'get {original} {b.FILES[0]}', self.calls)
+        self.assertNotIn(f'get {original} {b.FILES[1]}', self.calls)
+        self.assertFalse((self.dest / original).exists())
+
+    def test_interrupted_own_receipt_writes_do_not_block_a_fresh_offer(self):
+        for index, temporary in enumerate(['.receipt.tmp','stream.json.tmp','receipt.json.tmp']):
+            with self.subTest(temporary=temporary):
+                self.dest = self.root/('D-orphan-'+str(index)); self.dest.mkdir()
+                self.c['destination'] = str(self.dest)
+                self.name = 'synapse-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+                self.receipt = self.make_receipt()
+                self.offer = dict(self.offer,id=self.name,
+                    files={name:{'state':'WAITING'} for name in b.FILES})
+                old, _ = self.download()
+                (old/temporary).write_bytes(b'{"interrupted":')
+                old_name = self.name
+                self.name = 'synapse-'+(dt.datetime.now(dt.timezone.utc)+dt.timedelta(seconds=1)).strftime('%Y%m%dT%H%M%SZ')
+                self.receipt = self.make_receipt()
+                self.offer = dict(self.offer,id=self.name)
+                self.calls.clear()
+                selected, receipt = self.download()
+                self.assertEqual(selected.name,self.name)
+                self.assertEqual(b.validate_bundle(selected),receipt)
+                self.assertFalse(old.exists())
+                self.assertTrue((self.dest/'.stream-quarantine'/old_name/temporary).is_file())
+                self.assertNotIn(f'get {old_name} {b.FILES[0]}',self.calls)
+                self.assertFalse((self.dest/old_name).exists())
     def test_stale_complete_stage_does_not_hide_fresh_offer(self):
         old = 'synapse-' + (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=7)).strftime('%Y%m%dT%H%M%SZ')
         stage = self.dest / '.stream-partials' / old
@@ -186,7 +348,7 @@ class StreamTests(unittest.TestCase):
         stale = stage / 'synapse-20000101T000000Z'
         fresh = stage / self.name
         stale.mkdir(); fresh.mkdir()
-        (stale / 'own.partial').write_bytes(b'fixture')
+        (stale / b.FILES[0]).write_bytes(b'partial cipher fixture')
         os.utime(stale, (1, 1))
         s.cleanup_local(self.dest)
         self.assertFalse(stale.exists())
@@ -218,7 +380,7 @@ class StreamTests(unittest.TestCase):
         with patch.object(b, 'download', return_value=(staged, self.receipt)), \
              patch.object(b, 'weekly_verify', side_effect=b.BackupError('BAD_SHA')), \
              patch.object(s, 'promote', side_effect=AssertionError('No promotion before verify')), \
-             patch.object(b.board_report, 'publish', side_effect=lambda c,r,status: reported.append(dict(status)) or True):
+             patch.object(s, 'publish', side_effect=lambda c,r,status: reported.append(dict(status)) or True):
             with self.assertRaisesRegex(b.BackupError, 'BAD_SHA'):
                 b.pull(self.c)
         self.assertTrue(staged.exists())
@@ -236,7 +398,7 @@ class StreamTests(unittest.TestCase):
         with patch.object(b, 'download', return_value=(staged, self.receipt)) as download, \
              patch.object(b, 'weekly_verify', side_effect=lambda *a: order.append('verify')), \
              patch.object(s, 'promote', side_effect=promoted), \
-             patch.object(b.board_report, 'publish', return_value=False):
+             patch.object(s, 'publish', return_value=False):
             with self.assertRaisesRegex(b.BackupError, 'BOARD_REPORT_PENDING'):
                 b.pull(self.c)
         self.assertEqual(order, ['verify', 'promote'])
@@ -245,9 +407,23 @@ class StreamTests(unittest.TestCase):
 
     @unittest.skipUnless(AGE and KEYGEN, 'Requires actual age and age-keygen')
     def test_real_age_stream_download_restore_old_wal_data_and_tamper(self):
+        self._real_age_restore_roundtrip()
+
+    @unittest.skipUnless(AGE and shutil.which('ssh-keygen'), 'Requires actual age and ssh-keygen')
+    def test_real_age_ssh_recipient_restore_without_user_keys(self):
+        self._real_age_restore_roundtrip(ssh_recipient=True)
+
+    def _real_age_restore_roundtrip(self, ssh_recipient=False):
         identity = Path(self.c['identity'])
-        subprocess.run([KEYGEN, '-o', str(identity)], check=True, capture_output=True)
-        recipient = subprocess.run([KEYGEN, '-y', str(identity)], check=True, capture_output=True, text=True).stdout.strip()
+        if ssh_recipient:
+            # A disposable fixture key in this test's private TemporaryDirectory.
+            # No user key is read, searched for, copied or placed in the repo.
+            subprocess.run([shutil.which('ssh-keygen'), '-q', '-t', 'ed25519', '-N', '',
+                            '-f', str(identity)], check=True, capture_output=True)
+            recipient = Path(str(identity)+'.pub').read_text().strip()
+        else:
+            subprocess.run([KEYGEN, '-o', str(identity)], check=True, capture_output=True)
+            recipient = subprocess.run([KEYGEN, '-y', str(identity)], check=True, capture_output=True, text=True).stdout.strip()
         self.c.update(age=AGE, recipient=recipient)
         source = self.root / 'wal-db'
         sealed = self.root / 'sealed-db'
@@ -309,6 +485,42 @@ class LinuxStreamTests(unittest.TestCase):
         fifo = self.root / 'cipher.fifo'
         os.mkfifo(fifo, 0o640); fifo.chmod(0o640)
         return fifo
+
+    def test_actual_root_preflight_window_and_fatal_reporting_without_docker(self):
+        if os.geteuid()==0:
+            prefix=[]
+        elif shutil.which('sudo') and subprocess.run([shutil.which('sudo'),'-n','true'],capture_output=True).returncode==0:
+            prefix=[shutil.which('sudo'),'-n']
+        else:
+            if os.environ.get('CI'):self.fail('Actual root fixture capability required')
+            self.skipTest('No fixture-only root capability')
+        script = '''import sys,os,json
+from pathlib import Path
+from unittest.mock import patch
+root=Path(sys.argv[1]).resolve()
+assert root.name.startswith('stream-fixture-') and root.is_dir() and os.geteuid()==0
+sys.path.insert(0,sys.argv[2])
+import backup_stream as s
+mode=sys.argv[3];calls=[]
+def inventory(c):
+ if mode=='window':raise AssertionError('No daytime inventory/Docker')
+ raise s.ConfigurationError('LINK_OUTSIDE_ROOTS')
+c={'transport':s.TRANSPORT,'reviewed_inventory':True}
+with patch.object(s,'_prepare_output',return_value=(root,os.getgid())),patch.object(s,'server_daily_success',return_value=False),patch.object(s,'night_window',return_value=(mode!='window',0 if mode=='window' else 18000)),patch.object(s,'inventory',side_effect=inventory),patch.object(s,'publish',side_effect=lambda c,r,status:calls.append(status) or False),patch.object(s.b,'run',side_effect=AssertionError('No Docker in this preflight fixture')):
+ try:s.produce(c)
+ except s.NightComplete:assert mode=='window'
+ except s.ConfigurationError as error:assert mode=='inventory' and str(error)=='LINK_OUTSIDE_ROOTS'
+ else:raise AssertionError('Expected a safe stop')
+assert len(calls)==1
+assert calls[0]['phase']=='night-summary' if mode=='window' else calls[0]['error']=='LINK_OUTSIDE_ROOTS'
+print(json.dumps({'root':True,'mode':mode,'reports':len(calls),'docker_calls':0}))
+'''
+        for mode in ['window','inventory']:
+            with self.subTest(mode=mode):
+                result=subprocess.run(prefix+[sys.executable,'-c',script,str(self.root),
+                                      str(Path(s.__file__).resolve().parent),mode],capture_output=True,timeout=10)
+                self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+                self.assertEqual(json.loads(result.stdout)['reports'],1)
 
     def test_parent_symlink_swap_cannot_export_outside_file(self):
         source, outside, scratch = self.root/'source', self.root/'outside', self.root/'scratch'
@@ -449,6 +661,29 @@ class LinuxStreamTests(unittest.TestCase):
             s._fcntl.flock(lease, s._fcntl.LOCK_EX | s._fcntl.LOCK_NB)
             with self.assertRaisesRegex(b.BackupError, 'STREAM_CONSUMER_BUSY'):
                 s.read_fifo(self.c, directory, b.FILES[0], io.BytesIO())
+
+    def test_server_committed_stream_needs_exact_d_ack_for_daily_gate(self):
+        output = self.root/'server'; output.mkdir(mode=0o750)
+        directory = output/self.name; directory.mkdir(mode=0o750)
+        metadata = dict(self.offer,state='COMMITTED')
+        (directory/s.META).write_text(json.dumps(metadata)); (directory/s.META).chmod(0o640)
+        receipt = directory/'receipt.json'
+        receipt.write_bytes(json.dumps(self.receipt,sort_keys=True).encode()+b'\n'); receipt.chmod(0o640)
+        c = dict(self.c,board_endpoint_file='explicit-fixture-endpoint')
+        with patch.object(s, 'root_entry', side_effect=self.fixture_entry), \
+             patch.object(b.board_report, 'acknowledged', return_value=False) as ack:
+            self.assertFalse(s.server_daily_success(c,output,os.getgid()))
+            ack.assert_called_once_with(c,self.name,b.sha(receipt))
+        self.assertFalse((output/'.daily-success.json').exists())
+        # File ownership is tested by actual root-worker tests. Here only the
+        # ACK decision and canonical receipt hash are under test.
+        def write_metadata(path,value,gid):
+            b.write_json(path,value)
+        with patch.object(s, 'root_entry', side_effect=self.fixture_entry), \
+             patch.object(b.board_report, 'acknowledged', return_value=True), \
+             patch.object(s, 'atomic_metadata', side_effect=write_metadata):
+            self.assertTrue(s.server_daily_success(c,output,os.getgid()))
+        self.assertEqual(json.loads((output/'.daily-success.json').read_text())['receipt_sha'],b.sha(receipt))
 
     def test_only_list_get_no_shell_raw_path_ack_delete_or_traversal(self):
         output = self.root / 'reader'; output.mkdir(mode=0o750)
