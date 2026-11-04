@@ -21,6 +21,8 @@ window.SynapseModules.register('content-shooting', {
   (блок «№98, контракт А» сразу после `cabinetAssets`; `module-registry` всегда первым). Общие списки
   `cabinetAssets`/`cabinetStyles` не трогать: живой cabinet.html отличается от main, правка этих строк
   даёт конфликт при выпуске.
+- Модуль, загруженный раньше реестра, кладёт `[id, definition]` в `window.SynapseModulesQueue = [...]`;
+  реестр разбирает очередь при загрузке, а позже `SynapseModulesQueue.push([id, definition])` регистрирует сразу.
 - Пока модуль не зарегистрирован, на его месте заглушка «Скоро» без падений.
 - `mount` вызывается при каждом входе на экран и при смене компании (перед этим `unmount`).
   Содержимое `el` после `unmount` оболочка очищает сама.
@@ -99,3 +101,6 @@ window.SynapseModules.register('content-shooting', {
 
 В браузере: `ctx.settings.content.get()` / `.save(settings, version)`; вне модуля —
 `window.SynapseModules.contentSettings(companyCode).get()`.
+
+Хранение (не менять без записи здесь): таблица `content_settings(company_code PRIMARY KEY, body TEXT JSON
+с пятью полями settings, version INTEGER, updated_at TEXT ISO, updated_by INTEGER — id пользователя)`; на неё опирается модуль «Контент-план» (агент Б).

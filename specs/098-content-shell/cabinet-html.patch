@@ -1,0 +1,305 @@
+diff --git a/sites/synapse/cabinet.html b/sites/synapse/cabinet.html
+index 6867517..abe36e6 100644
+--- a/sites/synapse/cabinet.html
++++ b/sites/synapse/cabinet.html
+@@ -589,8 +589,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+ <a class="skip-link" href="#main-content">Перейти к содержимому</a>
+ <div class="shell" id="app" hidden>
+   <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
+-    <a href="#home" data-view-link="home">Главная</a><a href="#crm" data-view-link="crm">Заявки</a>
+-    <a href="#clients" data-view-link="clients">Клиенты</a><a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
++    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы контента">Контент</button><a href="#crm" data-view-link="crm">Заявки</a>
++    <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
+   </nav>
+   <div class="mobile-bar">
+     <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
+@@ -618,6 +618,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+       <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
+         Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
+       </a>
++      <!-- №98: меню «Контент» и «Настройки»; оболочка ставит «Контент» после «Главной», а «Хью» превращает в «Чаты». -->
++      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент</button>
++      <div class="subnav" id="content-menu" hidden>
++        <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
++        <a class="nav-link" href="#content/shooting" data-view-link="content-shooting">Съёмка</a>
++        <a class="nav-link" href="#content/materials" data-view-link="content-materials">Материалы</a>
++        <a class="nav-link" id="content-factory-link" href="#content-factory" data-view-link="content-factory" hidden>Постинг</a>
++        <a class="nav-link" href="#content/connections" data-view-link="content-connections">Подключения</a>
++        <a class="nav-link" href="#content/stats" data-view-link="content-stats" data-view-also="content-factory-stats media-mentor-rollout">Статистика</a>
++      </div>
++      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings" data-view-also="settings-content">Настройки</a>
+       <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
+         aria-controls="crm-menu">CRM</button>
+       <div class="subnav" id="crm-menu" hidden>
+@@ -647,8 +658,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+       </div>
+       <button class="nav-category" type="button" aria-expanded="false" aria-controls="marketing-menu">Продвижение</button>
+       <div class="subnav" id="marketing-menu" hidden>
+-      <a class="nav-link" id="content-factory-link" href="#content-factory"
+-        data-view-link="content-factory" hidden>Контент завод</a>
+       <a class="nav-link" id="actor-onboarding-link" href="#actor-onboarding"
+         data-view-link="actor-onboarding" hidden>Моя анкета</a>
+       <a class="nav-link" id="actor-workspace-link" href="#actor-workspace"
+@@ -662,7 +671,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+       <div class="subnav" id="finance-menu" hidden><a class="nav-link" href="#finance" data-view-link="finance">Доходы и расходы</a><a class="nav-link" href="#catalog" data-view-link="catalog">Модули и пакеты</a></div>
+       <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
+       <div class="subnav" id="management-menu" hidden>
+-      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки компании</a>
+       <a class="nav-link" id="site-orders-link" href="#site-orders" data-view-link="site-orders" hidden>Заявки с сайта</a>
+       <a class="nav-link" id="system-settings-link" href="#system-settings" data-view-link="system-settings" hidden>Настройки системы</a>
+       <a class="nav-link" id="company-team-link" href="#company-team" data-view-link="company-team" hidden>Моя команда</a>
+@@ -696,6 +704,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+         <section class="card factory-compose" id="content-factory-compose" aria-live="polite" hidden></section>
+       </div>
+     </div>
++    <nav class="sb-settings-tabs" id="settings-tabs" aria-label="Разделы настроек" hidden>
++      <a class="plain-button" href="#settings" data-settings-tab="settings">Компания</a>
++      <a class="plain-button" href="#settings/content" data-settings-tab="settings-content">Контент</a>
++    </nav>
+     <section class="view-panel" id="home-view" data-view="home" hidden>
+       <div class="content-header home-header"><h1>Главная</h1>
+         <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
+@@ -1087,6 +1099,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+   document.write(cabinetAssets.map((asset) =>
+     `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
+   ).join(""));
++  // №98, контракт А (specs/098-content-shell): реестр модулей и экраны раздела «Контент».
++  // Новые модули добавляются только в эти два списка; module-registry всегда первым.
++  const shellAssets = ["module-registry", "content-settings"];
++  const shellStyles = ["shell", "content-settings"];
++  document.write(shellStyles.map((asset) =>
++    `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
++  ).join("") + shellAssets.map((asset) =>
++    `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
++  ).join(""));
+ </script>
+ <script>
+ (() => {
+@@ -1201,7 +1222,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     accounts: "Настройка аккаунтов",
+     "company-team": "Моя команда",
+     "access-denied": "Доступ ограничен",
+-    trademarks: "Помощь в регистрации знаков"
++    trademarks: "Помощь в регистрации знаков",
++    "content-plan": "Контент-план",
++    "content-shooting": "Съёмка",
++    "content-materials": "Материалы",
++    "content-connections": "Подключения",
++    "content-stats": "Статистика",
++    chats: "Чаты",
++    "settings-content": "Настройки контента"
+   });
+   const CRM_API = "/content/crm";
+   const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
+@@ -1373,12 +1401,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     if(window.matchMedia("(max-width: 760px)").matches)setDrawer(false);
+     const context = cabinetContext();
+     // Entity IDs and unfinished forms belong to the previous company.
+-    history.replaceState(null, '', '#'+(factoryRoutes[currentView] || currentView));
++    history.replaceState(null, '', '#'+(factoryRoutes[currentView] || routeOf(currentView)));
+     const view=registeredViews[currentView];
+     if(view?.onProjectChange) view.onProjectChange(context);
+     else view?.render(document.querySelector(`[data-view="${currentView}"]`),context);
+     SbCabinet.renderModuleGuide?.(document.querySelector(`[data-view="${currentView}"]`),currentView,context);
+     if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
++    window.SynapseModules?.chat.companyChanged();
+   };
+ 
+   const editorSupported = (kind) =>
+@@ -1531,6 +1560,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     if (value === "telegram-sources") return !!selectedProject() && hasPermission("autoposting.view");
+     if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
+     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
++    if (["content-plan", "content-shooting", "content-materials", "content-connections", "content-stats"].includes(value)) {
++      return !!selectedProject() && (hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
++    }
++    if (value === "chats") return allowedProjects.length > 0;
++    if (value === "settings-content") return !!selectedProject() && (hasPermission("settings.view") || hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
+     // Медиа-наставник переиспользует право раздела публикаций: новых прав не заводим.
+     if (["media-mentor", "media-mentor-rollout", "content-factory-settings", "content-factory-stats"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
+     if (value === "actor-onboarding") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self") || identity?.permissions?.includes("actor-onboarding.manage");
+@@ -1556,6 +1590,23 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     return true;
+   };
+   const defaultView = () => "home";
++  /* Экраны, которые монтирует реестр модулей (контракт А, specs/098-content-shell).
++     legacy — прежний рабочий экран, пока модуль не зарегистрирован; иначе заглушка «Скоро». */
++  const MODULE_ROUTES = Object.freeze({
++    "content-plan": {route: "content/plan", stub: {text: "Опросник и готовый план с согласованием появятся здесь.",
++      links: [{href: "#content-factory/plan/proposals", label: "Предложения плана"}, {href: "#content-factory/plan", label: "Постинг"}]}},
++    "content-shooting": {route: "content/shooting", stub: {text: "Рилсы для съёмки по порядку, суфлёр и загрузка материалов появятся здесь.",
++      links: [{href: "#content-factory/sources", label: "Исходники"}]}},
++    "content-materials": {route: "content/materials", stub: {text: "Смонтированные рилсы с предпросмотром по площадкам появятся здесь.",
++      links: [{href: "#content-factory/sources", label: "Исходники"}, {href: "#content-factory/plan", label: "Постинг"}]}},
++    "content-connections": {route: "content/connections", stub: {text: "Статус подключения каждой площадки компании появится здесь.",
++      links: [{href: "#social-stats", label: "Соцсети"}]}},
++    "content-stats": {route: "content/stats", legacy: "content-factory-stats"},
++    chats: {route: "chats", legacy: "hugh"},
++    "settings-content": {route: "settings/content", stub: {text: "Настройки контента загружаются."}}
++  });
++  const routeOf = (view) => MODULE_ROUTES[view]?.route || view;
++  let moduleRoute = {path: "", query: ""};
+   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
+   /* Контент завод (CF1): четыре вкладки. Канонические адреса видов; прежние адреса (#autoposting,
+      #content-factory/materials, #media-mentor, #media-mentor-rollout, #telegram-sources) переводятся
+@@ -1570,6 +1621,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     const raw = decodeURIComponent(location.hash.slice(1));
+     const pathPart = raw.split("?")[0], query = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+     let value = pathPart.split("/")[0];
++    moduleRoute = {path: "", query};
++    const moduleView = Object.keys(MODULE_ROUTES).find(view => pathPart === MODULE_ROUTES[view].route || pathPart.startsWith(MODULE_ROUTES[view].route + "/"));
++    if (moduleView) {
++      value = moduleView;
++      moduleRoute = {path: pathPart.slice(MODULE_ROUTES[moduleView].route.length + 1), query};
++    }
++    if (pathPart === "content/posting") value = "autoposting";
+     if (value === "content-factory") {
+       const part = pathPart.slice("content-factory/".length);
+       if (Object.hasOwn(factoryParts, part)) value = factoryParts[part];
+@@ -1584,7 +1642,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+   const setCategoryForView = (viewName) => {
+     const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"];
+     const crmViews = ["crm", "deals", "clients", "chat"];
+-    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "content-factory-stats", "content-factory-settings", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
++    const contentViews = [...Object.keys(MODULE_ROUTES).filter(view => view.startsWith("content-")), ...factoryViews, "media-mentor"];
++    const categoryId = contentViews.includes(viewName) ? "content-menu" : ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "content-factory-stats", "content-factory-settings", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
+       ["settings", "site-orders", "system-settings", "accounts", "account", "company-team", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
+       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
+         ? "crm-menu" : null;
+@@ -1594,6 +1653,49 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     button.setAttribute("aria-expanded", "true");
+     menu.hidden = false;
+   };
++  // №98: порядок меню «Главная → Контент → Задачи → Чаты → Настройки»; «Хью» становится «Чатами».
++  // Делается здесь, чтобы не трогать соседние строки меню (точечная вставка в общий файл).
++  (() => {
++    const home = document.querySelector('.nav [data-view-link="home"]'), chats = byId("hugh-link");
++    home.after(byId("content-category"), byId("content-menu"));
++    chats.setAttribute("href", "#chats");
++    Object.assign(chats.dataset, {viewLink: "chats", viewAlso: "hugh"});
++    chats.textContent = "Чаты";
++    byId("tasks-link").after(chats);
++  })();
++  let moduleController = null;
++  // Модуль не зарегистрирован, а прежний экран есть — показываем его под тем же пунктом меню.
++  const effectiveView = (view) => {
++    const legacy = MODULE_ROUTES[view]?.legacy;
++    return legacy && !window.SynapseModules?.has(view) && permittedView(legacy) ? legacy : view;
++  };
++  const unmountModule = () => { moduleController?.unmount(); moduleController = null; };
++  const mountModule = (view, element) => {
++    unmountModule();
++    moduleController = window.SynapseModules.mount(element, view, {route: moduleRoute, stub: {title: VIEW_TITLES[view], ...(MODULE_ROUTES[view].stub || {})}});
++  };
++  Object.keys(MODULE_ROUTES).forEach(view => {
++    // Контейнеры экранов модулей создаются здесь: разметка кабинета не меняется.
++    if (!byId(`${view}-view`)) {
++      const section = document.createElement("section");
++      Object.assign(section, {className: "view-panel", id: `${view}-view`, hidden: true});
++      section.dataset.view = view;
++      byId("home-view").before(section);
++    }
++    registeredViews[view] = {
++      render(element) {
++        const definition = window.SynapseModules?.get(view);
++        if (moduleController?.id === view && moduleController.definition === definition && definition?.onRoute) {
++          try { definition.onRoute({path: moduleRoute.path, params: new URLSearchParams(moduleRoute.query)}); } catch (error) { console.error(error); }
++          return;
++        }
++        mountModule(view, element);
++      },
++      // Смена компании всегда перемонтирует модуль: прежний контекст и запросы отменяются.
++      onProjectChange() { if (currentView === view) mountModule(view, byId(`${view}-view`)); },
++      onLeave: unmountModule
++    };
++  });
+   const cabinetContext = () => ({
+     identity,
+     get selectedProjectId() { return selectedProjectId; },
+@@ -1614,7 +1716,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     dateValue
+   });
+   const setView = (viewName, focusMain = false) => {
+-    const nextView = validView(viewName) ? viewName : defaultView();
++    const routeView = validView(viewName) ? viewName : defaultView();
++    const nextView = effectiveView(routeView);
+     if (nextView !== currentView) registeredViews[currentView]?.onLeave?.();
+     currentView = nextView;
+     const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
+@@ -1637,9 +1740,20 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     document.querySelectorAll("[data-view]").forEach((view) => {
+       view.hidden = view.dataset.view !== currentView;
+     });
++    document.body.dataset.cabinetView = currentView;
++    const claimed = [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(currentView));
++    const settingsView = ["settings", "settings-content"].includes(currentView);
++    byId("settings-tabs").hidden = !settingsView;
++    byId("settings-tabs").querySelectorAll("[data-settings-tab]").forEach(tab => {
++      tab.hidden = !permittedView(tab.dataset.settingsTab);
++      if (tab.dataset.settingsTab === currentView) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
++    });
++    const contentMaterials = !!window.SynapseModules?.has("content-materials");
++    byId("content-factory-plan-bar").querySelector('[data-factory-action="create"]').hidden = contentMaterials;
+     document.querySelectorAll("[data-view-link]").forEach((link) => {
+       const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
+-      if (link.dataset.viewLink === currentView || clientRoute || (factory && link.dataset.viewLink === "content-factory")) link.setAttribute("aria-current", "page");
++      const also = (link.dataset.viewAlso || "").split(" ").includes(currentView) || link.dataset.viewLink === routeView;
++      if (link.dataset.viewLink === currentView || clientRoute || also || (factory && !claimed && link.dataset.viewLink === "content-factory")) link.setAttribute("aria-current", "page");
+       else link.removeAttribute("aria-current");
+     });
+     document.querySelectorAll("[data-client-view]").forEach((link) => {
+@@ -1666,8 +1780,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     if (focusMain) { window.scrollTo({top: 0, behavior: "instant"}); byId("main-content").focus({preventScroll: true}); }
+   };
+   const navigate = (viewName) => {
+-    if (location.hash === `#${viewName}`) setView(viewFromHash(), true);
+-    else location.hash = viewName;
++    const route = routeOf(viewName);
++    if (location.hash === `#${route}`) setView(viewFromHash(), true);
++    else location.hash = route;
+   };
+ 
+   const setDrawer = (open, restoreFocus = false) => {
+@@ -1778,8 +1893,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+       byId("reviews-link").hidden = !permittedView("reviews");
+       byId("autoposting-view").hidden = !permittedView("autoposting");
+       byId("content-factory-link").hidden = !permittedView("content-factory");
++      byId("content-category").hidden = !permittedView("content-plan") && !permittedView("content-factory");
++      byId("content-menu").querySelectorAll("[data-view-link]").forEach(link => { if (link.id !== "content-factory-link") link.hidden = !permittedView(link.dataset.viewLink); });
++      byId("mobile-content").hidden = byId("content-category").hidden;
++      const settingsTarget = permittedView("settings") ? "settings" : "settings-content";
++      byId("settings-link").dataset.viewLink = settingsTarget;
++      byId("settings-link").href = "#" + routeOf(settingsTarget);
+       byId("content-factory-view").hidden = !permittedView("content-factory");
+-      byId("settings-link").hidden = !permittedView("settings");
++      byId("settings-link").hidden = !permittedView("settings") && !permittedView("settings-content");
+       byId("site-orders-link").hidden = !permittedView("site-orders");
+       byId("campaigns-link").hidden = !permittedView("campaigns");
+       byId("company-team-link").hidden = !hasPermission("team.manage");
+@@ -1811,6 +1932,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+       SbCabinet.initMenuPreferences?.({identity, setDrawer});
+       // Ключи провайдеров вводит только владелец и только в настройках системы.
+       if (identity.role === "owner") SbCabinet.initHughProviders?.({identity, byId, apiJson, escapeHTML});
++      window.SynapseModules?.attachShell({identity: () => identity, company: selectedProject, apiJson, crmQuery,
++        navigate: (route) => { location.hash = route; }, escapeHTML});
++      window.SynapseModules?.onRegister(id => {
++        // Поздняя регистрация: открытый экран модуля или его прежняя замена перерисовываются.
++        if (id === currentView || MODULE_ROUTES[id]?.legacy === currentView || id === "content-materials") setView(viewFromHash());
++      });
+       setView(viewFromHash());
+       registeredViews.sites.initialize(context);
+       if (hasPermission("account.view")) registeredViews.accounts.initialize(context);
+@@ -1892,6 +2019,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+     if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
+   });
+   byId("mobile-more").addEventListener("click", () => setDrawer(true));
++  byId("mobile-content").addEventListener("click", () => {
++    const button = byId("content-category");
++    button.setAttribute("aria-expanded", "true");
++    byId("content-menu").hidden = false;
++    setDrawer(true);
++    button.focus();
++  });
+   byId("menu-button").addEventListener("click", () => setDrawer(!drawerOpen, drawerOpen));
+   byId("backdrop").addEventListener("click", () => setDrawer(false, true));
+   byId("sidebar").addEventListener("keydown", (event) => {
