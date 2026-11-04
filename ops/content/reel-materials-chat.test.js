@@ -10,9 +10,16 @@ const entries=[{key:'reel-edit:3:request',at:'2026-11-05T01:00:00.000Z',from:'us
   {key:'evil:1',from:'hugh',text:'не из «Материалов»'}];
 function fixture({rooms=true,body}={}){
   const db=new DatabaseSync(':memory:');
-  createTeamChat({db,tasks:{},call:async()=>({})}); // схема рабочего чата как на main (PR 480)
-  if(rooms)for(const sql of ["room TEXT NOT NULL DEFAULT 'common'","kind TEXT NOT NULL DEFAULT 'message'",'ref_task_id INTEGER','audience_id INTEGER'])
-    db.exec('ALTER TABLE team_chat_messages ADD COLUMN '+sql); // миграция комнат PR 504
+  // С комнатами — настоящая схема team-chat.js (в сборке №98 она уже содержит миграцию комнат PR 504);
+  // без комнат — схема рабочего чата как на main (PR 480).
+  if(rooms){
+    createTeamChat({db,tasks:{},call:async()=>({})});
+    const have=new Set(db.prepare('PRAGMA table_info(team_chat_messages)').all().map(c=>c.name));
+    for(const sql of ["room TEXT NOT NULL DEFAULT 'common'","kind TEXT NOT NULL DEFAULT 'message'",'ref_task_id INTEGER','audience_id INTEGER'])
+      if(!have.has(sql.split(' ')[0]))db.exec('ALTER TABLE team_chat_messages ADD COLUMN '+sql); // миграция комнат PR 504, если её ещё нет
+  }else db.exec(`CREATE TABLE team_chat_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,company_code TEXT NOT NULL,user_id INTEGER NOT NULL,
+    author_name TEXT NOT NULL,text TEXT NOT NULL,client_id TEXT NOT NULL,created_at TEXT NOT NULL,task_id INTEGER,command_state TEXT NOT NULL DEFAULT 'none',
+    UNIQUE(company_code,user_id,client_id))`);
   const calls=[];let clock=1000;
   const fetchImpl=async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>body??{companyCode:'avokado',authorId:7,entries}};};
   const log=createReelHughLog({db,crmUrl:'http://crm',crmKey:'k',fetchImpl,now:()=>clock,warn:()=>{}});
