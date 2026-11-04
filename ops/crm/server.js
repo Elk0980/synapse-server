@@ -560,7 +560,7 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=10').get()) {
   migrate(10, () => require('./task-products').migrateTasksBoard(db));
 }
 
-// Расходы по компании (spec 100): добавочная колонка, проверенный бэкап до транзакции.
+// Расходы по компании (spec 111): добавочная колонка, проверенный бэкап до транзакции.
 if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(companyExpenses.MIGRATION_VERSION)) {
   if (!companyExpenses.hasCompanyColumn(db)) companyExpenses.backupBeforeExpensesScope(db, DATABASE_PATH);
   migrate(companyExpenses.MIGRATION_VERSION, () => companyExpenses.migrateExpensesCompany(db));
@@ -1240,7 +1240,7 @@ function romi(revenue, expense) {
   return typeof expense === 'number' && expense > 0 ? ((revenue - expense) / expense) * 100 : null;
 }
 
-// Расходы и ROMI по источникам. Для компании учитываются только её строки расходов (spec 100).
+// Расходы и ROMI по источникам. Для компании учитываются только её строки расходов (spec 111).
 function applyExpenses(analytics, rows) {
   for (const row of rows) analytics.groupFor(row.source).expenses = row.expenses;
   for (const group of analytics.groups.values()) group.romi = romi(group.revenue, group.expenses);
@@ -3270,7 +3270,8 @@ async function route(request, response) {
     const result = insertExpense.run(
       now,
       date(body.spentAt ?? body.date, 'spentAt', now),
-      requiredString(body.source, 'source'),
+      // Код площадки в нижнем регистре: «Yandex-Direct» и «yandex-direct» — одна строка аналитики.
+      requiredString(body.source, 'source').toLowerCase(),
       nonNegativeNumber(body.amount, 'amount'),
       optionalString(body.comment, 'comment'),
       expenseCompany

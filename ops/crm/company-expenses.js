@@ -1,9 +1,9 @@
 'use strict';
 
-/* Расходы по компании (spec 100). Добавочная миграция: в expenses появляется nullable
+/* Расходы по компании (spec 111). Добавочная миграция: в expenses появляется nullable
    company_code. Старые строки остаются общими (company_code IS NULL) и не приписываются
-   ни одной компании задним числом. Перед миграцией делается проверенный физический снимок
-   базы рядом с ней; при сбое снимок остаётся оператору, миграция откатывается целиком. */
+   ни одной компании задним числом. Если расходы уже есть, перед миграцией делается проверенный
+   физический снимок базы рядом с ней; при сбое снимок остаётся оператору, миграция откатывается целиком. */
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -19,6 +19,8 @@ function hasCompanyColumn(db) {
 function backupBeforeExpensesScope(db, databasePath) {
   if (!databasePath || databasePath === ':memory:') return null;
   if (db.isTransaction) throw new Error('Бэкап расходов должен предшествовать транзакции миграции');
+  // Пустую таблицу нечего терять: ALTER на ней не затрагивает данные, снимок не нужен.
+  if (db.prepare('SELECT COUNT(*) AS count FROM expenses').get().count === 0) return null;
   const destination = path.resolve(
     `${databasePath}.before-expenses-company-v${MIGRATION_VERSION}-${Date.now()}-${randomUUID()}.sqlite`
   );

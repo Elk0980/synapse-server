@@ -104,6 +104,8 @@ const potentialStep = (potential, requested) => {
 };
 const optionalSum = (values) => values.some((value) => value !== null && value !== undefined)
   ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) : null;
+const romiOf = (revenue, expenses) => typeof expenses === "number" && expenses > 0 &&
+  revenue !== null && revenue !== undefined ? (Number(revenue) - expenses) / expenses * 100 : null;
 const formatMetric = (value) => value === null || value === undefined ? "—" :
   new Intl.NumberFormat("ru-RU").format(Number(value));
 const sourceStatsFor = (platform, stats) => stats.filter((row) =>
@@ -137,7 +139,8 @@ const aggregatePlatform = (platform, stats) => {
     sales: optionalSum(rows.map((row) => row.sales)),
     revenue: optionalSum(rows.map((row) => row.revenue)),
     expenses: optionalSum(rows.map((row) => row.expenses)),
-    romi: rows.length ? optionalSum(rows.map((row) => row.romi)) : null,
+    // ROMI площадки считается из её суммарных выручки и расхода: проценты разных кодов не складываются.
+    romi: romiOf(optionalSum(rows.map((row) => row.revenue)), optionalSum(rows.map((row) => row.expenses))),
     capturedAt: externals.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null,
     hasExternal: externals.length > 0
   };
@@ -230,13 +233,20 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   const sales = total("sales");
   const revenue = total("revenue");
   const values = { ...(dashboard.summary || {}), ...dashboard };
-  const expensesUnavailable = values.expenses === null || dashboard.expensesScope || summary.expensesScope;
-  const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
+  /* Расходы ведутся по компании (spec 111). «global_unavailable» отвечает только старый сервер:
+     тогда расходы компании не ведутся вовсе. Иначе null означает «расходы не внесены», а не ноль. */
+  const expensesUnavailable = [dashboard.expensesScope, summary.expensesScope].includes("global_unavailable");
+  const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses ?? null : total("expenses");
   const financeRevenue = allSelected ? values.revenue : revenue;
-  const financeRomi = expensesUnavailable ? null : allSelected ? values.romi :
-    financeRevenue === null || financeRevenue === undefined || financeExpenses === null || !financeExpenses
-      ? null : (financeRevenue - financeExpenses) / financeExpenses * 100;
-  const financeUnavailable = expensesUnavailable || (!allSelected && financeExpenses === null);
+  const financeRomi = expensesUnavailable ? null : allSelected ? values.romi ?? null :
+    romiOf(financeRevenue, financeExpenses);
+  const financeUnavailable = expensesUnavailable;
+  const expensesMissing = !expensesUnavailable && financeExpenses === null;
+  const financeExpensesText = financeUnavailable ? "по компании не ведутся" :
+    expensesMissing ? "не внесены" : formatMoney(financeExpenses);
+  const financeRomiText = financeUnavailable ? "по компании не ведутся" :
+    expensesMissing ? "нет расходов для расчёта" : formatROMI(financeRomi);
+  const financeMark = financeUnavailable || expensesMissing ? dataMark("none") : dataMark("manual");
   const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
   const funnel = [
     potentialStep(potential, analyticsState.range),
@@ -286,7 +296,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       <dl class="funnel-detail-list">${details}</dl></div></div>`;
   }).join("");
   const tableRows = platforms.map((platform) => {
-    const noExpenses = expensesUnavailable || platform.expenses === null;
+    const noExpenses = expensesUnavailable || platform.expenses === null || platform.expenses === undefined;
     const kind = platform.hasExternal ? "snapshot" : platform.rows.length ? "live" : "none";
     const clickTargets = platform.rows.flatMap((row) => Object.entries(row.clicksByTarget || {}))
       .map(([target, count]) => `${target}: ${count}`).join(" · ");
@@ -300,12 +310,12 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   }).join("");
   byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
     <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
-    <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
-      ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
+    <div class="crm-stat"><span>Расходы</span><strong>${escapeHTML(financeExpensesText)}</strong>${financeMark}</div>
     <div class="crm-stat"><span>Выручка</span><strong>${financeRevenue === null || financeRevenue === undefined
       ? "—" : formatMoney(financeRevenue)}</strong></div>
-    <div class="crm-stat"><span>ROMI</span><strong>${financeUnavailable
-      ? "по компании не ведутся" : formatROMI(financeRomi)}</strong></div></div></section>
+    <div class="crm-stat"><span>ROMI</span><strong>${escapeHTML(financeRomiText)}</strong>${financeMark}</div></div>
+    <p class="crm-note">Расходы — ручной ввод владельца по выбранной компании, выручка — продажи в CRM.
+    Без расходов ROMI не считается.</p></section>
     <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
     <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
     <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
@@ -350,7 +360,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   byId("expenses-content").innerHTML = expenseRows
     ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Источник</th>
       <th>Сумма</th><th>Комментарий</th></tr></thead><tbody>${expenseRows}</tbody></table></div>`
-    : '<div class="crm-empty">За период расходов нет</div>';
+    : '<div class="crm-empty">За период расходы по компании не внесены</div>';
 };
 // Каждая загрузка получает монотонный номер и снимок компании/периода. Ответ (успешный или ошибочный)
 // применяется, только если он всё ещё последний и относится к текущим компании и периоду: старый ответ
@@ -405,6 +415,16 @@ const renderAnalyticsControls = () => {
   form.elements.to.value = analyticsState.range.to;
   byId("expense-form").hidden = !identity.permissions.includes("crm.edit");
   byId("expense-form").elements.date.value = dateValue(new Date());
+  // Подсказка кодов площадок: расход с кодом «yandex-direct» попадает в ту же строку, что визиты и заявки.
+  const sourceInput = byId("expense-form").elements.source;
+  if (sourceInput && !byId("expense-source-codes")) {
+    const list = document.createElement("datalist");
+    list.id = "expense-source-codes";
+    list.innerHTML = ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes.map((code) =>
+      `<option value="${escapeHTML(code)}">${escapeHTML(platform.label)}</option>`)).join("");
+    sourceInput.after(list);
+    sourceInput.setAttribute("list", list.id);
+  }
   if (analyticsBound) return;
   analyticsBound = true;
   byId("platform-trigger").addEventListener("click", () => {
