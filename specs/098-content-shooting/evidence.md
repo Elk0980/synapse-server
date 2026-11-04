@@ -25,3 +25,15 @@
   удалён, продолжение → 410 `UPLOAD_EXPIRED`, новая сессия 201, квота считает только живые сессии.
 - Регрессия: `company-modules-access`, `compose-contract`, `chat-proxy`, `content-factory-sources-proxy`,
   `telegram-sources-integration` — вместе с тестами «Съёмки» 17/17 PASS. `node --check` — OK.
+## (б) экран и загрузка — 05.11
+- `node --test sites/synapse/cabinet/shooting.test.cjs` (jsdom из scratchpad): 4/4 PASS — разбор «Имя: реплика»,
+  запасной вариант без ролей и без сценария (хук+тема), расписание (выход 12.11, дедлайн −3 → 09.11, съёмка
+  вт/чт → чт 05.11), порядок согласованных рилсов (пост и несогласованный исключены); клиент загрузки
+  продолжает после `TypeError: Failed to fetch` и 409 с принятого смещения (куски 0–10, 10–20, 20–25);
+  список №1…N и переход в карточку; кнопка у каждого из 5 кадров + «Другое»; черновик в карточке;
+  без права правки кнопки выключены; без настроек — подсказка; смена компании обрывает загрузки прежней.
+- Регрессия загрузчика кабинета: telegram-sources-view, actor-workspace, task-board-routing,
+  menu-preferences, module-guide — 37/37 PASS.
+- Playwright (Chromium), заглушка API, вымышленные данные: список и карточка при 390 и 1440 px —
+  scrollWidth = clientWidth (390/390, 1440/1440), ошибок страницы 0. Снимки вне git:
+  `scratchpad/shots/b/shooting-{list,card}-{390,1440}.png`.
