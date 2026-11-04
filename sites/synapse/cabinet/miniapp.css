@@ -21,3 +21,6 @@ html,body{margin:0;background:var(--surface);color:var(--text);font:16px/1.45 -a
 .ma-room .pc-message{max-width:100%;box-sizing:border-box}
 .ma-room .pc-compose textarea{font-size:16px}
 .ma-room .pc-dialog{width:min(560px,calc(100vw - 20px));max-height:calc(var(--ma-viewport) - 24px)}
+/* Личные напоминания от Хью (specs/083): компактная плашка над чатом; кнопку нажимает только сам получатель. */
+.ma-personal{max-width:520px;margin:0 auto 8px;padding:8px 6px;border-bottom:1px solid var(--line)}
+.ma-personal p{margin:6px 0;line-height:1.45}
