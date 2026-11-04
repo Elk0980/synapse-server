@@ -53,6 +53,8 @@ test('view-as HTTP: owner, employee, forgery, binding, readonly, live permission
   assert.equal((await viewed(human)).status,403);
   assert.equal((await viewed(owner,token+'x')).status,403);
   assert.equal((await viewed(owner,'2')).status,403);
+  assert.equal((await viewed(owner,token.split('.')[0]+'.'+ 'é'.repeat(43))).status,403);
+  assert.equal((await viewed()).headers.get('cache-control'),'private, no-store');
   const otherOwner=await login('root');assert.equal((await viewed(otherOwner)).status,403);
   for(const method of ['POST','PUT','PATCH','DELETE','HEAD','OPTIONS']) {
     const r=await viewed(owner,token,method,'/content/logout');assert.equal(r.status,403);

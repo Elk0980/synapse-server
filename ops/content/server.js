@@ -840,7 +840,7 @@ async function proxyChat(request, response, url, cors) {
 
 const server = http.createServer(async (request, response) => {
   const cors = corsHeaders(request);
-  const reply = (status, payload, extra) => send(response, status, payload, { ...cors, ...(extra || {}) });
+  const reply = (status, payload, extra) => send(response, status, payload, { ...cors, ...(request.headers['x-view-as'] ? {'cache-control':'private, no-store'} : {}), ...(extra || {}) });
   try {
     if (request.headers['x-view-as']) {
       request.viewAsSession = viewAs.resolve(request, sessionData(request));
@@ -1349,7 +1349,7 @@ const server = http.createServer(async (request, response) => {
         const fresh=requireSession(request);if(fresh.user.role!=='owner'||fresh.user.id!==session.user.id)fail(403,'Доступ изменился');
         return reply(200,result,{'cache-control':'no-store'});
       }
-      return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(extra || {}) }) });
+      return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(request.headers['x-view-as'] ? {'cache-control':'private, no-store'} : {}), ...(extra || {}) }) });
     }
 
     // --- файлы (фоны блоков): /content/:site/assets[/:name]

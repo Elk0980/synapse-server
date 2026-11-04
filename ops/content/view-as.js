@@ -18,7 +18,7 @@ function createViewAs({secret, authStore, db}) {
       if (!session || session.user.role !== 'owner' || session.user.mustChangePassword || request.headers['x-api-key']) deny('VIEW_AS_FORBIDDEN');
       const [payload,sig,...extra] = String(request.headers['x-view-as']).split('.');
       const expected = sign(payload || '');
-      if (extra.length || !sig || sig.length!==expected.length || !crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected))) deny('VIEW_AS_INVALID');
+      if (extra.length || !/^[A-Za-z0-9_-]{43}$/.test(sig||'') || sig.length!==expected.length || !crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected))) deny('VIEW_AS_INVALID');
       let data; try { data=JSON.parse(Buffer.from(payload,'base64url')); } catch { deny('VIEW_AS_INVALID'); }
       if (data.owner!==session.user.id || data.binding!==sign(session.csrf) || !(data.exp>Date.now())) deny('VIEW_AS_INVALID');
       const user=authStore.getById(data.uid);

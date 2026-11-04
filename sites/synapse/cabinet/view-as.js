@@ -45,5 +45,10 @@
     }
   }};
   // Expired/revoked token must remain recoverable before whoami succeeds.
-  document.addEventListener('DOMContentLoaded',()=>{if(token())window.SynapseViewAs.render({viewAs:{}});});
+  document.addEventListener('DOMContentLoaded',async()=>{
+    if(!token())return;
+    window.SynapseViewAs.render({viewAs:{}});
+    if(location.pathname.endsWith('/cabinet.html'))return;
+    try {const r=await fetch('/content/whoami');if(r.ok)window.SynapseViewAs.render(await r.json());}catch{}
+  });
 })();
