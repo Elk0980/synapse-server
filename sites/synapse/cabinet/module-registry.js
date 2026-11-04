@@ -38,8 +38,15 @@
       method, signal, headers: { 'X-CSRF-Token': currentUser()?.csrfToken || '' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
+    // Сырые байты (загрузка частями): Response как есть, CSRF добавляется для записи, cookie same-origin.
+    const raw = (method, path, body, { headers = {}, params } = {}) => {
+      const verb = String(method || 'GET').toUpperCase();
+      const extra = verb === 'GET' || verb === 'HEAD' ? {} : { 'X-CSRF-Token': currentUser()?.csrfToken || '' };
+      return fetch(url(path, params), { method: verb, credentials: 'same-origin', cache: 'no-store', signal,
+        headers: { ...headers, ...extra }, ...(body === undefined || body === null ? {} : { body }) });
+    };
     return {
-      url,
+      url, raw,
       get: (path, params) => shell.apiJson(url(path, params), { signal }),
       post: write('POST'), put: write('PUT'), patch: write('PATCH'),
       del: (path, params) => write('DELETE')(path, undefined, params)
@@ -63,6 +70,7 @@
       user: Object.freeze({ id: user?.userId ?? null, login: user?.login || '', name: user?.displayName || user?.login || '', role: user?.role || '' }),
       permissions: Object.freeze([...(user?.permissions || [])]),
       can, signal,
+      get csrfToken() { return currentUser()?.csrfToken || ''; },
       route: Object.freeze({ path: route?.path || '', params: new URLSearchParams(route?.query || '') }),
       api: Object.freeze(apiClient(companyCode, signal)),
       crm: (path, params, options = {}) => shell.crmQuery(path, params, { ...options, signal }),

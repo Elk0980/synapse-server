@@ -6,4 +6,4 @@
 - [x] T4 Плавающая кнопка чата с Хью; shell.css, 390 px без горизонтальной прокрутки.
 - [x] T5 Точечные вставки в cabinet.html; patch --dry-run на живой копии без конфликтов (cabinet-html.patch).
 - [x] T6 Тесты кабинета и ops/content, снимки Playwright 390/1440 — evidence.md.
-- [ ] T7 ctx.csrfToken и ctx.api.raw для загрузки байтов (просьба агента В, комментарий 481).
+- [x] T7 ctx.csrfToken и ctx.api.raw для загрузки байтов (просьба агента В, комментарий 481).

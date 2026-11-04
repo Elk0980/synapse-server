@@ -1,6 +1,6 @@
 # Контракт А: реестр модулей ЛК и Настройки → Контент
 
-Версия контракта: 2 (05.11: точка подключения shellAssets). Владелец: агент «А · Каркас» (задача №98). Ветка: `claude/night98-a-shell`.
+Версия контракта: 2.1 (05.11: точка подключения shellAssets; ctx.csrfToken и api.raw по просьбе В). Владелец: агент «А · Каркас» (задача №98). Ветка: `claude/night98-a-shell`.
 Файлы оболочки: `sites/synapse/cabinet/module-registry.js`, `sites/synapse/cabinet/shell.css`,
 `sites/synapse/cabinet.html` (меню, маршруты), `ops/content/content-settings.js` (сервер).
 
@@ -59,8 +59,10 @@ window.SynapseModules.register('content-shooting', {
   route: { path, params },
   api: {                                  // fetch к /content/*, JSON, same-origin
     get(path, params?),                   // companyCode добавляется автоматически
-    post(path, body?, params?), put(...), patch(...), del(path, params?)   // CSRF добавляется сам
-  },
+    post(path, body?, params?), put(...), patch(...), del(path, params?),  // CSRF добавляется сам
+    raw(method, path, body?, {headers?, params?}?) -> Promise<Response>   // байты, например PATCH
+  },                                      // application/offset+octet-stream; CSRF для записи, signal
+  csrfToken,                              // строка текущей сессии (геттер), если нужен свой fetch
   crm(path, params?, options?),           // существующий crmQuery (/content/crm/*), scoped по компании
   settings: { content: { get(), save(settings, version) } },  // см. раздел 4
   navigate(route), openHughChat(), escapeHTML(text)
