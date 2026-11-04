@@ -93,9 +93,11 @@ function createContentPlanWorkspace(db,{mentor,approvers=()=>null,now=Date.now}=
     return slot.userId?slot.userId===identity.userId:identity.role==='owner';
   }
 
-  function signoffs(code,identity=null) {
+  /* configured — список из «Настроек → Контент» (заголовок прокси); undefined — внедрённая функция/заглушка. */
+  function signoffs(code,identity=null,configured=undefined) {
     const owner=company(db,code),snap=mentor.get(code),plan=snap.plan;
-    const configured=approvers(owner.code.toLowerCase()),slots=slotsOf(configured);
+    if(configured===undefined)configured=approvers(owner.code.toLowerCase());
+    const slots=slotsOf(configured);
     const base={companyCode:owner.code.toLowerCase(),approversSource:Array.isArray(configured)&&configured.length?'settings':'stub',
       planRevision:plan?.revision||0,briefRevision:snap.brief.revision};
     const states=snap.variants||[],approvable=states.filter(s=>s.approvable);
@@ -115,10 +117,10 @@ function createContentPlanWorkspace(db,{mentor,approvers=()=>null,now=Date.now}=
       emptyIdeas:(plan?.days||[]).filter(day=>!ideas.has(day.ideaId)).map(day=>day.ideaId)};
   }
 
-  function signoff(code,body,identity) {
+  function signoff(code,body,identity,configured=undefined) {
     object(body,['planRevision','briefRevision','slot','checked']);
     if(typeof body.checked!=='boolean'||typeof body.slot!=='string')fail(400,'Укажите отметку согласующего');
-    const owner=company(db,code),state=signoffs(code,identity);
+    const owner=company(db,code),state=signoffs(code,identity,configured);
     if(!state.planRevision)fail(409,'План ещё не составлен','PLAN_REQUIRED');
     if(body.planRevision!==state.planRevision||body.briefRevision!==state.briefRevision)
       fail(409,'План уже изменили. Обновите страницу.','REVISION_CONFLICT');
@@ -139,7 +141,7 @@ function createContentPlanWorkspace(db,{mentor,approvers=()=>null,now=Date.now}=
       VALUES(?,?,?,?,?,?,?)`).run(owner.id,revs.planRevision,revs.briefRevision,slot.slot,actor.userId,actor.userName,iso(now));
     else db.prepare('DELETE FROM content_plan_signoffs WHERE company_id=? AND plan_revision=? AND brief_revision=? AND slot=?')
       .run(owner.id,revs.planRevision,revs.briefRevision,slot.slot);
-    return signoffs(code,identity);
+    return signoffs(code,identity,configured);
   }
 
   return {questionnaire,saveQuestionnaire,signoffs,signoff};

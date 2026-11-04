@@ -26,6 +26,18 @@ function versionNumber(value) {
   return parsed;
 }
 
+/* №98 Б: согласующие из «Настроек → Контент» приходят от прокси content доверенным заголовком
+   (браузерный заголовок с тем же именем прокси удаляет). Нет заголовка — заглушка «Владелец». */
+function configuredApprovers(request) {
+  const raw = request.headers?.['x-synapse-content-approvers'];
+  if (raw === undefined || raw === '') return undefined;
+  let list;
+  try { list = JSON.parse(Buffer.from(String(raw), 'base64url').toString('utf8')); } catch { list = null; }
+  if (!Array.isArray(list) || !list.length || list.length > 20 || list.some((item) => !item || !Number.isSafeInteger(item.userId) || item.userId < 1))
+    fail(400, 'Некорректный список согласующих');
+  return list.map((item) => ({userId: item.userId, label: String(item.label || `#${item.userId}`).slice(0, 200)}));
+}
+
 function createMediaMentorHandler({mentor, transfer, generation, generationDrafts, workflow, workspace, companyModuleContext, readJson, send}) {
   return async function handleMediaMentor(request, response, url, cors = {}) {
     // Раздел внедрения живёт на /media-mentor-rollout и сюда не попадает: после имени
@@ -33,7 +45,9 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
     if (!/^\/media-mentor(?:\/|$)/.test(url.pathname)) return false;
     const code = url.searchParams.get('companyCode');
     const readOnly = request.method === 'GET';
-    const {identity} = companyModuleContext(request, code, `autoposting.${readOnly ? 'view' : 'edit'}`);
+    // Отметку согласующего ставит человек с content-plan.approve (Лена, Таня), даже без права правки плана.
+    const signoffWrite = url.pathname === '/media-mentor/plan/signoffs' && request.method === 'POST';
+    const {identity} = companyModuleContext(request, code, signoffWrite ? 'content-plan.approve' : `autoposting.${readOnly ? 'view' : 'edit'}`);
     // Автор — только из доверенной личности запроса.
     const actor = {userId: identity.userId, userName: identity.userName};
     const briefVersion = /^\/media-mentor\/brief\/versions\/([^/]+)$/.exec(url.pathname);
@@ -49,11 +63,11 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
     if (url.pathname === '/media-mentor/questionnaire' && readOnly) result = workspace.questionnaire(code);
     else if (url.pathname === '/media-mentor/questionnaire' && request.method === 'PUT')
       result = workspace.saveQuestionnaire(code, await readJson(request), actor);
-    else if (url.pathname === '/media-mentor/plan/signoffs' && readOnly) result = workspace.signoffs(code, identity);
-    else if (url.pathname === '/media-mentor/plan/signoffs' && request.method === 'POST') {
-      const body = await readJson(request), fresh = companyModuleContext(request, code, 'autoposting.edit');
+    else if (url.pathname === '/media-mentor/plan/signoffs' && readOnly) result = workspace.signoffs(code, identity, configuredApprovers(request));
+    else if (signoffWrite) {
+      const body = await readJson(request), fresh = companyModuleContext(request, code, 'content-plan.approve');
       if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
-      result = workspace.signoff(code, body, fresh.identity);
+      result = workspace.signoff(code, body, fresh.identity, configuredApprovers(request));
     } else if (workspaceRoute) fail(405, 'Метод не поддерживается');
     else if(url.pathname==='/media-mentor/plan/import-preview'&&request.method==='POST') {
       const body=await readJson(request,1500000);

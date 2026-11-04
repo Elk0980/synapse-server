@@ -177,6 +177,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+// №98 Б: согласующие контент-плана из «Настроек → Контент» — доверенным заголовком в CRM.
+const contentPlanApprovers = require('./content-plan-approvers').createContentPlanApprovers({ db, authStore });
 const companyTeam = require('./company-team').createCompanyTeam(authStore);
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
@@ -646,8 +648,10 @@ async function proxyCrm(request, response, url, cors) {
     if (crmPath === '/media-mentor/plan/decision' && identity.role !== 'owner') {
       fail(403, 'Согласовывать и отклонять план может только владелец');
     }
+    // Отметку согласующего ставит человек с content-plan.approve; список и слот проверяет CRM.
+    const signoffWrite = crmPath === '/media-mentor/plan/signoffs' && !readOnly;
     if (identity.role !== 'owner') {
-      requirePermission(request, `autoposting.${readOnly ? 'view' : 'edit'}`, code);
+      requirePermission(request, signoffWrite ? 'content-plan.approve' : `autoposting.${readOnly ? 'view' : 'edit'}`, code);
     }
   }
   if (/^\/(?:email-campaigns|email-subscriptions)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') {
@@ -783,6 +787,11 @@ async function proxyCrm(request, response, url, cors) {
   delete headers[CRM_IDENTITY_HEADER];
   headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(forwardIdentity);
   delete headers['x-synapse-task-principal'];
+  delete headers['x-synapse-content-approvers'];
+  if (crmPath === '/media-mentor/plan/signoffs') {
+    const approvers = contentPlanApprovers.header(url.searchParams.get('companyCode'));
+    if (approvers) headers['x-synapse-content-approvers'] = approvers;
+  }
   const taskPrincipal=Buffer.from(JSON.stringify({v:1,source:'cabinet',identityHash:crypto.createHash('sha256').update(headers[CRM_IDENTITY_HEADER]).digest('hex'),userId:forwardIdentity.id,at:Date.now(),method:request.method,path:crmPath})).toString('base64url');
   headers['x-synapse-task-principal']=taskPrincipal+'.'+crypto.createHmac('sha256',CRM_API_KEY).update(taskPrincipal).digest('base64url');
   if (requestBody) {

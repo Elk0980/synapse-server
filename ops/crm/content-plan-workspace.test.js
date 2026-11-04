@@ -97,3 +97,39 @@ test('HTTP: questionnaire and signoffs use company guard, edit permission and fr
   assert.equal((await call('GET','/media-mentor/plan/signoffs',viewer)).body.stage,'none');
   await assert.rejects(call('DELETE','/media-mentor/plan/signoffs',OWNER),e=>e.status===405);
 });
+
+test('HTTP: approvers from Настройки → Контент — Лена and Таня with content-plan.approve; plan is approved only when all tick',async t=>{
+  const {mentor,ws,plan}=fixture(t);
+  plan(Array.from({length:7},(_,i)=>day(i)));
+  const transfer={status:()=>({}),variantStatus:()=>({})};
+  const handler=createMediaMentorHandler({mentor,transfer,workspace:ws,readJson:async r=>r.body,
+    companyModuleContext:(request,code,permission)=>{
+      const id=request.identity;
+      if(id.role!=='owner'&&!id.permissions.has(permission))throw Object.assign(Error('Недостаточно прав'),{status:403});
+      return {identity:id,company:{code}};
+    },send:(res,status,body)=>{res.status=status;res.body=body;}});
+  const header=list=>Buffer.from(JSON.stringify(list)).toString('base64url');
+  const settings=header([{userId:5,label:'SAMPLE Лена'},{userId:7,label:'SAMPLE Таня'}]);
+  const call=async(method,identity,body,approvers=settings)=>{const res={};
+    await handler({method,identity,body,headers:approvers===null?{}:{'x-synapse-content-approvers':approvers}},res,new URL('http://x/media-mentor/plan/signoffs?companyCode=alpha'));return res.body;};
+  // Согласующим не нужно право правки плана: только просмотр и content-plan.approve.
+  const lena={userId:5,userName:'SAMPLE Лена',role:'editor',permissions:new Set(['autoposting.view','content-plan.approve'])};
+  const tanya={userId:7,userName:'SAMPLE Таня',role:'editor',permissions:new Set(['autoposting.view','content-plan.approve'])};
+  const outsider={userId:9,userName:'SAMPLE другой',role:'editor',permissions:new Set(['autoposting.edit','content-plan.approve'])};
+  let state=await call('GET',lena);
+  assert.equal(state.approversSource,'settings');
+  assert.deepEqual(state.approvers.map(a=>[a.slot,a.canCheck]),[['user:5',true],['user:7',false]]);
+  const tick=(who,slot,checked=true)=>call('POST',who,{planRevision:1,briefRevision:1,slot,checked});
+  await assert.rejects(tick(EDITOR,'user:5'),e=>e.status===403,'без content-plan.approve отметку не поставить');
+  await assert.rejects(tick(outsider,'user:5'),e=>e.status===403,'не из списка — только свой слот, а его нет');
+  await assert.rejects(tick(OWNER,'owner'),e=>e.status===404,'при назначенных согласующих владелец не утверждает отметкой в обход списка');
+  state=await tick(lena,'user:5');
+  assert.equal(state.stage,'approval');assert.equal(state.approvedIdeas,0,'одна отметка из двух план не утверждает');
+  assert.equal(week(mentor.get('alpha')).approvedIdeas,0);
+  state=await tick(tanya,'user:7');
+  assert.equal(state.stage,'smm');assert.equal(week(mentor.get('alpha')).approvedIdeas,7);
+  // Без заголовка (настройки не выпущены или никто не выбран) — согласует владелец; битый заголовок — 400.
+  assert.equal((await call('GET',lena,undefined,null)).approvers[0].slot,'owner');
+  await assert.rejects(call('GET',lena,undefined,'не-json'),e=>e.status===400);
+  await assert.rejects(call('GET',lena,undefined,header([{userId:-1}])),e=>e.status===400);
+});
