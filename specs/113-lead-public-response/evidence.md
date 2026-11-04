@@ -1,5 +1,13 @@
 # Свидетельства
 
+## После ревью 465, 04.11.2026
+sameSecret (SHA-256 + timingSafeEqual) применён в hasApiKey и requireApiKey. Других сравнений x-api-key в
+ops/crm/server.js нет. lead-public-response.test.js: проверены совпадение, другой ключ, другая длина, пустое значение,
+undefined, массив, пустой ожидаемый ключ. Неверный ключ той же длины получает публичный ответ, а /companies — 401.
+Вместе с analytics и origin: 5/5 PASS. Полный ops/crm 1016/1018 (те же два падения, что на main). gate ok.
+
+## Первая версия
+
 04.11.2026, Linux, ветка claude/lead-public-response от main 0a618be.
 - node --test ops/crm/lead-public-response.test.js ops/crm/analytics.test.js ops/crm/origin.test.js: PASS.
   Публичный ответ на создание и на дубль совпадает с {id, deduplicated}. Во втором ответе нет имени, комментария, clientId,

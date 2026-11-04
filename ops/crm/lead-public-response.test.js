@@ -9,6 +9,17 @@ const { mkdtemp, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { sameSecret } = require('./server.js');
+
+test('sameSecret сравнивает ключ за постоянное время и не принимает пустое или не строку', () => {
+  assert.equal(sameSecret('key-123', 'key-123'), true);
+  assert.equal(sameSecret('key-124', 'key-123'), false);
+  assert.equal(sameSecret('key-123-longer', 'key-123'), false, 'разная длина не бросает исключение');
+  assert.equal(sameSecret('', 'key-123'), false);
+  assert.equal(sameSecret(undefined, 'key-123'), false);
+  assert.equal(sameSecret(['key-123'], 'key-123'), false, 'повторённый заголовок не принимается');
+  assert.equal(sameSecret('', ''), false, 'пустой ожидаемый ключ ничего не открывает');
+});
 
 test('публичный POST /leads не отдаёт поля заявки ни при создании, ни при дубле', async (context) => {
   const directory = await mkdtemp(path.join(tmpdir(), 'crm-lead-public-'));
@@ -64,6 +75,13 @@ test('публичный POST /leads не отдаёт поля заявки н�
   const text = JSON.stringify(repeated.body);
   for (const secret of ['Синтетический', 'личный', 'visitor-301', 'vk.ru', '+7000']) assert.ok(!text.includes(secret));
 
+  // Неверный ключ той же длины — как публичный вызов; на закрытых маршрутах 401.
+  const wrongKey = apiKey.slice(0, -1) + (apiKey.endsWith('0') ? '1' : '0');
+  const forged = await fetch(`http://127.0.0.1:${port}/leads`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': wrongKey }, body: JSON.stringify(lead),
+  });
+  assert.deepEqual(await forged.json(), { id: created.body.id, deduplicated: true });
+  assert.equal((await fetch(`http://127.0.0.1:${port}/companies`, { headers: { 'X-API-Key': wrongKey } })).status, 401);
   // Доверенный сервис с ключом по-прежнему получает полную запись (ops/chat и др.).
   const trusted = await request('POST', '/leads', lead);
   assert.equal(trusted.status, 200);
