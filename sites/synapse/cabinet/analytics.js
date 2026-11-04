@@ -155,6 +155,7 @@ const dataMark = (kind, date) => {
     mixed: `LIVE + СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
     manual: "РУЧНОЙ ВВОД",
     "live-manual": "LIVE + РУЧНОЙ ВВОД",
+    "romi-sources": "выручка — CRM, расход — ручной ввод",
     "snapshot-manual": `СНИМОК${date ? ` от ${snapshotDate(date)}` : ""} + РУЧНОЙ ВВОД`,
     none: "НЕТ ДАННЫХ"
   };
@@ -249,6 +250,8 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   const financeRomiText = financeUnavailable ? "по компании не ведутся" :
     expensesMissing ? "нет расходов для расчёта" : formatROMI(financeRomi);
   const financeMark = financeUnavailable || expensesMissing ? dataMark("none") : dataMark("manual");
+  // ROMI смешивает два источника: выручку из CRM и расход, введённый вручную.
+  const romiMark = financeUnavailable || expensesMissing ? dataMark("none") : dataMark("romi-sources");
   const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
   const funnel = [
     potentialStep(potential, analyticsState.range),
@@ -321,7 +324,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     <div class="crm-stat"><span>Расходы</span><strong>${escapeHTML(financeExpensesText)}</strong>${financeMark}</div>
     <div class="crm-stat"><span>Выручка</span><strong>${financeRevenue === null || financeRevenue === undefined
       ? "—" : formatMoney(financeRevenue)}</strong></div>
-    <div class="crm-stat"><span>ROMI</span><strong>${escapeHTML(financeRomiText)}</strong>${financeMark}</div></div>
+    <div class="crm-stat"><span>ROMI</span><strong>${escapeHTML(financeRomiText)}</strong>${romiMark}</div></div>
     <p class="crm-note">Расходы — ручной ввод владельца по выбранной компании, выручка — продажи в CRM.
     Без расходов ROMI не считается.</p></section>
     <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">

@@ -50,7 +50,7 @@ test('внесённый расход компании даёт ROMI с метк
     await f.render();
     const finance=f.finance();
     assert.match(finance,/Расходы 1000 ₽ РУЧНОЙ ВВОД/);
-    assert.match(finance,/ROMI 200% РУЧНОЙ ВВОД/);
+    assert.match(finance,/ROMI 200% выручка — CRM, расход — ручной ввод/);
     assert.doesNotMatch(finance,/не ведутся/);
     const direct=f.platformRow('Поисковая реклама');
     assert.equal(direct.cells[7].textContent.trim(),'1000 ₽');
