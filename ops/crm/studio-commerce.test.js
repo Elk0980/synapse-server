@@ -16,6 +16,24 @@ function fixture(t){
   const body=(more={})=>({revision:api.get('alvi',1).revision,requestId:'request-'+(++seq),type:'received',amount:1000,currency:'RUB',reference:'receipt-'+seq,evidence:'Чек кассы',occurredAt:'2026-09-29T10:00:00Z',...more});
   return {api,db,body};
 }
+test('cohort retains partial payments, top-up and full refunds once, separately by currency',t=>{
+  const {api,body}=fixture(t);
+  api.publication('alvi',1,{revision:0,requestId:'source-001',postId:1,evidence:'Подтверждение источника'});
+  const firstInput=body({amount:400}),first=api.payment('alvi',1,firstInput).payments[0].id;
+  const secondInput=body({amount:600}),second=api.payment('alvi',1,secondInput).payments[1].id;
+  api.payment('alvi',1,firstInput);
+  api.payment('alvi',1,body({currency:'THB',amount:250}));
+  const refundInput=body({type:'refund',refundOf:first,amount:400});
+  api.payment('alvi',1,refundInput);
+  api.payment('alvi',1,body({type:'refund',refundOf:second,amount:600}));
+  api.payment('alvi',1,refundInput);
+  const group=api.cohort('alvi',[{id:1}],new Map([[1,['booked','visited']]]))[0];
+  assert.equal(group.paidLeads,1);assert.equal(group.booked,1);assert.equal(group.visited,1);
+  assert.deepEqual(group.totals,[
+    {currency:'RUB',receivedCents:100000,refundedCents:100000,netCents:0},
+    {currency:'THB',receivedCents:25000,refundedCents:0,netCents:25000}]);
+});
+
 test('publication attribution is company-scoped, proven and retains corrections',t=>{
   const {api}=fixture(t);const input={revision:0,requestId:'source-0001',postId:1,evidence:'Клиент указал публикацию'};
   assert.throws(()=>api.publication('alvi',1,{...input,postId:2}),e=>e.status===404);

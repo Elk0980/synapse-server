@@ -16,9 +16,9 @@ const potentialFor=(code,over={})=>({company:{code,name:code},organization:{id:c
   totals:{all:206783,target:90388,nonTarget:32275,unclassified:84120},unclassifiedCategories:['Косметолог','Медитация'],missingCategories:[],excluded:[],
   periods:[{periodStart:'2026-08-01',periodEnd:'2026-08-31',granularity:'month',partial:false}],note:'',...over});
 
-async function fixture({code='alvi',permissions=['analytics.view'],potential,dashboard=empty,range=AUG,respond}={}){
+async function fixture({code='alvi',permissions=['analytics.view'],potential,dashboard=empty,range=AUG,respond,journey,realJourney=false}={}){
  const dom=new JSDOM(`<div>${section}</div>`,{url:'https://cabinet.test/cabinet.html#analytics-through',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[];
- w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};w.eval(SOURCE);
+ w.SbCabinet={registerView:(name,view)=>{views[name]=view;},studioJourney:journey};if(realJourney)w.eval(fs.readFileSync(require.resolve('./studio-journey.js'),'utf8'));w.eval(SOURCE);
  let selected=code,currentRange={...range};
  const ctx={currentView:'analytics-through',get selectedProjectId(){return selected;},identity:{role:'marketer',permissions},byId:id=>d.getElementById(id),
   escapeHTML:v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
@@ -52,11 +52,43 @@ test('potential is requested for the selected company and period and rendered as
  }finally{f.dom.window.close();}
 });
 
-test('potential → views is never expressed as a percentage, even for a complete period; later steps still convert',async()=>{
+test('unlinked aggregate stages never claim client conversion, even with complete snapshot coverage',async()=>{
  const views={...empty,sourceStats:[{source:'2gis',external:{pageViews:1000,siteClicks:40},externalCapturedAt:'2026-09-17T09:00:00.000Z',clicks:5,leads:1}]};
  const f=await fixture({dashboard:views,potential:potentialFor('alvi')});
  try{assert.equal(f.conversion(),'Конверсия из предыдущей ступени: — (показатели напрямую не сопоставимы)');
-  assert.match(f.d.querySelectorAll('.funnel-conversion')[2].textContent,/%/,'views → clicks keeps its percentage');}
+  for(const item of f.d.querySelectorAll('.funnel-conversion'))assert.doesNotMatch(item.textContent,/%/);
+  assert.match(f.d.querySelectorAll('.funnel-conversion')[2].textContent,/нет подтверждённой связи клиентов между этапами/);
+  assert.match(f.content(),/могут пересекаться/);}
+ finally{f.dom.window.close();}
+});
+
+test('platform ROMI is recomputed from complete sums, never summed from row percentages',async()=>{
+ const f=await fixture({dashboard:{sourceStats:[
+  {source:'vk',revenue:200,expenses:100,romi:100},
+  {source:'vk-ads',revenue:1800,expenses:900,romi:100}
+ ],revenue:2000,expenses:1000,romi:100},potential:potentialFor('alvi')});
+ try{const row=[...f.d.querySelectorAll('.analytics-source-table tbody tr')].find(r=>r.cells[0].textContent==='ВКонтакте');
+  assert.equal(row.cells[8].textContent,'100%');}
+ finally{f.dom.window.close();}
+});
+
+test('platform ROMI stays unknown for incomplete or invalid bases and distinguishes known zero revenue',async()=>{
+ const cases=[
+  [{revenue:100,expenses:null},'—'],[{revenue:null,expenses:100},'—'],
+  [{revenue:100,expenses:0},'—'],[{revenue:100,expenses:-10},'—'],
+  [{revenue:NaN,expenses:100},'—'],[{revenue:100,expenses:Infinity},'—'],
+  [{revenue:'100',expenses:100},'—'],[{revenue:0,expenses:100},'-100%']
+ ];
+ for(const [base,expected] of cases){
+  const f=await fixture({dashboard:{sourceStats:[{source:'vk',...base,romi:999}],expenses:100},potential:potentialFor('alvi')});
+  try{const row=[...f.d.querySelectorAll('.analytics-source-table tbody tr')].find(r=>r.cells[0].textContent==='ВКонтакте');
+   assert.equal(row.cells[8].textContent,expected,JSON.stringify(base));}
+  finally{f.dom.window.close();}
+ }
+ const f=await fixture({dashboard:{sourceStats:[{source:'vk',revenue:200,expenses:100,romi:100},
+  {source:'vk-ads',revenue:300,expenses:null,romi:null}],expenses:100},potential:potentialFor('alvi')});
+ try{const row=[...f.d.querySelectorAll('.analytics-source-table tbody tr')].find(r=>r.cells[0].textContent==='ВКонтакте');
+  assert.equal(row.cells[8].textContent,'—','one complete row must not hide another incomplete row');}
  finally{f.dom.window.close();}
 });
 
@@ -129,5 +161,42 @@ test('stale responses never overwrite newer ones: period change, A→B→A compa
   f.toggle2gis();await tick();assert.match(f.content(),/Загрузка/);assert.doesNotMatch(f.content(),/701/);
   pending.get('alvi|2026-05-01').resolve(dashboardFor(500));await tick();assert.doesNotMatch(f.content(),/701/);assert.match(f.card().textContent,/не выбрана в фильтре/);assert.doesNotMatch(f.content(),/500/,'2GIS views stay hidden while the platform is deselected');
   f.toggle2gis();await tick();assert.match(f.card().textContent,/только целевые рубрики/);assert.match(f.content(),/500/);
+ }finally{f.dom.window.close();}
+});
+
+
+test('analytics reuses the payment journal only with CRM permission and server-normalized range',async()=>{
+ const range={from:'2026-07-31T16:00:00.000Z',to:'2026-08-31T15:59:59.999Z'};
+ for(const allowed of [false,true]){
+  const mounts=[];
+  const f=await fixture({permissions:allowed?['analytics.view','crm.view']:['analytics.view'],dashboard:{...empty,range},journey:{mountSummary(node,ctx,options){mounts.push({node,code:ctx.scopeParams().companyCode,options});}},potential:potentialFor('alvi')});
+  try{
+   assert.match(f.content(),/Суммы сделок \(CRM\)/);
+   assert.equal(mounts.length,allowed?1:0);
+   if(allowed){
+    assert.equal(mounts[0].code,'alvi');assert.equal(JSON.stringify(mounts[0].options.range),JSON.stringify(range));
+    assert.match(f.content(),/по всем источникам выбранной компании/);
+    assert.match(f.content(),/не складываются/);
+    const previous=mounts[0].node;f.toggle2gis();assert.equal(previous.isConnected,false);
+   }else assert.match(f.content(),/правом просмотра CRM/);
+  }finally{f.dom.window.close();}
+ }
+ const mounts=[];const f=await fixture({permissions:['analytics.view','crm.view'],journey:{mountSummary(){mounts.push(1);}},potential:potentialFor('alvi')});
+ try{assert.equal(mounts.length,0);assert.match(f.content(),/подтверждённого периода/);}finally{f.dom.window.close();}
+});
+
+
+test('analytics renders the actual journey report with ledger amounts instead of legacy deal values',async()=>{
+ const range={from:'2026-08-01T00:00:00.000Z',to:'2026-08-31T23:59:59.999Z'};
+ const f=await fixture({permissions:['analytics.view','crm.view'],realJourney:true,dashboard:{...empty,range,revenue:99000},potential:potentialFor('alvi'),respond:call=>call.path==='/studio-journey'?{
+  companyCode:'alvi',timezone:'Asia/Irkutsk',summary:{leads:1,booked:1,confirmed:1,visited:1,memberships:0,noShows:0,reschedules:0,noShowRate:0},sources:[],
+  publications:[{postId:1,title:'Тестовая публикация',leads:1,booked:1,visited:1,paidLeads:1,totals:[{currency:'RUB',receivedCents:100000,refundedCents:20000,netCents:80000}]}]
+ }:undefined});
+ try{
+  await tick();const panel=f.d.querySelector('[data-analytics-ledger]');
+  assert.match(panel.textContent,/Тестовая публикация/);assert.match(panel.textContent,/Поступления/);assert.match(panel.textContent,/Возвраты/);
+  assert.match(panel.textContent.replace(/\s/g,''),/1000,00RUB200,00RUB800,00RUB/);
+  assert.doesNotMatch(panel.textContent,/99000|списке ниже/);
+  const request=f.calls.find(c=>c.path==='/studio-journey');assert.equal(request.params.companyCode,'alvi');assert.equal(request.params.from,range.from);assert.equal(request.params.to,range.to);
  }finally{f.dom.window.close();}
 });
