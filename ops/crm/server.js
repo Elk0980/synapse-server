@@ -1874,6 +1874,8 @@ async function handleEntityRoutes(request, response, url, cors) {
           taskCoordination.assertCanFinish(row);
           if (values.description !== undefined) taskCoordination.assertCanFinish({...row, description:values.description});
         }
+        // Блок шагов из прежнего описания сохраняется до правки текста (системная запись, updated_by=0).
+        if (taskPatch && values.description !== undefined) taskCoordination.preserveSteps(row, values.description);
         const assignments = entries.map(([field]) => `${column(config, field)}=?`);
         const parameters = entries.map(([, value]) => value);
         if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');

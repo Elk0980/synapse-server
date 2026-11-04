@@ -205,5 +205,27 @@ function assertTaskCanFinish(db, row) {
   if (value) assertCanFinish(value);
 }
 
-module.exports = {assertTaskCanFinish, MAX_STEPS,parseDescription, effective, counts, progress, validateIncoming, merge, close, remove, reopen, withdrawn,
+// Перед изменением описания: если блок не сохранён, а прежнее описание содержит блок,
+// он сохраняется в coordination (шаги открыты, «[x]» — пометка наследия). Так правка
+// описания не может стереть шаги приёмки. Вызывать в транзакции записи задачи.
+function preserveBeforeDescriptionChange(db, row, description, stamp, userId = 0) {
+  if (!row || description === undefined || description === row.description) return false;
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_coordination_history'").get()) return false;
+  const saved = db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(row.id);
+  let data;
+  try { data = saved ? JSON.parse(saved.data) : {}; } catch { return false; }
+  if (object(data.pointAB)) return false;
+  const parsed = parseDescription(row.description);
+  if (!parsed) return false;
+  data.pointAB = stored(parsed);
+  const revision = (saved?.revision || 0) + 1, json = JSON.stringify(data);
+  db.prepare(`INSERT INTO task_coordination(task_id,revision,data,updated_at,updated_by) VALUES(?,?,?,?,?)
+    ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,data=excluded.data,updated_at=excluded.updated_at,updated_by=excluded.updated_by`)
+    .run(row.id, revision, json, stamp, userId);
+  db.prepare('INSERT INTO task_coordination_history(task_id,revision,data,updated_at,updated_by) VALUES(?,?,?,?,?)')
+    .run(row.id, revision, json, stamp, userId);
+  return true;
+}
+
+module.exports = {preserveBeforeDescriptionChange, assertTaskCanFinish, MAX_STEPS,parseDescription, effective, counts, progress, validateIncoming, merge, close, remove, reopen, withdrawn,
   assertCanFinish, isExecutor, httpsUrl, stored};

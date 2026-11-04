@@ -146,6 +146,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
   return {get,list,save,selfStatus,assertCanFinish:row=>Steps.assertTaskCanFinish(db,row),
+    preserveSteps:(row,description)=>Steps.preserveBeforeDescriptionChange(db,row,description,new Date(now()).toISOString()),
     tool:createTaskTools(db,{now,owner,entry,save})};
 }
 module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable,

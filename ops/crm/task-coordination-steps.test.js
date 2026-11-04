@@ -217,3 +217,17 @@ test('task_create straight into done with open description steps -> 409 and noth
   assert.equal(db.prepare("SELECT count(*) n FROM tasks WHERE client_ref='sample:done'").get().n, 0);
   assert.equal(call('task_create',{title:'SAMPLE done plain',project:'alpha',status:'done',client_ref:'sample:plain'}).task.status, 'done');
 });
+
+test('description change first preserves the parsed block (legacy marks kept, steps open); saved block is untouched', t => {
+  const {db,call,create} = fixture(t), task = create('SAMPLE preserve', 'Точка А: а\nШаги приёмки:\n- [x] один\n- [ ] два');
+  const row = db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id);
+  assert.equal(Steps.preserveBeforeDescriptionChange(db,row,row.description,'2026-11-04T02:00:00Z'), false, 'без изменения описания — ничего');
+  assert.equal(Steps.preserveBeforeDescriptionChange(db,row,'Без шагов','2026-11-04T02:00:00Z'), true);
+  db.prepare('UPDATE tasks SET description=? WHERE id=?').run('Без шагов', task.id);
+  const view = call('task_get',{task_id:task.id});
+  assert.equal(view.point_ab.source, 'card');
+  assert.deepEqual(view.point_ab.steps.map(step => [step.text,step.state,!!step.legacy]), [['один','open',true],['два','open',false]]);
+  assert.throws(() => call('task_update',{task_id:task.id,status:'done'}), error => error.status === 409);
+  const again = db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id);
+  assert.equal(Steps.preserveBeforeDescriptionChange(db,again,'Другое','2026-11-04T03:00:00Z'), false, 'сохранённый блок не перезаписывается');
+});

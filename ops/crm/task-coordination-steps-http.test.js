@@ -16,6 +16,13 @@ test('legacy CRUD: POST done and PATCH description [x] + done with open steps ->
   assert.equal(patched.status,409,JSON.stringify(patched.body));
   const cleared=await fixture.cabinet(`/tasks/${open.body.id}?companyCode=palitra-love`,'PATCH',{description:'Без шагов',status:'done'});
   assert.equal(cleared.status,409,'стирание шагов из описания в том же запросе не закрывает задачу');
+  // Стереть шаги правкой описания, затем закрыть вторым запросом — шаги уже сохранены в блоке.
+  const erased=await fixture.cabinet(`/tasks/${open.body.id}?companyCode=palitra-love`,'PATCH',{description:'Без шагов'});
+  assert.equal(erased.status,200,JSON.stringify(erased.body));
+  const after=await fixture.cabinet(`/tasks/${open.body.id}?companyCode=palitra-love`,'PATCH',{status:'done'});
+  assert.equal(after.status,409,JSON.stringify(after.body));
+  const view=await fixture.cabinet('/coordination/mcp/task_get','POST',{task_id:open.body.id});
+  assert.equal(view.body.point_ab.source,'card');assert.deepEqual(view.body.point_ab.steps.map(step=>[step.text,step.state]),[['проверить','open']]);
   const plain=await fixture.cabinet('/tasks?companyCode=palitra-love','POST',{title:'SAMPLE crud plain',status:'done',companyCode:'palitra-love'});
   assert.equal(plain.status,201);
 });
