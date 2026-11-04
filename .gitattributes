@@ -1,0 +1,2 @@
+# Preserve the exact public HTTP bytes captured for the server-live snapshot.
+sites/synapse/cabinet/sites-projects.css -text whitespace=cr-at-eol
