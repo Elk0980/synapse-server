@@ -8,7 +8,7 @@
   const stripWaitingPrefix = value => String(value || '').replace(/^\s*(?:жд[её]т\s+влада|вопрос\s*→\s*влад)(?![\p{L}\p{N}_])(?:[^\S\r\n]*[:—–-])?[^\S\r\n]*/iu,'');
   const isWaiting = task => waitingField(task.coordination?.blocker) || waitingField(task.coordination?.nextAction) || normalized(task.assignee_name) === 'влад';
   const ownerText = (value,max=200,products=[]) => {
-    if (typeof value !== 'string' || /[\x00-\x1f\x7f\u2028\u2029/\\]|\b[0-9a-f]{12,}\b/iu.test(value)) return '';
+    if (typeof value !== 'string' || /[\x00-\x1f\x7f\u2028\u2029/\\]|\b[0-9a-f]{12,}\b|\b\d{7,}\b/iu.test(value)) return '';
     const clean=value.trim(); if (!clean || Array.from(clean).length>max) return '';
     let words=clean;
     for (const name of products.filter(name=>typeof name==='string'&&name.trim())) words=words.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu'),'');
