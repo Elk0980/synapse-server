@@ -453,9 +453,18 @@ function createMediaMentorSuggestRoute({ suggester, loadBrief, loadStats, requir
     // Права те же, что у плана: подсказка — подготовка правки плана, а не отдельная власть.
     if (session.user?.role !== 'owner') requirePermission(request, 'autoposting.edit', code);
     const body = await readBody(request);
-    const allowed = analysing ? [] : reviewing ? ['from', 'to'] : ['startDate', 'days'];
+    const allowed = analysing ? [] : reviewing ? ['from', 'to'] : ['startDate', 'days', 'platforms'];
     const extra = Object.keys(body).filter((key) => !allowed.includes(key));
     if (extra.length) fail(400, 'Переданы лишние поля');
+    /* №136: экран «Контент-план» передаёт площадки, отмеченные в видимой анкете. Они только сужают
+       площадки брифа, прочитанного на сервере: добавить площадку, которой нет в брифе, нельзя.
+       Пустой список — площадки не выбраны, модель не вызывается (brief_incomplete). */
+    let only = null;
+    if (body.platforms !== undefined) {
+      if (!Array.isArray(body.platforms) || body.platforms.length > 20
+        || body.platforms.some((value) => typeof value !== 'string' || value.length > 50)) fail(400, 'Площадки передаются списком');
+      only = new Set(body.platforms.map((value) => value.toLowerCase()));
+    }
     let result;
     const context = { companyCode: code, userId: session.user.id,
       audience: session.user.role === 'owner' ? 'owner-private' : 'actor-private' };
@@ -465,8 +474,9 @@ function createMediaMentorSuggestRoute({ suggester, loadBrief, loadStats, requir
         if (!stats) fail(404, 'Статистика компании не найдена');
         result = await suggester.review(stats.overview, stats.plan || null, context);
       } else {
-        const brief = await loadBrief(code, session.user);
-        if (!brief) fail(404, 'Бриф компании не найден');
+        const loaded = await loadBrief(code, session.user);
+        if (!loaded) fail(404, 'Бриф компании не найден');
+        const brief = only ? { ...loaded, platforms: (loaded.platforms || []).filter((p) => only.has(String(p).toLowerCase())) } : loaded;
         result = analysing ? await suggester.analyze(brief, context)
           : await suggester.suggest(brief, { startDate: body.startDate, days: body.days ?? MIN_DAYS }, context);
       }
