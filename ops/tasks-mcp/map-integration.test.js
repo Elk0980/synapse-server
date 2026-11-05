@@ -33,7 +33,12 @@ test('обновление приватного канона возобновл�
   assert.equal(fresh.isError,false);
   assert.equal(fresh.data.rules_changed,null);
   assert.deepEqual(fresh.data.rules,resumed.data.rules);
-  assert.deepEqual((await f.call('task_get',{task_id:id})).data,before);
+  // №142: задача не меняется; меняется только текущий код правил в метке якоря.
+  const after=(await f.call('task_get',{task_id:id})).data;
+  assert.equal(after.rules_anchor.current,resumed.data.rules_revision.slice(0,8));
+  assert.notEqual(after.rules_anchor.current,before.rules_anchor.current);
+  const strip=task=>({...task,rules_anchor:null,coordination:{...task.coordination,rules_anchor:null}});
+  assert.deepEqual(strip(after),strip(before));
   assert.equal((await f.call('doc_read',{path:'SITE.md'})).isError,false);
   assert.equal((await f.call('doc_read',{path:'CONSTITUTION.md'})).isError,true);
 });

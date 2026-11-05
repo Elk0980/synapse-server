@@ -125,12 +125,19 @@ test('unconfigured health is a skipped sample, never a false alarm',async t=>{
 
 test('async coordination write authorizes every positive role and stores proof identity atomically',async t=>{
  const verifier={code:async()=>({sha,url}),connected:async()=>({sha})};
- const {db,api}=fixture(t,{trusted:true,verifier});
+ const {db,api,watchdog}=fixture(t,{trusted:true,verifier});
  db.exec("ALTER TABLE tasks ADD COLUMN parent_task_id INTEGER; ALTER TABLE tasks ADD COLUMN source TEXT; ALTER TABLE tasks ADD COLUMN due_date TEXT;");
  const actor=(kind,id,name)=>({role:'owner',userId:7,trusted:{kind,id,name,key:kind==='vlad'?`person:${id}`:`agent:${id}`}});
+ // №142: стадии кода/подключения/проверки требуют якорь исполнителя с текущим кодом правил.
+ await assert.rejects(api.saveAsync(1,{revision:0,data:proof()},actor('agent',1,'Codex')),/session_start/);
+ watchdog.rules.seen({rules_revision:'ab'.repeat(32),rules_version:'1.7'});
+ await assert.rejects(api.saveAsync(1,{revision:0,data:proof()},actor('agent',1,'Codex')),/нет якоря/);
+ db.prepare('INSERT INTO task_comments VALUES(9,1,?,?,?)').run('Codex','Сэр · правила 1.7 · код abababab','2026-11-03T17:00:00Z');
  let r=await api.saveAsync(1,{revision:0,data:proof()},actor('agent',1,'Codex'));assert.equal(r.milestones.code.state,'confirmed');
- await assert.rejects(api.saveAsync(1,{revision:1,data:proof('verified','https://example.test/proof')},actor('agent',1,'Codex')),/независимый/);
- r=await api.saveAsync(1,{revision:1,data:proof('verified','https://example.test/proof')},actor('agent',2,'Reviewer'));assert.equal(r.milestones.code.state,'confirmed');
+ const shots='https://example.test/proof https://example.test/390.png https://example.test/1440.png';
+ await assert.rejects(api.saveAsync(1,{revision:1,data:proof('verified',shots)},actor('agent',1,'Codex')),/другой агент/);
+ await assert.rejects(api.saveAsync(1,{revision:1,data:proof('verified','https://example.test/proof')},actor('agent',2,'Reviewer')),/390/);
+ r=await api.saveAsync(1,{revision:1,data:proof('verified',shots)},actor('agent',2,'Reviewer'));assert.equal(r.milestones.code.state,'confirmed');
  r=await api.saveAsync(1,{revision:2,data:proof('connected',sha)},actor('release',3,'Release'));
  r=await api.saveAsync(1,{revision:3,data:proof('accepted','Принимаю')},actor('vlad',7,'Влад'));
  assert.equal(r.revision,4);db.exec("UPDATE tasks SET status='done' WHERE id=1");
