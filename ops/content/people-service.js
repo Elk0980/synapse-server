@@ -8,7 +8,7 @@ const {createPeopleHttp}=require('./people-http');
 const {createPeoplePlan}=require('./people-plan');
 function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,requireCsrf,readJson,sendJson,env=process.env}) {
   const enabled=env.PEOPLE_NOTIFICATIONS_ENABLED==='1'&&env.PEOPLE_NOTIFICATIONS_TEXT_APPROVED==='1';
-  const call=createPeopleCrmClient({crmUrl,apiKey:crmKey});
+  const call=createPeopleCrmClient({crmUrl,apiKey:crmKey,authStore});
   const tasks=createPeopleTasks({authStore,db,call});
   const answers=require('./team-chat-answers').createTeamChatAnswers({db,tasks,call,env});
   const teamChat=require('./team-chat').createTeamChat({db,tasks,call,answers,unsafe:require('./team-chat-answers').unsafe});
