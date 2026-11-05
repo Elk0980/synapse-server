@@ -4,6 +4,7 @@ const { isPasswordHash, hashPassword, verifyPassword } = require('./passwords');
 const crypto = require('node:crypto');
 
 const COMPANIES = Object.freeze({
+  nebo: { name: 'Небо', contentSiteId: null },
   'synapse-business': { name: 'Synapse Бизнес', contentSiteId: null },
   taisabai: { name: 'ТайСабай', contentSiteId: null },
   'novyi-etap': { name: 'НовыйЭтап', contentSiteId: null },

@@ -1,0 +1,76 @@
+.workflow,.app-onboarding{margin:16px 0;overflow-wrap:anywhere}.workflow h3,.app-onboarding h3{margin:0 0 12px}.workflow h4{margin:20px 0 8px}.workflow__settings{display:grid;gap:12px}.workflow__stage,.workflow__confirmation{border:1px solid #d7d9c8;border-radius:18px;padding:16px;min-width:0;margin:12px 0}.workflow__stage legend,.workflow__confirmation legend{font-weight:700;max-width:100%;padding:0 6px}.workflow__buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.workflow__buttons .app-btn{width:auto;flex:1 1 120px;padding:10px 14px;font-size:14px;min-height:44px}.workflow__row{border-bottom:1px solid #e8e4dc;padding-bottom:14px}.workflow .app-input{width:100%;box-sizing:border-box}.workflow__timeline{padding-left:24px;font-size:14px;color:#77796c}.workflow__timeline li{padding:4px 0}.workflow__timeline .is-current{color:#505d2c;font-weight:700}.workflow__current{display:block;font-size:20px;color:#505d2c}.workflow__history{margin-top:18px;font-size:14px}.workflow__history summary{min-height:44px;cursor:pointer}.app-onboarding{background:#f3f4e9;border:1px solid #d4d8bd}.app-onboarding__steps{padding-left:22px}.app-onboarding__steps li{padding:5px 0}.workflow button:disabled{opacity:.55;cursor:default}.workflow .check{align-items:flex-start;line-height:1.5}.workflow .check input{margin-top:5px;min-width:18px}.workflow__settings [data-save-settings]{min-height:48px}
+
+/* Automatic add-to-home offers overlay the page and never occupy chat layout space. */
+.app-onboarding-popup{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom));background:#26261f66;overscroll-behavior:contain}
+.app-onboarding-popup__dialog{position:relative;width:100%;max-width:520px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));margin:0;padding:20px;overflow-y:auto;overscroll-behavior:contain;box-shadow:0 16px 60px #26261f40}
+.app-onboarding-popup__dialog>h3{padding-right:32px}
+.app-onboarding-popup__close{position:absolute;right:8px;top:8px;display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;font-size:24px;line-height:1;color:var(--ink,#26261f);cursor:pointer}
+.app-onboarding-popup__close:hover{background:#e9ecd9}
+@media(max-width:420px){.app-onboarding-popup__dialog{padding:18px 16px}}
+
+
+/* One action width and one readable text size in both installation windows. */
+.phone .app-onboarding { display:grid; gap:14px; font-size:15px; line-height:1.5; padding:20px; }
+.phone .app-onboarding h3 { font-size:20px; line-height:1.3; margin:0; }
+.phone .app-onboarding h4 { font-size:16px; line-height:1.4; margin:4px 0 0; }
+.phone .app-onboarding .muted { font-size:15px; line-height:1.5; white-space:pre-line; }
+.phone .app-onboarding > .app-btn,.phone .app-onboarding .workflow__buttons .app-btn { width:100%; min-height:48px; padding:12px 16px; font-size:16px; line-height:1.4; border-radius:999px; justify-self:stretch; flex:none; }
+.phone .app-onboarding .workflow__buttons { display:grid; grid-template-columns:minmax(0,1fr); width:100%; gap:10px; margin:0; }
+.phone .app-onboarding-popup__dialog { margin:0; max-width:520px; }
+.phone .app-onboarding-popup__close { min-width:44px; min-height:44px; right:4px; top:4px; }
+.app-guide { min-width:0; display:grid; gap:12px; }
+.app-guide__example { color:var(--muted); font-size:12px; }
+.app-guide .app-onboarding__steps { display:grid; gap:20px; padding-left:24px; margin:0; }
+.app-guide .app-onboarding__steps li { padding:0; }
+.app-guide .app-onboarding__steps li::marker { font-weight:700; color:var(--accent); }
+.app-guide__controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:10px 0; padding:10px; background:#fff; border:1px solid var(--line); border-radius:12px; font-size:13px; }
+.app-guide__controls b { display:grid; place-items:center; width:36px; height:36px; border:2px solid var(--accent); border-radius:50%; font-size:20px; }
+.app-guide__figure { margin:12px 0 0; display:grid; gap:6px; max-width:280px; }
+.app-guide__figure.is-expanded { max-width:none; }
+.app-guide__picture { position:relative; overflow:hidden; border:1px solid #d4d8bd; border-radius:12px; background:#fff; }
+.app-guide__picture img { display:block; width:100%; height:auto; }
+.app-guide__picture--ios-share { aspect-ratio:320/650; }
+.app-guide__picture--ios-share img { position:absolute; width:312.5%; max-width:none; left:-106.25%; top:0; }
+.app-guide__picture--ios-add { aspect-ratio:468/475; }
+.app-guide__picture--ios-add img { position:absolute; width:410.2564%; max-width:none; left:-155.3419%; top:-11.5789%; }
+.app-guide__picture--android-menu { aspect-ratio:738/750; }
+.app-guide__picture--android-menu img { position:absolute; top:-113.33%; }
+.app-guide__picture--android-choice { aspect-ratio:738/480; }
+.app-guide__picture--android-choice img { position:absolute; top:-220%; }
+.app-guide__picture--android-install { aspect-ratio:738/570; }
+.app-guide__picture--android-install img { position:absolute; top:-38%; }
+.app-guide__mark { position:absolute; display:block; border:3px solid #d14026; border-radius:999px; pointer-events:none; box-shadow:0 0 0 2px #fff; }
+.app-guide__mark--add { width:17%; height:14%; left:77%; top:21%; }
+.app-guide__mark--toggle { width:19%; height:11%; left:75%; top:70%; }
+.app-guide__mark--install { width:22%; height:11%; left:72%; top:81%; }
+.app-guide__zoom { min-height:44px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--accent); font:inherit; font-size:13px; cursor:pointer; }
+.app-guide__figure figcaption,.app-guide__source { font-size:12px; color:var(--muted); }
+.app-guide__source { min-height:44px; display:flex; align-items:center; }
+
+.app-guide__scroll { max-width:100%; overflow:auto; overscroll-behavior:contain; }
+.app-guide__figure.is-expanded .app-guide__picture { width:max(100%,440px); }
+/* Keep the close control reachable while a long illustrated guide scrolls. */
+.phone .app-onboarding-popup { top:var(--chat-viewport-top,0px); bottom:auto; height:var(--chat-viewport-height,100dvh); }
+.phone .app-onboarding-popup__dialog { max-height:calc(var(--chat-viewport-height,100dvh) - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+.phone .app-onboarding-popup__close { position:sticky; top:0; grid-area:1 / 1; justify-self:end; align-self:start; margin:-8px -8px 0 0; z-index:2; background:#f3f4e9; }
+.phone .app-onboarding-popup__dialog > h3 { grid-area:1 / 1; align-self:center; min-height:44px; display:flex; align-items:center; }
+/* Keep the complete confirmation screenshot: the Install action must not be cropped. */
+.app-guide__picture--android-install { aspect-ratio:auto; }
+.app-guide__picture--android-install img { position:static; width:100%; }
+.app-guide__picture--android-install .app-guide__mark { display:none; }
+
+/* Compact staff confirmations stay inline above the conversation. */
+.workflow--compact .workflow__stage-confirm { display:grid; gap:8px; min-width:0; margin:8px 0; padding:10px; border:1px solid var(--line,#ddd); border-radius:12px; }
+.workflow--compact .workflow__stage-confirm .field { min-width:0; margin:0; }
+.workflow__stage-confirm .workflow__buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.workflow__stage-confirm .workflow__buttons .app-btn { flex:1 1 100px; min-width:0; margin:0; }
+.workflow__stage-confirm textarea,.workflow__stage-confirm select { width:100%; max-width:100%; box-sizing:border-box; }
+.workflow__call-due { margin:8px 0; padding:10px; border:1px solid var(--line,#ddd); border-radius:12px; background:var(--accent-soft,#f1f3e8); overflow-wrap:anywhere; }
+.workflow__call-due .muted { margin:0 0 6px; }
+[data-completion-settings] { display:grid; gap:12px; min-width:0; }
+[data-completion-settings] .field { min-width:0; margin:0; }
+[data-completion-settings] textarea,[data-completion-settings] select { width:100%; max-width:100%; box-sizing:border-box; }
+.workflow__memo-upload { display:grid; gap:8px; min-width:0; }
+.workflow__memo-upload input[type="file"] { max-width:100%; min-width:0; width:100%; font:inherit; }
+.workflow__memo-upload .app-btn { max-width:100%; white-space:normal; }
+[data-funnel-report] { min-width:0; overflow-wrap:anywhere; }

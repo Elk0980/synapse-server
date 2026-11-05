@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Черновик — Synapse</title>
+<link rel="stylesheet" href="/cabinet/site-files.css">
+</head>
+<body>
+<header><a href="/cabinet.html#sites">← Сайты проекта</a><h1 id="site-name">Открываем черновик…</h1>
+<a id="open-site" target="_blank" rel="noopener" hidden>Открыть сайт</a></header>
+<p id="status" role="status"></p><p id="error" role="alert"></p>
+<main hidden id="workspace">
+  <section class="preview" aria-label="Предпросмотр сайта"><iframe id="site-preview" title="Черновик сайта" referrerpolicy="no-referrer"></iframe></section>
+  <details id="files-panel"><summary>Файлы и история сохранений</summary>
+    <div class="file-layout">
+      <aside><label for="file-list">Файл сайта</label><select id="file-list" size="12"></select>
+      <h2>История сохранений</h2><ol id="history"></ol></aside>
+      <form id="file-form"><label for="file-content" id="file-label">Содержимое файла</label>
+        <textarea id="file-content" spellcheck="false" aria-describedby="save-help"></textarea>
+        <p id="save-help">Сохранение обновляет этот черновик и добавляет версию в проект.</p>
+        <div class="save-row"><input id="save-message" maxlength="240" aria-label="Описание изменений" placeholder="Что изменили — необязательно">
+        <button type="submit" id="save-file">Сохранить черновик</button></div>
+      </form>
+    </div>
+  </details>
+</main>
+<script src="/cabinet/site-files.js" defer></script>
+</body></html>

@@ -644,7 +644,8 @@ function createMediaMentor(db,{now=Date.now}={}) {
   /* Вводные контент-завода (CF1) живут рядом с брифом на той же базе, но отдельно от него:
      их правка не создаёт версию брифа и не снимает согласования плана. */
   const inputs=createContentFactoryInputs(db,{now});
-  return {get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,
+  const publicationCopies=require('./media-mentor-publication-copies.cjs').create(db);
+  return {publicationCopies,get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,
     planVariantStates,variantDecisions,inputs};
 }
 

@@ -16,6 +16,8 @@ const { createEmailDiagnostics } = require('./email-diagnostics');
 const { companyPublicLinks } = require('./company-links');
 const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
+const {create:createContentDay}=require('./content-day.cjs');
+const {create:createContentDayHttp}=require('./content-day-http.cjs');
 const {createContentFactorySourceHandler}=require('./content-factory-source-http');
 const {createContentFactoryContextHandler}=require('./content-factory-context-http');
 const {createReviewTasks}=require('./autoposting-review-tasks');
@@ -648,8 +650,11 @@ const taskDispatch = createTaskDispatch(db,{onAccept:taskCoordination.acceptDisp
 const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
-const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow});
+const mediaMentor = createMediaMentor(db);
+const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow,publicationCopies:mediaMentor.publicationCopies});
 const handleContentFactoryCompletion=require('./content-factory-completion-http').createContentFactoryCompletionHandler({autoposting,companyModuleContext,readJson,send});
+const contentDay=createContentDay({db,getSettings:code=>autopostingTransport.getSettings(code),readCalendar:(code,q)=>autoposting.calendar(code,q),createVariant:(id,code,body,actor)=>autoposting.createPublishedCopy(id,code,body,actor)});
+const handleContentDay=createContentDayHttp({service:contentDay,context:companyModuleContext,readJson,reply:(req,res,status,result,cors)=>send(res,status,result,{...cors,'cache-control':'no-store'})});
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
@@ -661,7 +666,6 @@ const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,co
 const handleClientIntakes = createClientIntakesHandler({intakes:createClientIntakes(db),companyModuleContext,readJson,send});
 const mediaMentorRollout = createMediaMentorRollout(db);
 const handleMediaMentorRollout = createMediaMentorRolloutHandler({rollout:mediaMentorRollout,companyModuleContext,readJson,send});
-const mediaMentor = createMediaMentor(db);
 const handlePeople = createPeopleHandler({db,taskCoordination,mentor:mediaMentor,identity:crmIdentity,readJson,send});
 const mediaMentorTransfer = createMediaMentorTransfer(db,{mentor:mediaMentor,autoposting,information:companyInformation});
 const contentPlanJobs = createContentPlanJobs(db,{requireWorker:true});
@@ -2690,6 +2694,7 @@ async function route(request, response) {
       scheduledAt: p.scheduledAt, timezone: p.timezone, mediaKind: p.readiness?.mediaKind || 'none' }));
     return send(response, 200, { companyCode: company.code.toLowerCase(), items }, { ...cors, 'cache-control': 'no-store' });
   }
+  if(await handleContentDay(request,response,url,cors))return;
   if(await handleContentFactoryCompletion(request,response,url,cors))return;
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
     const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';

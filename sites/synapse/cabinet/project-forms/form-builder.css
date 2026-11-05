@@ -1,0 +1,36 @@
+/* Ограниченная область: инспектор форм и поля в макете. */
+.fb-settings { margin-top: 20px; padding-top: 16px; border-top: 1px solid #dedbd0; }
+.fb-settings .ins-sub { margin: 0 0 14px; }
+.fb-check-setting { margin: 12px 0; }
+.fb-check-setting__label, .fb-channel { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.fb-settings input[type="checkbox"], .form-fields input[type="checkbox"] { flex: 0 0 auto; width: 18px; height: 18px; margin: 0; accent-color: #626c36; }
+.fb-check-setting .hint { margin: 6px 0 0 27px; }
+.fb-channels { min-width: 0; margin: 18px 0; padding: 12px; border: 1px solid #dedbd0; border-radius: 12px; }
+.fb-channels legend { padding: 0 5px; font-weight: 700; }
+.fb-channel { margin: 10px 0; }
+.fb-channel:has(input:disabled) { cursor: default; }
+.fb-placeholder-details { margin: 12px 0; }
+.fb-placeholder-details summary { margin-bottom: 12px; cursor: pointer; font-weight: 600; }
+.fb-fields-title { margin: 20px 0 12px; font-size: 14px; }
+.fb-field-card { margin: 12px 0; padding: 12px; border: 1px solid #dedbd0; border-radius: 12px; background: #fff; }
+.fb-field-card.is-hidden { background: #f4f2ec; border-style: dashed; }
+.fb-field-card__head { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.fb-field-card__head h5 { min-width: 0; margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.fb-field-card__type { color: #6d6a60; flex: 0 0 auto; font-size: 11px; }
+.fb-field-tools { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.fb-field-tools .btn { min-height: 30px; padding: 5px 9px; }
+.fb-settings .btn:disabled { opacity: .5; cursor: default; }
+.fb-add { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 18px; }
+.fb-add .ins-field { margin-bottom: 0; }
+.fb-add-field { width: 100%; }
+.form-fields:empty { display: none; }
+.form-fields { display: grid; gap: 14px; margin: 16px 0; }
+.form-fields__field { min-width: 0; }
+.form-fields__label { margin-top: 0; }
+.form-fields__control { width: 100%; box-sizing: border-box; }
+.form-fields textarea { resize: vertical; min-height: 90px; }
+.form-fields__required { color: #9b442b; }
+.form-fields__checkbox { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.form-fields__checkbox input { margin-top: 3px; }
+.form-fields__checkbox .field__label { display: inline; }
+.form-fields input:focus-visible, .form-fields select:focus-visible, .form-fields textarea:focus-visible, .fb-settings input:focus-visible, .fb-settings select:focus-visible, .fb-settings textarea:focus-visible, .fb-settings button:focus-visible { outline: 2px solid #626c36; outline-offset: 2px; }

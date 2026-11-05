@@ -1,0 +1,47 @@
+/* 2026-11-02 · spec 049 · раздел «Контент»: сначала телефон, затем ПК.
+   Только раскладка; данные, права и действия не меняются. */
+.content-day__create{border-radius:99px}
+.content-day__channel{margin-top:12px;padding:14px 16px;border:1px solid #e1e4d6;border-radius:16px;background:#fff}
+.content-day__channel-head{flex-direction:row!important;align-items:center!important;justify-content:space-between;gap:8px 12px}
+.content-day__channel-head h2{font-size:18px;line-height:1.3}
+.content-day__channel-head .app-btn{width:auto;min-height:40px;padding:8px 14px;border-radius:99px;font-size:14px;line-height:1.3}
+.content-day__channel>p{margin:6px 0 0;font-size:13px;line-height:1.45}
+.content-day__channel .content-day__count{font-weight:600;color:#3e492e}
+@media(max-width:380px){.content-day__channel-head .app-btn{width:100%;justify-content:center}}
+@media(min-width:760px){
+ .content-day>div{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start}
+ .content-day>div>:not(.content-day__channel){grid-column:1/-1}
+ .content-day>div>.content-day__channel{margin-top:0;height:100%}
+ .content-day__create{justify-self:start;width:auto;min-width:260px;padding-inline:28px}
+}
+/* 02.11.2026: уведомление «Вышло» в приложении. */
+.content-day__fresh{margin:12px 0 4px;padding:12px 14px;border-radius:14px;background:#eef6e8;border:1px solid #cfe2bf;color:#24301a}
+.content-day__fresh-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.content-day__fresh-head h2{margin:0;font-size:16px}
+.content-day__fresh-head .app-btn{min-height:36px;padding:6px 12px}
+.content-day__fresh-post{margin-top:8px}
+.content-day__fresh-post strong{display:block;font-size:14px;overflow-wrap:anywhere}
+.content-day__fresh-post ul{margin:4px 0 0;padding:0;list-style:none}
+.content-day__fresh-post li{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.content-day__fresh-post a{color:#2f5d1e;font-weight:600}
+.content-day__fresh-head h2{white-space:nowrap}
+.content-day__fresh-head .app-btn{width:auto;flex:0 0 auto}
+/* 03.11.2026: ПК — обычные размеры кнопок и карточек, экран используется по ширине. Телефон не меняется. */
+@media(min-width:1024px){
+ .app-body[data-layout="dashboard"]{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+ .app-body[data-layout="dashboard"]>.app-btn{min-height:60px;padding:12px 18px;border-radius:12px;font-size:.95rem}
+ .app-body>.app-btn{min-width:0;min-height:38px;padding:8px 18px;font-size:.92rem}
+ .app-sidebar .app-menu__item{min-height:38px;padding:8px 12px}
+ .app-btn{min-height:38px;padding:8px 16px;font-size:.92rem}
+ .content-tasks-dialog{padding:24px}
+ .content-tasks-dialog__surface{width:min(100%,1280px);height:100%;border-radius:16px;overflow:hidden;box-shadow:0 18px 48px #1d1c1633}
+ .content-tasks-dialog__body{padding:20px 24px}
+ .content-tasks-dialog .app-btn{min-height:36px;padding:7px 16px;font-size:.9rem}
+ .content-day__create,.content-day>div>.content-day__create{min-width:0;padding-inline:20px}
+ .content-day__all{justify-self:start;width:auto}
+ .content-day__channel-head .app-btn{width:auto}
+ .palitra-composer-primary,.palitra-composer-secondary,.palitra-composer-danger{min-height:38px;padding:8px 18px;font-size:14px}
+ .palitra-composer-input{min-height:38px;padding-top:7px;padding-bottom:7px;font-size:15px}
+ .palitra-composer-input:is(select){min-height:38px}
+ .palitra-composer-close{min-width:36px;min-height:36px}
+}
