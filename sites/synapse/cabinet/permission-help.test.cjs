@@ -2,9 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {JSDOM}=require('jsdom'),{PERMISSIONS}=require('../../../ops/content/auth-store');
 test('all registered rights have Russian labels and accessible click/keyboard/hover help; never changes checkboxes',()=>{
  const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});try{const w=dom.window;w.eval(fs.readFileSync(path.join(__dirname,'permission-help.js'),'utf8'));
- for(const code of PERMISSIONS)assert.ok(w.SynapsePermissionHelp.codes.includes(code),code);
- // Пояснение может опережать право из соседнего PR (autoposting.channels, PR 537); лишних кодов нет.
- assert.deepEqual([...w.SynapsePermissionHelp.codes].filter(code=>!PERMISSIONS.includes(code)&&code!=='autoposting.channels'),[]);w.document.querySelector('main').innerHTML=w.SynapsePermissionHelp.markup(PERMISSIONS,{selectable:true,checked:['price.edit']});
+ assert.deepEqual([...w.SynapsePermissionHelp.codes].sort(),[...PERMISSIONS].sort());w.document.querySelector('main').innerHTML=w.SynapsePermissionHelp.markup(PERMISSIONS,{selectable:true,checked:['price.edit']});
  const b=w.document.querySelector('.permission-help-button'),tip=w.document.getElementById(b.getAttribute('aria-describedby'));
  assert.equal(tip.hidden,true);b.dispatchEvent(new w.MouseEvent('mouseover',{bubbles:true}));assert.equal(tip.hidden,false);b.click();assert.equal(tip.hidden,false);
  b.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(tip.hidden,true);
