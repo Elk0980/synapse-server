@@ -124,3 +124,9 @@ body { background:var(--bg); font-family:"Segoe UI",system-ui,sans-serif; }
 .client-extra { border-top:1px solid var(--line); margin-top:8px; padding-top:12px; }
 .client-extra summary { cursor:pointer; padding:10px 0; color:var(--muted); }
 .client-extra .crm-form { padding-top:12px; }
+/* №139: группа «Ещё» и переключатель «Показывать все разделы на прежних местах». */
+.sidebar .nav-category.nav-empty, .sidebar .subnav.nav-empty { display:none; }
+.sidebar .nav-more { margin-top:20px; padding-top:14px; border-top:1px solid var(--line); border-radius:0; }
+.menu-more-note { margin:6px 12px 8px; color:var(--muted); font-size:12px; line-height:1.4; }
+.menu-show-all { display:flex; align-items:center; gap:10px; margin-top:16px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); font-weight:600; cursor:pointer; }
+.menu-show-all input { width:18px; height:18px; flex-shrink:0; accent-color:var(--accent); }
