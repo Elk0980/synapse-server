@@ -55,6 +55,29 @@ test('формат и роль вне словаря не принимаются
   assert.equal(out.items.length, 0);
 });
 
+test('№121: на Instagram / Reels, TikTok и Shorts Хью получает формат reel, остальные площадки не трогаются', async () => {
+  // Как на боевом 05.11: площадка только «Instagram / Reels», модель вернула post/reel/story/post/story.
+  const brief = { ...BRIEF, platforms: ['instagram', 'tiktok', 'youtube_shorts', 'vk'] };
+  const formats = ['post', 'reel', 'story', 'post', 'story'];
+  const rows = formats.map((format, i) => row({ date: `2026-11-${String(6 + i).padStart(2, '0')}`, platform: 'instagram', format, topic: `Тема ${i + 1}` }));
+  rows.push(row({ date: '2026-11-06', platform: 'tiktok', format: 'carousel', topic: 'ТТ' }),
+    row({ date: '2026-11-07', platform: 'youtube_shorts', format: 'story', topic: 'YT' }),
+    row({ date: '2026-11-08', platform: 'vk', format: 'post', topic: 'ВК пост' }),
+    row({ date: '2026-11-09', platform: 'vk', format: 'story', topic: 'ВК сторис' }));
+  const prompts = [];
+  const s = createMediaMentorSuggest({ ask: async (payload) => { prompts.push(JSON.parse(payload).system); return { text: JSON.stringify(rows) }; } });
+  const out = await s.suggest(brief, { startDate: '2026-11-06', days: 7 });
+  assert.equal(out.status, 'ok');
+  const byTopic = Object.fromEntries(out.items.map((item) => [item.topic, item.format]));
+  for (let i = 1; i <= 5; i += 1) assert.equal(byTopic[`Тема ${i}`], 'reel', `Instagram / Reels №${i}`);
+  assert.equal(byTopic['ТТ'], 'reel'); assert.equal(byTopic['YT'], 'reel');
+  assert.equal(byTopic['ВК пост'], 'post', 'фото-пост ВК остаётся постом');
+  assert.equal(byTopic['ВК сторис'], 'story');
+  assert.equal(out.adjusted.length, 6, 'каждая замена видна с причиной');
+  assert.ok(out.adjusted.every((line) => /заменён на «reel»/.test(line)));
+  assert.match(prompts[0], /instagram.*tiktok.*youtube_shorts формат только reel/);
+});
+
 test('выдуманный материал стирается, позиция остаётся', async () => {
   const s = createMediaMentorSuggest({ ask: fake(JSON.stringify([row({ assetId: 'a999' })])) });
   const out = await s.suggest(BRIEF, { startDate: '2026-09-21', days: 7 });
