@@ -14,6 +14,14 @@
 @media(max-width:700px){.tb-overview{gap:15px}.tb-waiting{padding:11px}.tb-board .tb-waiting-row{grid-template-columns:minmax(0,1fr);gap:4px;padding:10px 2px}.tb-waiting-row strong{font-size:14px}.tb-waiting-row time{white-space:normal}.tb-goal{padding:13px}.tb-goal strong{font-size:17px}.tb-board .tb-now-row{grid-template-columns:minmax(0,1fr) auto;gap:5px 8px}.tb-now-direction{grid-column:1/-1}.tb-now-row strong{grid-column:1}.tb-now-row .tb-stages{grid-column:2;grid-row:2}.tb-now-stage{grid-column:1/-1}.tb-direction-grid{grid-template-columns:minmax(0,1fr)}.tb-waiting-actions textarea{font-size:16px}}
 .tb-module-state{font-size:11px;color:var(--tb-muted);margin:8px 0}.tb-board .tb-module-tasks .tb-module-task,.tb-sheet .tb-module-tasks .tb-module-task{display:grid;width:100%;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:9px;text-align:left;min-width:0}.tb-module-task>strong{font-size:12px;overflow-wrap:anywhere}.tb-module-task-progress{font-size:12px;font-weight:600}.tb-module-task-stage{grid-column:1/-1;font-size:11px;color:var(--tb-muted)}
 
+/* №108: complete instructions and safe links, including long URLs on phones. */
+.tb-waiting-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;overflow:visible;display:block;-webkit-line-clamp:unset;margin:6px 0}
+.tb-waiting-instructions{min-width:0}.tb-waiting-links{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.tb-waiting-links a{display:inline-block;border:1px solid var(--tb-line);padding:6px 10px;border-radius:8px;white-space:normal;overflow-wrap:anywhere;max-width:100%}
+.tb-waiting-row .tb-waiting-open{display:flex;flex-direction:column;align-items:start;text-align:left;white-space:normal}
+.tb-facts dd,.tb-description p,.tb-comments p,.tb-milestone>p{white-space:pre-wrap;overflow-wrap:anywhere}
+#tasks-view a,.tb-overlay a{overflow-wrap:anywhere;max-width:100%}
+@media(max-width:600px){.tb-board .tb-waiting-row{grid-template-columns:minmax(0,1fr)}.tb-waiting-row time{white-space:normal}}
 .tb-waiting-actions [hidden]{display:none!important}.tb-waiting-actions [data-owner-question]{font-size:16px;line-height:1.35}.tb-waiting-actions>p{margin:9px 0}.tb-simple-next{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}[data-task-technical]>summary{cursor:pointer;padding:12px 0;color:var(--tb-muted)}[data-question-queue] button{display:block;margin:6px 0}
 
 .tb-diagnostic{white-space:pre-wrap;overflow-wrap:anywhere}
