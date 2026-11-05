@@ -9,31 +9,31 @@
 
 ## Проверка PR
 
-`tools/protect-prod-sites/guard.py` требует точную метку `сайт <каталог>` для
-изменений `sites/<каталог>/**`: например `сайт alvi`, `сайт avokado3`,
-`сайт palitra-love`, `сайт taisabai`. Новый неизвестный каталог защищён автоматически.
-Для вложенных черновиков: `сайт drafts/peptides`, `сайт drafts/alvi` и т.д.
-Обрабатываются удаление и ОБА пути переименования, все страницы API (до3000 файлов;
-больше/неполный ответ/смена SHA или меток при чтении — закрытый отказ).
+Решение Влада 05.11.2026 19:14: метка `сайты: инфраструктура` нужна только для
+**чистовых сайтов** — «те, которые уже стоят на купленных доменах, в которых нет synapse».
+`tools/protect-prod-sites/guard.py` выводит их сам из `caddy/Caddyfile` и монтирований
+сервиса `caddy` в `docker-compose.yml` (оба файла — из base ветки): каждый адрес сайта
+без подстроки `synapse` в имени хоста считается купленным, его `root` (в том числе через
+snippet `import`) переводится в папку репозитория (`/srv/sites/alvi` → `sites/alvi`).
+Новый купленный домен в Caddyfile защищает свою папку автоматически, ручного списка нет.
+Таблица текущих доменов: `python tools/protect-prod-sites/guard.py --domains`.
 
-Метку `сайты: инфраструктура` требуют (решение Влада 05.11, №114): ВСЕ `.github/**`
-(включая любые новые workflows/actions), Caddy (`caddy/**`, любой `Caddyfile*`), любые
-`Dockerfile*` и `compose*.yml`/`docker-compose*.yml` в любом каталоге, `ops/release/**`,
-`ops/autosync/**`, legacy `ops/synapse-sync*`, `.env*`, файлы `ops/**` с `secret`,
-`password` или `credential` в имени, shared track.js/company-links.js, корневые файлы
-sites/ и сама защита `tools/protect-prod-sites/**`.
-Код мастерской `ops/crm/**`, `ops/content/**`, sites/{synapse,chat,board,vhod},
-`specs/**`, `docs/**` и остальной `tools/**` метки не требует. Исключение — модули
-мастерской, которые отдают клиентским сайтам цены, тексты, ссылки и заказы:
-`ops/content/seed/**`, `ops/content/site-store.js`, `ops/content/site-orders.js`,
-`ops/content/company-links-reader.js`, `ops/content/tag_site.py`,
-`ops/content/tag_avokado.py`, `ops/crm/company-links.js`, `ops/content/client-bot-config.js`. В общих `ops/content/server.js`
-и `ops/crm/server.js` метку требует правка публичных обработчиков клиентских сайтов
-(`public-*`, `SITES`, `DOCUMENT_VALIDATORS`, `ORDER_SITES`, `validateSite`, `validatePrice` в content —
-/api/price, /api/site, /api/company-links, /api/orders; POST `/leads`, `/events`, `publicPost`,
-`checkPublicOrigin`, `companyDomains` в CRM): блоки ищутся в файле на merge-base, diff
-сверяется по строкам hunks; строки с этими маркерами, отсутствие patch или исходника и
-переименование файла — тоже метка (закрытый отказ).
+Метку требуют (одна метка на весь PR):
+- файлы в папках чистовых сайтов, включая удаление и оба пути переименования
+  (сейчас `sites/alvi`, `sites/avokado3`, `sites/palitra-love`);
+- закрытый отказ: файл в `sites/` или `panel/`, который не отдаёт ни один домен Caddyfile
+  (новая папка без блока, `sites/board`, корневые файлы `sites/`); любая ошибка разбора
+  Caddyfile/Compose, неизвестный `import` файла, placeholder или `root` вне репозитория
+  у купленного домена — тогда метку требует любой файл PR;
+- сама защита и выкладка: все `.github/**`, `tools/protect-prod-sites/**`, `caddy/**`,
+  любой `Caddyfile*`, `compose*.yml`/`docker-compose*.yml`, `ops/synapse-sync*`,
+  `ops/release/**`, `ops/autosync/**`.
+
+Без метки, с обычными проверками CI: сайты на доменах с `synapse` (`sites/avokado`,
+`sites/avokado2`, `sites/taisabai`, `sites/drafts/**`, `sites/synapse`, `sites/chat`,
+`sites/vhod`, `panel/`), ЛК и сервисы `ops/**` (включая публичные маршруты, `site-store.js`,
+seed, общие `track.js`/`company-links.js`, Dockerfile сервисов), `specs/**`, `docs/**`,
+остальной `tools/**`. Прежние метки `сайт <каталог>` больше не используются.
 CI-метка не обещает совместимость API; runtime admission описан ниже. Chat требует
 отдельной проверки совместимости по текущему runtime-контракту.
 CODEOWNERS с вымышленным GitHub аккаунтом Claude не создаётся.
