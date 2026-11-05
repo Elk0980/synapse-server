@@ -184,9 +184,6 @@ services:
       HUGH_SKILLS_MAX_BYTES: ${HUGH_SKILLS_MAX_BYTES:-}
       # Лимит видео для очереди контента (байты); пусто = 60 МБ по умолчанию сервиса.
       MAX_PUBLISHING_VIDEO_BYTES: ${MAX_PUBLISHING_VIDEO_BYTES:-}
-      # Съёмка: запас диска в МБ, который остаётся после загрузки файла (нужно свободно ≥ запас + файл).
-      # Пусто — 2048 (2 ГБ); меньше 512 не бывает: проверку места выключить нельзя.
-      SHOOTING_MIN_FREE_MB: ${SHOOTING_MIN_FREE_MB:-}
       # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       CABINET_PUBLIC_URL: ${CABINET_PUBLIC_URL:-}
