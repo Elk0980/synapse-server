@@ -373,3 +373,24 @@ test('company pages, provider cabinet and planning links; switching clears old e
   assert.ok(f.d.querySelector('[data-channel-links] a[href="https://vk.com/avokado"]'));assert.ok(f.calls.every(c=>c.method==='GET'));
  }finally{f.close();}
 });
+test('№149 (Влад 13:30): профили подписаны площадкой; выбранные в других проектах — отдельной группой, выбрать нельзя',async()=>{
+ const f=await fixture({company:'avokado',override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[
+   {id:'900001',name:'Алви',platform:'youtube_shorts',status:'active',takenBy:[{companyCode:'alvi',companyName:'АЛВИ'}]},
+   {id:'900002',name:'Палитра-SAMPLE',platform:'youtube_shorts',status:'active',takenBy:[{companyCode:'palitra',companyName:'Палитра'}]},
+   {id:'900003',name:'Авокадо',platform:'youtube_shorts',status:'active'},
+   {id:'<img src=x>',name:'<script>x</script>',platform:'youtube_shorts',status:'inactive',takenBy:[{companyCode:'x',companyName:'<b>X</b>'}]}]}:
+   call.path.endsWith('/autoposting/settings')&&call.method==='GET'?{channels:[{id:'youtube_shorts',platform:'youtube_shorts',provider:'onlypult',name:'YouTube Shorts',target:'',revision:1,enabled:false,connected:false,tokenConfigured:true}]}:undefined});
+ try{
+  card(f,'youtube_shorts').querySelector('[data-load-profiles]').click();await f.settle();
+  const select=card(f,'youtube_shorts').querySelector('[data-channel-field=target]');
+  const own=[...select.querySelectorAll(':scope > option')].filter(o=>o.value);
+  assert.deepEqual(own.map(o=>o.textContent),['Авокадо · YouTube · 900003'],'в основном списке — только профиль без чужого проекта, с площадкой');
+  const group=select.querySelector('optgroup');assert.equal(group.label,'Уже выбраны в других проектах');
+  const foreign=[...group.querySelectorAll('option')];
+  assert.match(foreign[0].textContent,/^Алви · YouTube · 900001 · проект АЛВИ$/);assert.match(foreign[1].textContent,/Палитра-SAMPLE · YouTube · 900002 · проект Палитра/);
+  assert.ok(foreign.every(o=>o.disabled),'чужой профиль выбрать нельзя');
+  assert.equal(select.querySelectorAll('img,script,b').length,0);assert.match(foreign[2].textContent,/<script>x<\/script> · YouTube · <img src=x> · требует подключения · проект <b>X<\/b>/);
+  select.value='900003';select.dispatchEvent(new f.w.Event('change',{bubbles:true}));card(f,'youtube_shorts').querySelector('button[type=submit]').click();await f.settle();
+  const saved=JSON.parse(f.calls.filter(c=>c.method==='PUT').at(-1).options.body).channels[0];assert.equal(saved.target,'900003');
+ }finally{f.close();}
+});

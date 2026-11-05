@@ -202,7 +202,18 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (!row || row.provider !== 'onlypult') fail('Сначала сохраните ключ Onlypult для этой площадки');
     const {profiles,diagnostics} = await onlypult.inspectProfiles(row);
     if (rowFor(current.code,id)?.revision !== row.revision) throw failure('SETTINGS_CHANGED');
-    return {companyCode: current.code, channelId: id, revision: row.revision, profiles,diagnostics};
+    /* №149: Onlypult не сообщает, какому проекту принадлежит профиль (в схеме Profile нет такого поля), а один ключ
+       видит профили всех проектов. Помечаем профиль, если он уже выбран для этой площадки в ДРУГОЙ компании Synapse —
+       по нашим сохранённым настройкам, без догадок. Эндпоинт доступен только владельцу (server.js). */
+    const hasName = db.prepare('PRAGMA table_info(companies)').all().some(column => column.name === 'name');
+    const takenRows = db.prepare(`SELECT c.target AS target, co.code AS code, ${hasName ? 'co.name' : 'NULL'} AS name FROM autoposting_channels c
+      JOIN companies co ON co.code = c.company_code COLLATE NOCASE
+      WHERE c.id = ? AND c.provider = 'onlypult' AND c.target <> '' AND c.company_code <> ? COLLATE NOCASE AND co.is_deleted = 0`).all(id, current.code);
+    const marked = profiles.map(profile => {
+      const takenBy = takenRows.filter(item => item.target === profile.id).map(item => ({companyCode: item.code, companyName: String(item.name || item.code).slice(0,120)}));
+      return takenBy.length ? {...profile, takenBy} : profile;
+    });
+    return {companyCode: current.code, channelId: id, revision: row.revision, profiles: marked, diagnostics};
   }
   async function checkChannel(code, id) {
     const current = company(code), row = rowFor(current.code, id);

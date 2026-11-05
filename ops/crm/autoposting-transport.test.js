@@ -660,3 +660,14 @@ test('настройки показывают реальные форматы н
  await assert.rejects(tt.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY'}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
    error=>error.code==='TIKTOK_PRIVACY_UNCONFIRMED','остановка именно на подтверждении режима, а не на формате');
 });
+
+test('№149: профиль Onlypult, уже выбранный для этой площадки в другой компании, помечается её названием; своя компания и другие площадки не помечаются',async t=>{
+ const f=onlypultFixture(t);f.save({target:'alvi-vk',enabled:false});
+ // Авокадо подключает тот же общий ключ Onlypult для своей площадки ВК.
+ f.api.saveSettings('avokado',{channels:[{id:'vk',platform:'vk',provider:'onlypult',name:'VK',target:'',enabled:false,revision:0,token:OP_TOKEN}]});
+ const listing=await f.api.listProfiles('avokado','vk');
+ const alvi=listing.profiles.find(p=>p.id==='alvi-vk'),own=listing.profiles.find(p=>p.id==='avokado-vk');
+ assert.deepEqual(alvi.takenBy,[{companyCode:'alvi',companyName:'alvi'}]);assert.equal('takenBy' in own,false);
+ const self=await f.api.listProfiles('alvi','vk');assert.equal(self.profiles.some(p=>'takenBy' in p),false,'своя компания не помечает свой профиль');
+ assert.ok(!JSON.stringify(listing).includes(OP_TOKEN));
+});

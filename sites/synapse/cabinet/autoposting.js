@@ -72,6 +72,7 @@ const optionWords = (platform,options) => {
   return words;
 };
 const PLATFORM_TITLE = {telegram:"Telegram",vk:"ВКонтакте",youtube_shorts:"YouTube Shorts"};
+const PROFILE_PLATFORM = {telegram:"Telegram",vk:"ВКонтакте",youtube_shorts:"YouTube",instagram:"Instagram",tiktok:"TikTok",max:"MAX"};
 /* Единое правило ссылки на видео для YouTube Shorts во всех трёх проверках (кабинет, сервер, адаптер):
    разбирается как URL, схема только https, фрагмент пуст, расширение проверяется именно в пути.
    Поэтому jpg?name=.mp4 видео не считается, clip.mp4?version=1 проходит, clip.mp4#t=1 отклоняется. */
@@ -265,6 +266,18 @@ function createChannelsPanel(host,deps){
     if(!details)return;const lines=profileShapeLines(diagnostics),content=details.querySelector('[data-profile-diagnostics-content]');
     content.replaceChildren();for(const line of lines){const paragraph=document.createElement('p');paragraph.textContent=line;content.append(paragraph);}details.hidden=!lines.length;
   };
+  /* №149 (Влад 13:30): в списке видны профили всех проектов общего аккаунта Onlypult. Сервер уже отдаёт только профили
+     этой площадки; подписываем площадку, отмечаем выбранный для этой компании, а профили, уже выбранные в других
+     компаниях Synapse (profile.takenBy), уводим в отдельную группу и не даём выбрать — чтобы не публиковать в чужой проект. */
+  const profileOptions=(channel,profiles,target)=>{
+    const platform=PROFILE_PLATFORM[channel.id]||channel.name||channel.id,company=deps.companyName()||companyCode;
+    const label=p=>`${p.name} · ${platform} · ${p.id}${p.status==='active'?'':' · требует подключения'}`;
+    const taken=p=>Array.isArray(p.takenBy)&&p.takenBy.length>0;
+    const own=profiles.filter(p=>!taken(p)),foreign=profiles.filter(taken);
+    const ownHtml=own.map(p=>`<option value="${esc(p.id)}"${String(target)===p.id?' selected':''}>${esc(label(p))}${String(target)===p.id?esc(` · выбран для ${company}`):''}</option>`).join('');
+    const foreignHtml=foreign.length?`<optgroup label="Уже выбраны в других проектах">${foreign.map(p=>`<option value="${esc(p.id)}" disabled${String(target)===p.id?' selected':''} data-taken-by="${esc(p.takenBy.map(item=>item.companyCode).join(','))}">${esc(label(p))} · проект ${esc(p.takenBy.map(item=>item.companyName||item.companyCode).join(', '))}</option>`).join('')}</optgroup>`:'';
+    return ownHtml+foreignHtml;
+  };
   const renderChannels=()=>{
     const vk=channels().find(channel=>channel.id==="vk");
     const socials=Array.isArray(information?.profile?.socials)?information.profile.socials:[];
@@ -292,7 +305,7 @@ function createChannelsPanel(host,deps){
         <label>Способ подключения<select data-channel-field="provider">${PROVIDER_ONLY.has(channel.id)?`<option value="onlypult" selected>Через Onlypult</option>`:`<option value="direct"${!onlypult?' selected':''}>Напрямую</option><option value="onlypult"${onlypult?' selected':''}${!owner()?' disabled':''}>Через Onlypult</option>`}</select></label>${PROVIDER_ONLY.has(channel.id)?`<p class="autoposting-note" data-channel-publishing-help>${esc(PROVIDER_HELP[channel.id])}</p>`:''}
         ${onlypult?'<p class="autoposting-note">Подключите сообщество в Onlypult. Сохраните его ключ здесь, загрузите список профилей и выберите профиль этой компании.</p>'+(cabinet.platformLinks?.cabinetLink('onlypult') || ''):channel.platform==="vk"?'<p class="autoposting-note">Для администратора с уже выданным совместимым доступом. Эти поля не создают приложение ВК и не выдают разрешения.</p>':''}
         <label>Название канала<input data-channel-field="name" value="${esc(values.name||"")}" maxlength="200" required></label>
-        ${onlypult?`<label>Профиль этой компании<select data-channel-field="target"><option value="">Сначала загрузите профили</option>${values.target&&!profiles.some(p=>p.id===values.target)?`<option value="${esc(values.target)}" selected>Сохранённый профиль ${esc(values.target)}</option>`:''}${profiles.map(p=>`<option value="${esc(p.id)}"${String(values.target)===p.id?' selected':''}>${esc(p.name)} · ${esc(p.id)}${p.status==='active'?'':' · требует подключения'}</option>`).join('')}</select></label>`:`<label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>`}
+        ${onlypult?`<label>Профиль этой компании<select data-channel-field="target"><option value="">Сначала загрузите профили</option>${values.target&&!profiles.some(p=>p.id===values.target)?`<option value="${esc(values.target)}" selected>Сохранённый профиль ${esc(values.target)}</option>`:''}${profileOptions(channel,profiles,values.target)}</select></label>`:`<label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>`}
         <label>${onlypult?"Ключ Onlypult для подключения":channel.platform==="vk"?"Новый ключ пользователя с правом wall":"Новый токен бота — администратора канала"}<input data-channel-field="token" type="password" autocomplete="new-password" maxlength="4096"></label>
         <label class="autoposting-checkbox"><input data-channel-field="enabled" type="checkbox"${values.enabled?" checked":""}>Разрешить автоматическую отправку</label>
         ${onlypult?'<p class="autoposting-note">Отправку можно разрешить после выбора профиля.</p>':''}
