@@ -243,6 +243,8 @@ const peopleService=require('./people-service').createPeopleService({db,authStor
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
 // Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
 const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
+// №166: карточка рилса на согласование и итоги публикации → общий чат компании (источник — CRM, служебный ключ).
+const reelChatApproval=require('./reel-chat-approval').createReelChatApprovalSync({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
   requireSession,requireCsrf,readJson,sendJson:send,publishingOrigin:PUBLISHING_ASSET_ORIGIN,
   maxImageBytes:MAX_PUBLISHING_ASSET,maxVideoBytes:MAX_PUBLISHING_VIDEO,ready:()=>Boolean(CRM_API_KEY),
@@ -635,6 +637,8 @@ async function proxyCrm(request, response, url, cors) {
     if (/^\/social-stats\/analytics(?:\/|$)/.test(crmPath) && identity.role!=='owner') fail(403,'Аналитический доступ и профили Onlypult настраивает владелец');
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner' && !identity.permissions.includes('autoposting.approve')) fail(403,'Нет права согласовывать публикации');
+  // «Согласовано» в карточке чата — то же существующее согласование версии и то же право (№166).
+  if (/^\/autoposting\/reels\/\d+\/chat-approvals\/\d+\/approve$/.test(crmPath) && identity.role!=='owner' && !identity.permissions.includes('autoposting.approve')) fail(403,'Нет права согласовывать публикации');
   // Отметка «опубликовано вне ЛК» — решение владельца компании; права редактора недостаточно.
   if (/^\/autoposting\/posts\/\d+\/receipts$/.test(crmPath) && identity.role!=='owner') fail(403,'Отмечать публикацию вне кабинета может только владелец');
   if (crmPath==='/autoposting/plan-summary') fail(404,'Адрес не найден');
@@ -832,7 +836,8 @@ async function proxyCrm(request, response, url, cors) {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };
     response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
     upstreamResponse.pipe(response);
-    upstreamResponse.on('end', () => { reelHughLog.afterProxy(crmPath, request.method, upstreamResponse.statusCode, url.searchParams.get('companyCode'), forwardIdentity); });
+    upstreamResponse.on('end', () => { reelHughLog.afterProxy(crmPath, request.method, upstreamResponse.statusCode, url.searchParams.get('companyCode'), forwardIdentity);
+      reelChatApproval.afterProxy(crmPath, request.method, upstreamResponse.statusCode, url.searchParams.get('companyCode')); });
   });
   upstream.on('error', (error) => {
     console.error('content: ошибка прокси CRM:', error);
@@ -1004,6 +1009,7 @@ const server = http.createServer(async (request, response) => {
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
     await reelHughLog.beforePeople(request,url,requireSession);
+    await reelChatApproval.beforePeople(request,url,requireSession);
     if (await peopleService.handle(request,response,url)) return;
     if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
@@ -1487,6 +1493,7 @@ server.listen(PORT, () => {
   projectChat.startWorker();
   peopleService.start();
   taskDispatchWorker.start();
+  reelChatApproval.start();
   if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
   economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
@@ -1494,6 +1501,7 @@ server.listen(PORT, () => {
 
 function shutdownContent() {
   clearInterval(economyTimer);
+  reelChatApproval.stop();
   projectChat.stopWorker();
   taskDispatchWorker.stop();
   const contentPlanStopped=contentPlanRunner.stop();
