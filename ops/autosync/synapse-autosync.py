@@ -71,6 +71,10 @@ def allowed(path):
     return bool(ALLOW.match(path)) and not DENY.search(path) and '..' not in path.split('/')
 
 
+def is_js(path):
+    return path.lower().endswith(('.js', '.cjs', '.mjs'))
+
+
 def tree_mode(ctx, commit, path):
     out = ctx.git('ls-tree', commit, '--', path)
     return out.split(' ', 1)[0] if out else None
@@ -86,7 +90,7 @@ def blob(ctx, commit, path):
 def live_path(ctx, path):
     """Абсолютный путь на боевом; отказ, если путь уходит из белого списка через симлинки."""
     full = os.path.normpath(os.path.join(ctx.live, path))
-    roots = [os.path.join(ctx.live, r) + os.sep for r in ROOTS]
+    roots = [os.path.normpath(os.path.join(ctx.live, r)) + os.sep for r in ROOTS]
     if not any(full.startswith(r) for r in roots):
         raise RuntimeError(f'путь вне белого списка: {path}')
     parent = os.path.dirname(full)
@@ -176,8 +180,20 @@ def ci_gate(ctx, state, head):
     return True
 
 
-def write_atomic(full, data, mode):
-    os.makedirs(os.path.dirname(full), mode=0o2775, exist_ok=True)
+def write_atomic(ctx, full, data, mode):
+    roots = [os.path.normpath(os.path.join(ctx.live, r)) for r in ROOTS]
+    root = next((r for r in roots if full.startswith(r + os.sep)), None)
+    if root is None or not os.path.isdir(root):
+        raise RuntimeError('public root должен быть подготовлен при установке')
+    missing, parent = [], os.path.dirname(full)
+    while not os.path.exists(parent):
+        missing.append(parent)
+        parent = os.path.dirname(parent)
+    if parent != root and not parent.startswith(root + os.sep):
+        raise RuntimeError('нет существующего публичного предка')
+    for directory in reversed(missing):
+        os.mkdir(directory, mode=0o2775)
+        os.chmod(directory, 0o2775)  # Defeat UMask only for OUR new public dirs.
     tmp = os.path.join(os.path.dirname(full), '.' + os.path.basename(full) + '.autosync-new')
     with open(tmp, 'wb') as f:
         f.write(data)
@@ -188,14 +204,21 @@ def write_atomic(full, data, mode):
 
 
 def node_check(path, data):
-    """Синтаксис JS. На хосте без node проверку синтаксиса даёт обязательный зелёный CI."""
-    if not path.endswith(('.js', '.cjs', '.mjs')) or not shutil.which('node'):
+    """Синтаксис JS: отсутствие обязательного checker — отказ, а не успех."""
+    if not is_js(path):
         return True
+    if not shutil.which('node'):
+        return False
     import tempfile
-    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(path)[1]) as f:
-        f.write(data)
-        f.flush()
-        return subprocess.run(['node', '--check', f.name], capture_output=True).returncode == 0
+    # Close the source before node opens it (NamedTemporaryFile locks on Windows).
+    with tempfile.TemporaryDirectory(prefix='synapse-autosync-check-') as directory:
+        filename = os.path.join(directory, 'asset' + os.path.splitext(path)[1].lower())
+        with open(filename, 'wb') as f:
+            f.write(data)
+        try:
+            return subprocess.run(['node', '--check', filename], capture_output=True, timeout=30).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
 
 
 def http_ok(ctx, path, data):
@@ -242,13 +265,13 @@ def run_once(ctx, init=False):
     if base == head:
         return 0
     if state.get('lastError', {}).get('head') == head:
-        return 1  # этот коммит уже откатывался; ждём следующего merge
+        return 1  # коммит уже отклонён/откатывался; ждём следующего merge
     if subprocess.run(['git', '-C', ctx.repo, 'merge-base', '--is-ancestor', base, head]).returncode != 0:
         stop(ctx, state, f'not-fast-forward base={base} head={head}')
         return 2
     if not ci_gate(ctx, state, head):
         return 0
-    actions, skipped = [], []
+    actions, skipped, syntax_errors = [], [], []
     for status, path in plan(ctx, base, head):
         if not allowed(path):
             skipped.append({'path': path, 'reason': 'вне белого списка'})
@@ -259,20 +282,38 @@ def run_once(ctx, init=False):
         if tree_mode(ctx, head, path) not in ('100644', '100755'):
             skipped.append({'path': path, 'reason': 'симлинк или подмодуль'})
             continue
+        # Inspect immutable Git metadata before reading an oversized new blob.
+        if int(ctx.git('cat-file', '-s', f'{head}:{path}')) > MAX_FILE:
+            if is_js(path):
+                syntax_errors.append(path)
+            else:
+                skipped.append({'path': path, 'reason': 'слишком большой'})
+            continue
         new, old = blob(ctx, head, path), blob(ctx, base, path)
         live = read_live(ctx, path)
         if new is None or len(new) > MAX_FILE:
-            skipped.append({'path': path, 'reason': 'нет файла или слишком большой'})
+            if is_js(path):
+                syntax_errors.append(path)
+            else:
+                skipped.append({'path': path, 'reason': 'нет файла или слишком большой'})
+        elif not node_check(path, new):
+            syntax_errors.append(path)
         elif live == new:
             continue
-        elif not node_check(path, new):
-            skipped.append({'path': path, 'reason': 'синтаксическая ошибка JS, не выкладываю'})
         elif live is None and old is None:
             actions.append((path, None, new))
         elif live is not None and live == old:
             actions.append((path, live, new))
         else:
             skipped.append({'path': path, 'reason': 'локальная правка, не трогаю'})
+    if syntax_errors:
+        # Batch preflight: reject the HEAD before backups/asset/version writes.
+        # Keep the deployed commit/metadata intact, remembering only the failure.
+        reason = 'не пройдена проверка JS (синтаксис, node или лимит): ' + ', '.join(syntax_errors)
+        state['lastError'] = {'head': head, 'time': now(), 'reason': reason}
+        save_state(ctx, state)
+        stop(ctx, state, f'js-preflight head={head} files={len(syntax_errors)}')
+        return 1
     if len(actions) > MAX_FILES:
         stop(ctx, state, f'too-many-files {len(actions)} head={head}')
         return 2
@@ -297,7 +338,7 @@ def run_once(ctx, init=False):
         for path, live, new in actions:
             full = live_path(ctx, path)
             mode = os.stat(full).st_mode & 0o777 if live is not None else 0o644
-            write_atomic(full, new, mode)
+            write_atomic(ctx, full, new, mode)
             done.append((path, live))
         for path, _, new in actions:
             if not http_ok(ctx, path, new):
@@ -306,7 +347,7 @@ def run_once(ctx, init=False):
             raise RuntimeError('health cabinet.html')
         if actions:
             previous = read_live(ctx, SHELL_VERSION)
-            write_atomic(live_path(ctx, SHELL_VERSION), json.dumps({'commit': head}).encode() + b'\n', 0o644)
+            write_atomic(ctx, live_path(ctx, SHELL_VERSION), json.dumps({'commit': head}).encode() + b'\n', 0o644)
             done.append((SHELL_VERSION, previous))
     except Exception as error:  # откат всего, что успели заменить
         for path, live in reversed(done):
@@ -314,7 +355,7 @@ def run_once(ctx, init=False):
             if live is None:
                 os.unlink(full)
             else:
-                write_atomic(full, live, os.stat(full).st_mode & 0o777)
+                write_atomic(ctx, full, live, os.stat(full).st_mode & 0o777)
         ctx.log(f'ROLLBACK head={head} reason={error} restored={len(done)} backup={bdir}')
         state.update(lastError={'head': head, 'time': now(), 'reason': str(error)})
         save_state(ctx, state)

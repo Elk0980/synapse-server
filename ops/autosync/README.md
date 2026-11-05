@@ -33,6 +33,19 @@ bare-клон `/opt/synapse-autosync/repo` и выкладывает на бое
 200 на `cabinet.html`. Любая ошибка — автоматический откат из копии, запись `ROLLBACK`
 в журнал и `lastError` в state; этот коммит повторно не выкладывается до следующего merge.
 
+Проверка синтаксиса JS выполняется для всего набора до первой замены. Если хотя бы
+один разрешённый JS не прошёл проверку (ошибка синтаксиса, нет node или превышен
+лимит 5 МиБ), коммит целиком отклоняется: CSS/JSON,
+остальные JS и `shell-version.json` не активируются, выложенный commit в state не
+меняется. Сохраняется только отказ `lastError`; этот HEAD повторно не проверяется
+до следующего merge. Локальные правки и остальные ограничения сохраняются.
+Размер нового файла проверяется по метаданным Git до чтения содержимого. Слишком
+большой JS блокирует весь набор; слишком большой файл другого типа пропускается.
+Расширения `.js`, `.cjs`, `.mjs` проверяются без учёта регистра, включая `.JS` и `.MJS`.
+Публичные корни `cabinet`/`brand` готовятся при установке. Новые вложенные каталоги
+создаются по одному с явными правами `2775`, независимо от UMask службы; существующим
+и приватным каталогам скрипт права не меняет.
+
 Журнал: `/var/log/synapse-autosync/autosync.log`. Статус: `state.json` (commit, время,
 выложенные файлы, пропуски, путь копии).
 
@@ -42,11 +55,16 @@ bare-клон `/opt/synapse-autosync/repo` и выкладывает на бое
 
 ## Установка (root). Таймер включать только после защиты main (№57)
 
+На хосте обязателен доступный `node` для `node --check`. Если его нет, установку и
+включение таймера не продолжать; зелёный CI не заменяет эту проверку. Установка
+Node.js, добавление внешних репозиториев/ключей этим документом не разрешаются.
+
 Пока `main` не защищён (№57: обязательные проверки, без прямых push), любой, кто может
 писать в `main`, сможет выложить статику кабинета. Поэтому до №57 ставится всё, кроме
 `enable --now` таймера.
 
 ```sh
+command -v node >/dev/null && node --version || { echo 'STOP: требуется node для проверки JS'; exit 1; }
 SHA=<принятый merge-коммит>; RAW=https://raw.githubusercontent.com/Elk0980/synapse-server/$SHA/ops/autosync
 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin synapse-autosync
 install -d -o root -g root -m 755 /usr/local/lib/synapse-autosync
@@ -58,7 +76,7 @@ curl -fsSL $RAW/synapse-autosync.timer -o /etc/systemd/system/synapse-autosync.t
 curl -fsSL $RAW/synapse-autosync.logrotate -o /etc/logrotate.d/synapse-autosync
 # запись в каталоги статики через группу (ACL на сервере не установлен); файлы остаются root:root 644
 for d in /opt/synapse/sites/synapse/cabinet /opt/synapse/sites/synapse/brand; do
-  find "$d" -type d -exec chgrp synapse-autosync {} + -exec chmod 2770 {} +; done
+  find "$d" -type d -exec chgrp synapse-autosync {} + -exec chmod 2775 {} +; done
 systemctl daemon-reload
 systemd-analyze security synapse-autosync.service | tail -1     # цель ≤ 3.5
 systemctl start synapse-autosync.service                         # первый запуск = база (--init не нужен)
@@ -75,7 +93,7 @@ docker и не видит сокет Docker и `.env`; скрипт в `/usr/loc
 Проверки перед выкладкой: все check-runs коммита на GitHub завершены с success/neutral/skipped
 (запрос без токена, только для нового коммита; ожидающий перепроверяется не чаще раза в 5 минут);
 симлинки и подмодули не выкладываются; путь проверяется через realpath; `node --check`
-для JS, если на хосте есть node (на synapse-core node нет — синтаксис проверяет обязательный CI).
+для всех JS/CJS/MJS обязателен на хосте; отсутствие node отклоняет весь коммит.
 После выкладки пишется `cabinet/shell-version.json` `{"commit": "<sha>"}` — его читает оболочка
 кабинета (PR 519); из репозитория этот файл не выкладывается. Копий хранится 10 последних.
 
@@ -91,4 +109,6 @@ cat /var/lib/synapse-autosync/state.json                 # что выложен
 
 `python3 -m unittest ops/autosync/test_autosync.py` — правила трёх сторон, пропуск
 локальной правки, белый список, откат при провале проверки, отсутствие повтора, shell-version.json,
-симлинки, ожидание и отказ CI, STOP только при смене состояния (6 тестов).
+симлинки, ожидание и отказ CI, STOP только при смене состояния, отказ всего набора
+при ошибке JS и успешная активация валидного набора. Реальный `node --check`
+обязателен в Linux CI; в локальной среде без node соответствующие тесты пропускаются.
