@@ -415,3 +415,27 @@ test('календарь ничего не меняет в базе и не об
   assert.deepEqual(new Set(f.settingsCalls),new Set(['alvi','avokado']));
   assert.equal(f.db.prepare("SELECT COUNT(*) n FROM autoposting_posts WHERE status='needs_review'").get().n,0);
 });
+
+test('Telegram через Onlypult — «фото или одно видео»: одно видео готово, видео с фото и два видео — нет',async t=>{
+  const f=fixture(t);
+  Object.assign(f.channels[0],{provider:'onlypult',caps:{maxText:4000,maxMedia:10,mediaMode:'photos_or_video',maxCaption:1024}});
+  f.seed(1,'2026-10-03T02:00:00Z');
+  const id=f.db.prepare('SELECT id FROM autoposting_posts ORDER BY id DESC LIMIT 1').get().id;
+  const telegram=async media=>{
+    f.makeReady(id,'alvi',{mediaUrls:media});
+    return postOf(await f.api.calendar('alvi',MONTH),id).calendarReadiness.platforms.find(item=>item.platform==='telegram');
+  };
+  const rule=/Видео публикуется одно/;
+  const reel=await telegram(['https://cdn.example.com/reel.mp4']);
+  assert.equal(reel.ready,true,reel.issues.join('; '));
+  for(const media of [['https://cdn.example.com/reel.mp4',MEDIA],['https://cdn.example.com/a.mp4','https://cdn.example.com/b.mov']]){
+    const mixed=await telegram(media);
+    assert.equal(mixed.ready,false);assert.ok(mixed.issues.some(issue=>rule.test(issue)),mixed.issues.join('; '));
+  }
+  const photos=await telegram([MEDIA,'https://cdn.example.com/photo2.jpg']);
+  assert.equal(photos.ready,true,photos.issues.join('; '));
+  // Прямой бот по-прежнему «только фото»: видео через него не готово.
+  Object.assign(f.channels[0],{provider:'direct',caps:{maxText:4096,maxMedia:10,mediaMode:'photos',maxCaption:1024}});
+  const direct=await telegram(['https://cdn.example.com/reel.mp4']);
+  assert.equal(direct.ready,false);assert.ok(direct.issues.some(issue=>/Подключение отправляет фотографии/.test(issue)));
+});

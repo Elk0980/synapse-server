@@ -592,7 +592,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 <div class="shell" id="app" hidden>
   <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
-    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы контента">Контент</button><a href="#crm" data-view-link="crm">Заявки</a>
+    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы Контент завода">Контент завод</button><a href="#crm" data-view-link="crm">Заявки</a>
     <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
   </nav>
   <div class="mobile-bar">
@@ -622,8 +622,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
         Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
       </a>
-      <!-- №98: меню «Контент» и «Настройки»; оболочка ставит «Контент» после «Главной», а «Хью» превращает в «Чаты». -->
-      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент</button>
+      <!-- №98: меню «Контент завод» (№140: было «Контент») и «Настройки»; оболочка ставит его после «Главной», а «Хью» превращает в «Чаты». -->
+      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент завод</button>
       <div class="subnav" id="content-menu" hidden>
         <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
         <a class="nav-link" href="#content/shooting" data-view-link="content-shooting">Съёмка</a>
@@ -693,7 +693,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <button class="backdrop" id="backdrop" type="button" aria-label="Закрыть меню" hidden></button>
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
-    <div class="workspace-scope" id="workspace-scope"><strong></strong><button type="button" id="workspace-change-company">Сменить компанию</button></div>
+    <!-- №140: плашки «Компания: … / Сменить компанию» нет — компания меняется только в блоке «Проект» левого меню. -->
     <div id="content-factory-header" hidden>
       <!-- №122: «Постинг» — готовые публикации; «Контент-план» и «Статистика» — отдельные пункты меню «Контент». -->
       <div class="content-header"><h1>Постинг</h1></div>
@@ -1090,7 +1090,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20261105-night98-expenses-board-links-108-permission-help-110";
+  window.SB_CABINET_ASSET_VERSION = "20261105-night98-expenses-board-links-108-permission-help-110-menu-140";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1297,16 +1297,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const projectContext = () => selectedProject()?.name || "Проект не определён";
   const SYSTEM_VIEWS = new Set(['system-settings','accounts','trademarks']);
+  // №140: плашка компании над разделами убрана; остаётся только заголовок вкладки браузера.
   const renderScopeBanner = () => {
-    const el=byId('workspace-scope');
-    el.dataset.scope=SYSTEM_VIEWS.has(currentView)?'system':currentView==='account'?'personal':'company';
     const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
-    const caption=ownerBoard?'Все проекты · Synapse Задачи':currentView==='trademarks'?'Общая справочная инструкция Synapse'
-      : SYSTEM_VIEWS.has(currentView)?'Управление всей системой · все компании'
-      : currentView==='account'?'Личный аккаунт · '+(identity?.displayName||identity?.login||'')
-      : 'Компания: '+projectContext();
-    el.querySelector('strong').textContent=caption;
-    el.querySelector('button').hidden=ownerBoard||SYSTEM_VIEWS.has(currentView)||currentView==='account';
     document.title=(postingView(currentView)?'Постинг':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
     if (ownerBoard) document.title = 'Synapse Задачи';
   };
@@ -1386,13 +1379,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     renderScopeBanner();
   };
 
-  byId('workspace-change-company').addEventListener('click',event=>{
-    event.stopPropagation();
-    if(window.matchMedia('(max-width: 760px)').matches)setDrawer(true);
-    else if(document.body.classList.contains('menu-collapsed'))document.querySelector('[data-menu-fold]')?.click();
-    byId('sidebar').scrollTop=0;
-    openProjectMenu();
-  });
   const closeProjectMenu = (restoreFocus = false) => {
     const trigger = byId("project-trigger");
     byId("project-menu").hidden = true;

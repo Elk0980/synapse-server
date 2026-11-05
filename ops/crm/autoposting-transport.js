@@ -73,13 +73,14 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
   /* Живые ограничения Onlypult по площадкам. Общая перезапись в «10 фотографий» осталась только
      для ВКонтакте, где она и была: у остальных площадок свои форматы, и объявлять в настройках
      то, что backend затем молча отклонит, нельзя.
-     Telegram — 4000 символов текста, 1024 в подписи к медиа, до 10 материалов;
+     Telegram — 4000 символов текста, 1024 в подписи к медиа; «фото или одно видео»: до 10 фото
+     либо ровно одно видео (рилс) без фото в довесок — как Reel в Instagram;
      YouTube Shorts и TikTok — ровно одно видео;
      Instagram и MAX — до 10 вложений, но настоящий предел приходит от профиля перед отправкой. */
   const PROVIDER_CAPS = Object.freeze({
     youtube_shorts: {maxMedia: 1, mediaMode: 'video'},
     tiktok: {maxMedia: 1, mediaMode: 'video'},
-    telegram: {maxText: 4000, maxCaption: 1024, maxMedia: 10, mediaMode: 'photos'},
+    telegram: {maxText: 4000, maxCaption: 1024, maxMedia: 10, mediaMode: 'photos_or_video'},
     instagram: {maxMedia: 10, mediaMode: 'photos'},
     max: {maxMedia: 10, mediaMode: 'photos'},
     vk: {maxMedia: 10, mediaMode: 'photos'},

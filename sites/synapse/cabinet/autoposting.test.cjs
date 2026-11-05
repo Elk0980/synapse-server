@@ -1042,3 +1042,21 @@ test('сторис без подписи сохраняется по режим�
     const body=JSON.parse(create[0].options.body);assert.equal(body.format,'');assert.equal(body.text,'');assert.deepEqual(body.platformOptions,{instagram:{is_story:true}});
   }finally{f.close();}
 });
+test('Telegram через Onlypult — «фото или одно видео»: одно видео проходит проверку, видео с фото и два видео блокируют план',async()=>{
+  const tg={id:'telegram',platform:'telegram',provider:'onlypult',name:'Telegram',target:'tg-1',revision:1,enabled:true,connected:true,tokenConfigured:true,
+    caps:{maxText:4000,maxCaption:1024,maxMedia:10,mediaMode:'photos_or_video',limitsFrom:'profile'}};
+  const f=await fixture({override:call=>call.path.endsWith('/autoposting/settings')&&call.method==='GET'?{timezone:'Asia/Irkutsk',channels:[tg]}:undefined});
+  try{
+    const check=async media=>{f.set('autoposting-media',media);await f.click('autoposting-save');await f.click('autoposting-preview');return f.node('autoposting-preview-content').textContent;};
+    fill(f,{text:'п'.repeat(1024),media:'https://assets.example.test/reel.mp4'});
+    await f.click('autoposting-save');await f.click('autoposting-preview');
+    assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/видео публикуется одно/,'одно видео с подписью 1024 проходит');
+    assert.equal(f.node('autoposting-schedule').disabled,false,'рилс можно поставить в план');
+    for(const media of ['https://assets.example.test/reel.mp4\nhttps://assets.example.test/a.png','https://assets.example.test/a.mp4\nhttps://assets.example.test/b.mov']){
+      assert.match(await check(media),/Telegram: видео публикуется одно, без фото и других файлов/);
+      assert.equal(f.node('autoposting-schedule').disabled,true);
+    }
+    assert.doesNotMatch(await check('https://assets.example.test/a.png\nhttps://assets.example.test/b.png'),/видео публикуется одно/,'фото — как раньше');
+    assert.equal(f.node('autoposting-schedule').disabled,false);
+  }finally{f.close();}
+});

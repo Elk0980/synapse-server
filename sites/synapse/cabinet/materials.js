@@ -42,7 +42,18 @@ function create(el, ctx) {
     publication: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/publication", body)
   };
   el.classList.add("mt-view");
-  el.innerHTML = `<header class="mt-head"><h1>Материалы</h1><p class="muted">Смонтированные рилсы: предпросмотр по площадкам, скачивание, публикация и правки.</p></header>
+  el.innerHTML = `<header class="mt-head"><h1>Материалы</h1><p class="muted">Смонтированные рилсы: предпросмотр по площадкам, скачивание, публикация и правки.</p>
+      ${canEdit ? `<button type="button" class="plain-button primary mt-upload-open" data-upload-open>Загрузить ролик</button>` : ""}</header>
+    ${canEdit ? `<form class="mt-upload" data-upload hidden>
+      <h2>Новый ролик</h2>
+      <p class="muted">Готовый смонтированный MP4 или WebM до 60 МБ. Ролик появится в сетке как v1; на площадки ничего не уходит.</p>
+      <label>Файл<input type="file" name="file" accept="video/mp4,video/webm,.mp4,.webm" required></label>
+      <label>Название<input type="text" name="title" maxlength="200" required placeholder="Например: №2 «Первый визит» v2"></label>
+      <label>Дата выхода<input type="date" name="releaseDate"></label>
+      <fieldset class="mt-targets"><legend>Площадки</legend>${PLATFORMS.map(p => `<label><input type="checkbox" name="platforms" value="${p.id}"> ${esc(p.label)}</label>`).join("")}</fieldset>
+      <p class="mt-status" role="status" data-upload-status></p>
+      <div class="mt-actions"><button type="submit" class="plain-button primary" data-upload-submit>Загрузить</button><button type="button" class="plain-button" data-upload-cancel>Отмена</button></div>
+    </form>` : ""}
     <form class="mt-filters" data-filters>
       <label>Выход с<input type="date" name="from"></label><label>по<input type="date" name="to"></label>
       <label>Площадка<select name="platform"><option value="">Все площадки</option>${PLATFORMS.map(p => `<option value="${p.id}">${esc(p.label)}</option>`).join("")}</select></label>
@@ -82,11 +93,12 @@ function create(el, ctx) {
       catch (error) {if (!ctx.signal.aborted) fail(error);}
     }
   }
-  function close() {state.open = null;$("[data-detail]").hidden = true;$("[data-grid]").hidden = false;$("[data-filters]").hidden = false;}
+  function close() {state.open = null;$("[data-detail]").hidden = true;$("[data-grid]").hidden = false;$("[data-filters]").hidden = false;const opener = $("[data-upload-open]");if (opener) opener.hidden = false;}
   const currentVersion = () => (state.open.versions || []).find(v => v.version === state.version) || state.open.currentVersion;
   function renderDetail() {
     const reel = state.open, version = currentVersion(), media = safeUrl(version?.mediaUrl), node = $("[data-detail]");
     $("[data-grid]").hidden = true;$("[data-filters]").hidden = true;node.hidden = false;
+    if (!state.busy) toggleUpload(false);const opener = $("[data-upload-open]");if (opener) opener.hidden = true;
     const versions = reel.versions || [];
     node.innerHTML = `<button type="button" class="plain-button mt-back" data-back>← Все материалы</button>
       <h2 tabindex="-1" data-title>${esc(reel.title)}</h2>
@@ -140,6 +152,80 @@ function create(el, ctx) {
     } catch (error) {detailStatus("Не удалось открыть редактор: " + (error?.message || "ошибка"));}
     finally {state.busy = false;}
   }
+  /* Загрузка готового ролика владельцем или редактором (№145): тот же путь, что у агента монтажа, но под сессией кабинета.
+     1) POST publishing-assets — сырой файл, сервер проверяет формат и лимит 60 МБ, отдаёт {url, sha256};
+     2) POST crm/autoposting/reels {title, releaseDate, platforms, mediaUrl, sha256, durationMs} — ролик v1. Сервер не менялся. */
+  const UPLOAD_TYPES = {"video/mp4": "MP4", "video/webm": "WebM"}, UPLOAD_LIMIT = 60 * 1024 * 1024;
+  const uploadStatus = text => {const target = el.querySelector("[data-upload-status]");if (target) target.textContent = text || "";};
+  const fileType = file => UPLOAD_TYPES[file.type] ? file.type : /\.mp4$/i.test(file.name) ? "video/mp4" : /\.webm$/i.test(file.name) ? "video/webm" : "";
+  function checkFile(file) {
+    if (!file) return "Выберите файл ролика.";
+    if (!fileType(file)) return "Это не видео: нужен файл MP4 или WebM.";
+    if (!file.size) return "Файл пустой.";
+    if (file.size > UPLOAD_LIMIT) return `Файл ${(file.size / 1048576).toFixed(1)} МБ — больше лимита 60 МБ. Сожмите ролик и повторите.`;
+    return "";
+  }
+  /* Длительность читаем из метаданных в браузере; если не прочиталась за 5 с — отправляем без неё, сервер это допускает. */
+  const durationOf = file => new Promise(resolve => {
+    if (typeof URL.createObjectURL !== "function") return resolve(null);
+    let url = "";const done = value => {if (url) URL.revokeObjectURL(url);resolve(Number.isFinite(value) && value > 0 ? Math.round(value * 1000) : null);};
+    try {
+      const video = document.createElement("video");video.preload = "metadata";video.muted = true;
+      const timer = setTimeout(() => done(null), 5000);
+      video.onloadedmetadata = () => {clearTimeout(timer);done(video.duration);};
+      video.onerror = () => {clearTimeout(timer);done(null);};
+      url = URL.createObjectURL(file);video.src = url;
+    } catch (_) {done(null);}
+  });
+  function toggleUpload(show) {
+    const form = el.querySelector("[data-upload]");if (!form) return;
+    form.hidden = !show;el.querySelector("[data-upload-open]").hidden = show;
+    if (show) {form.querySelector("[name=title]").focus({preventScroll: true});} else {form.reset();uploadStatus("");}
+  }
+  const uploadError = async response => {
+    let message = "";try {const data = await response.json();message = data?.error || data?.message || "";} catch (_) {}
+    if (response.status === 413) return "Файл больше лимита 60 МБ: сервер его не принял.";
+    if (response.status === 415) return message || "Сервер не распознал файл как видео MP4/WebM.";
+    if (response.status === 403) return "Нет права загружать ролики в эту компанию.";
+    return message ? `Не удалось загрузить файл: ${message}` : `Не удалось загрузить файл (ответ ${response.status}).`;
+  };
+  async function upload(event) {
+    event.preventDefault();if (state.busy) return;
+    const form = event.target, fields = form.elements, file = fields.file.files?.[0];
+    const problem = checkFile(file);if (problem) {uploadStatus(problem);return;}
+    const title = fields.title.value.trim();if (!title) {uploadStatus("Введите название ролика.");return;}
+    const platforms = [...form.querySelectorAll("[name=platforms]:checked")].map(input => input.value);
+    if (!platforms.length) {uploadStatus("Отметьте хотя бы одну площадку.");return;}
+    if (typeof ctx.api.raw !== "function") {uploadStatus("Загрузка недоступна: обновите кабинет.");return;}
+    state.busy = true;form.querySelector("[data-upload-submit]").disabled = true;
+    try {
+      uploadStatus(`Загружаем файл (${(file.size / 1048576).toFixed(1)} МБ)…`);
+      const [durationMs, response] = await Promise.all([durationOf(file), ctx.api.raw("POST", "publishing-assets", file, {headers: {"Content-Type": fileType(file)}})]);
+      if (ctx.signal.aborted) return;
+      if (!response.ok) {uploadStatus(await uploadError(response));return;}
+      const asset = await response.json();
+      if (!safeUrl(asset?.url)) {uploadStatus("Сервер не вернул адрес файла. Повторите позже.");return;}
+      uploadStatus("Файл принят, создаём карточку ролика…");
+      const body = {title, releaseDate: fields.releaseDate.value || "", platforms, mediaUrl: asset.url, sha256: typeof asset.sha256 === "string" ? asset.sha256 : ""};
+      if (durationMs) body.durationMs = durationMs;
+      const reel = await ctx.api.post("crm/autoposting/reels", body);if (ctx.signal.aborted) return;
+      state.reels = [reel, ...state.reels.filter(item => item.key !== reel.key)];renderGrid();
+      toggleUpload(false);status(`Ролик «${reel.title}» загружен как v${reel.currentVersion?.version ?? 1}. Роликов: ${state.reels.length}.`);
+    } catch (error) {
+      if (ctx.signal.aborted) return;
+      uploadStatus(error?.status === 413 ? "Файл больше лимита 60 МБ: сервер его не принял." : error?.status === 403 ? "Нет права загружать ролики в эту компанию."
+        : error?.status ? `Не удалось сохранить ролик: ${error.message || "ответ " + error.status}` : "Ошибка сети: файл не отправлен. Проверьте соединение и повторите.");
+    } finally {state.busy = false;const submit = el.querySelector("[data-upload-submit]");if (submit) submit.disabled = false;}
+  }
+  const uploadForm = el.querySelector("[data-upload]");
+  if (uploadForm) {
+    uploadForm.addEventListener("submit", upload);
+    uploadForm.addEventListener("change", event => {
+      if (event.target.name !== "file") return;const file = event.target.files?.[0];
+      uploadStatus(file ? checkFile(file) : "");
+      if (file && !uploadForm.elements.title.value) uploadForm.elements.title.value = file.name.replace(/\.(mp4|webm)$/i, "").slice(0, 200);
+    });
+  }
   const onFilter = () => {
     const fields = $("[data-filters]").elements;state.filters = {from: fields.from.value, to: fields.to.value, platform: fields.platform.value};
     if (state.filters.from && state.filters.to && state.filters.from > state.filters.to) {status("Дата «с» позже даты «по».");return;}
@@ -151,6 +237,8 @@ function create(el, ctx) {
   el.addEventListener("click", event => {
     const target = event.target.closest("button,a");if (!target || !el.contains(target)) return;
     if (target.dataset.open) void open(target.dataset.open);
+    else if (target.hasAttribute("data-upload-open")) toggleUpload(true);
+    else if (target.hasAttribute("data-upload-cancel")) {if (!state.busy) toggleUpload(false);}
     else if (target.hasAttribute("data-back")) close();
     else if (target.hasAttribute("data-publish")) void publish();
     else if (target.hasAttribute("data-open-post")) openPost(state.open.postId);

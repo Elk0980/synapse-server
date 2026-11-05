@@ -78,6 +78,8 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
     CREATE TABLE IF NOT EXISTS task_watchdog_no_code(task_id INTEGER PRIMARY KEY,principal TEXT);
     CREATE TABLE IF NOT EXISTS task_watchdog_observations(id INTEGER PRIMARY KEY,task_id INTEGER,reason TEXT,created_at TEXT);`);
   db.prepare("INSERT INTO task_watchdog_settings VALUES('mode',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(mode);
+  // №142: правила доски как механизм (якорь, «проверено» с доказательством, поля постановки). Тот же режим.
+  const rules=require('./task-rules').createTaskRules(db,{now,principal,mode});
   // Включается после создания coordination. Не меняет старые done-записи.
   function installGuards() {
     for(const name of ['task_coordination_history','task_comments','task_watchdog_audits','task_watchdog_proofs','task_watchdog_comment_auth']) {
@@ -126,8 +128,9 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       if(s==='code') {if(!['agent','claude','release'].includes(p.kind)||p.key!==executorKey(db,t.assignee_name))fail(403,'Код подтверждает исполнитель');proofs[s]=await verifier.code(item.evidence);}
       if(s==='connected') {if(!['release','claude'].includes(p.kind))fail(403,'Подключение подтверждает выпускающий агент');proofs[s]=await verifier.connected(item.evidence);if(proofs[s].status==='not_configured')fail(503,'Боевой health не настроен');}
       if(s==='verified') {if(!((executorKey(db,t.reviewer_name)===p.key)||(key(t.reviewer_name)==='claude'&&p.kind==='claude')||(key(t.reviewer_name)==='влад'&&p.kind==='vlad'))||p.key===executorKey(db,t.assignee_name))fail(403,'Нужен независимый проверяющий');
-        let proofUrl;try{proofUrl=new URL(item.evidence);}catch{}
-        if(proofUrl?.protocol!=='https:'||proofUrl.username||proofUrl.password)fail(422,'Нужна HTTPS-ссылка на доказательство без учётных данных');proofs[s]={url:item.evidence};}
+        // №142: доказательство может содержать несколько ссылок и путей; нужна хотя бы одна HTTPS-ссылка без учётных данных.
+        const proofUrls=String(item.evidence).split(/[\s,;()<>«»"']+/).filter(t=>/^https:\/\/\S+$/i.test(t)).map(t=>{try{return new URL(t);}catch{return null;}});
+        if(!proofUrls.length||proofUrls.some(u=>!u||u.protocol!=='https:'||u.username||u.password))fail(422,'Нужна HTTPS-ссылка на доказательство без учётных данных');proofs[s]={url:item.evidence};}
       if(s==='accepted'){if(p.kind!=='vlad')fail(403,'Принимает только Влад');proofs[s]={decision:true};}
     }
     permits.set(actor,{id,data:JSON.stringify(data),baseline,assignee:t.assignee_name,reviewer:t.reviewer_name,at:now(),principal:p,proofs});
@@ -215,6 +218,7 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
     return {at:new Date(now()).toISOString(),delivery_enabled:false,mode,total:tasks.length,events,alerts,
       stalled:alerts.filter(a=>a.kind==='silence'&&a.minutes>=180),
       waiting_vlad:tasks.filter(t=>!['done','cancelled'].includes(t.status)&&/жд[её]т.*влад|ожида.*влад/i.test(old(t.id).blocker||'')).map(t=>({task_id:t.id,blocker:old(t.id).blocker})),
+      rules:rules.summary(now()-24*60*MINUTE),
       observations:db.prepare('SELECT * FROM task_watchdog_observations ORDER BY id DESC LIMIT 20').all(),
       audits:db.prepare('SELECT * FROM task_watchdog_audits ORDER BY created_at DESC LIMIT 20').all()};
   }
@@ -225,6 +229,7 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       `Подключений, удостоверенных сторожем: ${s.events.filter(e=>e.stage==='connected'&&e.trusted).length}; прежних/не удостоверенных отметок: ${s.events.filter(e=>e.stage==='connected'&&!e.trusted).length}.`,
       `Тишина от 3 часов: ${s.stalled.length}.`,...s.stalled.map(a=>`№${a.task_id} · ${a.minutes} мин · ${a.waiting_for} · ${a.blocker}`),
       `Ждут Влада: ${s.waiting_vlad.length}.`,...s.waiting_vlad.map(t=>`№${t.task_id} · ${t.blocker}`),
+      ...rules.lines(s.rules),
       'Исторические подтверждения — записи базы; их внешняя перепроверка указана отдельно. Рассылка выключена.'];
     return {...s,text:lines.join('\n')};
   }
@@ -253,6 +258,6 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       }
     } finally {running=false;}
   }
-  return {authorize,prepare,guard:check,record,comment,commentIdentity,author,accept,report,canGrant:actor=>principal(actor)?.kind==='vlad',mode,snapshot,digest,audit,installGuards,prepareScheduledDigest,silence:t=>silence(db,t,now())};
+  return {authorize,prepare,guard:check,record,comment,commentIdentity,author,accept,report,canGrant:actor=>principal(actor)?.kind==='vlad',mode,snapshot,digest,audit,installGuards,prepareScheduledDigest,silence:t=>silence(db,t,now()),rules};
 }
 module.exports={createTaskWatchdog,createEvidenceVerifier,silence,activity};

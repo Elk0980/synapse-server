@@ -16,8 +16,17 @@
 .cp fieldset { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px 14px; border:1px solid var(--line,#333); border-radius:10px; }
 .cp-check { display:inline-flex !important; grid-auto-flow:column; align-items:center; gap:8px; min-height:32px; }
 .cp-check input { width:20px; height:20px; }
-.cp-gen { display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; margin-top:10px; }
-.cp-gen label { flex:1 1 140px; }
+/* №141: «Начало» и «Дней» — ровная сетка: подписи в одной строке, поля одной высоты, кнопка — отдельной строкой.
+   Поле даты на iOS без appearance:none держит собственную ширину и высоту и наезжает на соседнее. */
+.cp-gen { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; gap:10px; margin-top:10px; }
+.cp-gen label { grid-template-rows:auto 44px; align-content:end; }
+.cp-gen label > span { line-height:1.3; }
+.cp-gen input[type="date"], .cp-gen select { display:block; width:100%; min-width:0; height:44px; min-height:44px; margin:0;
+  padding:0 10px; line-height:normal; box-sizing:border-box; }
+.cp-gen input[type="date"] { -webkit-appearance:none; appearance:none; text-align:left; }
+.cp-gen input[type="date"]::-webkit-date-and-time-value { text-align:left; margin:0; }
+.cp-gen > button { grid-column:1/-1; justify-self:start; }
+.cp-plan { display:grid; gap:10px; min-width:0; }
 .cp-note { color:var(--muted,#b9afa7); margin:6px 0; font-size:.92rem; overflow-wrap:anywhere; }
 .cp-warn { color:#ffd58a; margin:6px 0; }
 .cp-error { color:var(--red,#ff9c9c); }
@@ -56,9 +65,16 @@
 .cp-sheet .cp-script th { width:auto; white-space:nowrap; }
 .cp-sheet .cp-script td { overflow-wrap:break-word; }
 .cp-link { background:none; border:0; color:var(--accent,#9fd4ff); font:inherit; cursor:pointer; padding:0; min-height:32px !important; text-decoration:underline; }
+@media (min-width: 641px) {
+  .cp-gen { grid-template-columns:minmax(160px,220px) minmax(96px,140px) auto; justify-content:start; }
+  .cp-gen > button { grid-column:auto; height:44px; min-height:44px; padding-block:0; }
+}
 @media (max-width: 640px) {
-  .cp-line { grid-template-columns:auto 1fr; grid-template-areas:"n date" "topic topic" "pl st"; gap:4px 10px; }
-  .cp-n { grid-area:n; } .cp-date { grid-area:date; } .cp-topic { grid-area:topic; } .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; }
+  /* №143: площадки не делят колонку с номером — иначе колонка «auto» растягивается до их ширины,
+     дата переносится и обрезается, а статус налезает на площадки. Статус — отдельной строкой. */
+  .cp-line { grid-template-columns:max-content minmax(0,1fr); grid-template-areas:"n date" "topic topic" "pl pl" "st st"; gap:4px 10px; align-items:start; }
+  .cp-n { grid-area:n; } .cp-date { grid-area:date; white-space:nowrap; } .cp-topic { grid-area:topic; }
+  .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; justify-self:start; max-width:100%; white-space:normal; }
   .cp-actions { width:100%; } .cp-actions button { flex:1 1 140px; }
   .cp-script th { width:34%; }
   .cp-sheet-wrap { overflow:visible; border:0; }
