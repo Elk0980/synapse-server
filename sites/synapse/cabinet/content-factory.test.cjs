@@ -35,7 +35,7 @@ test('один пункт, старое избранное, переходы и 
  const input=d.querySelector('#autoposting-view input');input.value='Несохранённый материал';
  d.querySelector('[href="#content-factory/settings"]').click();await f.settle();
  assert.ok(f.visible('content-factory-settings-view'));assert.ok(!f.visible('autoposting-view'));
- assert.equal(d.getElementById('mobile-title').textContent,'Контент завод');assert.match(d.title,/^Контент завод — /);
+ assert.equal(d.getElementById('mobile-title').textContent,'Постинг');assert.match(d.title,/^Постинг — /);
  assert.equal(d.getElementById('content-factory-link').getAttribute('aria-current'),'page');
  w.history.back();await f.settle();assert.ok(f.visible('autoposting-view'));assert.equal(input.value,'Несохранённый материал');
  w.history.forward();await f.settle();assert.ok(f.visible('content-factory-settings-view'));
@@ -60,21 +60,50 @@ test('смена компании сохраняет вкладку и пере�
  const f=page('#content-factory/progress');try{await f.settle();[...f.d.querySelectorAll('#project-menu button')].find(n=>n.textContent.includes('Второй')).click();await f.settle();assert.equal(f.w.location.hash,'#content-factory/progress');assert.deepEqual(f.renders.at(-1),['media-mentor-rollout','two']);}finally{f.close();}
 });
 
-test('CF1: четыре вкладки по порядку, вход — Контент-план, подсветка подмаршрутов',async()=>{
+test('№122: «Постинг» — три вкладки без второго «Контент-плана» и «Статистики», вход — публикации',async()=>{
  const f=page('#content-factory');try{
  await f.settle();const {w,d}=f;
- const tabs=[...d.querySelectorAll('#content-factory-header [data-factory-view]')];
- assert.deepEqual(tabs.map(n=>n.textContent),['Контент-план','Исходники','Статистика','Настройки модуля']);
- assert.deepEqual(tabs.map(n=>n.getAttribute('href')),['#content-factory/plan','#content-factory/sources','#content-factory/stats','#content-factory/settings']);
+ const header=d.getElementById('content-factory-header'),title=header.querySelector('h1'),tabs=[...header.querySelectorAll('[data-factory-view]')];
+ assert.equal(title.textContent,'Постинг');assert.equal(d.getElementById('mobile-title').textContent,'Постинг');assert.match(d.title,/^Постинг — /);
+ assert.deepEqual(tabs.map(n=>n.textContent),['Публикации','Исходники','Настройки модуля']);
+ assert.deepEqual(tabs.map(n=>n.getAttribute('href')),['#content-factory/plan','#content-factory/sources','#content-factory/settings']);
+ assert.ok(!/Контент-план|Статистика|Контент завод/.test(header.textContent),'в шапке «Постинга» нет дублей меню');
  assert.ok(tabs.every(n=>!n.hidden));
  assert.equal(tabs[0].getAttribute('aria-current'),'page');
+ assert.equal(d.querySelector('[data-factory-action="compose"]').hidden,true,'«Составить план» — не в «Постинге»');
  assert.equal(d.querySelector('#media-mentor-link'),null,'пункт «Бриф и план» убран из меню');
- for(const [hash,view,tab] of [['#content-factory/plan/proposals','media-mentor',0],['#content-factory/sources','telegram-sources',1],['#content-factory/stats','content-factory-stats',2],['#content-factory/progress','media-mentor-rollout',2],['#content-factory/settings','content-factory-settings',3]]){
+ // [адрес, вид, вкладка «Постинга» или null — вид принадлежит пункту меню «Контент-план»/«Статистика»]
+ for(const [hash,view,tab,menu] of [['#content-factory/sources','telegram-sources',1],['#content-factory/settings','content-factory-settings',2],['#content-factory/plan','autoposting',0],
+   ['#content-factory/plan/proposals','media-mentor',null,'content-plan'],['#content-factory/stats','content-factory-stats',null,'content-stats'],['#content-factory/progress','media-mentor-rollout',null,'content-stats']]){
   w.location.hash=hash;await f.settle();
   assert.equal(w.location.hash,hash);assert.ok(f.visible(view+'-view'),hash);
+  assert.equal(title.closest('.content-header').hidden,tab===null,'заголовок «Постинг»: '+hash);
+  assert.equal(header.querySelector('.factory-tabs').hidden,tab===null,'вкладки «Постинга»: '+hash);
   assert.deepEqual(tabs.map(n=>n.getAttribute('aria-current')==='page'),tabs.map((n,i)=>i===tab),hash);
-  assert.equal(d.getElementById('content-factory-plan-bar').hidden,tab!==0,'строка действий только на Контент-плане: '+hash);
+  if(tab!==null)assert.equal(d.getElementById('mobile-title').textContent,'Постинг',hash);
+  if(tab===null){
+   assert.notEqual(d.getElementById('mobile-title').textContent,'Постинг',hash);
+   assert.equal(d.querySelector(`#content-menu [data-view-link="${menu}"]`).getAttribute('aria-current'),'page','подсвечен пункт меню: '+hash);
+   assert.equal(d.getElementById('content-factory-link').getAttribute('aria-current'),null,hash);
+  }
+  const bar=d.getElementById('content-factory-plan-bar');
+  assert.equal(bar.querySelector('[data-factory-action="compose"]').hidden,view!=='media-mentor','«Составить план» только у предложений плана: '+hash);
+  assert.equal(bar.hidden,!['autoposting','media-mentor'].includes(view),hash);
+  assert.equal(header.hidden,tab===null&&view!=='media-mentor',hash);
  }
+ assert.deepEqual(f.errors,[]);
+ }finally{f.close();}
+});
+test('№122: с модулем «Материалы» строка действий в «Постинге» пустая и скрыта — ни «Составить план», ни «Создать публикацию»',async()=>{
+ const f=page('#content-factory/sources',['autoposting.view','autoposting.edit']);try{
+ await f.settle();f.w.SynapseModules={has:id=>id==='content-materials'};
+ f.w.location.hash='#content-factory/plan';await f.settle();
+ assert.ok(f.visible('autoposting-view'));assert.ok(f.visible('content-factory-header'));
+ assert.equal(f.d.getElementById('content-factory-plan-bar').hidden,true);
+ assert.equal(f.d.querySelector('#content-factory-header h1').textContent,'Постинг');
+ f.w.location.hash='#content-factory/plan/proposals';await f.settle();
+ const bar=f.d.getElementById('content-factory-plan-bar');
+ assert.equal(bar.hidden,false);assert.equal(bar.querySelector('[data-factory-action="compose"]').hidden,false);assert.equal(bar.querySelector('[data-factory-action="create"]').hidden,true);
  assert.deepEqual(f.errors,[]);
  }finally{f.close();}
 });
@@ -104,8 +133,9 @@ test('CF1/CF2: «Составить план» показывает сводку
   if(url.startsWith('/content/crm/media-mentor'))return {companyCode:code,brief:{revision:2,fields:{product:'Шары под ключ',audience:'',pains:['Нет времени на оформление']}}};
   return null;
  };
- const f=page('#content-factory/plan',['autoposting.view','autoposting.edit'],'client',{crm});try{
+ const f=page('#content-factory/plan/proposals',['autoposting.view','autoposting.edit'],'client',{crm});try{
   await f.settle();
+  assert.equal(f.d.querySelector('[data-factory-action="compose"]').hidden,false);
   f.d.querySelector('[data-factory-action="compose"]').click();await f.settle();
   const panel=f.d.getElementById('content-factory-compose');
   assert.equal(panel.hidden,false);
@@ -122,7 +152,7 @@ test('CF1/CF2: «Составить план» показывает сводку
  }finally{f.close();}
 });
 test('CF1: «Создать публикацию» открывает существующий редактор и не подменяет открытую карточку',async()=>{
- const f=page('#content-factory/plan/proposals',['autoposting.view','autoposting.edit'],'client',{editor:true});try{
+ const f=page('#content-factory/plan',['autoposting.view','autoposting.edit'],'client',{editor:true});try{
   await f.settle();
   f.d.querySelector('[data-factory-action="create"]').click();await f.settle();
   assert.equal(f.w.location.hash,'#content-factory/plan');
@@ -135,5 +165,6 @@ test('CF1: «Создать публикацию» открывает сущес
   assert.equal(f.d.activeElement,f.d.getElementById('autoposting-select'));
   assert.match(f.d.querySelector('[data-factory-bar-status]').textContent,/Новый черновик/);
   assert.deepEqual(f.requests.filter(r=>r.method!=='GET'),[]);
+  assert.equal(f.d.querySelector('[data-factory-action="compose"]').hidden,true,'№122: «Составить план» в «Постинге» не показывается');
  }finally{f.close();}
 });

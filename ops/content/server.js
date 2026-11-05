@@ -142,6 +142,7 @@ function makeSession(identity) {
   return `${payload}.${signature(payload)}`;
 }
 function sessionData(request) {
+  if (request.viewAsSession) return request.viewAsSession;
   const cookies = Object.fromEntries(String(request.headers.cookie || '').split(';').map((part) => part.trim().split(/=(.*)/s)).filter(([key]) => key));
   const [payload, sig] = String(cookies.synapse_session || '').split('.');
   if (!payload || !sig) return null;
@@ -180,6 +181,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const viewAs = require('./view-as').createViewAs({ secret: SESSION_SECRET, authStore, db });
 // №98 Б: согласующие контент-плана из «Настроек → Контент» — доверенным заголовком в CRM.
 const contentPlanApprovers = require('./content-plan-approvers').createContentPlanApprovers({ db, authStore });
 const companyTeam = require('./company-team').createCompanyTeam(authStore);
@@ -868,8 +870,11 @@ async function proxyChat(request, response, url, cors) {
 
 const server = http.createServer(async (request, response) => {
   const cors = corsHeaders(request);
-  const reply = (status, payload, extra) => send(response, status, payload, { ...cors, ...(extra || {}) });
+  const reply = (status, payload, extra) => send(response, status, payload, { ...cors, ...(request.headers['x-view-as'] ? {'cache-control':'private, no-store'} : {}), ...(extra || {}) });
   try {
+    if (request.headers['x-view-as']) {
+      request.viewAsSession = viewAs.resolve(request, sessionData(request));
+    }
     if (request.method === 'OPTIONS') {
       response.writeHead(204, cors);
       return response.end();
@@ -1066,9 +1071,18 @@ const server = http.createServer(async (request, response) => {
       return reply(200, { ok: true }, { 'set-cookie': 'synapse_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0' });
     }
 
+    if (url.pathname === '/content/view-as') {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (request.method === 'GET') return reply(200, { users: authStore.list().map(u => ({ id:u.id, name:u.displayName, login:u.login })) });
+      if (request.method === 'POST') {
+        requireCsrf(request, session);
+        return reply(200, viewAs.issue(session, (await readJson(request)).userId));
+      }
+    }
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
       const session = requireSession(request);
-      return reply(200, { ...publicIdentity(session.user), csrfToken: session.csrf });
+      return reply(200, { ...publicIdentity(session.user), viewAs: session.viewAs || null, csrfToken: session.csrf });
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
@@ -1371,7 +1385,7 @@ const server = http.createServer(async (request, response) => {
         const fresh=requireSession(request);if(fresh.user.role!=='owner'||fresh.user.id!==session.user.id)fail(403,'Доступ изменился');
         return reply(200,result,{'cache-control':'no-store'});
       }
-      return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(extra || {}) }) });
+      return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(request.headers['x-view-as'] ? {'cache-control':'private, no-store'} : {}), ...(extra || {}) }) });
     }
 
     // --- файлы (фоны блоков): /content/:site/assets[/:name]
@@ -1463,7 +1477,7 @@ const server = http.createServer(async (request, response) => {
     if(status===403&&current?.user.mustChangePassword)error.details={mustChangePassword:true,csrfToken:current.csrf};
     if (status === 401 || status === 403) logAuthorizationDenial(request, error);
     if (status >= 500) console.error(error);
-    reply(status, { error: error.message, details: error.details || undefined });
+    reply(status, { error: error.message, code: error.code || undefined, details: error.details || undefined });
   }
 });
 
