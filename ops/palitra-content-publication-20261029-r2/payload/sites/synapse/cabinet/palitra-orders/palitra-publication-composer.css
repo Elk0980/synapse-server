@@ -1,0 +1,58 @@
+.palitra-composer-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(31,34,26,.32);padding:24px;box-sizing:border-box;overscroll-behavior:contain}
+.palitra-composer-overlay *{box-sizing:border-box}
+.palitra-composer-panel{width:min(720px,100%);max-height:calc(100dvh - 48px);overflow:auto;background:#fffef8;color:#272a22;border:1px solid #e3e4d7;border-radius:24px;box-shadow:0 20px 80px #20271926;padding:24px;font-family:inherit;scrollbar-gutter:stable}
+.palitra-composer-header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.palitra-composer-heading{margin:0;font-size:clamp(24px,4vw,30px);line-height:1.2;letter-spacing:-.025em;color:inherit}
+.palitra-composer-close{flex:none;min-width:44px;min-height:44px;border:1px solid #d5d8c5;border-radius:50%;background:transparent;color:#596240;font-size:30px;line-height:1;cursor:pointer}
+.palitra-composer-intro{margin:12px 0 24px;line-height:1.5;color:#74786b;font-size:14px}
+.palitra-composer-form{display:flex;flex-direction:column;gap:20px;min-width:0}
+.palitra-composer-field{display:flex;flex-direction:column;gap:8px;min-width:0}
+.palitra-composer-label{display:block;padding:0;font-size:15px;font-weight:650;line-height:1.4;color:#34382b}
+.palitra-composer-input{display:block;width:100%;min-width:0;max-width:100%;min-height:48px;border:1px solid #d6d9cb;border-radius:13px;padding:12px 14px;font:inherit;font-size:16px;line-height:1.4;background:#fff;color:#272a22}
+.palitra-composer-input::placeholder{color:#9a9d91;opacity:1}
+.palitra-composer-input[aria-invalid=true]{border-color:#b13e35;box-shadow:0 0 0 1px #b13e35}
+.palitra-composer-input[type=file]{padding:8px;font-size:13px}
+.palitra-composer-input[type=file]::file-selector-button{font:inherit;border:0;border-radius:8px;color:#354525;background:#edf0e3;padding:8px 10px;margin-right:8px;cursor:pointer}
+.palitra-composer-text{resize:vertical;min-height:132px}
+.palitra-composer-hint{font-size:13px;color:#73796a;line-height:1.5;margin:0}
+.palitra-composer-platforms{padding:0;margin:0;border:0;min-width:0}
+.palitra-composer-platforms>.palitra-composer-label{margin-bottom:8px}
+.palitra-composer-channels{display:grid;gap:8px;margin-top:12px}
+.palitra-composer-channel{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:4px 12px;border:1px solid #e3e5d9;border-radius:14px;background:#fff;padding:12px}
+.palitra-composer-channel-label{display:flex;align-items:center;gap:10px;min-height:30px;cursor:pointer;font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.palitra-composer-checkbox{appearance:auto;accent-color:#687548;width:20px;height:20px;margin:0;flex:none}
+.palitra-composer-details{display:block}
+.palitra-composer-details>summary{grid-column:2;grid-row:1;cursor:pointer;padding:5px 0;color:#576637;font-size:13px;text-align:right;list-style:none;min-height:30px}
+.palitra-composer-details>summary::after{content:' ⌄';display:inline-block}
+.palitra-composer-details[open]>summary::after{content:' ⌃'}
+.palitra-composer-details>summary::-webkit-details-marker{display:none}
+.palitra-composer-preview{grid-column:1/-1;min-width:0;max-width:100%;padding-top:12px}
+.palitra-composer-details:not([open])>.palitra-composer-preview{display:none}
+.palitra-composer-channel-note{grid-column:1/-1;margin:0;font-size:12px;color:#818576;line-height:1.45}
+.palitra-composer-channel{display:block}
+.palitra-composer-channel-label{padding-right:108px}
+.palitra-composer-details>summary{position:absolute;right:12px;top:12px;max-width:105px}
+.palitra-composer-preview{width:100%;clear:both}
+.palitra-composer-channel-note{margin-top:4px}
+.palitra-composer-media{display:grid;gap:12px}
+.palitra-composer-media-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.palitra-composer-media-item{display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:10px;background:#f0f2e9;padding:10px 12px;font-size:13px;line-height:1.4}
+.palitra-composer-media-item>span{overflow-wrap:anywhere;min-width:0}
+.palitra-composer-remove{border:0;background:transparent;color:#626d43;text-decoration:underline;text-underline-offset:3px;font:inherit;cursor:pointer;min-height:32px;flex:none;padding:4px}
+.palitra-composer-date-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.palitra-composer-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.palitra-composer-primary,.palitra-composer-secondary,.palitra-composer-danger{font:inherit;font-size:15px;font-weight:600;min-height:48px;padding:12px 22px;border-radius:99px;border:1px solid #d2d7c0;cursor:pointer;line-height:1.4;max-width:100%}
+.palitra-composer-primary{background:#295b79;border-color:#295b79;color:#fff;flex:1}
+.palitra-composer-secondary{background:#fff;color:#576637}
+.palitra-composer-danger{background:#fff6f3;color:#a14232;border-color:#e5c4b9}
+.palitra-composer-save-note{font-size:13px;line-height:1.5;color:#747969;margin:0;padding:0 2px}
+.palitra-composer-status{font-size:14px;line-height:1.5;color:#576637;margin:0}
+.palitra-composer-status:empty{display:none}
+.palitra-composer-error{font-size:14px;line-height:1.5;color:#963c31;background:#fff0eb;border-radius:12px;padding:12px 14px;margin:0;overflow-wrap:anywhere}
+.palitra-composer-discard{background:#fff6ee;border:1px solid #ead7c1;padding:14px;border-radius:14px;display:flex;flex-wrap:wrap;gap:10px}
+.palitra-composer-discard>p{flex-basis:100%;font-size:14px;line-height:1.5;margin:0}
+.palitra-composer-overlay [hidden]{display:none!important}
+.palitra-composer-overlay :focus-visible{outline:3px solid #82965d;outline-offset:3px}
+.palitra-composer-overlay :disabled{cursor:default;opacity:.55}
+@media(max-width:600px){.palitra-composer-overlay{padding:0;align-items:stretch}.palitra-composer-panel{width:100%;height:100dvh;max-height:100dvh;border:0;border-radius:0;padding:20px 16px calc(24px + env(safe-area-inset-bottom));scrollbar-gutter:auto}.palitra-composer-form{gap:20px}.palitra-composer-intro{margin-bottom:20px}.palitra-composer-footer{position:sticky;bottom:calc(-24px - env(safe-area-inset-bottom));margin:0 -16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:#fffef8;border-top:1px solid #e3e4d7;z-index:1}.palitra-composer-channel{gap:4px 8px}.palitra-composer-primary{min-width:160px}.palitra-composer-date-row{gap:10px}}
+@media(prefers-reduced-motion:reduce){.palitra-composer-overlay *{scroll-behavior:auto!important}}

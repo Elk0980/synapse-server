@@ -1,0 +1,9 @@
+
+/* Palitra centered native date strip; calendar dialog and composer remain unchanged. */
+.content-calendar__week{display:flex;grid-template-columns:none;gap:0;position:relative;box-sizing:border-box;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;padding:0;scroll-snap-type:x mandatory;scroll-padding:0;overscroll-behavior-x:contain;touch-action:pan-x pan-y pinch-zoom;scrollbar-width:none;-webkit-overflow-scrolling:touch;user-select:none;cursor:grab;overflow-anchor:none}
+.content-calendar__week::-webkit-scrollbar{display:none}
+.content-calendar__week>.content-calendar__edge{box-sizing:border-box;flex:0 0 calc(var(--content-day-size,40px)*3);width:calc(var(--content-day-size,40px)*3);pointer-events:none;scroll-snap-align:none}
+.content-calendar__week>.content-calendar__day{box-sizing:border-box;flex:0 0 var(--content-day-size,40px);width:var(--content-day-size,40px);min-width:var(--content-day-size,40px);scroll-snap-align:center;scroll-snap-stop:normal}
+.content-calendar__week--dragging{cursor:grabbing;scroll-snap-type:none}
+.content-calendar__week--dragging>.content-calendar__day{pointer-events:none}
+@media(prefers-reduced-motion:reduce){.content-calendar__week{scroll-behavior:auto!important}}

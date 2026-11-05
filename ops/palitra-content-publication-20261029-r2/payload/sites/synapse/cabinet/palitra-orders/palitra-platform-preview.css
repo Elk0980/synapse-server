@@ -1,0 +1,180 @@
+/* Palitra — предпросмотр публикации. Все правила только внутри .palitra-preview.
+   Цвета задаются переменными: страница может переопределить их на .palitra-preview. */
+.palitra-preview {
+  --pp-surface: #ffffff;
+  --pp-text: #1d2329;
+  --pp-muted: #5b6670;
+  --pp-line: #d3d9df;
+  --pp-accent: #2f6fde;
+  --pp-focus: #1a5fd0;
+  --pp-frame: #0e1013;
+  --pp-zone: rgba(255, 166, 0, 0.26);
+  --pp-zone-line: #ff9f1a;
+  --pp-ui: rgba(255, 255, 255, 0.55);
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--pp-text);
+  font: inherit;
+  line-height: 1.4;
+}
+.palitra-preview *,
+.palitra-preview *::before,
+.palitra-preview *::after { box-sizing: border-box; }
+.palitra-preview [hidden] { display: none !important; }
+
+.palitra-preview__meta { margin: 0 0 8px; color: var(--pp-muted); font-size: 0.875em; overflow-wrap: anywhere; }
+.palitra-preview__meta-platform { color: var(--pp-text); font-weight: 600; }
+.palitra-preview__note,
+.palitra-preview__extra,
+.palitra-preview__fit-note { margin: 8px 0 0; color: var(--pp-muted); font-size: 0.8125em; overflow-wrap: anywhere; }
+
+/* Кнопки */
+.palitra-preview__btn {
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--pp-line);
+  border-radius: 8px;
+  background: var(--pp-surface);
+  color: var(--pp-text);
+  font: inherit;
+  font-size: 0.875em;
+  cursor: pointer;
+}
+.palitra-preview__btn:disabled { opacity: 0.45; cursor: default; }
+.palitra-preview__toggle[aria-pressed="true"] { border-color: var(--pp-accent); background: var(--pp-accent); color: #ffffff; }
+.palitra-preview__btn:focus-visible,
+.palitra-preview__stage:focus-visible,
+.palitra-preview__media:focus-visible { outline: 3px solid var(--pp-focus); outline-offset: 2px; }
+.palitra-preview__controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.palitra-preview__fit { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.palitra-preview__pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; max-width: 480px; }
+.palitra-preview--vertical .palitra-preview__pager { max-width: 340px; margin-left: auto; margin-right: auto; }
+.palitra-preview__counter { font-variant-numeric: tabular-nums; color: var(--pp-muted); white-space: nowrap; }
+
+/* Медиа */
+.palitra-preview__stage { position: relative; min-width: 0; }
+.palitra-preview__slide { display: flex; align-items: center; justify-content: center; width: 100%; }
+.palitra-preview__media { display: block; max-width: 100%; }
+.palitra-preview__placeholder,
+.palitra-preview__fallback {
+  margin: 0;
+  padding: 24px 16px;
+  width: 100%;
+  text-align: center;
+  color: var(--pp-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Карточка: Telegram, ВКонтакте, MAX, лента Instagram */
+.palitra-preview__card {
+  max-width: 480px;
+  border: 1px solid var(--pp-line);
+  border-radius: 12px;
+  background: var(--pp-surface);
+  overflow: hidden;
+}
+.palitra-preview__head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-width: 0; }
+.palitra-preview__avatar {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--pp-line);
+  color: var(--pp-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+.palitra-preview__who { display: flex; flex-direction: column; min-width: 0; }
+.palitra-preview__who .palitra-preview__publisher { font-weight: 600; overflow-wrap: anywhere; }
+.palitra-preview__platform { color: var(--pp-muted); font-size: 0.8125em; }
+.palitra-preview--card .palitra-preview__stage { background: #f1f3f5; }
+.palitra-preview--card .palitra-preview__media { width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+.palitra-preview--card .palitra-preview__caption { margin: 0; padding: 10px 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.palitra-preview__caption--empty { color: var(--pp-muted); font-style: italic; }
+
+/* Вертикальный кадр 9:16: TikTok, Shorts, Reels, истории */
+.palitra-preview__frame {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  aspect-ratio: 9 / 16;
+  border-radius: 16px;
+  background: var(--pp-frame);
+  overflow: hidden;
+  color: #ffffff;
+}
+.palitra-preview--vertical .palitra-preview__stage,
+.palitra-preview--vertical .palitra-preview__slide { position: absolute; inset: 0; height: 100%; }
+.palitra-preview--vertical .palitra-preview__stage { display: flex; align-items: center; justify-content: center; }
+.palitra-preview--vertical .palitra-preview__media { width: 100%; height: 100%; object-fit: contain; }
+.palitra-preview--fit-cover .palitra-preview__media { object-fit: cover; }
+.palitra-preview--vertical .palitra-preview__placeholder,
+.palitra-preview--vertical .palitra-preview__fallback { color: rgba(255, 255, 255, 0.82); }
+
+.palitra-preview__zone { position: absolute; pointer-events: none; }
+.palitra-preview__zone--top { top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12%; }
+.palitra-preview__zone--right { right: 0; bottom: 4%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 10%; padding-bottom: 6%; }
+.palitra-preview__zone--bottom { left: 0; bottom: 0; right: 0; display: flex; align-items: center; justify-content: center; padding: 0 4%; }
+.palitra-preview__frame--zones .palitra-preview__zone { background: var(--pp-zone); outline: 1px dashed var(--pp-zone-line); outline-offset: -1px; }
+.palitra-preview__zone-label {
+  display: none;
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.palitra-preview__frame--zones .palitra-preview__zone-label { display: block; }
+.palitra-preview__bar { display: block; width: 28%; height: 6px; border-radius: 3px; background: var(--pp-ui); }
+.palitra-preview__bar--short { width: 18%; }
+.palitra-preview__progress { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--pp-ui); }
+.palitra-preview__dot { display: block; width: 64%; aspect-ratio: 1 / 1; border-radius: 50%; background: var(--pp-ui); }
+.palitra-preview__reply { display: block; width: 100%; height: 44%; border: 1px solid var(--pp-ui); border-radius: 999px; }
+
+.palitra-preview__overlay {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-size: 0.8125em;
+  min-width: 0;
+}
+.palitra-preview__overlay--top { top: 4%; }
+.palitra-preview__overlay--bottom { bottom: 4%; }
+.palitra-preview__overlay .palitra-preview__publisher { font-weight: 600; overflow-wrap: anywhere; }
+.palitra-preview__overlay .palitra-preview__title { font-weight: 600; overflow-wrap: anywhere; }
+.palitra-preview__overlay .palitra-preview__caption {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .palitra-preview__btn,
+  .palitra-preview__zone { transition: background-color 0.15s ease, border-color 0.15s ease; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .palitra-preview,
+  .palitra-preview * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+@media (max-width: 400px) {
+  .palitra-preview__btn { min-height: 44px; }
+  .palitra-preview__pager .palitra-preview__btn { flex: 1 1 0; }
+}
