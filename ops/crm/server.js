@@ -2691,10 +2691,11 @@ async function route(request, response) {
   }
   if(await handleContentFactoryCompletion(request,response,url,cors))return;
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
-    // №112: решение по версии — право просмотра + approve (проверяется ниже); каналы и ключи — channels.
+    // №112: решение по версии — право approve без edit (просмотр следует из зависимостей прав);
+    // каналы и ключи — autoposting.channels вместе с edit.
     const decision = request.method === 'POST' && /^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(url.pathname);
     const channelWrite = request.method !== 'GET' && (url.pathname === '/autoposting/settings' || /^\/autoposting\/settings\/[^/]+\/check$/.test(url.pathname));
-    const permission = decision ? 'autoposting.view' : channelWrite ? 'autoposting.channels'
+    const permission = decision ? 'autoposting.approve' : channelWrite ? 'autoposting.channels'
       : request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
     if (channelWrite && identity.role !== 'owner' && !identity.permissions.has('autoposting.edit')) fail(403,'Недостаточно прав',{code:'FORBIDDEN'});

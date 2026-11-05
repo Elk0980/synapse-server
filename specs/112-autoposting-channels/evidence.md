@@ -1,0 +1,24 @@
+# Свидетельства (Claude — код, 05.11.2026)
+
+Ветка `claude/autoposting-channels-112` от main, затем слита с main 73b6bf7 (после PR 520) без конфликтов.
+
+## Что сделано
+- `ops/content/auth-store.js`: право `autoposting.channels`; `autoposting.approve` → только `autoposting.view` + `company-information.view`; `autoposting.channels` → `autoposting.edit` (+ просмотр). Однократная миграция `auth_meta.autoposting_channels_v1`: INSERT OR IGNORE `autoposting.channels` всем с `autoposting.edit`, список id в `auth_meta`; снятое владельцем право при перезапуске не возвращается.
+- `ops/content/company-team.js`: пресет «Администратор» + `autoposting.channels` (прежняя возможность сохранена).
+- `ops/content/server.js` (прокси): `POST /autoposting/posts/:id/approve|reject` — `autoposting.view` (+ прежняя проверка `autoposting.approve`), без `edit`; `PUT /autoposting/settings`, `POST /autoposting/settings/:id/check` — `edit` + `channels`.
+- `ops/crm/server.js`: решение по версии — контекст по `autoposting.approve` (без `edit`; просмотр гарантируют зависимости прав в content), каналы — `channels` + `edit`; `schedule:true` у approve требует `edit`.
+- Кабинет: `autoposting.js` — поля и кнопки подключений активны только при `edit` + `channels`; `account.js` — подпись «⚠ Автопостинг — каналы публикации и ключи», у `edit` — «материалы и публикации».
+
+## Проверки
+- Новый `ops/content/autoposting-channels-permission.test.js`: зависимости, миграция (однократно, approve-only не получает, снятое не возвращается).
+- `ops/content/company-modules-access.test.js` (реальные content + CRM): согласующий без edit читает, не правит (403), согласует и отклоняет (200), approve+schedule — 403; edit без approve не согласует; approver и edit без channels читают настройки (200), но PUT и check — 403; edit+channels сохраняет ключ, ключ не возвращается в ответе.
+- `ops/crm/autoposting-approval-http.test.js`: те же правила на самой CRM по доверенной identity, включая channels без edit → 403.
+- jsdom `autoposting.test.cjs`: edit без channels — материалы редактируемы, подключения заблокированы, PUT/check не отправляются.
+- Прежние тесты, где редактор настраивает каналы (`studio-pilot-proxy`, `company-information`, `autoposting.test.cjs`), получили `autoposting.channels` — смысл проверок сохранён.
+- Полные наборы ops/crm и ops/content — результаты ниже.
+
+## Не сделано / ограничения
+- Миграция выдаст `channels` и тем, у кого `edit` появился через прежнюю зависимость approve (например, согласующему). Снять лишнее — Влад в «Настройке аккаунтов» после выпуска.
+- `permission-help.js` (PR 523) сверяет каталог пояснений с PERMISSIONS: кто сливается вторым, добавляет строку для `autoposting.channels`.
+- Версия ресурсов кабинета (`SB_CABINET_ASSET_VERSION`) не менялась, чтобы не конфликтовать с соседними PR; при выпуске её нужно поднять (изменены autoposting.js, account.js).
+- Выпуск, сервер и боевые базы не трогались.
