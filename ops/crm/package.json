@@ -2,6 +2,9 @@
   "private": true,
   "main": "smoke-test.js",
   "dependencies": {
-    "nodemailer": "^7.0.6"
+    "fflate": "0.8.3",
+    "nodemailer": "^7.0.6",
+    "read-excel-file": "9.3.14",
+    "saxen": "11.2.0"
   }
 }

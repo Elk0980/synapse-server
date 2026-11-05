@@ -46,6 +46,7 @@ const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
 const { createTelegramChannelStatsClient } = require('./telegram-channel-stats');
 const { createSocialStatsHandler } = require('./social-stats-http');
+const { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteSource } = require('./content-connections');
 const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
 const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
@@ -558,6 +559,7 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=10').get()) {
   require('./task-products').backupTasksBoard(db,DATABASE_PATH);
   migrate(10, () => require('./task-products').migrateTasksBoard(db));
 }
+migrate(12, () => require('./task-owner-question').migrateOwnerQuestions(db));
 
 // Owner-approved company display name. IDs, links and legal entities stay intact.
 db.prepare(`UPDATE companies SET name='Palitra', updated_at=?
@@ -644,6 +646,8 @@ const handleContentFactoryCompletion=require('./content-factory-completion-http'
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
+const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation}),
+  companyModuleContext,readJson,send,trustedService:request=>!request.headers[CRM_IDENTITY_HEADER]});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
@@ -659,7 +663,8 @@ const contentPlanGeneration = createContentPlanService({mentor:mediaMentor,jobs:
 const handleContentFactoryContext=createContentFactoryContextHandler({generation:contentPlanGeneration,jobs:contentPlanJobs,companyModuleContext,readJson,send,
   planningInsights:{capture:(code,month)=>require('./content-factory-planning-insights').createPlanningInsights({stats:socialStats}).capture(code,month)}});
 const contentPlanDrafts = createContentPlanDrafts(db,{jobs:contentPlanJobs,autoposting});
-const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,companyModuleContext,readJson,send});
+const contentPlanWorkspace = require('./content-plan-workspace').createContentPlanWorkspace(db,{mentor:mediaMentor});
+const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,workspace:contentPlanWorkspace,companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 const vkDirect = createVkDirect(db,{apiKey:API_KEY});
@@ -691,6 +696,9 @@ const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
   analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
+const handleContentConnections = createContentConnectionsHandler({companyModuleContext, send,
+  connections: createContentConnections(db, {declared: declaredFromEnv(process.env.CONTENT_CONNECTIONS_DECLARED),
+    siteSource: createMetrikaSiteSource({sitesDir: process.env.CONTENT_CONNECTIONS_SITES_DIR || ''})})});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2622,6 +2630,7 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
+  if (await handleContentConnections(request,response,url,cors)) return;
   if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/quote','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
@@ -2648,6 +2657,7 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
+  if(await handleReelMaterials(request,response,url))return;
   // Детерминированные напоминания: ключ сервиса уже проверен общим маршрутом.
   // Сессионный proxy не получает новый способ обхода прав через служебный GET.
   if (url.pathname === '/autoposting/review-reminders' && request.method === 'GET') {

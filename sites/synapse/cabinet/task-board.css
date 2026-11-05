@@ -22,3 +22,6 @@
 .tb-facts dd,.tb-description p,.tb-comments p,.tb-milestone>p{white-space:pre-wrap;overflow-wrap:anywhere}
 #tasks-view a,.tb-overlay a{overflow-wrap:anywhere;max-width:100%}
 @media(max-width:600px){.tb-board .tb-waiting-row{grid-template-columns:minmax(0,1fr)}.tb-waiting-row time{white-space:normal}}
+.tb-waiting-actions [hidden]{display:none!important}.tb-waiting-actions [data-owner-question]{font-size:16px;line-height:1.35}.tb-waiting-actions>p{margin:9px 0}.tb-simple-next{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}[data-task-technical]>summary{cursor:pointer;padding:12px 0;color:var(--tb-muted)}[data-question-queue] button{display:block;margin:6px 0}
+
+.tb-diagnostic{white-space:pre-wrap;overflow-wrap:anywhere}

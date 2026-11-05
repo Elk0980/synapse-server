@@ -565,10 +565,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 
 <link rel="stylesheet" href="brand/living-logo.css?v=20260911-projects-1">
 <script defer src="brand/living-logo.js?v=20260911-1"></script>
-<link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="brand/synapse-icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="brand/synapse-icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="apple-mobile-web-app-title" content="Synapse Business">
+<meta name="apple-mobile-web-app-title" content="Синапс" data-palitra-content="Synapse Business">
+<script src="brand/app-identity.js?v=20261105-1"></script>
 </head>
 <body>
 <div class="auth" id="auth">
@@ -1081,7 +1082,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20261105-board-links-108-r2";
+  window.SB_CABINET_ASSET_VERSION = "20261105-night98-board-links-108";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1101,8 +1102,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   ).join(""));
   // №98, контракт А (specs/098-content-shell): реестр модулей и экраны раздела «Контент».
   // Новые модули добавляются только в эти два списка; module-registry всегда первым.
-  const shellAssets = ["module-registry", "content-settings"];
-  const shellStyles = ["shell", "content-settings"];
+  const shellAssets = ["module-registry", "content-settings", "reel-plan-import", "content-plan", "shooting-script", "shooting-upload", "shooting-prompter", "shooting-board", "shooting", "materials", "reel-editor", "chats", "my-tasks", "content-connections", "content-stats"];
+  const shellStyles = ["shell", "content-settings", "content-plan", "shooting", "materials", "reel-editor", "chats", "content-connections"];
   document.write(shellStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join("") + shellAssets.map((asset) =>

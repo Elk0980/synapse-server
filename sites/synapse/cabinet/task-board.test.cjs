@@ -24,7 +24,9 @@ function fixture(role='owner', initial={view:'board'},setup) {
     if(name==='task_create')return replay?{created:false,task}:duplicates&&!args.force?{created:false,possible_duplicates:[task],possible_product_duplicates:[]}:{created:true,task};
     throw Error('Unexpected '+name);
   }};
-  setup?.(w);w.eval(fs.readFileSync(__dirname+'/task-text.js','utf8'));w.eval(source);
+  setup?.(w);w.eval(fs.readFileSync(__dirname+'/task-text.js','utf8'));
+  w.eval(fs.readFileSync(__dirname+'/task-overview.js','utf8'));
+  w.eval(source);
   const controller=w.SbTaskBoard.mount(d.getElementById('board'),ctx,initial);
   const input=(field,value)=>{field.value=value;field.dispatchEvent(new w.Event('input',{bubbles:true}));};
   const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
@@ -159,7 +161,8 @@ test('compact task retains result and opens previous controls in the task projec
   const f=fixture();try{await settle();f.task.coordination.result='Подтверждённый результат';let project,route;f.ctx.chooseProject=value=>{project=value;};f.ctx.navigate=value=>{route=value;};await f.controller.openTask(1);assert.match(f.d.querySelector('.tb-facts').textContent,/Подтверждённый результат/);f.d.querySelector('[data-task-record]').click();assert.equal(project,'synapse-business');assert.equal(route,'tasks/record/1');}finally{f.close();}
 });
 
-const overviewTask=(id,extra={})=>({id,title:`Работа ${id}`,company_code:'synapse-business',description:'',status:'planned',assignee_name:'Codex',reviewer_name:'Claude',waiting_since:null,coordination:{revision:1,blocker:'',nextAction:'',milestones:{}},comments:[{id:3,author:'Claude',text:'Начало',created_at:'2026-01-01T00:00:00Z'}],comments_pagination:{total:1},subtasks:[],subtasks_pagination:{total:0},...extra});
+const questionFields={owner_question:'Разрешить следующий шаг?',if_yes:'Работа продолжится.',if_no:'Работу отложим.',owner_minutes:2};
+const overviewTask=(id,extra={})=>({id,title:`Работа ${id}`,company_code:'synapse-business',description:'',status:'planned',assignee_name:'Codex',reviewer_name:'Claude',waiting_since:null,coordination:{revision:1,blocker:'',nextAction:'',milestones:{}},comments:[{id:3,author:'Claude',text:'Начало',created_at:'2026-01-01T00:00:00Z'}],comments_pagination:{total:1},subtasks:[],subtasks_pagination:{total:0},...extra,coordination:{revision:1,blocker:'',nextAction:'',milestones:{},...questionFields,...extra.coordination}});
 async function overviewFixture(records,initial={view:'projects'}) {
   const f=fixture('owner',initial);await settle();const map=new Map(records.map(task=>[task.id,task]));
   f.intercept('tasks_list',async()=>({tasks:[...map.values()],pagination:{total:map.size}}));
@@ -235,7 +238,7 @@ test('every module shows all visible nested work with task progress while struct
 });
 test('explicit questions on goals and orphan modules remain in waiting without inflating work counters',async()=>{
   const records=[overviewTask(1000,{title:'Цель · Решение по системе',assignee_name:'Влад',status:'in_progress'}),overviewTask(1100,{title:'Модуль · Самостоятельный блок',parent_task_id:9999,status:'in_progress',coordination:{revision:1,blocker:'Ждёт Влада',nextAction:'',milestones:{}}}),overviewTask(1200,{title:'Модуль · Снятый вопрос',status:'cancelled',assignee_name:'Влад'}),overviewTask(201,{title:'Единственная работа',parent_task_id:1100,status:'in_progress'})];
-  const f=await overviewFixture(records);try{assert.equal(f.d.querySelectorAll('.tb-waiting-row').length,2);assert.match(f.d.querySelector('[data-waiting]').textContent,/Решение по системе/);assert.match(f.d.querySelector('[data-waiting]').textContent,/Самостоятельный блок/);assert.doesNotMatch(f.d.querySelector('[data-waiting]').textContent,/Модуль ·|Цель ·|Снятый вопрос/);assert.ok(f.d.querySelector('[data-module-id="1100"]'));assert.match(f.d.querySelector('.tb-project-card[data-project="synapse-business"]').textContent,/В работе 1/);assert.equal(f.d.querySelectorAll('.tb-now-row').length,1);assert.equal(f.d.querySelector('.tb-now-row').dataset.taskOpen,'201');}finally{f.close();}
+  const f=await overviewFixture(records);try{assert.equal(f.d.querySelectorAll('.tb-waiting-row').length,2);assert.match(f.d.querySelector('[data-waiting]').textContent,/Разрешить следующий шаг/);assert.doesNotMatch(f.d.querySelector('[data-waiting]').textContent,/Модуль ·|Цель ·|Снятый вопрос/);assert.ok(f.d.querySelector('[data-module-id="1100"]'));assert.match(f.d.querySelector('.tb-project-card[data-project="synapse-business"]').textContent,/В работе 1/);assert.equal(f.d.querySelectorAll('.tb-now-row').length,1);assert.equal(f.d.querySelector('.tb-now-row').dataset.taskOpen,'201');}finally{f.close();}
 });
 test('a cancelled duplicate stays hidden but permits explicit separate creation with the same client_ref',async()=>{
   const f=fixture();try{
@@ -266,7 +269,7 @@ test('goal shows equal module weights, completed work gives 100%, and future mod
   try{assert.match(f.d.querySelector('[data-goal]').textContent,/50%/);assert.match(f.d.querySelector('[data-board-guide]').textContent,/среднее процентов её модулей с равным весом/);assert.match(f.d.querySelector('[data-board-guide]').textContent,/Завершённая задача даёт 100%/);assert.match(f.d.querySelector('[data-module-id="1100"] [data-module-task="201"]').textContent,/100%/);assert.match(f.d.querySelector('[data-module-id="1100"] [data-module-task="201"]').textContent,/готово/);assert.equal(f.d.querySelector('[data-module-id="1200"]'),null);const row=f.d.querySelector('.tb-upcoming [data-task-open="1200"]');assert.ok(row);assert.equal(f.d.querySelectorAll('.tb-upcoming [data-task-open="1200"]').length,1);row.click();await settle();assert.equal(f.d.querySelectorAll('[data-module-composition] [data-module-task]').length,3);assert.ok(f.d.querySelector('[data-module-composition] [data-module-task="204"]'));assert.match(f.d.querySelector('[data-module-composition]').textContent,/0%/);assert.equal(JSON.stringify(records),before);}finally{f.close();}
 });
 
-test('waiting instructions expose full blocker, next step and link buttons directly; text URLs are safe in all fields',async()=>{
+test('waiting instructions: link buttons directly, full blocker and next step one tap away; text URLs are safe in all fields',async()=>{
  const blocker='ждёт Влада: Первая строка\nВторая строка: github.com/Elk0980/synapse-server/pull/523\nТретья строка — '+ 'Длинный текст '.repeat(60);
  const next='Открыть synapse.synapsebusiness.ru/cabinet/people.html\nЗатем принять решение';
  const task=overviewTask(201,{description:'Описание https://example.test/description <img src=x onerror=alert(1)>',coordination:{revision:2,blocker,nextAction:next,milestones:{},links:[{url:'https://example.test/button',label:'Открыть инструкцию'},{url:'javascript:alert(1)',label:'Запрещено'}]}});
@@ -275,7 +278,8 @@ test('waiting instructions expose full blocker, next step and link buttons direc
  const row=f.d.querySelector('.tb-waiting-row');assert.equal(row.querySelector('.tb-waiting-text').textContent,blocker);assert.match(row.textContent,/Следующий шаг/);assert.ok(row.querySelector('a[href="https://example.test/button"]'));assert.equal(row.querySelector('button a'),null);
  assert.ok(row.querySelector('a[href="https://github.com/Elk0980/synapse-server/pull/523"]'));
  await f.controller.openTask(201);await settle();const panel=f.d.querySelector('[data-waiting-actions]');
- assert.equal(panel.querySelector('.tb-waiting-text').textContent,blocker);assert.match(panel.textContent,/Затем принять решение/);assert.ok(panel.querySelector('a[href="https://example.test/button"]'));
+ const full=panel.nextElementSibling;assert.ok(full.matches('[data-waiting-instructions]'),'full text sits right after the simple decision panel: '+full?.outerHTML.slice(0,120));
+ assert.equal(full.querySelector('.tb-waiting-text').textContent,blocker);assert.match(full.textContent,/Затем принять решение/);assert.equal(panel.querySelector('.tb-waiting-text'),null,'decision panel stays simple (№88)');assert.ok(panel.querySelector('a[href="https://example.test/button"]'));
  assert.ok(f.d.querySelector('.tb-description a[href="https://example.test/description"]'));assert.ok(f.d.querySelector('[data-comments] a[href="https://github.com/Elk0980/synapse-server"]'));
  assert.equal(f.d.querySelector('img'),null);assert.equal(f.d.querySelector('a[href^="javascript:"]'),null);
  assert.equal(f.d.querySelector('[data-plan-form]').elements.blocker.value,blocker);
@@ -315,4 +319,31 @@ test('auto refresh does not redraw while search or quick task has focus; applies
  const container=f.d.querySelector('#board'),event=(type,touches)=>{const e=new f.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:touches});container.querySelector('.tb-columns').dispatchEvent(e);};
  const pulls=f.refreshCount();event('touchstart',[{clientX:20,clientY:10}]);event('touchmove',[{clientX:20,clientY:100}]);event('touchend',[]);await settle();assert.equal(f.refreshCount(),pulls+1);
  }finally{f.close();}
+});
+test('only complete plain questions reach the owner; legacy requests stay in the orchestrator queue',async()=>{
+  const task=overviewTask(900,{title:'PR 123 head abcdef1234567890 /opt/private',description:'CI log',status:'in_progress',due_date:'2026-01-01',assignee_name:'Влад',coordination:{owner_question:''}}),f=await overviewFixture([task]);
+  try{assert.equal(f.d.querySelector('[data-waiting]'),null);for(const view of ['board','plan','today','projects']){await f.controller.render({view});assert.match(f.d.body.textContent,/PR 123 head abcdef1234567890 \/opt\/private/);}await f.controller.render({view:'agents'});assert.match(f.d.querySelector('[data-question-queue]').textContent,/Вопрос не оформлен/);await f.controller.openTask(900);assert.equal(f.d.querySelector('[data-waiting-actions]'),null);assert.match(f.d.querySelector('[data-task-simple]').textContent,/Вопрос пока не оформлен/);assert.equal(f.d.querySelector('[data-task-technical]').open,false);assert.match(f.d.querySelector('[data-task-technical]').textContent,/abcdef1234567890/);}finally{f.close();}
+});
+test('decision main is simple and hides technical context; own response remains explicit',async()=>{
+  const task=overviewTask(901,{title:'PR 123 abcdef1234567890',description:'/opt/private head CI',assignee_name:'Влад',coordination:{nextAction:'Проверить CI /opt/private'}}),f=await overviewFixture([task]);
+  try{await f.controller.openTask(901);const panel=f.d.querySelector('[data-owner-decision]');assert.match(panel.textContent,/Да → Работа продолжится/);assert.match(panel.textContent,/Нет → Работу отложим/);assert.match(panel.textContent,/Ваше время: 2 мин/);assert.doesNotMatch(panel.textContent,/[a-z]/i);assert.equal(f.d.querySelector('.tb-simple-next'),null);assert.equal(f.d.querySelector('[data-task-technical]').open,false);assert.match(f.d.querySelector('[data-task-technical]').textContent,/abcdef1234567890/);assert.equal(f.d.querySelector('[data-wait-custom]').hidden,true);panel.querySelector('[data-wait-own]').click();const form=panel.querySelector('form');assert.equal(f.d.querySelector('[data-wait-custom]').hidden,false);f.input(form.elements.text,'Предлагаю обсудить завтра');f.submit(form);await settle();assert.equal(f.calls.filter(call=>call.name==='task_comment').at(-1).args.text,'ОТВЕТ: Предлагаю обсудить завтра');assert.equal(f.calls.filter(call=>call.name==='task_update').length,0);}finally{f.close();}
+});
+test('a plain next action stays in one compact line and structured question updates leave the queue',async()=>{
+  const task=overviewTask(902,{assignee_name:'Влад',coordination:{owner_question:'',nextAction:'Выбрать дату начала'}}),f=await overviewFixture([task]);
+  try{await f.controller.openTask(902);assert.match(f.d.querySelector('.tb-simple-next').textContent,/Выбрать дату начала/);Object.assign(task.coordination,questionFields);await f.controller.render({view:'agents'});assert.equal(f.d.querySelector('[data-question-queue]'),null);assert.equal(f.d.querySelectorAll('.tb-waiting-row').length,1);}finally{f.close();}
+});
+
+test('decision failures keep raw diagnostics in extended details and never resend an unknown reply',async()=>{
+  const task=overviewTask(903,{assignee_name:'Влад'}),f=await overviewFixture([task]);
+  try{f.intercept('task_comment',async()=>{throw Error('POST /coordination/mcp PR #500 CI abcdef1234567890');});await f.controller.openTask(903);f.d.querySelector('[data-wait-choice="Да"]').click();await settle();assert.doesNotMatch(f.d.querySelector('[data-owner-decision]').textContent,/POST|PR|CI|abcdef/);f.intercept('task_get',async()=>{throw Error('GET /coordination/mcp PR #500 CI abcdef1234567890');});f.d.querySelector('[data-wait-check]').click();await settle();assert.doesNotMatch(f.d.querySelector('[data-owner-decision]').textContent,/GET|PR|CI|abcdef/);assert.match(f.d.querySelector('[data-task-technical]').textContent,/GET.*abcdef/);assert.equal(f.d.querySelector('[data-task-technical]').open,false);assert.equal(f.calls.filter(call=>call.name==='task_comment').length,1);await f.controller.openTask(903);const body=f.d.querySelector('[data-sheet-body]').cloneNode(true);body.querySelector('[data-task-technical]').remove();assert.doesNotMatch(body.textContent,/GET|PR|CI|abcdef/);assert.match(f.d.querySelector('[data-task-technical]').textContent,/GET.*abcdef/);}finally{f.close();}
+});
+
+test('ordinary titles keep Latin, paths, long text and numbers in every task view and compact header',async()=>{
+  const titles=['Проверить CRM /cabinet',('Подробное название '+ 'работы '.repeat(25)).trim(),'3517116'];
+  const rows=titles.map((title,index)=>overviewTask(9100+index,{title,status:'in_progress',due_date:'2026-01-01',parent_task_id:1100}));
+  const f=await overviewFixture([overviewTask(1000,{title:'Цель · Результат'}),overviewTask(1100,{title:'Модуль · Названия',parent_task_id:1000,status:'in_progress'}),...rows]);
+  try{for(const row of rows){assert.equal(f.d.querySelector(`[data-module-task="${row.id}"] strong`).textContent,`№${row.id} ${row.title}`);assert.equal(f.d.querySelector(`[data-now-tasks] [data-task-open="${row.id}"] strong`).textContent,`№${row.id} ${row.title}`);}
+    for(const view of ['board','plan','today','projects']){await f.controller.render({view});for(const row of rows)assert.ok(f.d.body.textContent.includes(row.title));assert.doesNotMatch(f.d.body.textContent,/№(910[0-2]) Задача №\1/);}
+    for(const row of rows){await f.controller.openTask(row.id);assert.equal(f.d.querySelector('[data-task-simple] h3').textContent,row.title);}
+  }finally{f.close();}
 });
