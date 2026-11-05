@@ -653,7 +653,10 @@ const handleContentFactoryCompletion=require('./content-factory-completion-http'
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
-const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation}),
+const reelMaterials=require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation});
+// №166: согласование рилса в общем чате — поверх тех же Материалов и автопостинга.
+const reelChatApprovals=require('./reel-chat-approval').createReelChatApproval(db,{materials:reelMaterials,autoposting});
+const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:reelMaterials,chatApprovals:reelChatApprovals,
   companyModuleContext,readJson,send,trustedService:request=>!request.headers[CRM_IDENTITY_HEADER]});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
