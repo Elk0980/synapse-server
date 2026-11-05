@@ -36,7 +36,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
   return async function handle(request,response,url,cors={}) {
     if(!url.pathname.startsWith('/internal/people/'))return false;
     const values=url.searchParams.getAll('companyCode'),code=values[0];
-    if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset'].includes(key)))fail(400,'Укажите один проект');
+    if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset',...(url.pathname.endsWith('/ownerDecisionEvents')?['taskId']:[])].includes(key)))fail(400,'Укажите один проект');
     const action=url.pathname.slice('/internal/people/'.length),method=request.method;
     const plan=action==='mediaMentor'||action==='planVariantsDecision';
     const write=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'].includes(action);
@@ -48,6 +48,9 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
       if(snapshot&&snapshot.companyCode!==code)fail(502,'Источник другого проекта');
       result={companyCode:code,tasks:all.filter(row=>visible(row,map,actor,code)).map(row=>({id:row.id,title:row.title,status:row.status,due_date:row.due_date})),
         plan:(snapshot?.plan?.days||[]).map(day=>({date:day.date,topic:day.topic,scripts:Object.values(day.variants||{}).map(v=>v.text||'')}))};
+    } else if(action==='ownerDecisionEvents'&&method==='GET') {
+      if(actor.role!=='owner')fail(403,'Только владелец');
+      result=require('./owner-decision-events').listOwnerDecisionEvents(db,code,{offset:integer(url.searchParams.get('offset')??undefined,0,1e9),taskId:url.searchParams.has('taskId')?integer(url.searchParams.get('taskId'),0,1e9):undefined});
     } else if(action==='teamChatTask'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');

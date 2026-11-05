@@ -212,3 +212,12 @@ test('свежий enqueue не повторяет уже доставленны
   assert.equal(f.sent.length,1);assert.equal(f.sent[0].payload.body,'На согласовании 6, нужно ≥7');
   assert.equal(f.service.preview(1,'alvi').items[0].status,'sent');
 });
+
+test('owner decision push-only, eventKey persisted, restart and repeated tick do not duplicate',async t=>{
+ const f=fixture(t,{enabled:true});f.consent(3,'alvi',{telegram:true});f.service.subscribe(3,'alvi',subscription('owner'));
+ const event={userId:3,companyCode:'alvi',eventKey:'owner-decision:106:created',title:'Нужно ваше решение: №106 Выбор',body:'Выбор',url:'/cabinet/people.html?company=alvi&task=106',pushOnly:true};
+ assert.equal(f.service.enqueue(event).queued,1);assert.equal(f.service.enqueue(event).queued,0);
+ await f.service.runOnce();assert.equal(f.sent.length,1);assert.equal(f.sent[0].payload.eventKey,event.eventKey);
+ const restarted=createPeopleNotifications(f.config);assert.equal(restarted.enqueue(event).queued,0);await restarted.runOnce();assert.equal(f.sent.length,1);
+ assert.equal(f.db.prepare("SELECT count(*) n FROM people_notification_outbox WHERE channel='telegram'").get().n,0);
+});
