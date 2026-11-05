@@ -2,7 +2,7 @@
 const {hashPassword} = require('./passwords');
 const crypto=require('node:crypto');
 const ROLES = Object.freeze({
-  administrator: {name:'Администратор', permissions:['crm.view','crm.edit','autoposting.view','autoposting.edit','company-information.view','actor-onboarding.self']},
+  administrator: {name:'Администратор', permissions:['crm.view','crm.edit','autoposting.view','autoposting.edit','autoposting.channels','company-information.view','actor-onboarding.self']},
   master: {name:'Мастер', permissions:['actor-onboarding.self','autoposting.view','company-information.view']},
   human_executor: {name:'Исполнитель — свои задачи', permissions:['tasks.self.view','tasks.self.edit']},
 });

@@ -355,7 +355,7 @@ test('Onlypult profile cache is removed on provider change and disabled viewers 
 });
 
 test('company editors can edit materials but cannot configure owner-managed Onlypult or enumerate its profiles',async()=>{
- const f=await fixture({role:'editor',permissions:['autoposting.view','autoposting.edit'],override:call=>call.path.endsWith('/settings')&&call.method==='GET'?{channels:[channels()[0],{...channels()[1],provider:'onlypult',target:'alvi-vk'}],timezone:'Asia/Irkutsk'}:undefined});
+ const f=await fixture({role:'editor',permissions:['autoposting.view','autoposting.edit','autoposting.channels'],override:call=>call.path.endsWith('/settings')&&call.method==='GET'?{channels:[channels()[0],{...channels()[1],provider:'onlypult',target:'alvi-vk'}],timezone:'Asia/Irkutsk'}:undefined});
  try{
   const onlypult=card(f),direct=card(f,'telegram');
   for(const field of onlypult.querySelectorAll('input,select,button'))assert.equal(field.disabled,!field.matches('[data-check-channel]'),field.outerHTML);
@@ -1041,4 +1041,15 @@ test('сторис без подписи сохраняется по режим�
     await f.click('autoposting-save');const create=f.calls.filter(call=>call.method==='POST');assert.equal(create.length,1);
     const body=JSON.parse(create[0].options.body);assert.equal(body.format,'');assert.equal(body.text,'');assert.deepEqual(body.platformOptions,{instagram:{is_story:true}});
   }finally{f.close();}
+});
+test('№112: edit without autoposting.channels keeps materials editable but locks channels and keys',async()=>{
+ const f=await fixture({role:'editor',permissions:['autoposting.view','autoposting.edit']});
+ try{
+  assert.equal(f.node('autoposting-title').disabled,false,'materials stay editable');
+  const fields=[...f.node('autoposting-channels').querySelectorAll('input,select,button')];assert.ok(fields.length);
+  for(const field of fields)assert.equal(field.disabled,true,field.outerHTML);
+  const form=f.node('autoposting-channels').querySelector('[data-channel]');form.querySelector('[data-check-channel]')?.click();
+  form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await f.settle();
+  assert.equal(f.calls.some(call=>call.path.includes('/autoposting/settings')&&call.method!=='GET'),false,'no PUT or check without the right');
+ }finally{f.close();}
 });

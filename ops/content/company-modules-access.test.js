@@ -21,6 +21,8 @@ async function fixture(t){
       ['viewer',['company-information.view','autoposting.view']],['none',['analytics.view']],
       ['information_editor',['company-information.view','company-information.edit']],
       ['posting_editor',['autoposting.view','autoposting.edit']],
+      ['approver',['autoposting.view','autoposting.approve']],
+      ['channels_editor',['autoposting.view','autoposting.edit','autoposting.channels']],
     ]){const user=auth.create(owner.id,{login,displayName:login,password},hashPassword(password));auth.updateAccess(owner.id,user.id,['alvi'],permissions);}
   }finally{authDb.close();}
   const apiKey=randomBytes(24).toString('hex'),marker=path.join(directory,'unexpected-network.txt'),preload=path.join(directory,'deny-outbound.cjs');
@@ -51,7 +53,7 @@ async function fixture(t){
     const text=await response.text();return {status:response.status,text,body:text&&response.headers.get('content-type')?.includes('json')?JSON.parse(text):null,headers:response.headers};
   }
   async function login(login){const signed=await request('POST','/content/login',{login,password});assert.equal(signed.status,200);const session={cookie:signed.headers.get('set-cookie').split(';')[0]};session.csrf=(await request('GET','/content/whoami',undefined,session)).body.csrfToken;return session;}
-  const sessions={};for(const name of ['owner','editor','viewer','none','information_editor','posting_editor'])sessions[name]=await login(name);
+  const sessions={};for(const name of ['owner','editor','viewer','none','information_editor','posting_editor','approver','channels_editor'])sessions[name]=await login(name);
   return {base,request,sessions,marker,assetsDir:path.join(directory,'assets'),crm:(method,url,body,session,headers)=>request(method,'/content/crm'+url,body,session,headers)};
 }
 
@@ -236,4 +238,32 @@ test('video uploads accept only real MP4/WebM containers under the video limit, 
   }
   const traversal=await raw('GET','/content/publishing-assets/alvi/'+'a'.repeat(32)+'.html');
   assert.equal(traversal.status,404);assert.equal(traversal.headers.get('content-security-policy'),null,'чужие пути не получают медиа-политику');
+});
+
+test('№112: approver decides without edit; channels and keys need autoposting.channels on proxy and CRM',async t=>{
+  const f=await fixture(t),{owner,approver,posting_editor:postingEditor,channels_editor:channelsEditor}=f.sessions;
+  const info=(await f.crm('GET','/company-information?companyCode=alvi',undefined,owner)).body;
+  const created=await f.crm('POST','/autoposting/posts?companyCode=alvi',{title:'Материал',text:'Текст',mediaUrls:['https://example.test/photo.webp'],
+    platformIds:['telegram'],scheduledAt:new Date(Date.now()+3600000).toISOString(),timezone:'UTC',profileRevision:info.revision},owner);
+  assert.equal(created.status,201);const post=created.body;
+  // Approver: reads materials, cannot edit them, can approve and reject.
+  assert.equal((await f.crm('GET','/autoposting/posts?companyCode=alvi',undefined,approver)).status,200);
+  assert.equal((await f.crm('PATCH',`/autoposting/posts/${post.id}?companyCode=alvi`,{revision:post.revision,title:'Чужая правка'},approver)).status,403);
+  assert.equal((await f.crm('POST',`/autoposting/posts/${post.id}/approve?companyCode=alvi`,{revision:post.revision,approved:true},postingEditor)).status,403,'edit without approve cannot decide');
+  assert.equal((await f.crm('POST',`/autoposting/posts/${post.id}/approve?companyCode=alvi`,{revision:post.revision,approved:true,schedule:true},approver)).status,403,'approve+schedule still needs edit');
+  const approved=await f.crm('POST',`/autoposting/posts/${post.id}/approve?companyCode=alvi`,{revision:post.revision,approved:true},approver);
+  assert.equal(approved.status,200,approved.text);assert.equal(approved.body.approval.approved,true);
+  const rejected=await f.crm('POST',`/autoposting/posts/${post.id}/reject?companyCode=alvi`,{revision:approved.body.revision,comment:'Нужна правка текста'},approver);
+  assert.equal(rejected.status,200,rejected.text);
+  // Keys and channels.
+  const channel={id:'telegram',name:'QA',target:'@fixture_qa',enabled:false,revision:0,token:'123456:ABCDEFGHIJKLMNOPQRSTUVWX'};
+  for(const session of [approver,postingEditor]){
+    assert.equal((await f.crm('GET','/autoposting/settings?companyCode=alvi',undefined,session)).status,200,'reading settings is unchanged');
+    assert.equal((await f.crm('PUT','/autoposting/settings?companyCode=alvi',{channels:[channel]},session)).status,403);
+    assert.equal((await f.crm('POST','/autoposting/settings/telegram/check?companyCode=alvi',{},session)).status,403);
+  }
+  const saved=await f.crm('PUT','/autoposting/settings?companyCode=alvi',{channels:[channel]},channelsEditor);
+  assert.equal(saved.status,200,saved.text);assert.equal(saved.body.channels.find(item=>item.id==='telegram').tokenConfigured,true);
+  assert.doesNotMatch(saved.text,/ABCDEFGHIJKLMNOPQRSTUVWX/);
+  assert.equal(existsSync(f.marker),false);
 });

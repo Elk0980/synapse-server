@@ -10,7 +10,7 @@ test('real content→CRM pilot routes enforce session, CSRF, edit rights and com
   t.after(async()=>{for(const child of children.reverse())if(child.exitCode===null&&child.signalCode===null){const done=once(child,'exit');child.kill();await done;}
     assert.ok(path.resolve(directory).startsWith(path.resolve(os.tmpdir())+path.sep));await fs.rm(directory,{recursive:true,force:true});});
   const authDb=new DatabaseSync(contentDb);const auth=createAuthStore(authDb,`owner:owner:${hashPassword(password)}`),owner=auth.getByLogin('owner');
-  for(const [login,permissions]of [['reader',['crm.view','autoposting.view']],['writer',['crm.edit','autoposting.edit']],['marketing',['autoposting.edit']]])
+  for(const [login,permissions]of [['reader',['crm.view','autoposting.view']],['writer',['crm.edit','autoposting.edit']],['marketing',['autoposting.edit','autoposting.channels']]])
     auth.create(owner.id,{login,displayName:login,password,companies:['avokado'],permissions},hashPassword(password));
   authDb.close();
   const crmPort=await freePort(),crmBase=`http://127.0.0.1:${crmPort}`;
@@ -71,7 +71,7 @@ test('real content→CRM pilot routes enforce session, CSRF, edit rights and com
   const savedProvider=await through('owner','/autoposting/settings?companyCode=avokado',{method:'PUT',body:onlypultBody});assert.equal(savedProvider.status,200);assert.doesNotMatch(JSON.stringify(savedProvider.body),new RegExp(onlypultBody.channels[0].token));
   for(const patch of [{id:'vk',revision:1,target:'another-company',enabled:false},{id:'vk',provider:'direct',revision:1,target:'123',token:'new-test-token',enabled:false}])
     assert.equal((await through('marketing','/autoposting/settings?companyCode=avokado',{method:'PUT',body:{channels:[patch]}})).status,403,'cannot switch target or provider of an existing owner connection');
-  const editorIdentity=Buffer.from(JSON.stringify({v:1,userId:2,role:'editor',permissions:['autoposting.view','autoposting.edit'],companyCodes:['avokado']})).toString('base64url');
+  const editorIdentity=Buffer.from(JSON.stringify({v:1,userId:2,role:'editor',permissions:['autoposting.view','autoposting.edit','autoposting.channels'],companyCodes:['avokado']})).toString('base64url');
   assert.equal((await direct('/autoposting/settings/vk/profiles?companyCode=avokado',{headers:{'x-synapse-crm-identity':editorIdentity}})).status,403);
   assert.equal((await direct('/autoposting/settings?companyCode=avokado',{method:'PUT',body:{channels:[{id:'vk',revision:1,target:'another-company',enabled:false}]},headers:{'x-synapse-crm-identity':editorIdentity}})).status,403);
   const directSaved=await through('marketing','/autoposting/settings?companyCode=avokado',{method:'PUT',body:{channels:[{id:'telegram',provider:'direct',revision:0,target:'@test_channel',enabled:false,token:'12345:'+'a'.repeat(24)}]}});assert.equal(directSaved.status,200,'direct provider editing retains its previous permission');
