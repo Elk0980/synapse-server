@@ -15,7 +15,13 @@ function rollingWeekStart(rule,anchor,at) {
 function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now,enabled=false,intervalMs=60000}) {
   db.exec(`CREATE TABLE IF NOT EXISTS people_friday_rules (
     company_code TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-    settings TEXT NOT NULL,anchor_at TEXT NOT NULL,updated_at TEXT NOT NULL);`);
+    settings TEXT NOT NULL,anchor_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS people_owner_decision_baseline (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,company_code TEXT NOT NULL,
+    baseline_at TEXT NOT NULL,PRIMARY KEY(user_id,company_code));
+    CREATE TABLE IF NOT EXISTS people_owner_decision_seen (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,company_code TEXT NOT NULL,
+    event_key TEXT NOT NULL,seen_at TEXT NOT NULL,PRIMARY KEY(user_id,company_code,event_key));`);
   let timer=null,active=null,stopping=false;
   const stamp=()=>new Date(now()).toISOString();
   const owner=(id,code)=>{const u=authStore.getById(id);if(!u||u.role!=='owner'||!u.companyCodes.includes(code))fail(403,'Настройку выполняет владелец');return u;};
@@ -84,15 +90,33 @@ function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now
       for(const person of owners) {
         if(stopping)break;
         try {
-          const actor=owner(person.user_id,person.company_code);
-          let offset=0;
+          const actor=owner(person.user_id,person.company_code),code=person.company_code;
+          const events=[];let offset=0,complete=false;
           for(let page=0;page<100;page++) {
-            const result=await call('ownerDecisionEvents',{offset},actor,person.company_code);
-            owner(actor.id,person.company_code);
-            for(const event of result.events)notifications.enqueue({userId:actor.id,companyCode:person.company_code,
+            const result=await call('ownerDecisionEvents',{offset},actor,code);
+            owner(actor.id,code);events.push(...result.events);
+            if(result.nextOffset===null){complete=true;break;}offset=result.nextOffset;
+          }
+          const markSeen=db.prepare('INSERT OR IGNORE INTO people_owner_decision_seen VALUES(?,?,?,?)');
+          if(!db.prepare('SELECT 1 FROM people_owner_decision_baseline WHERE user_id=? AND company_code=?').get(actor.id,code)) {
+            // First scan for this owner and project: everything already open counts as delivered.
+            // Only a complete read creates the baseline; a partial one is retried on the next tick.
+            if(!complete)continue;
+            db.exec('BEGIN IMMEDIATE');
+            try {
+              for(const event of events)markSeen.run(actor.id,code,event.eventKey,stamp());
+              db.prepare('INSERT INTO people_owner_decision_baseline VALUES(?,?,?)').run(actor.id,code,stamp());
+              db.exec('COMMIT');
+            }catch(error){db.exec('ROLLBACK');throw error;}
+            continue;
+          }
+          const seen=db.prepare('SELECT 1 FROM people_owner_decision_seen WHERE user_id=? AND company_code=? AND event_key=?');
+          for(const event of events) {
+            if(seen.get(actor.id,code,event.eventKey))continue;
+            notifications.enqueue({userId:actor.id,companyCode:code,
               eventKey:event.eventKey,title:`Нужно ваше решение: №${event.taskId} ${event.title}`.slice(0,120),
-              body:event.title.slice(0,1000),url:`/cabinet/people.html?company=${encodeURIComponent(person.company_code)}&task=${event.taskId}`,pushOnly:true});
-            if(result.nextOffset===null)break;offset=result.nextOffset;
+              body:event.title.slice(0,1000),url:`/cabinet/people.html?company=${encodeURIComponent(code)}&task=${event.taskId}`,pushOnly:true});
+            markSeen.run(actor.id,code,event.eventKey,stamp());
           }
         }catch{} // Failure is not an event; retry read on next existing scheduler tick.
       }
