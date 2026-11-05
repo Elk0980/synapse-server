@@ -56,17 +56,8 @@
       try { if (sessionStorage.getItem(origin.key) === origin.snapshot) sessionStorage.removeItem(origin.key); } catch { /* Старый черновик остаётся доступным. */ }
     };
     const persistComment = (id,value) => write(`comment:${id}`,{...(read(`comment:${id}`) || {}),text:value});
-    const mediaTheme = window.matchMedia?.('(prefers-color-scheme: dark)');
-    let themeMode;
-    try { themeMode = localStorage.getItem(`${key}:theme`); } catch {}
-    if (!['system','light','dark'].includes(themeMode)) themeMode = 'system';
-    const theme = () => themeMode === 'system' ? (mediaTheme?.matches ? 'dark' : 'light') : themeMode;
-    const applyTheme = () => {
-      const active = theme(); container.dataset.tbTheme = active;
-      document.body.classList.toggle('tb-owner-theme-light',active === 'light'); document.body.classList.toggle('tb-owner-theme-dark',active === 'dark');
-      document.querySelectorAll('.tb-sheet').forEach(node => { node.dataset.tbTheme = active; });
-      const button = container.querySelector('[data-board-theme]'); if (button) button.textContent = {system:'Тема: система',light:'Светлая тема',dark:'Тёмная тема'}[themeMode];
-    };
+    // №148: у доски нет своей темы — цвета берутся из переменных кабинета (workspace.css).
+    try { localStorage.removeItem(`${key}:theme`); } catch { /* прежняя настройка темы больше не используется */ }
     const saved = read('filters') || {};
     const state = {view:initial.view || saved.view || 'board', project:initial.project ?? saved.project ?? '', product:initial.product ?? saved.product ?? '', search:'', ...initial};
     const tool = (name, args = {}) => ctx.crmQuery(`/coordination/mcp/${name}`, {}, ctx.csrfOptions('POST', args));
@@ -98,14 +89,26 @@
       const node = container.querySelector('[data-board-notice]'); if (node) { node.textContent = text; node.setAttribute('role', error ? 'alert' : 'status'); }
     };
     const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Готовность"></progress>`;
+    // №148: задачи самого владельца — исполнитель «Влад» или ожидание «ждёт Влада» без оформленного вопроса.
+    const isMine = task => !['done','cancelled'].includes(task.status) && (String(task.assignee_name || '').trim().replace(/ё/g,'е').toLocaleLowerCase('ru-RU') === 'влад' || window.SbTaskOverview?.isWaiting(task) === true);
+    const myInstructions = task => {
+      const blocker = String(task.coordination?.blocker || '').trim(), next = String(task.coordination?.nextAction || '').trim();
+      if (!blocker && !next) return '';
+      return `<details class="tb-waiting-instructions" data-my-instructions open><summary>Инструкция</summary>${blocker ? `<p class="tb-waiting-text">${esc(blocker)}</p>` : ''}${next ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(next)}</p>` : ''}</details>`;
+    };
+    const mineMarkup = exclude => {
+      const mine = tasks.filter(task => isVisibleWork(task) && matchesProject(task) && isMine(task) && !exclude.has(task.id)).sort(dueSort);
+      return `<section class="tb-mine" data-my-tasks><h2>Мои задачи <span>${mine.length}</span><a href="#tasks/mine" class="tb-mine-all">Все мои задачи · порядок и пауза</a></h2><div>${mine.map(task => `<article class="tb-mine-row" data-my-task="${task.id}"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))} · ${esc(STATUS[task.status] || task.status)}${task.due_date ? ` · срок ${esc(task.due_date)}` : ''}</span><strong>${esc(displayTitle(task))}</strong></button>${linksMarkup(task)}${myInstructions(task)}</article>`).join('') || '<p class="tb-empty">Задач на вас сейчас нет.</p>'}</div></section>`;
+    };
     const overviewMarkup = () => {
       const helper = window.SbTaskOverview; if (!helper) return '';
       const model = helper.build(tasks.filter(task => matchesProject(task)),productNames());
-      const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
+      const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут вашего решения <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
         const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
         return `<article class="tb-waiting-row"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(ownerDecision(task).question)}</strong></button>${linksMarkup(task)}${waitingInstructions(task)}${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}</article>`;
       }).join('')}</div></section>` : '';
-      if (state.view !== 'projects') return waiting;
+      const first = waiting + mineMarkup(new Set(model.waiting.map(task => task.id)));
+      if (state.view !== 'projects') return first;
       const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
       const goals = model.goals.map(goal => `<article class="tb-goal" data-goal="${goal.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${goal.task.id}"><span>Цель</span><strong>${esc(goal.title)}</strong></button>${percentage(goal.progress)}</div>${goal.current.length || goal.next.length ? `<p>Сейчас строим: ${esc(goal.current.map(module => module.title).join(', ') || 'модуль ещё не начат')}${goal.next.length ? ` → потом: ${esc(goal.next.map(module => module.title).join(', '))}` : ''}</p>` : ''}</article>`).join('');
       const modules = model.modules || model.directions;
@@ -114,7 +117,7 @@
       const next = modules.filter(module => !module.started);
       const upcoming = next.length ? `<section class="tb-upcoming"><h2>Дальше по плану</h2><div>${next.map(direction => `<button type="button" data-task-open="${direction.task.id}">${esc(direction.title)} · ${direction.progress}%</button>`).join('')}</div></section>` : '';
       const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(displayTitle(item.task))}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
-      return `<div class="tb-overview">${waiting}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
+      return `<div class="tb-overview">${first}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
     };
     async function hydrateOverview(records) {
       if (!window.SbTaskOverview) return records;
@@ -203,9 +206,6 @@
       container.querySelectorAll('[data-product]').forEach(button => button.onclick = () => { state.product = button.dataset.product; draw(); });
       container.querySelectorAll('[data-board-view]').forEach(button => button.onclick = () => { state.view = button.dataset.boardView; draw(); });
       container.querySelector('[data-board-refresh]').onclick = () => render();
-      const themeButton = document.createElement('button'); themeButton.type = 'button'; themeButton.dataset.boardTheme = '';
-      themeButton.onclick = () => { themeMode = {system:'light',light:'dark',dark:'system'}[themeMode]; try { localStorage.setItem(`${key}:theme`,themeMode); } catch {} applyTheme(); };
-      container.querySelector('.tb-controls').append(themeButton); applyTheme();
       container.querySelector('[data-create-task]').onclick = () => openCreate();
       container.querySelector('[data-board-search]').oninput = event => {
         state.search = event.target.value;
@@ -231,7 +231,6 @@
     function sheet(title, className, onClose, beforeClose) {
       const overlay = document.createElement('div'); overlay.className = 'tb-overlay';
       overlay.innerHTML = `<section class="tb-sheet ${className}" role="dialog" aria-modal="true" aria-label="${esc(title)}" tabindex="-1"><header class="tb-sheet-header"><h2>${esc(title)}</h2><button type="button" data-sheet-close aria-label="Закрыть">×</button></header><div data-sheet-body></div></section>`;
-      overlay.querySelector('.tb-sheet').dataset.tbTheme = theme();
       document.body.append(overlay); focusBeforeSheet = document.activeElement;
       const previousFocus = focusBeforeSheet;
       const close = () => { if (!overlay.isConnected) return; beforeClose?.(); overlay.remove(); onClose?.(); if (previousFocus?.isConnected) previousFocus.focus(); };
@@ -599,8 +598,7 @@
     const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
     window.addEventListener('pageshow',pageShow);window.addEventListener('focus',focus); document.addEventListener('visibilitychange',visibility);
     window.addEventListener('sb-waiting-reply-settled',replySettled);
-    mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel);container.removeEventListener('focusout',focusOut); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel);container.removeEventListener('focusout',focusOut); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});
