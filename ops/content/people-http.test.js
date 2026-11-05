@@ -59,6 +59,7 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   assert.equal((await request(grant,human,'PUT',{companyCode:'synapse-business',enabled:true})).status,403);
   assert.equal((await request(grant,owner,'PUT',{companyCode:'synapse-business',enabled:true},false)).status,403);
   assert.equal((await request(grant,owner,'PUT',{companyCode:'synapse-business',enabled:true})).status,200);
+  const listed=(await(await request(scoped('/members'),owner)).json()).members.find(m=>m.id===user.id);assert.ok(listed.permissions.includes('content-plan.approve'));assert.equal(listed.canApprovePlan,true);assert.ok(!listed.permissions.includes('crm.view'));
   assert.equal((await request(scoped('/plan'),human)).status,200);
   const permitted=await(await request('/content/people/context',human)).json();assert.equal(permitted.user.role,'editor');assert.ok(permitted.user.permissions.includes('content-plan.approve'));assert.ok(!permitted.user.permissions.includes('crm.view'));
   assert.equal((await request(scoped('/plan/decision'),human,'POST',{planRevision:1,briefRevision:1,scope:'plan',decision:'approved',comment:''},false)).status,403);

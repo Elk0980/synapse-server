@@ -55,7 +55,7 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
           return reply(200,{member:team.assignHuman(session.user.id,Number(member[1]),code)});
         }
       }
-      if(path==='/members'&&method==='GET') {code=company();fresh(code,true);return reply(200,{members:team.list(session.user.id,code).map(m=>({...m,canApprovePlan:authStore.getById(m.id)?.permissions.includes('content-plan.approve')===true})),roles:['human_executor']});}
+      if(path==='/members'&&method==='GET') {code=company();fresh(code,true);return reply(200,{members:team.list(session.user.id,code).map(m=>{const permissions=authStore.getById(m.id)?.permissions||[];return {...m,permissions:[...permissions],canApprovePlan:permissions.includes('content-plan.approve')};}),roles:['human_executor']});}
       fail(405,'Метод не поддерживается');
     }
     const code=company();fresh(code);
