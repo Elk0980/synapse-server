@@ -1,0 +1,12 @@
+/* Common refresh/back buttons, including already mounted and late legacy DOM. */
+(function (root) {
+ 'use strict';
+ if(root.PalitraActionIcons?.version==='v1')return;
+ const paths={refresh:['M3 11a9 9 0 0 1 15-6.7L21 7','M21 3v4h-4','M21 13a9 9 0 0 1-15 6.7L3 17','M3 21v-4h4'],back:['M15 5l-7 7 7 7']};
+ function icon(doc,kind){const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');for(const[k,v]of Object.entries({viewBox:'0 0 24 24',width:'22',height:'22',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',focusable:'false','data-action-symbol':kind}))svg.setAttribute(k,v);for(const d of paths[kind]){const p=doc.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',d);svg.append(p);}return svg;}
+ function install(doc){if(!doc||doc.documentElement.dataset.actionIconsInstalled==='v1')return()=>{};doc.documentElement.dataset.actionIconsInstalled='v1';let dead=false,pending=false;
+  function scan(){pending=false;if(dead)return;for(const b of doc.querySelectorAll('button')){const label=b.getAttribute('aria-label')||b.getAttribute('title')||b.textContent.trim();const kind=/^Обновить(?:\s|$)/u.test(label)?'refresh':/^(?:Назад|Закрыть контент и вернуться|← Мои чаты)$/u.test(label)||b.id==='pc-back'||b.classList.contains('app-back')?'back':b.dataset.actionIcon;if(!paths[kind])continue;if(b.querySelector(':scope > svg[data-action-symbol="'+kind+'"]'))continue;const text=label|| (kind==='back'?'Назад':'Обновить');b.setAttribute('aria-label',text);if(!b.title)b.title=text;b.dataset.actionIcon=kind;b.classList.add('app-action-icon');const old=doc.createElement('span');old.className='app-action-icon__original';old.setAttribute('aria-hidden','true');while(b.firstChild)old.append(b.firstChild);b.append(icon(doc,kind),old);}}
+  const observer=new root.MutationObserver(()=>{if(!pending&&!dead){pending=true;root.queueMicrotask(scan);}});scan();observer.observe(doc.documentElement,{childList:true,subtree:true});return()=>{dead=true;observer.disconnect();};
+ }
+ const api=Object.freeze({version:'v1',icon,install});if(typeof module==='object'&&module.exports)module.exports=api;else{Object.defineProperty(root,'PalitraActionIcons',{value:api});if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',()=>install(root.document),{once:true});else install(root.document);}
+})(typeof window==='undefined'?globalThis:window);

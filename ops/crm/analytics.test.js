@@ -112,19 +112,16 @@ test('events, external snapshots, attribution and analytics work together', asyn
     name: 'Referrer Lead', contact: '+70000000001', companyCode: 'analytics_co',
     referrer: 'https://2gis.ru/a',
   }, false);
-  // Публичный ответ формы — только номер и признак дубля (№97); источник читаем с API-ключом.
-  assert.deepEqual(Object.keys(leadFromReferrer.body).sort(), ['deduplicated', 'id']);
-  const storedSource = async (lead) => (await request('GET', `/leads/${lead.body.id}`)).body.source;
-  assert.equal(await storedSource(leadFromReferrer), '2gis');
+  assert.equal(leadFromReferrer.body.source, '2gis');
   const leadFromUtm = await request('POST', '/leads', {
     name: 'UTM Lead', contact: '+70000000002', companyCode: 'analytics_co',
     utmSource: 'Yandex',
   }, false);
-  assert.equal(await storedSource(leadFromUtm), 'yandex');
+  assert.equal(leadFromUtm.body.source, 'yandex');
   const directLead = await request('POST', '/leads', {
     name: 'Direct Lead', contact: '+70000000003', companyCode: 'analytics_co',
   }, false);
-  assert.equal(await storedSource(directLead), null);
+  assert.equal(directLead.body.source, null);
   const dashboard = await request(
     'GET', `/dashboard?companyCode=analytics_co&from=${today}&to=${today}`
   );

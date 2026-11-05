@@ -1,0 +1,230 @@
+/* Palitra — чат по заявке (/chat). Телефон — основной экран: список заявок, затем переписка с полем внизу;
+   с 900px список и переписка рядом. Кнопки от 44px, видимый фокус, безопасные отступы. Только эта страница. */
+:root {
+  --pc-bg: #fffdf8;
+  --pc-surface: #ffffff;
+  --pc-ink: #302f2a;
+  --pc-muted: #5f5a4f;
+  --pc-olive: #69723e;
+  --pc-olive-dark: #5a6235;
+  --pc-soft: #f1ede3;
+  --pc-line: #e1dccd;
+  --pc-error: #a3361f;
+  --pc-ok: #3f6b2a;
+  --pc-radius: 28px;
+  --pc-radius-small: 16px;
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--pc-bg);
+  color: var(--pc-ink);
+  font: 16px/1.5 'Nunito Sans', Arial, system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+[hidden] { display: none !important; }
+h1, h2 { margin: 0; line-height: 1.2; }
+p { margin: 0; }
+a { color: var(--pc-olive-dark); }
+:focus-visible { outline: 3px solid var(--pc-olive); outline-offset: 2px; }
+
+.pc {
+  position: fixed; inset-inline: 0; top: var(--pc-viewport-top, 0px);
+  height: var(--pc-viewport-height, 100vh); height: var(--pc-viewport-height, 100dvh);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.pc-top {
+  flex-shrink: 0;
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  background: var(--pc-surface); border-bottom: 1px solid var(--pc-line);
+}
+.pc-brand { font-weight: 700; font-size: 1.2rem; text-decoration: none; color: var(--pc-olive-dark); min-height: 44px; display: inline-flex; align-items: center; }
+.pc-sub { color: var(--pc-muted); font-size: .9rem; }
+
+.pc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 10px 20px; border-radius: var(--pc-radius);
+  border: 2px solid var(--pc-olive); background: var(--pc-olive); color: #fff;
+  font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; touch-action: manipulation;
+}
+.pc-btn:hover { background: var(--pc-olive-dark); border-color: var(--pc-olive-dark); }
+.pc-btn--quiet { background: var(--pc-surface); color: var(--pc-ink); }
+.pc-btn--quiet:hover { background: var(--pc-soft); }
+.pc-btn--main { min-width: 140px; }
+.pc-btn:disabled { opacity: .55; cursor: progress; }
+.pc-link { border: 0; background: none; padding: 0; min-height: 44px; font: inherit; color: var(--pc-olive-dark); text-decoration: underline; cursor: pointer; }
+.pc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pc-row--between { justify-content: space-between; }
+.pc-more { width: 100%; }
+
+.pc-status { flex-shrink: 0; max-height: 25%; overflow: auto; margin: 10px 16px 0; padding: 10px 14px; border-radius: var(--pc-radius-small); background: var(--pc-soft); }
+.pc-status[data-state="error"], .pc-state[data-state="error"], .pc-note[data-state="error"], #pc-view-status[data-state="error"] { color: var(--pc-error); }
+.pc-state[data-state="ok"] { color: var(--pc-ok); }
+.pc-restart { margin: 10px 16px 0; }
+.pc-muted { color: var(--pc-muted); font-size: .92rem; }
+.pc-note:empty, .pc-state:empty, .pc-muted:empty { display: none; }
+
+.pc-main { flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 12px 16px 0; min-height: 0; overflow: hidden; }
+.pc-main.is-open .pc-list { display: none; }
+.pc-list, .pc-view { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pc-list { overflow: auto; }
+.pc-view { flex: 1; min-height: 0; gap: 0; overflow: hidden; }
+.pc-history { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; padding: 0 2px 12px; }
+.pc-history > * { flex-shrink: 0; }
+.pc-list__title { font-size: 1.15rem; }
+.pc-threads { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pc-thread {
+  width: 100%; min-height: 56px; padding: 12px 16px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--pc-surface); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-small);
+  display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;
+}
+.pc-thread:hover { border-color: var(--pc-olive); }
+
+.pc-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.pc-title { font-size: clamp(1.25rem, 5vw, 1.6rem); overflow-wrap: anywhere; }
+.pc-title:focus { outline: none; }
+.pc-title:focus-visible { outline: 3px solid var(--pc-olive); outline-offset: 2px; }
+
+.pc-messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pc-msg {
+  max-width: 88%; padding: 10px 14px; border-radius: var(--pc-radius-small); overflow-wrap: anywhere;
+  display: flex; flex-direction: column; gap: 4px; background: var(--pc-surface); border: 1px solid var(--pc-line);
+}
+.pc-msg--own { align-self: flex-end; background: #eef0e2; border-color: transparent; }
+.pc-msg--shop { align-self: flex-start; }
+.pc-msg__meta, .pc-msg__status { color: var(--pc-muted); font-size: .8rem; }
+.pc-msg__text { white-space: pre-wrap; }
+/* Shared presentation only; composer/pending/file state stays in the existing legacy runtime. */
+.pc-msg { position: relative; padding-inline-start: 48px; min-height: 46px; }
+.pc-msg__avatar { position: absolute; inset-inline-start: 10px; top: 10px; width: 26px; height: 26px; border-radius: 50%; overflow: hidden; color: #687047; background: #e9eddf; }
+.pc-msg__avatar svg { display: block; width: 100%; height: 100%; fill: currentColor; padding: 4px; }
+.pc-msg__avatar-image { position: absolute; max-width: none; width: 218.1818%; height: 387.8788%; left: 0; top: -109.0909%; object-fit: fill; }
+.pc-msg__time { white-space: nowrap; }
+/* PALITRA-WEBCHAT-PHASED1: вложения — в ширине сообщения, без автозапуска; ссылка скачивания — крупная цель касания. */
+.pc-file { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+.pc-file__kind, .pc-file__state { color: var(--pc-muted); font-size: .85rem; }
+.pc-file__image, .pc-file__video { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: var(--pc-radius-small); background: var(--pc-soft); }
+.pc-file__video--round { width: min(240px, 100%); aspect-ratio: 1 / 1; object-fit: cover; border-radius: 50%; }
+.pc-file__audio { width: min(320px, 100%); max-width: 100%; }
+.pc-file__download { display: inline-flex; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+
+/* PALITRA-COMPOSER-BOTTOM: история прокручивается отдельно, последняя строка всегда ввод+скрепка+отправка.
+   Ошибки, UNKNOWN и выбранный файл остаются над строкой; ничего не размещается после неё. */
+.pc-composer {
+  flex: 0 0 auto; min-height: 0; max-height: 65%; z-index: 2;
+  background: var(--pc-bg); padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--pc-line);
+}
+.pc-compose-feedback { min-height: 0; overflow-y: auto; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 6px; }
+.pc-compose-feedback:empty { display: none; }
+.pc-compose-row { display: flex; flex: 0 0 auto; gap: 8px; align-items: flex-end; min-width: 0; }
+.pc-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.pc-composer textarea {
+  flex: 1 1 0; min-width: 0; font: inherit; color: inherit; width: 100%; min-height: 44px; height: 44px; max-height: 112px; resize: none;
+  padding: 9px 12px; border: 1px solid var(--pc-line); border-radius: 24px; background: #fff; overflow-y: hidden;
+}
+.pc-composer textarea[readonly] { background: var(--pc-soft); }
+.pc-compose-row .pc-btn--main { flex: 0 0 auto; min-width: 0; padding: 10px 14px; }
+.pc-actions { color: var(--pc-muted); font-size: .9rem; }
+.pc-actions summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.pc-actions[open] > :not(summary) { margin-top: 6px; }
+.pc-selected { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Настоящий file input остаётся доступным клавиатуре; его label — маленькая скрепка слева от поля. */
+.pc-attach { flex: 0 0 44px; width: 44px; height: 44px; display: flex; align-items: center; position: relative; min-width: 0; }
+.pc-attach__input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+.pc-attach__input:focus-visible + .pc-attach__pick { outline: 3px solid var(--pc-olive); outline-offset: 2px; }
+.pc-attach__input:disabled + .pc-attach__pick { opacity: .55; cursor: progress; }
+.pc-attach__pick { width: 44px; height: 44px; min-height: 44px; padding: 10px; border: 0; cursor: pointer; }
+.pc-compose-row .pc-attach__pick { padding: 10px; }
+.pc-attach__pick svg { width: 24px; height: 24px; flex-shrink: 0; }
+.pc-attach__name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 359px) {
+  .pc-main { padding: 8px 10px 0; }
+  .pc-btn { padding: 10px 14px; }
+  .pc-compose-row { gap: 6px; }
+  .pc-compose-row .pc-btn--main { padding: 10px; }
+}
+@media (min-width: 900px) {
+  .pc-main { flex-direction: row; align-items: stretch; max-width: 1180px; width: 100%; margin: 0 auto; }
+  .pc-list { flex: 0 0 288px; }
+  .pc-main.is-open .pc-list { display: flex; }
+  .pc-view { flex: 1 1 0; }
+  #pc-back { display: none; }
+  .pc-msg { max-width: 72%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+/* The optional contact request lives in the scrolling history, never below the composer. */
+.pc-contact { display:grid; gap:8px; min-width:0; padding:12px; border:1px solid var(--pc-line); border-radius:16px; background:var(--pc-soft); }
+.pc-contact__form { display:flex; flex-wrap:wrap; gap:8px; min-width:0; }
+.pc-contact__form input { flex:1 1 150px; min-width:0; width:100%; min-height:44px; border:1px solid var(--pc-line); border-radius:22px; padding:9px 12px; font:inherit; font-size:16px; background:#fff; }
+.pc-contact__form .pc-btn { flex:0 1 auto; min-width:0; font-size:14px; padding:9px 12px; }
+.pc-contact .pc-note { overflow-wrap:anywhere; }
+.pc-messages:empty::after { content:'Напишите нам — менеджер ответит здесь.'; display:block; padding:24px 8px; color:var(--pc-muted); text-align:center; }
+.pc-widget .pc-top { display:none; }
+.pc-widget .pc-main { padding-top:6px; }
+.pc-widget .pc-main.is-open .pc-list { display:none; }
+.pc-widget .pc-view { width:100%; }
+.pc-widget #pc-back, .pc-widget #pc-refresh, .pc-widget .pc-head { display:none; }
+.pc-widget #pc-refresh:not([hidden]) { display:inline-flex; align-self:flex-start; min-height:44px; padding:8px 12px; font-size:14px; }
+.pc-widget .pc:has(> #pc-main:not([hidden])) > #pc-status:not([data-state="error"]) { display:none; }
+.pc-widget .pc-main { gap:8px; padding-inline:12px; }
+.pc-widget .pc-history { gap:8px; padding-bottom:10px; }
+.pc-widget .pc-actions { align-self:stretch; font-size:14px; }
+.pc-widget .pc-actions > summary { width:44px; min-height:44px; margin-left:auto; justify-content:center; border-radius:50%; color:var(--pc-olive-dark); font:26px/1 system-ui,sans-serif; list-style:none; }
+.pc-widget .pc-actions > summary::-webkit-details-marker { display:none; }
+.pc-widget .pc-actions > summary:hover { background:var(--pc-soft); }
+.pc-widget .pc-actions[open] { padding:0 10px 10px; border:1px solid var(--pc-line); border-radius:18px; background:var(--pc-surface); }
+.pc-widget .pc-actions .pc-btn { min-height:44px; padding:8px 12px; font-size:14px; }
+.pc-widget .pc-contact { padding:8px 10px; gap:6px; border-radius:18px; background:transparent; }
+.pc-widget .pc-contact > p:first-child { font-size:13px; color:var(--pc-muted); }
+.pc-widget .pc-contact__form { flex-wrap:nowrap; gap:6px; }
+.pc-widget .pc-contact__form input { flex:1 1 0; }
+.pc-widget .pc-contact__form .pc-btn { flex:0 0 auto; padding:8px 12px; }
+.pc-widget .pc-messages:empty::after { content:none; }
+.pc-welcome { align-self:flex-start; max-width:96%; padding:16px; border:1px solid var(--pc-line); border-radius:22px 22px 22px 6px; background:var(--pc-surface); font-size:15px; line-height:1.5; overflow-wrap:anywhere; }
+.pc-welcome__brand { display:block; margin-bottom:6px; color:var(--pc-olive-dark); font-size:13px; }
+
+/* Compact offers are a bounded sibling above history; composer stays last and never covered. */
+.pc-offers { flex: 0 1 auto; min-height: 0; max-height: 40vh; max-height: 40dvh; overflow: auto; overscroll-behavior: contain; }
+.pc-offers:empty, .pc-offers:not(:has(.client-chat-offers:not([hidden]))) { display: none; }
+.pc .client-chat-offers { margin: 0 0 8px; padding: 8px; border: 1px solid var(--pc-line); border-radius: 16px; background: var(--pc-surface); font-size: .9rem; overflow-wrap: anywhere; }
+.pc .client-chat-offers__item { position: relative; padding: 4px 32px 6px 4px; }
+.pc .client-chat-offers__item + .client-chat-offers__item { border-top: 1px solid var(--pc-line); padding-top: 10px; margin-top: 6px; }
+.pc .client-chat-offers h3 { margin: 0 0 4px; font-size: 1rem; line-height: 1.3; }
+.pc .client-chat-offers .muted { color: var(--pc-muted); margin: 4px 0; }
+.pc .client-chat-offers .app-btn { min-height: 40px; max-width: 100%; margin: 5px 5px 0 0; padding: 7px 12px; border: 1px solid var(--pc-olive); border-radius: 20px; font: inherit; background: var(--pc-surface); color: var(--pc-olive-dark); cursor: pointer; }
+.pc .client-chat-offers .app-btn:disabled { opacity: .6; cursor: progress; }
+.pc .client-chat-offers__close { position: absolute; top: 0; right: 0; width: 32px; min-height: 40px; padding: 0; border: 0; background: none; color: var(--pc-ink); font: inherit; font-size: 1.3rem; cursor: pointer; }
+.pc .client-chat-offers .app-guide { margin-top: 8px; }
+.pc .client-chat-offers .app-guide img { display: block; max-width: 100%; height: auto; }
+.pc .client-chat-offers .app-guide__picture { max-width: 240px; }
+.pc .client-chat-offers .app-guide__steps { padding-left: 20px; }
+@media (max-height: 420px) { .pc-offers { max-height: 20vh; max-height: 20dvh; } }
+
+/* Orders navigation and reviewed explanations: no modal backdrop, no composer overlap. */
+.settings-tree { display:flex;flex-direction:column;gap:16px;min-width:0; }
+.settings-tree__section { border:1px solid var(--line,#deddd4);border-radius:18px;padding:16px;min-width:0; }
+.settings-tree__section>summary { cursor:pointer;min-height:32px;font-weight:650; }
+.settings-tree__section[open]>summary { margin-bottom:16px; }
+.manager-client__heading { flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-start; }
+.manager-client__heading>.muted { margin-left:auto; }
+.manager-client__source { border:1px solid var(--line,#deddd4);border-radius:999px;padding:2px 8px;font-size:.75rem;font-weight:500;white-space:nowrap; }
+.manager-workspace__heading h1 { display:flex;align-items:center;gap:10px; }
+.notification-count[hidden] { display:none!important; }
+.app-help { display:inline-flex;align-items:center;max-width:100%;vertical-align:middle; }
+.app-help__trigger { flex:none;width:32px;height:32px;min-height:32px;padding:0;border:1px solid #8d926c;border-radius:50%;background:var(--paper,#fffdf8);color:#505a2e;font:700 18px/1 system-ui;cursor:pointer; }
+.app-help__trigger:focus-visible,.app-help__close:focus-visible { outline:3px solid #68713b;outline-offset:3px; }
+.app-help__popover { position:fixed;z-index:1100;box-sizing:border-box;max-width:calc(100vw - 16px);padding:14px 60px 14px 14px;border:1px solid #c8cbb8;border-radius:14px;background:#fffdf8;color:#303426;box-shadow:0 5px 20px #0002;overflow:auto;overflow-wrap:anywhere; }
+.app-help__popover p { margin:0;font-size:14px;line-height:1.45; }
+.app-help__description { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+.app-help__field { display:flex;align-items:flex-start;gap:8px;min-width:0;margin-bottom:1rem; }
+.app-help__field>label { flex:1;min-width:0;margin-bottom:0; }
+.app-help__field>.app-help { margin-top:0;flex:none; }
+.ed-toolbar>.app-help__field { margin-bottom:0; }
+.app-help__popover>.app-help__close { position:absolute;top:4px;right:4px;display:grid;place-items:center;box-sizing:border-box;flex:none;width:44px;min-width:44px;max-width:44px;height:44px;min-height:44px;max-height:44px;padding:0;border:0;background:transparent;color:inherit;font:24px/1 system-ui;cursor:pointer; }
+.editor-help { display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
+.editor-help .text__title { margin:0; }

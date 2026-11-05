@@ -21,6 +21,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const contactFollowup = require('./native-contact-followup.cjs');
+const { createPalitraNotificationText, projectStaffNotificationParts } = require('./site-orders.js');
+// PALITRA-WEBCHAT-PHASED1: единственный строгий разбор ссылки `thread:<id>` (модуль ФС при загрузке не трогает).
+const { parseTypedRef: mediaRef } = require('./customer-chat-media.cjs');
+// PALITRA-WEBCHAT-PHASEE: файл владельца в прежний диалог — общий журнал загрузок (создаёт адаптер чата) и его планировщик.
+const uploadKit = require('./customer-chat-upload.cjs');
 
 const JOB_PREFIX = 'cb:';
 const MAX_TEXT = 8000;
@@ -45,6 +51,9 @@ const WORK_LABELS = Object.freeze({ new: 'Новая', in_work: 'В работе
 // Показываем в браузере только безопасные для просмотра типы; остальное скачивается как файл.
 const INLINE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'video/mp4', 'video/webm']);
 const DELIVERY = new Set(['received', 'pending', 'sending', 'sent', 'uncertain', 'failed']);
+// PALITRA-APP-WORKPLACE: ключ идемпотентности ответа владельца из веб-приложения (UUID v4 от страницы).
+const OWNER_REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const CONTROL_CHARS = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 
 const QUOTA_ERROR = 'Лимит хранилища файлов бота исчерпан: файл не сохранён, он остаётся в переписке Telegram';
 const fail = (status, message, code) => { throw Object.assign(new Error(message), { status, code }); };
@@ -55,7 +64,10 @@ const idOf = (value) => { const text = String(value ?? ''); return TELEGRAM_ID.t
 const positive = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
 
 function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.now, randomBytes = crypto.randomBytes,
-  maxFile = DEFAULT_MAX_FILE, maxStorage = DEFAULT_MAX_STORAGE, linkTtlMs = LINK_TTL, codeTtlMs = CODE_TTL } = {}) {
+  maxFile = DEFAULT_MAX_FILE, maxStorage = DEFAULT_MAX_STORAGE, linkTtlMs = LINK_TTL, codeTtlMs = CODE_TTL, ownerStillValid = null, ownerCanRead = null,
+  // PALITRA-WEBCHAT-PHASEB: server передаёт ОБЩУЮ транзакцию хоста (projectChat.transaction) и серверный адаптер чата сайта.
+  // Без них — прежнее поведение (собственная транзакция модуля, без чата сайта).
+  transact = null, chatIntegration = null, miniappIntegration = null, contactFollowupGuard = null, onAcceptedCustomerMessage = null } = {}) {
   const storage = path.resolve(assetsDir, 'client-dialogs');
   fs.mkdirSync(storage, { recursive: true });
   db.exec(`
@@ -142,15 +154,27 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
   if (!db.prepare("SELECT 1 FROM pragma_table_info('client_dialog_attachments') WHERE name='superseded_at'").get()) {
     db.exec('ALTER TABLE client_dialog_attachments ADD COLUMN superseded_at TEXT');
   }
+  /* PALITRA-APP-WORKPLACE: квитанции ответов владельца из веб-приложения. Один requestId владельца — один ответ:
+     сообщение, задание очереди и запись аудита создаются вместе с квитанцией в одной транзакции. Версия сессии автора
+     хранится, чтобы мост не отправил ответ, если доступ автора изменился до отправки. Текст здесь не хранится. */
+  db.exec(`CREATE TABLE IF NOT EXISTS client_dialog_owner_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, bot_key TEXT NOT NULL, owner_user_id INTEGER NOT NULL, owner_session_version INTEGER NOT NULL,
+      request_id TEXT NOT NULL, dialog_id INTEGER NOT NULL, fingerprint TEXT NOT NULL,
+      message_id INTEGER NOT NULL REFERENCES client_dialog_messages(id), job_id INTEGER NOT NULL REFERENCES client_bot_outbox(id),
+      created_at TEXT NOT NULL, UNIQUE(bot_key, owner_user_id, request_id), UNIQUE(job_id));`);
   const stamp = (at = now()) => new Date(at).toISOString();
   let inTx = false;
-  const tx = (fn) => {
+  const legacyTx = (fn) => {
     if (inTx) return fn();
     db.exec('BEGIN IMMEDIATE'); inTx = true;
     try { const value = fn(); db.exec('COMMIT'); return value; }
     catch (error) { db.exec('ROLLBACK'); throw error; }
     finally { inTx = false; }
   };
+  // PALITRA-WEBCHAT-PHASEB: одна транзакция на заявку, диалоги, чат сайта и очередь (вложенный вызов — внутри той же).
+  const tx = typeof transact === 'function' ? transact : legacyTx;
+  // Серверные хуки чата сайта (customer-chat-native-adapter); устанавливаются один раз в конце фабрики, наружу не выдаются.
+  let chatHooks = null, miniapp = null;
 
   /* ---------- конфигурация ---------- */
   // Бот считается включённым в content, только если задано его имя (не секрет). Токен живёт только в chat.
@@ -178,11 +202,13 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
   /* Остановить ещё не начатые задания, связанные с прежним менеджером: копии ему, заметки ему и его ответы клиентам.
      Уже начатые (sending) не трогаются: их исход придёт подтверждением или станет «неизвестен» по сроку аренды. */
   function stopOperatorJobs(key, operatorId, reason) {
-    const rows = db.prepare("SELECT id,message_id FROM client_bot_outbox WHERE bot_key=? AND status='pending' AND operator_id=?").all(key, String(operatorId));
+    const rows = db.prepare("SELECT * FROM client_bot_outbox WHERE bot_key=? AND status='pending' AND operator_id=?").all(key, String(operatorId));
     const at = stamp();
     for (const row of rows) {
       db.prepare("UPDATE client_bot_outbox SET status='failed',error=?,claimed_at=NULL,finished_at=? WHERE id=?").run(reason, at, row.id);
       if (row.message_id) db.prepare("UPDATE client_dialog_messages SET delivery_status='failed',delivery_error=? WHERE id=?").run(reason, row.message_id);
+      // PALITRA-WEBCHAT-PHASEB: копия чата сайта — тот же исход в журнале доставок чата (в той же транзакции).
+      if (chatHooks) chatHooks.onSettled(row, 'failed', reason, JSON.parse(row.external_ids || '[]'));
     }
     if (rows.length) audit(key, 'operator_jobs_stopped', 'system', `${reason}: ${rows.length}`);
     return rows.length;
@@ -206,7 +232,14 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     const ready = Boolean(row.ok) && fresh && row.username.toLowerCase() === String(bot.username).toLowerCase();
     return { ready, checkedAt: row.checked_at, error: ready ? '' : (!fresh ? 'Нет свежего подтверждения от сервиса chat' : row.error || 'Мост не подтвердил бота') };
   };
-  const storageUsed = () => Number(db.prepare("SELECT COALESCE(sum(size),0) AS n FROM client_dialog_attachments WHERE status='stored'").get().n);
+  const legacyStorageUsed = () => Number(db.prepare("SELECT COALESCE(sum(size),0) AS n FROM client_dialog_attachments WHERE status='stored'").get().n);
+  /* PALITRA-WEBCHAT-PHASED1: общий предел maxStorage один на прежние диалоги и вложения чата сайта (сохранённые и
+     ожидаемые). Без чата сайта добавка 0 — прежний подсчёт без изменений. */
+  const chatMediaBytes = () => {
+    if (!chatHooks || typeof chatHooks.mediaBytes !== 'function') return 0;
+    try { const n = Number(chatHooks.mediaBytes()); return Number.isFinite(n) && n > 0 ? n : 0; } catch (_) { return 0; }
+  };
+  const storageUsed = () => legacyStorageUsed() + chatMediaBytes();
 
   const greeting = (bot, extra = '') => [
     `Здравствуйте! Это ${bot.title}.`,
@@ -233,15 +266,35 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     method: 'sendMessage',
     params: { chat_id: chatId, text: part, ...(replyTo && index === 0 ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}) },
     ...(map ? { map } : {}) }));
-  function notice(key, bot, chatId, text, { replyTo = null, dialogId = null, messageId = null, map = null } = {}) {
+  function notice(key, bot, chatId, text, { replyTo = null, dialogId = null, messageId = null, map = null, replyMarkup = null } = {}) {
     // Заметка действующему менеджеру помечается им: при смене менеджера она не уйдёт прежнему.
     const operatorId = activeOperator(key)?.telegram_user_id === String(chatId) ? String(chatId) : null;
-    return enqueue(key, bot, 'notice', { parts: textParts(chatId, text, { replyTo, map }), dialogId, messageId, operatorId });
+    const parts=textParts(chatId,text,{replyTo,map});if(replyMarkup&&parts[0])parts[0].params.reply_markup=replyMarkup;
+    return enqueue(key, bot, 'notice', { parts, dialogId, messageId, operatorId });
+  }
+  // Server-only: a real native pending event, not a client/system chat message.
+  function enqueueOrderContactFollowup(event) {
+    if (db.isTransaction !== true) fail(409, 'Нужна транзакция уведомления', 'FOLLOWUP_TRANSACTION');
+    const check = contactFollowup.eventVerdict(db, event, now());
+    if (!check.allowed) return null;
+    const found = botForSite('palitra'), operator = activeOperator('palitra');
+    if (!found || found.key !== 'palitra' || found.bot.companyCode !== 'palitra-love' || !found.enabled || !operator
+      || !transportReady('palitra', operator.telegram_user_id).ok) return null;
+    const channel = check.order.contact_channel, label = contactFollowup.CHANNEL_LABELS[channel] || 'Контакт клиента';
+    const action = contactFollowup.contactAction(channel, check.order.contact);
+    const buttons = [[{ text: 'Открыть заявку №' + event.orderId, url: contactFollowup.orderUrl(event.orderId) }]];
+    if (contactFollowup.CHANNEL_LABELS[channel]) buttons.push([{ text: 'Связаться · ' + label, url: action ? action.url : contactFollowup.orderUrl(event.orderId) }]);
+    const text = 'Заявка №' + event.orderId + '\n' + contactFollowup.ALERT + '\nУдобный способ: ' + label
+      + '. Контакт и этапы доступны в карточке заявки.';
+    return enqueue(found.key, found.bot, 'notice', { operatorId: operator.telegram_user_id,
+      parts: [{ method: 'sendMessage', params: { chat_id: operator.telegram_user_id, text,
+        reply_markup: { inline_keyboard: buttons } } }] });
   }
   /* Служебный текст клиенту сохраняется в диалоге: в кабинете видно всё, что клиент получил от бота. */
   function clientNotice(key, bot, dialog, text) {
     const id = insertMessage({ dialog, direction: 'out', authorType: 'system', text, chatId: null, messageId: null, status: 'pending' });
-    notice(key, bot, dialog.chat_id, text, { dialogId: dialog.id, messageId: id });
+    notice(key, bot, dialog.chat_id, text, { dialogId: dialog.id, messageId: id,
+      replyMarkup:miniapp?.startMarkup({key,chatId:String(dialog.chat_id),dialogId:dialog.id})||null });
     return id;
   }
 
@@ -346,15 +399,32 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     const known = db.prepare('SELECT result FROM client_bot_receipts WHERE bot_key=? AND chat_id=? AND message_id=? AND edit_date=?').get(key, chatId, messageId, editDate);
     if (known) {
       const result = JSON.parse(known.result);
-      return { ...result, duplicate: true, downloads: pendingDownloads(result.messageIds || []) };
+      /* Repair R2: повтор правки media-сообщения чата сайта с тем же ключом bot/chat/message/edit_date сверяется с
+         canonical событием ядра (отпечаток содержимого): то же содержимое — прежняя квитанция, другое — явный конфликт
+         (без второго события, файла и задания). Обычные повторы и прежние диалоги — как раньше. */
+      if (edited && chatHooks && /^site_chat_edit(?:_duplicate|_conflict)?$/.test(String(result.action || ''))) {
+        const check = tx(() => chatHooks.editedMessage({ key, bot, chatId, messageId, message, editDate: positive(message.edit_date), text: messageText(message), replay: true }));
+        if (check && check.action === 'site_chat_edit_conflict') return { ...check, duplicate: true, downloads: [] };
+      }
+      // PALITRA-WEBCHAT-PHASED1: повтор того же события заново выдаёт ещё не сохранённые вложения (и прежние, и чата сайта):
+      // пустой список прошлого ответа — не окончательная квитанция скачивания.
+      return { ...result, duplicate: true, downloads: [...pendingDownloads(result.messageIds || []), ...threadDownloads(key, result)] };
     }
     const result = tx(() => {
-      const value = edited ? receiveEdit(key, bot, message, chatId, messageId, editDate) : receiveMessage(key, bot, message, chatId, messageId);
+      // PALITRA-WEBCHAT-PHASEB: правка сообщения, сохранённого в чате сайта, — явный отказ без второй (legacy) истории.
+      // PHASED1: правка сообщения с вложением — новая версия в чате сайта (событие ядра); прочие правки — как раньше.
+      const typedEdit = edited && chatHooks ? chatHooks.editedMessage({ key, bot, chatId, messageId, message, editDate: positive(message.edit_date), text: messageText(message) }) : null;
+      const value = typedEdit || (edited ? receiveEdit(key, bot, message, chatId, messageId, editDate) : receiveMessage(key, bot, message, chatId, messageId));
       db.prepare('INSERT INTO client_bot_receipts(bot_key,chat_id,message_id,edit_date,result,created_at) VALUES(?,?,?,?,?,?)')
         .run(key, chatId, messageId, editDate, JSON.stringify(value), stamp());
       return value;
     });
-    return { ...result, duplicate: false, downloads: pendingDownloads(result.messageIds || []) };
+    return { ...result, duplicate: false, downloads: [...pendingDownloads(result.messageIds || []), ...threadDownloads(key, result)] };
+  }
+  /* PHASED1: ожидающие вложения чата сайта этого результата: { attachmentId:'thread:N', fileId, size } — только мосту. */
+  function threadDownloads(key, result) {
+    if (!chatHooks || typeof chatHooks.pendingThreadDownloads !== 'function') return [];
+    return chatHooks.pendingThreadDownloads(key, result);
   }
 
   const command = (text) => {
@@ -364,19 +434,36 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
 
   function receiveMessage(key, bot, message, chatId, messageId) {
     const text = messageText(message);
-    const cmd = command(text);
+    // Repair R3: команда — только из настоящего message.text; подпись (caption) файла командой не бывает.
+    const cmd = typeof message.text === 'string' ? command(message.text) : null;
     const operator = activeOperator(key);
     const isOperator = Boolean(operator && operator.telegram_user_id === chatId);
     if (cmd && ((cmd.name === 'start' && /^op_/.test(cmd.arg)) || cmd.name === 'operator')) {
       return bindOperator(key, bot, chatId, cmd.name === 'operator' ? cmd.arg : cmd.arg.slice(3));
     }
-    if (isOperator) return operatorMessage(key, bot, operator, message, chatId, messageId, text, cmd);
+    if (isOperator) {
+      // PALITRA-WEBCHAT-PHASEB: «Ответить» на копию сообщения чата сайта — в общую историю чата, до прежнего пути.
+      if (chatHooks && !cmd) {
+        const routed = chatHooks.managerReply({ key, bot, message, chatId, messageId, text });
+        if (routed) return routed;
+      }
+      return operatorMessage(key, bot, operator, message, chatId, messageId, text, cmd);
+    }
     // Прежний менеджер после смены получателя: ни его сообщений клиентам, ни копий ему — только объяснение.
     const stale = operatorOf(key);
     if (stale && stale.telegram_user_id === chatId) {
       audit(key, 'operator_inactive', `telegram:${chatId}`, 'получатель заявок изменён');
       notice(key, bot, chatId, 'Вы больше не подключены как менеджер: получатель заявок изменён. Сообщение клиенту не отправлено.', { replyTo: messageId });
       return { ok: true, action: 'operator_inactive', messageIds: [] };
+    }
+    if (chatHooks) {
+      // PALITRA-WEBCHAT-PHASEB: START c_… из чата сайта — до upsertDialog; распознанный c_ в прежний путь не уходит.
+      if (cmd && cmd.name === 'start' && /^c_/.test(cmd.arg)) return chatHooks.claimStart({ key, bot, chatId, messageId, payload: cmd.arg });
+      // Сообщение клиента с подтверждённым каналом чата сайта — в общую историю; без канала — прежний путь.
+      if (!cmd) {
+        const routed = chatHooks.customerMessage({ key, bot, message, chatId, messageId, text });
+        if (routed) return routed;
+      }
     }
     return clientMessage(key, bot, operator, message, chatId, messageId, text, cmd);
   }
@@ -447,6 +534,11 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     }
     const row = insertMessage({ dialog, direction: 'in', authorType: 'client', text, chatId, messageId, telegramDate: positive(message.date) || null });
     storeAttachment(dialog, row, message);
+    // Server-only optional hook shares the canonical incoming message + receive receipt transaction.
+    // Failure rolls back both facts; delivery retries use the existing receive receipt.
+    if (bot.site === 'palitra' && bot.companyCode === 'palitra-love' && typeof onAcceptedCustomerMessage === 'function') {
+      onAcceptedCustomerMessage({ dialogId: dialog.id, messageId: row });
+    }
     db.prepare('UPDATE client_dialogs SET unread=unread+1 WHERE id=?').run(dialog.id);
     // Без менеджера сообщение сохраняется и видно владельцу; в Telegram его никто не получает.
     if (operator) forward(key, bot, operator, db.prepare('SELECT * FROM client_dialogs WHERE id=?').get(dialog.id), row, messageId);
@@ -619,14 +711,27 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
   }
 
   /* ---------- выдача заданий мосту ---------- */
-  const view = (row) => ({ id: `${JOB_PREFIX}${row.id}`, kind: row.kind,
-    parts: JSON.parse(row.parts).map(({ method, params }) => ({ method, params })), after: JSON.parse(row.after) });
+  // PHASEE: у файловой части мосту передаются только сведения о байтах (upload:<UUID>, размер, хеш, имя, тип) — без URL и путей.
+  function view(row) {
+    let parts = typeof chatHooks?.notificationParts === 'function' ? chatHooks.notificationParts(row, JSON.parse(row.parts)) : JSON.parse(row.parts);
+    const bot = config(row.bot_key);
+    if (row.kind === 'forward' && row.company_code === 'palitra-love' && bot?.site === 'palitra' && bot.companyCode === 'palitra-love'
+      && row.operator_id && row.operator_id === activeOperator(row.bot_key)?.telegram_user_id && !(chatHooks && chatHooks.isTyped(row)) && !miniapp?.isMessageJob(row)) {
+      const compact = createPalitraNotificationText({ db }).legacyMessage(row.message_id, row.dialog_id, row.bot_key);
+      parts = projectStaffNotificationParts(parts, compact, JSON.parse(row.external_ids || '[]'));
+    }
+    parts=miniapp?.notificationParts(row,parts)||parts;
+    return { id: `${JOB_PREFIX}${row.id}`, kind: row.kind,
+    parts: parts.map(({ method, params, upload }) => ({ method, params,
+      ...(upload ? { upload: { ref: upload.ref, size: upload.size, sha256: upload.sha256, name: upload.name, type: upload.type } } : {}) })),
+    after: JSON.parse(row.after) };
+  }
   function orderJobView(job, bot) {
     const summary = job.orderKind === 'order' ? siteOrders.orderSummary(bot.site, job.orderId) : null;
-    const text = summary ? `${job.text}${summary.checklist ? '\n\nФото и памятка — ручные отметки менеджера.' : ''}\n\nСтатус обработки: ${WORK_LABELS[summary.work.status]}` : job.text;
+    const text = summary && !job.compactNotification ? `${job.text}${summary.checklist ? '\n\nФото и памятка — ручные отметки менеджера.' : ''}\n\nСтатус обработки: ${WORK_LABELS[summary.work.status]}` : job.text;
     const parts = textParts(job.chatId, text);
     if (summary) parts[parts.length - 1].params.reply_markup = keyboard(summary.id, summary.checklist);
-    return { id: job.id, kind: 'order', parts, after: [] };
+    return { id: job.id, kind: 'order', parts:miniapp?.orderParts(job,parts)||parts, after: [] };
   }
   const keyboard = (orderId, checklist) => ({ inline_keyboard: [[
     { text: 'В работе', callback_data: `ow:${orderId}:in_work` },
@@ -636,6 +741,12 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
       callback_data: `oc:${orderId}:${item.key}:${item.checked ? 0 : 1}:${item.revision}` }])] });
   function pendingJobs(key) {
     const bot = requireBot(key);
+    // PALITRA-WEBCHAT-PHASEB: ограниченно поставить копии чата сайта, ждавшие готовности (not_queued), — своей отдельной
+    // транзакцией до выдачи; это тот же опрос моста, без нового worker и таймера. Сбой не мешает прежним заданиям.
+    if (chatHooks) {
+      try { chatHooks.beforeOutbox(key); }
+      catch (error) { console.error('content: копии чата сайта не поставлены в очередь:', oneLine(error.code || error.message, 120)); }
+    }
     return tx(() => {
       const expired = db.prepare("SELECT id FROM client_bot_outbox WHERE bot_key=? AND status='sending' AND claimed_at<?").all(key, stamp(now() - LEASE));
       for (const job of expired) settle(key, bot, db.prepare('SELECT * FROM client_bot_outbox WHERE id=?').get(job.id), 'uncertain', 'Отправка прервана; результат доставки неизвестен', []);
@@ -644,8 +755,26 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
       let row;
       for (;;) {
         row = db.prepare("SELECT * FROM client_bot_outbox WHERE bot_key=? AND status='pending' AND next_attempt_at<=? ORDER BY id LIMIT 1").get(key, stamp());
-        if (!row || !row.operator_id || row.operator_id === current) break;
-        stopOperatorJobs(key, row.operator_id, 'Менеджер изменён или отключён до отправки');
+        if (row && row.operator_id && row.operator_id !== current) { stopOperatorJobs(key, row.operator_id, 'Менеджер изменён или отключён до отправки'); continue; }
+        // PALITRA-APP-WORKPLACE: ответ владельца из приложения уходит, только пока его автор — действующий владелец с той же версией сессии.
+        if (row && row.kind === 'reply' && !ownerReplyAllowed(row)) { stopOwnerReply(key, row, 'Доступ автора ответа изменился до отправки'); continue; }
+        // PALITRA-WEBCHAT-PHASEB: копия чата сайта — только при действующем боте, точном адресате и (для ответа владельца)
+        // действующем авторе; проверка ядра в этой же транзакции, до захвата. Отказ завершает задание, повторно оно не выдаётся.
+        if (row && typeof contactFollowupGuard === 'function') {
+          const followup = contactFollowupGuard(row);
+          if (followup && !followup.allowed) { settle(key, bot, row, 'failed', followup.reason, []); continue; }
+        }
+        if (row && chatHooks) {
+          const guard = chatHooks.dispatchGuard(row);
+          if (guard && !guard.allowed) { stopChatJob(key, row, guard.reason); continue; }
+        }
+        // PALITRA-WEBCHAT-PHASEE: файловая часть вне чата сайта — только у ответа владельца с файлом в прежний диалог,
+        // ровно та, что строится из завершённой загрузки; иначе задание останавливается до выдачи.
+        if (row && hasFilePart(row) && !(chatHooks && chatHooks.isTyped(row)) && !legacyUploadValid(row)) {
+          stopOwnerReply(key, row, 'Файл задания не совпадает с загрузкой');
+          continue;
+        }
+        break;
       }
       if (row) {
         db.prepare("UPDATE client_bot_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?").run(stamp(), row.id);
@@ -656,7 +785,53 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     });
   }
 
+  /* PALITRA-WEBCHAT-PHASEB (repair R2–R4): номера сообщений Telegram задания чата сайта — только канонические положительные
+     безопасные целые, без повторов и не больше числа частей задания. Известные номера не стираются: новый исход объединяется
+     с уже подтверждёнными частями. Прежний контракт legacy-заданий не меняется. */
+  const TELEGRAM_MESSAGE_ID = /^[1-9]\d{0,15}$/;
+  function chatReceiptIds(values, limit) {
+    const out = [];
+    for (const value of Array.isArray(values) ? values : []) {
+      if (out.length >= limit) break;
+      const id = typeof value === 'number' ? String(value) : typeof value === 'string' ? value : '';
+      if (TELEGRAM_MESSAGE_ID.test(id) && Number.isSafeInteger(Number(id)) && !out.includes(id)) out.push(id);
+    }
+    return out;
+  }
+  const chatPartsCount = (job) => { try { const parts = JSON.parse(job.parts || '[]'); return Array.isArray(parts) ? parts.length : 0; } catch (_) { return 0; } };
+  const chatKnownIds = (job) => { try { return chatReceiptIds(JSON.parse(job.external_ids || '[]'), chatPartsCount(job)); } catch (_) { return []; } };
+
+  /* PALITRA-WEBCHAT-PHASEE: задание ответа владельца с файлом в прежний диалог — настоящие legacy dialog/message, квитанция
+     client_dialog_owner_requests этого задания и завершённая загрузка этого сообщения. Ложной связи с чатом сайта нет. */
+  const uploadStore = () => (chatHooks && chatHooks.uploads) || null;
+  const partsOf = (job) => { try { const parts = JSON.parse(job.parts || '[]'); return Array.isArray(parts) ? parts : []; } catch (_) { return []; } };
+  const hasFilePart = (job) => partsOf(job).some((part) => Object.hasOwn(uploadKit.FILE_METHODS, part?.method));
+  function legacyUploadOf(job) {
+    const miniappUpload=miniapp?.uploadOf(job);if(miniappUpload)return miniappUpload;
+    const store = uploadStore();
+    if (!store || !job || job.kind !== 'reply' || !positive(job.message_id) || !positive(job.dialog_id)) return null;
+    const row = store.forLegacyMessage(job.message_id);
+    if (!row || row.target_kind !== 'legacy' || row.dialog_id !== job.dialog_id || row.bot_key !== job.bot_key) return null;
+    const receipt = db.prepare('SELECT 1 FROM client_dialog_owner_requests WHERE job_id=? AND message_id=? AND bot_key=? AND dialog_id=?')
+      .get(job.id, job.message_id, job.bot_key, job.dialog_id);
+    return receipt ? row : null;
+  }
+  // Части задания: прежние sendMessage тому же чату и ровно одна файловая часть из этой загрузки.
+  function legacyUploadValid(job) {
+    if(miniapp?.uploadJobAllowed(job))return true;
+    const row = legacyUploadOf(job);
+    if (!row) return false;
+    const dialog = db.prepare('SELECT chat_id FROM client_dialogs WHERE id=? AND bot_key=?').get(job.dialog_id, job.bot_key);
+    const parts = partsOf(job);
+    const files = parts.filter((part) => Object.hasOwn(uploadKit.FILE_METHODS, part?.method));
+    return Boolean(dialog) && files.length === 1 && uploadStore().partMatches(files[0], row)
+      && parts.every((part) => (part?.method === 'sendMessage' || Object.hasOwn(uploadKit.FILE_METHODS, part?.method)) && String(part?.params?.chat_id ?? '') === String(dialog.chat_id));
+  }
+  const strictJob = (job) => Boolean(chatHooks && (chatHooks.isTyped(job) || legacyUploadOf(job)));
   function settle(key, bot, job, status, error, ids) {
+    // Задание чата сайта: любой переход (в том числе срок аренды без нового ACK) сохраняет уже подтверждённые части.
+    // PHASEE: ответ владельца с файлом в прежний диалог — тот же строгий учёт номеров частей (без связи с чатом сайта).
+    if (strictJob(job)) ids = chatReceiptIds([...chatKnownIds(job), ...(Array.isArray(ids) ? ids : [])], chatPartsCount(job));
     const finished = ['sent', 'uncertain', 'failed'].includes(status) ? stamp() : null;
     db.prepare(`UPDATE client_bot_outbox SET status=?,error=?,external_ids=?,claimed_at=NULL,next_attempt_at=?,finished_at=COALESCE(?,finished_at) WHERE id=?`)
       .run(status, oneLine(error, 300), JSON.stringify(ids), stamp(now() + 15000 * Math.max(1, job.attempts)), finished, job.id);
@@ -675,11 +850,23 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
         .run(DELIVERY.has(status) ? status : 'failed', status === 'sent' ? '' : oneLine(error, 300), delivered, job.message_id);
     }
     // Менеджер сразу узнаёт, что ответ не дошёл или исход неизвестен; повтор — только его новым ответом.
-    if (job.kind === 'reply' && ['uncertain', 'failed'].includes(status)) {
+    // Ответ из веб-приложения (без Telegram-сообщения менеджера) показывает исход в самом приложении: заметку в Telegram не шлём.
+    if (job.kind === 'reply' && job.reply_to_operator_message && ['uncertain', 'failed'].includes(status)) {
       const operator = activeOperator(key);
       if (operator) notice(key, bot, operator.telegram_user_id, status === 'uncertain'
         ? 'Не удалось подтвердить доставку этого ответа клиенту. Автоматически не повторяю, чтобы не было дубля: проверьте переписку и при необходимости ответьте ещё раз.'
         : `Ответ клиенту не доставлен${error ? `: ${oneLine(error, 200)}` : ''}.`, { replyTo: job.reply_to_operator_message });
+    }
+    // PALITRA-WEBCHAT-PHASEB: любой исход задания чата сайта (ACK, срок аренды, повтор) — в журнал доставок чата, той же транзакцией.
+    if (chatHooks) chatHooks.onSettled(job, status, error, ids);
+  }
+  /* PALITRA-WEBCHAT-PHASEB: остановка ещё не начатого задания чата сайта: в очереди failed, в чате — тот же исход. */
+  function stopChatJob(key, job, reason) {
+    const at = stamp();
+    const changed = db.prepare("UPDATE client_bot_outbox SET status='failed',error=?,claimed_at=NULL,finished_at=? WHERE id=? AND status='pending'").run(oneLine(reason, 300), at, job.id).changes;
+    if (Number(changed) === 1) {
+      audit(key, 'site_chat_job_stopped', 'system', `${oneLine(reason, 80)}: задание ${JOB_PREFIX}${job.id}`);
+      chatHooks.onSettled(job, 'failed', reason, JSON.parse(job.external_ids || '[]'));
     }
   }
 
@@ -702,6 +889,9 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     return tx(() => {
       const job = db.prepare('SELECT * FROM client_bot_outbox WHERE id=? AND bot_key=?').get(id, key);
       if (!job) fail(404, 'Отправка не найдена');
+      // PALITRA-WEBCHAT-PHASEB: задание чата сайта — «отправлено» только с номерами всех частей (см. acknowledgeChatJob).
+      // PHASEE: строгая ветка — и для ответа владельца с файлом в прежний диалог (только при подтверждённой связи загрузки).
+      if (strictJob(job)) return acknowledgeChatJob(key, bot, job, body);
       if (job.status === 'sent') return { ok: true, status: 'sent' };
       const known = JSON.parse(job.external_ids || '[]');
       const merged = ids.length >= known.length ? ids : known;
@@ -715,6 +905,36 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
       settle(key, bot, job, status, body.ok === true ? '' : (body.error || 'Не удалось отправить в Telegram'), merged);
       return { ok: body.ok === true, status };
     });
+  }
+  /* PALITRA-WEBCHAT-PHASEB: итог задания чата сайта (sendMessage частями по 3500 символов).
+     - «отправлено» — только ok:true, в котором ровно столько РАЗЛИЧНЫХ канонических положительных безопасных номеров, сколько
+       частей, и все ранее подтверждённые номера среди них; иначе ok:true — исход неизвестен (uncertain), без повтора вслепую;
+     - разрешённый повтор до отправки (retryable, определённый отказ) оставляет задание в очереди, в чате — «в очереди»;
+       номера уже подтверждённых частей сразу попадают в квитанцию и карту ответов менеджера (без завершения доставки);
+     - номера всегда объединяются с известными (не заменяются), не больше числа частей; завершённое (uncertain/failed) не
+       понижается и не возвращается в очередь — его уточняет только полное подтверждение; повтор sent идемпотентен.
+     Всё — в текущей (общей) транзакции. */
+  function acknowledgeChatJob(key, bot, job, body) {
+    const need = chatPartsCount(job);
+    const known = chatKnownIds(job);
+    const reported = chatReceiptIds(body.externalMessageIds, need + 1);   // need+1 — чтобы заметить лишний номер
+    const merged = chatReceiptIds([...known, ...reported], need);
+    const full = body.ok === true && need > 0 && reported.length === need && known.every((id) => reported.includes(id));
+    if (job.status === 'sent') { chatHooks.onSettled(job, 'sent', '', known); return { ok: true, status: 'sent' }; }
+    if (['uncertain', 'failed'].includes(job.status)) {
+      if (full) { settle(key, bot, job, 'sent', '', reported); return { ok: true, status: 'sent' }; }
+      if (merged.length > known.length) {
+        db.prepare('UPDATE client_bot_outbox SET external_ids=? WHERE id=?').run(JSON.stringify(merged), job.id);
+        chatHooks.onSettled(job, job.status, job.error, merged);
+      }
+      return { ok: false, status: job.status };
+    }
+    const status = full ? 'sent' : body.ok === true || body.uncertain ? 'uncertain'
+      : body.retryable && job.attempts < ATTEMPTS ? 'pending' : 'failed';
+    const error = full ? '' : body.ok === true ? 'Мост сообщил об успехе без номеров всех частей сообщения — доставка не подтверждена'
+      : (body.error || 'Не удалось отправить в Telegram');
+    settle(key, bot, job, status, error, full ? reported : merged);
+    return { ok: status === 'sent', status };
   }
 
   /* ---------- кнопки статуса заявки ---------- */
@@ -866,13 +1086,25 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
       deliveryStatus: row.delivery_status, deliveryError: row.delivery_error, edited: Boolean(row.edited),
       versions: db.prepare('SELECT text,kind,created_at FROM client_dialog_versions WHERE message_id=? ORDER BY id').all(row.id)
         .map((version) => ({ text: version.text, kind: version.kind, createdAt: version.created_at })),
-      attachments: db.prepare('SELECT id,kind,mime,name,size,status,error,superseded_at FROM client_dialog_attachments WHERE message_id=? ORDER BY id').all(row.id)
+      attachments: [...db.prepare('SELECT id,kind,mime,name,size,status,error,superseded_at FROM client_dialog_attachments WHERE message_id=? ORDER BY id').all(row.id)
         .map((file) => ({ id: file.id, kind: file.kind, mime: file.mime, name: file.name, size: file.size, status: file.status, error: file.error,
-          superseded: Boolean(file.superseded_at), supersededAt: file.superseded_at || null })),
+          superseded: Boolean(file.superseded_at), supersededAt: file.superseded_at || null })), ...legacyUploadFiles(row.id)],
     }));
     const order = dialog.order_id ? siteOrders.orderSummary(site, dialog.order_id) : null;
-    return { dialog: dialogJSON(dialog), order: order ? { id: order.id, work: order.work } : null, messages };
+    return { dialog: dialogJSON(dialog), order: order ? { id: order.id, work: order.work } : null, messages,
+      ...(legacyUploadsOn() ? { uploads: { enabled: true, maxBytes: uploadStore().maxFile } } : {}) };
   }
+  /* PHASEE: файл, отправленный владельцем из приложения в этот диалог, — в том же списке вложений сообщения, с отдельной
+     ссылкой `upload:<UUID>` (числовые legacy-номера не меняются); байты — по маршруту этого диалога. */
+  function legacyUploadFiles(messageId) {
+    const store = uploadStore();
+    const row = store ? store.forLegacyMessage(messageId) : null;
+    if (!row) return [];
+    const view = store.attachmentView(row);
+    return [{ id: view.ref, ref: view.ref, kind: view.kind, mime: view.mime, name: view.name, size: view.size, status: 'stored', error: '',
+      superseded: false, supersededAt: null, presentation: view.presentation }];
+  }
+  const legacyUploadsOn = () => { try { return Boolean(uploadStore()) && typeof chatHooks.uploadsEnabled === 'function' && chatHooks.uploadsEnabled() === true; } catch (_) { return false; } };
   function markRead(site, dialogId) {
     const { dialog } = dialogView(site, dialogId);
     db.prepare('UPDATE client_dialogs SET unread=0 WHERE id=?').run(dialog.id);
@@ -894,6 +1126,214 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     return { file: path.join(storage, row.disk_name), mime: row.mime, name: row.name, size: row.size, inline: INLINE_MIME.has(row.mime) };
   }
 
+  /* ---------- ответ владельца из веб-приложения (PALITRA-APP-WORKPLACE 13.10.2026) ----------
+     Сессию, роль owner, Origin и CSRF проверяет server.js до и после чтения тела; сюда приходит только автор из свежей
+     сессии. Ответ — обычный текст sendMessage в существующий личный чат клиента через ту же очередь client_bot_outbox и
+     тот же мост; Telegram-сообщения менеджера нет, поэтому copyMessage и номера сообщений Telegram не подделываются.
+     Сообщение, задание, квитанция и аудит записываются одной транзакцией; тот же requestId с тем же текстом — тот же
+     ответ без второго задания, с другим — 409. Статус «Доставлено» ставит только подтверждение моста (settle). */
+  const ownerRequestView = (receipt) => {
+    const message = db.prepare('SELECT delivery_status,delivery_error FROM client_dialog_messages WHERE id=?').get(receipt.message_id);
+    return { dialogId: receipt.dialog_id, messageId: receipt.message_id, jobId: `${JOB_PREFIX}${receipt.job_id}`,
+      deliveryStatus: message?.delivery_status || 'failed', deliveryError: message?.delivery_error || '' };
+  };
+  function ownerReplyAllowed(job) {
+    const receipt = db.prepare('SELECT owner_user_id,owner_session_version FROM client_dialog_owner_requests WHERE job_id=? AND bot_key=?').get(job.id, job.bot_key);
+    if (!receipt) return true; // обычный ответ менеджера из Telegram
+    try { return typeof ownerStillValid === 'function' && ownerStillValid(receipt.owner_user_id, receipt.owner_session_version) === true; }
+    catch (_) { return false; }
+  }
+  function stopOwnerReply(key, job, reason) {
+    const at = stamp();
+    db.prepare("UPDATE client_bot_outbox SET status='failed',error=?,claimed_at=NULL,finished_at=? WHERE id=? AND status='pending'").run(reason, at, job.id);
+    if (job.message_id) db.prepare("UPDATE client_dialog_messages SET delivery_status='failed',delivery_error=? WHERE id=?").run(reason, job.message_id);
+    audit(key, 'owner_web_reply_stopped', 'system', `${reason}: задание ${JOB_PREFIX}${job.id}`);
+  }
+  function sendOwnerReply(site, dialogId, body, owner) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join(',') !== 'requestId,text') {
+      fail(400, 'Нужны только requestId и text', 'VALIDATION');
+    }
+    const requestId = typeof body.requestId === 'string' ? body.requestId.toLowerCase() : '';
+    if (!OWNER_REQUEST_ID.test(requestId)) fail(400, 'Некорректный requestId', 'VALIDATION');
+    const text = body.text;
+    if (typeof text !== 'string' || !text.trim()) fail(400, 'Напишите текст ответа', 'VALIDATION');
+    // Без молчаливого обрезания и вычищения: длинный текст или служебные символы — явный отказ.
+    if (text.length > MAX_TEXT) fail(400, `Ответ длиннее ${MAX_TEXT} символов — сократите его`, 'TOO_LONG');
+    if (CONTROL_CHARS.test(text)) fail(400, 'В тексте есть служебные символы', 'VALIDATION');
+    if (!owner || !Number.isSafeInteger(owner.id) || owner.id < 1 || !Number.isSafeInteger(owner.sessionVersion)) fail(403, 'Нет доступа');
+    if (typeof ownerStillValid !== 'function') fail(503, 'Ответы из приложения не настроены на сервере', 'OWNER_CHECK_MISSING');
+    const found = botForSite(site);
+    if (!found || !found.enabled) fail(404, 'Клиентский бот не подключён', 'BOT_DISABLED');
+    const id = Number(dialogId);
+    if (!Number.isSafeInteger(id) || id < 1) fail(404, 'Диалог не найден');
+    const fingerprint = sha256(JSON.stringify({ dialogId: id, text }));
+    return tx(() => {
+      const previous = db.prepare('SELECT * FROM client_dialog_owner_requests WHERE bot_key=? AND owner_user_id=? AND request_id=?').get(found.key, owner.id, requestId);
+      if (previous) {
+        if (previous.fingerprint !== fingerprint) fail(409, 'Этот requestId уже использован для другого ответа', 'REQUEST_MISMATCH');
+        return { ok: true, duplicate: true, ...ownerRequestView(previous) };
+      }
+      // PHASEE: requestId файла и текста — одно пространство автора: занятый загрузкой requestId текстом не используется.
+      const store = uploadStore();
+      if (store && store.requestUsed('owner', `owner:${owner.id}`, requestId)) fail(409, 'Этот requestId уже использован для отправки файла', 'REQUEST_MISMATCH');
+      const dialog = db.prepare('SELECT * FROM client_dialogs WHERE id=? AND bot_key=? AND company_code=?').get(id, found.key, found.bot.companyCode);
+      if (!dialog) fail(404, 'Диалог не найден');
+      if (!TELEGRAM_ID.test(String(dialog.chat_id || ''))) fail(409, 'У этого диалога нет чата Telegram — ответить отсюда нельзя', 'NO_CHAT');
+      const operator = activeOperator(found.key);
+      if (!operator) fail(409, 'Менеджер бота не привязан или не совпадает с получателем заявок — ответ не отправлен', 'OPERATOR_MISSING');
+      if (!bridgeState(found.key).ready) fail(503, 'Сервис chat сейчас не подтверждает бота — ответ не отправлен, попробуйте позже', 'BRIDGE_NOT_READY');
+      const messageId = insertMessage({ dialog, direction: 'out', authorType: 'operator', text, chatId: null, messageId: null, status: 'pending' });
+      db.prepare('UPDATE client_dialogs SET unread=0 WHERE id=?').run(dialog.id);
+      const jobId = enqueue(found.key, found.bot, 'reply', { parts: textParts(dialog.chat_id, text), after: [], dialogId: dialog.id, messageId,
+        replyToOperatorMessage: null, operatorId: operator.telegram_user_id });
+      db.prepare(`INSERT INTO client_dialog_owner_requests(bot_key,owner_user_id,owner_session_version,request_id,dialog_id,fingerprint,message_id,job_id,created_at)
+        VALUES(?,?,?,?,?,?,?,?,?)`).run(found.key, owner.id, owner.sessionVersion, requestId, dialog.id, fingerprint, messageId, jobId, stamp());
+      audit(found.key, 'owner_web_reply', `owner:${owner.id}`, `диалог №${dialog.id}, сообщение №${messageId}, задание ${JOB_PREFIX}${jobId}`);
+      return { ok: true, duplicate: false, dialogId: dialog.id, messageId, jobId: `${JOB_PREFIX}${jobId}`, deliveryStatus: 'pending', deliveryError: '' };
+    });
+  }
+  /* ---------- PALITRA-WEBCHAT-PHASEE: файл владельца в прежний диалог бота ----------
+     Тот же контракт, что у текстового ответа владельца: настоящий диалог этого бота и компании, его личный чат Telegram,
+     действующий менеджер и подтверждённый мост; owner — свежий владелец из сессии (server.js проверяет Origin/CSRF до и
+     после чтения тела), ownerStillValid — здесь на каждом шаге. Одна запись client_dialog_messages + та же квитанция
+     client_dialog_owner_requests + одно задание reply (sendMessage-части при длинной подписи и одна sendPhoto/sendDocument).
+     Гостевого доступа к прежним диалогам нет; истории чата сайта и диалога не смешиваются. */
+  function requireLegacyUploads({ write = true } = {}) {
+    const store = uploadStore();
+    if (!store) fail(404, 'Не найдено', 'NOT_FOUND');
+    if (write && !legacyUploadsOn()) fail(409, 'Отправка файлов пока недоступна — ответьте текстом', 'UPLOADS_DISABLED');
+    return store;
+  }
+  function legacyUploadScope(site, dialogId, owner, write = true) {
+    if (!owner || !Number.isSafeInteger(owner.id) || owner.id < 1 || !Number.isSafeInteger(owner.sessionVersion)) fail(403, 'Нет доступа', 'OWNER');
+    const checker = !write && typeof ownerCanRead === 'function' ? ownerCanRead : ownerStillValid;
+    if (typeof checker !== 'function') fail(503, 'Ответы из приложения не настроены на сервере', 'OWNER_CHECK_MISSING');
+    let valid = false;
+    try { valid = checker(owner.id, owner.sessionVersion) === true; } catch (_) { valid = false; }
+    if (!valid) fail(403, 'Доступ владельца изменился', 'OWNER_REVOKED');
+    const found = botForSite(site);
+    if (!found || !found.enabled) fail(404, 'Клиентский бот не подключён', 'BOT_DISABLED');
+    const id = Number(dialogId);
+    if (!Number.isSafeInteger(id) || id < 1) fail(404, 'Диалог не найден');
+    const dialog = db.prepare('SELECT * FROM client_dialogs WHERE id=? AND bot_key=? AND company_code=?').get(id, found.key, found.bot.companyCode);
+    if (!dialog) fail(404, 'Диалог не найден');
+    return { found, dialog, owner, scope: Object.freeze({ site, companyCode: found.bot.companyCode, botKey: found.key, actorKind: 'owner',
+      actorRef: `owner:${owner.id}`, ownerSessionVersion: owner.sessionVersion, targetKind: 'legacy', targetId: dialog.id }) };
+  }
+  function legacyDeliverable(found, dialog) {
+    if (!TELEGRAM_ID.test(String(dialog.chat_id || ''))) fail(409, 'У этого диалога нет чата Telegram — ответить отсюда нельзя', 'NO_CHAT');
+    const operator = activeOperator(found.key);
+    if (!operator) fail(409, 'Менеджер бота не привязан или не совпадает с получателем заявок — ответ не отправлен', 'OPERATOR_MISSING');
+    if (!bridgeState(found.key).ready) fail(503, 'Сервис chat сейчас не подтверждает бота — ответ не отправлен, попробуйте позже', 'BRIDGE_NOT_READY');
+    return operator;
+  }
+  const legacyUploadReceipt = (row) => {
+    const receipt = db.prepare('SELECT * FROM client_dialog_owner_requests WHERE message_id=?').get(row.legacy_message_id);
+    return receipt ? { ...ownerRequestView(receipt), requestId: row.request_id } : { dialogId: row.dialog_id, messageId: row.legacy_message_id, requestId: row.request_id };
+  };
+  const legacyAnswer = (store, row, extra = {}) => ({ ok: true, dialogId: row.dialog_id, upload: store.view(row),
+    ...(store.stateOf(row) === 'committed' ? legacyUploadReceipt(row) : {}), ...extra });
+  function prepareOwnerUpload(site, dialogId, body, owner) {
+    const store = requireLegacyUploads();
+    const input = uploadKit.prepareInput(body, { maxFile: Math.min(maxFile, store.maxFile) });
+    return tx(() => {
+      const { found, dialog, scope } = legacyUploadScope(site, dialogId, owner);
+      // Новая загрузка — только туда, куда этот ответ можно доставить (те же условия, что у текста); повтор — та же запись.
+      if (!store.requestUsed('owner', scope.actorRef, input.requestId)) legacyDeliverable(found, dialog);
+      const { row, duplicate } = store.prepare({ scope, input, crossUsed: () => Boolean(db.prepare('SELECT 1 FROM client_dialog_owner_requests WHERE owner_user_id=? AND request_id=?')
+        .get(owner.id, input.requestId)) || (typeof chatHooks.threadRequestUsed === 'function' && chatHooks.threadRequestUsed(scope.actorRef, input.requestId) === true) });
+      return legacyAnswer(store, row, { duplicate });
+    });
+  }
+  function ownerUploadStatus(site, dialogId, uuid, owner) {
+    const store = requireLegacyUploads({ write: false });
+    const { scope } = legacyUploadScope(site, dialogId, owner, false);
+    return { ...store.status(uuid, scope, legacyUploadReceipt), dialogId: scope.targetId };
+  }
+  function beginOwnerUpload(site, dialogId, uuid, owner) {
+    const store = requireLegacyUploads();
+    const { scope } = legacyUploadScope(site, dialogId, owner);
+    return store.begin(uuid, scope);
+  }
+  function finishOwnerUpload(site, dialogId, uuid, claim, bytes, owner) {
+    const store = requireLegacyUploads();
+    let scope;
+    // Доступ пропал, пока читалось тело: приём освобождается, запись снова ждёт тех же байтов.
+    try { ({ scope } = legacyUploadScope(site, dialogId, owner)); } catch (error) { releaseOwnerUpload(uuid, claim, 'Доступ изменился'); throw error; }
+    const result = store.finish({ uuid, scope, claim, bytes,
+      authorize: () => { const fresh = legacyUploadScope(site, dialogId, owner).scope; if (fresh.actorRef !== scope.actorRef || fresh.targetId !== scope.targetId) fail(403, 'Доступ изменился'); },
+      receipt: legacyUploadReceipt,
+      commit: (row) => {
+        if (!legacyUploadsOn()) fail(409, 'Отправка файлов пока недоступна — ответьте текстом', 'UPLOADS_DISABLED');
+        const { found, dialog } = legacyUploadScope(site, row.dialog_id, owner);
+        const operator = legacyDeliverable(found, dialog);
+        const messageId = insertMessage({ dialog, direction: 'out', authorType: 'operator', text: row.caption, chatId: null, messageId: null, status: 'pending' });
+        db.prepare('UPDATE client_dialogs SET unread=0 WHERE id=?').run(dialog.id);
+        const linked = store.link(row.upload_uuid, { legacyMessageId: messageId, ownerSessionVersion: owner.sessionVersion });
+        // Подпись ≤ 1024 — подписью файла; длиннее — прежними текстовыми частями, файл без подписи (без обрезания и дубля).
+        const plan = uploadKit.captionPlan(row.caption);
+        const parts = [...(plan.text ? textParts(dialog.chat_id, plan.text) : []), store.filePart(linked, { chatId: String(dialog.chat_id), caption: plan.caption })];
+        const jobId = enqueue(found.key, found.bot, 'reply', { parts, after: [], dialogId: dialog.id, messageId, replyToOperatorMessage: null, operatorId: operator.telegram_user_id });
+        db.prepare(`INSERT INTO client_dialog_owner_requests(bot_key,owner_user_id,owner_session_version,request_id,dialog_id,fingerprint,message_id,job_id,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?)`).run(found.key, owner.id, owner.sessionVersion, row.request_id, dialog.id, row.fingerprint, messageId, jobId, stamp());
+        audit(found.key, 'owner_web_upload', `owner:${owner.id}`, `диалог №${dialog.id}, сообщение №${messageId}, задание ${JOB_PREFIX}${jobId}`);
+        return { dialogId: dialog.id, messageId, jobId: `${JOB_PREFIX}${jobId}`, deliveryStatus: 'pending', deliveryError: '', requestId: row.request_id };
+      } });
+    return { ok: true, upload: store.view(store.row(uuid)), ...result };
+  }
+  // Защищённое чтение владельцем: только завершённая загрузка, связанная с сообщением ИМЕННО этого диалога (route dialog).
+  function ownerUploadFile(site, dialogId, uuid) {
+    const store = requireLegacyUploads({ write: false });
+    const found = botForSite(site);
+    const id = Number(dialogId);
+    if (!found || !Number.isSafeInteger(id) || id < 1) fail(404, 'Файл не найден', 'NOT_FOUND');
+    const dialog = db.prepare('SELECT id FROM client_dialogs WHERE id=? AND bot_key=? AND company_code=?').get(id, found.key, found.bot.companyCode);
+    if (!dialog) fail(404, 'Файл не найден', 'NOT_FOUND');
+    const meta = store.fileMeta(uuid, { targetKind: 'legacy', targetId: dialog.id, site, companyCode: found.bot.companyCode });
+    const message = meta.legacyMessageId ? db.prepare('SELECT dialog_id FROM client_dialog_messages WHERE id=?').get(meta.legacyMessageId) : null;
+    if (!message || message.dialog_id !== dialog.id) fail(404, 'Файл не найден', 'NOT_FOUND');
+    return meta;
+  }
+  const openOwnerUpload = (meta) => requireLegacyUploads({ write: false }).open(meta);
+  const releaseOwnerUpload = (uuid, claim, reason) => { const store = uploadStore(); if (store && typeof claim === 'string' && claim) store.release(uuid, claim, reason); };
+
+  /* PHASEE: байты файла для моста — фиксированный внутренний маршрут upload-source, ключ службы — server.js. Проверяются
+     точное задание (тот же бот, выдано мосту и не просрочено), его часть, завершённая загрузка этого сообщения и адресат —
+     до чтения файла и после него. Ничего, кроме проверенных байтов, наружу не выдаётся. */
+  function uploadSource(key, jobRef, partText, ref) {
+    const store = uploadStore();
+    const match = /^cb:([1-9]\d{0,15})$/.exec(String(jobRef || ''));
+    const index = /^(0|[1-9]\d{0,2})$/.test(String(partText || '')) ? Number(partText) : -1;
+    const uuid = uploadKit.parseUploadRef(ref);
+    if (!store || !match || index < 0 || !uuid) fail(404, 'Файл задания не найден', 'NOT_FOUND');
+    const bot = requireBot(key);
+    const job = db.prepare('SELECT * FROM client_bot_outbox WHERE id=? AND bot_key=? AND company_code=?').get(Number(match[1]), key, bot.companyCode);
+    if (!job) fail(404, 'Файл задания не найден', 'NOT_FOUND');
+    // Только выданное мосту и ещё не просроченное задание: завершённое, ожидающее или чужое байтов не получает.
+    if (job.status !== 'sending' || !(now() - Date.parse(job.claimed_at || '') < LEASE)) fail(409, 'Задание не выдано мосту', 'NOT_CLAIMED');
+    const part = partsOf(job)[index];
+    const row = store.committedRow(uuid);
+    if (!part || !part.upload || part.upload.ref !== ref || !row || row.bot_key !== key || row.company_code !== bot.companyCode
+      || !store.partMatches(part, row)) fail(404, 'Файл задания не найден', 'NOT_FOUND');
+    if (row.target_kind === 'thread') {
+      if (!chatHooks.isTyped(job) || typeof chatHooks.uploadJobAllowed !== 'function' || !chatHooks.uploadJobAllowed(job, row)) fail(409, 'Задание файла больше не действует', 'JOB_CHANGED');
+    } else {
+      if (legacyUploadOf(job)?.upload_uuid !== uuid || !legacyUploadValid(job) || !ownerReplyAllowed(job)) fail(409, 'Задание файла больше не действует', 'JOB_CHANGED');
+      if (!activeOperator(key)) fail(409, 'Менеджер бота изменён', 'JOB_CHANGED');
+    }
+    return row;
+  }
+  /* Карточка заявки → переписка: только единственный диалог этого бота и компании, связанный с этой заявкой сайта.
+     Нет связи или связей несколько — null, без поиска по телефону, имени или «последнему клиенту». */
+  function orderDialog(site, orderId) {
+    const found = botForSite(site);
+    const id = Number(orderId);
+    if (!found || !Number.isSafeInteger(id) || id < 1) fail(404, 'Заявка не найдена');
+    if (!siteOrders.orderSummary(site, id)) fail(404, 'Заявка не найдена');
+    const rows = db.prepare('SELECT id FROM client_dialogs WHERE bot_key=? AND company_code=? AND order_id=? LIMIT 2').all(found.key, found.bot.companyCode, id);
+    return { dialogId: rows.length === 1 ? rows[0].id : null };
+  }
+
   /* ---------- HTTP ---------- */
   /* Внутренние маршруты моста: /content/internal/client-bot/<route>?botKey=… Ключ службы проверяет server.js. */
   async function handleInternal(request, response, url, { readJson, readRaw, send }) {
@@ -904,13 +1344,40 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     if (route === '/outbox' && request.method === 'GET') return send(response, 200, { jobs: pendingJobs(key) });
     if (route === '/heartbeat' && request.method === 'POST') return send(response, 200, heartbeat(key, await readJson(request)));
     if (route === '/acknowledge' && request.method === 'POST') return send(response, 200, acknowledge(key, await readJson(request)));
+    /* PALITRA-WEBCHAT-PHASED1: ссылка вложения разбирается ДО Number(): точная `thread:<id>` — чат сайта (своя таблица и
+       хранилище), десятичное число — прежнее вложение диалога; всё остальное (другие префиксы, хвосты, %-кодирование) — 404. */
+    const attachmentRoute = (value) => {
+      if (typeof value === 'number') return Number.isSafeInteger(value) && value > 0 ? { legacy: value } : null;
+      const text = typeof value === 'string' ? value : '';
+      if (/^[1-9]\d{0,15}$/.test(text)) return { legacy: text };
+      return chatHooks && mediaRef(text) ? { typed: text } : null;
+    };
     if (route === '/attachment' && request.method === 'POST') {
       requireBot(key);
-      return send(response, 200, saveAttachment(key, url.searchParams.get('id'), await readRaw(request, maxFile)));
+      const target = attachmentRoute(url.searchParams.get('id'));
+      if (!target) fail(404, 'Вложение не найдено');
+      const bytes = await readRaw(request, maxFile);
+      if (target.typed) return send(response, 200, chatHooks.saveThreadAttachment(key, target.typed, bytes));
+      return send(response, 200, saveAttachment(key, target.legacy, bytes));
     }
     if (route === '/attachment-status' && request.method === 'POST') {
       const body = await readJson(request);
-      return send(response, 200, markAttachment(key, body.attachmentId, body.status, body.error));
+      const target = attachmentRoute(body.attachmentId);
+      if (!target) fail(404, 'Вложение не найдено');
+      if (target.typed) { requireBot(key); return send(response, 200, chatHooks.markThreadAttachment(key, target.typed, body.status, body.error)); }
+      return send(response, 200, markAttachment(key, target.legacy, body.status, body.error));
+    }
+    // PALITRA-WEBCHAT-PHASEE: байты файла задания — только точные параметры botKey, jobId, part, ref; проверка до и после чтения.
+    if (route === '/upload-source' && request.method === 'GET') {
+      if ([...url.searchParams.keys()].sort().join(',') !== 'botKey,jobId,part,ref') fail(404, 'Маршрут не найден');
+      const args = [key, url.searchParams.get('jobId'), url.searchParams.get('part'), url.searchParams.get('ref')];
+      const first = uploadSource(...args);
+      const bytes = uploadStore().readSource(first);
+      const second = uploadSource(...args);
+      if (second.upload_uuid !== first.upload_uuid || second.actual_sha256 !== first.actual_sha256 || bytes.length !== second.actual_size) fail(409, 'Файл задания изменился', 'JOB_CHANGED');
+      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': bytes.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      response.end(bytes);
+      return undefined;
     }
     fail(404, 'Маршрут не найден');
   }
@@ -950,9 +1417,33 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     fail(404, 'Не найдено');
   }
 
-  return { receive, callback, pendingJobs, acknowledge, heartbeat, bridgeState, saveAttachment, markAttachment, issueOrderLink, createOperatorCode,
+  /* PALITRA-WEBCHAT-PHASEB: серверный адаптер чата сайта получает закрытые функции модуля ровно один раз, при создании.
+     Наружу (в возвращаемый объект и HTTP) они не выдаются: постановка в очередь — только через проверки адаптера. */
+  if (typeof chatIntegration === 'function') {
+    const hooks = chatIntegration(Object.freeze({ db, now, stamp, tx, config, botForSite, activeOperator, bridgeState, textParts, mediaOf, audit,
+      notice: (key, chatId, text, options = {}) => notice(key, requireBot(key), chatId, text, options),
+      miniappStartMarkup: input => miniapp?.startMarkup(input)||null,
+      enqueue: (key, kind, options) => enqueue(key, requireBot(key), kind, options),
+      // PALITRA-WEBCHAT-PHASED1: тот же приватный каталог вложений (свои UUID-имена), те же пределы файла и общего объёма;
+      // байты прежних диалогов — для общего предела (без добавки чата сайта, чтобы не считать дважды).
+      storageRoot: storage, maxFile, maxStorage, legacyStorageBytes: legacyStorageUsed,
+      // PHASEE: requestId ответов владельца в прежние диалоги — для общего пространства «текст/файл» его загрузок в чат сайта.
+      ownerRequestUsed: (ownerId, requestId) => Boolean(db.prepare('SELECT 1 FROM client_dialog_owner_requests WHERE owner_user_id=? AND request_id=?')
+        .get(ownerId, String(requestId || '').toLowerCase())) }));
+    const required = ['isTyped', 'dispatchGuard', 'onSettled', 'beforeOutbox', 'managerReply', 'claimStart', 'customerMessage', 'editedMessage',
+      'pendingThreadDownloads', 'saveThreadAttachment', 'markThreadAttachment', 'mediaBytes'];
+    if (!hooks || required.some((name) => typeof hooks[name] !== 'function')) throw new TypeError('createClientDialogs: неполные хуки чата сайта');
+    chatHooks = hooks;
+  }
+
+  // Optional server-only capability. No HTTP exposure or second transport; the existing outbox remains authoritative.
+  miniapp = typeof miniappIntegration==='function' ? miniappIntegration(Object.freeze({db,tx,now,botForSite,activeOperator,bridgeState,
+    insertMessage,enqueue,textParts,dialogView,onAcceptedCustomerMessage,notificationText:createPalitraNotificationText({db}),storageRoot:storage,getUploads:uploadStore,uploadsEnabled:legacyUploadsOn})) : null;
+  return { miniapp, enqueueOrderContactFollowup, receive, callback, pendingJobs, acknowledge, heartbeat, bridgeState, saveAttachment, markAttachment, issueOrderLink, createOperatorCode,
     revokeOperator, transportReady, status, listDialogs, dialogView, markRead, attachmentFile, handleInternal, handleCabinet,
-    crmIntake, enabledFor: (site) => Boolean(botForSite(site)?.enabled), storage };
+    crmIntake, enabledFor: (site) => Boolean(botForSite(site)?.enabled), storage, sendOwnerReply, orderDialog,
+    // PHASEE: файл владельца в прежний диалог (маршруты владельца — server.js).
+    prepareOwnerUpload, ownerUploadStatus, beginOwnerUpload, finishOwnerUpload, ownerUploadFile, openOwnerUpload, releaseOwnerUpload };
 }
 
 module.exports = { createClientDialogs, JOB_PREFIX, WORK_LABELS };

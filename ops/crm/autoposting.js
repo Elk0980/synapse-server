@@ -18,6 +18,16 @@ const mediaOnlyTargetMessage=name=>`${name}: без текста Synapse отп�
 const FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
 const ROLES=Object.freeze({reach:'Охватный',affection:'На влюбление',sale:'На продажу'});
 const REVIEW_STATES=Object.freeze({draft:'Черновик',pending:'На согласовании',approved:'Согласовано',rejected:'Отклонено'});
+const DELIVERY_BLOCKER_MESSAGES=Object.freeze({
+  TIKTOK_PRIVACY_UNCONFIRMED:'Для отправки в TikTok сервис должен подтвердить доступную аудиторию профиля. Текущий контракт Onlypult этих данных не возвращает.',
+});
+function deliveryBlocker(channel){
+  const code=channel?.caps?.deliveryBlocker;
+  if(!code)return null;
+  return Object.hasOwn(DELIVERY_BLOCKER_MESSAGES,code)
+    ?{code,message:DELIVERY_BLOCKER_MESSAGES[code]}
+    :{code:'CHANNEL_DELIVERY_BLOCKED',message:'Возможность отправки на выбранную площадку не подтверждена.'};
+}
 const META_LIMITS=Object.freeze({audience:500,hook:500,idea:4000,hughNote:2000,metrics:1000,methodSource:300});
 function meta(value) {
   if(value===null||value===undefined)return {};
@@ -40,14 +50,47 @@ const sha256=value=>{if(value===null||value===undefined||value==='')return '';if
    Состав полей взят из проверенной OpenAPI Onlypult (29.09.2026), ничего сверх неё не принимается.
    Опции одной площадки не отправляются другой.
    instagram: is_story и is_reels взаимоисключающие — Story и Reel это разные режимы.
-   tiktok.privacy: полного перечня доступных конкретному аккаунту режимов схема не даёт,
-   поэтому принимаются только два документированных значения, и «по умолчанию публично»
-   здесь не подставляется — без явного выбора отправка TikTok не идёт. */
+   tiktok.privacy: четыре значения контракта Onlypult (официальный SDK 0.1.9),
+   не перечень возможностей автора. «По умолчанию публично» не подставляется;
+   Onlypult должен принять точный согласованный режим без замены и повторного POST. */
+/* 02.11.2026: полный набор параметров Onlypult для наших шести площадок
+   (официальный SDK @onlypult/mcp 0.1.9 и https://onlypult.com/dev/openapi.yaml, сверено 02.11.2026).
+   Все параметры необязательны, кроме аудитории TikTok, и хранятся плоско в platform_options площадки.
+   Отправитель Onlypult сам раскладывает их по полям запроса (first_comment, delete_at_*, post_options, poll).
+   Прямое подключение ботом эти параметры не исполняет — постановка в очередь тогда отклоняется. */
+const DELETE_UNITS=Object.freeze(['minutes','hours','days','weeks']);
+const OPTION_TEXT=max=>Object.freeze({type:'text',max});
+const OPTION_INT=(min,max)=>Object.freeze({type:'int',min,max});
+const OPTION_LINES=Object.freeze({type:'lines',min:2,max:10,each:100});
+const DELETE_RULES=Object.freeze({delete_after_value:OPTION_INT(1,999),delete_after_unit:DELETE_UNITS});
+const POLL_RULES=Object.freeze({poll_question:OPTION_TEXT(300),poll_options:OPTION_LINES,poll_multiple:'boolean',poll_anonymous:'boolean'});
 const PLATFORM_OPTION_SCHEMA=Object.freeze({
-  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean'}),
-  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
-  max:Object.freeze({pin_message:'boolean'}),
+  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean',graduation_strategy:['MANUAL','SS_PERFORMANCE'],first_comment:OPTION_TEXT(2200),...DELETE_RULES}),
+  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean',...DELETE_RULES}),
+  youtube_shorts:Object.freeze({privacy:['public','unlisted','private'],...DELETE_RULES}),
+  telegram:Object.freeze({pin_message:'boolean',show_caption_above_media:'boolean',...POLL_RULES,...DELETE_RULES}),
+  vk:Object.freeze({disable_comment:'boolean',attachments_mode:['carousel','grid'],...POLL_RULES,...DELETE_RULES}),
+  max:Object.freeze({pin_message:'boolean',...DELETE_RULES}),
 });
+function optionValue(platform,key,rule,item){
+  if(rule==='boolean'){if(typeof item!=='boolean')fail(400,`Опция «${key}» — true или false`);return item;}
+  if(Array.isArray(rule)){if(typeof item!=='string'||!rule.includes(item))fail(400,`Опция «${key}»: допустимо ${rule.join(' или ')}`);return item;}
+  if(rule.type==='text'){
+    if(typeof item!=='string')fail(400,`Опция «${key}» — текст`);
+    const text=item.trim();if(!text)fail(400,`Опция «${key}» не может быть пустой`);
+    if(text.length>rule.max)fail(400,`Опция «${key}» длиннее ${rule.max} символов`);return text;
+  }
+  if(rule.type==='int'){if(!Number.isSafeInteger(item)||item<rule.min||item>rule.max)fail(400,`Опция «${key}»: целое число от ${rule.min} до ${rule.max}`);return item;}
+  if(rule.type==='lines'){
+    if(!Array.isArray(item))fail(400,`Опция «${key}» — список`);
+    const lines=item.map(line=>typeof line==='string'?line.trim():null);
+    if(lines.some(line=>!line||line.length>rule.each))fail(400,`Каждый вариант «${key}» — от 1 до ${rule.each} символов`);
+    if(lines.length<rule.min||lines.length>rule.max)fail(400,`Опция «${key}»: от ${rule.min} до ${rule.max} вариантов`);
+    if(new Set(lines).size!==lines.length)fail(400,`Варианты «${key}» повторяются`);
+    return lines;
+  }
+  fail(400,`Опция «${key}» для площадки ${platform} не поддерживается`);
+}
 function platformOptions(value) {
   if(value===null||value===undefined||value==='')return {};
   if(typeof value!=='object'||Array.isArray(value))fail(400,'Опции площадок должны быть объектом');
@@ -58,11 +101,13 @@ function platformOptions(value) {
     const schema=PLATFORM_OPTION_SCHEMA[platform],clean={};
     for(const [key,item]of Object.entries(options)){
       if(!Object.hasOwn(schema,key))fail(400,`Неизвестная опция «${key}» для площадки ${platform}`);
-      const rule=schema[key];
-      if(rule==='boolean'){if(typeof item!=='boolean')fail(400,`Опция «${key}» — true или false`);clean[key]=item;}
-      else{if(typeof item!=='string'||!rule.includes(item))fail(400,`Опция «${key}»: допустимо ${rule.join(' или ')}`);clean[key]=item;}
+      clean[key]=optionValue(platform,key,schema[key],item);
     }
     if(platform==='instagram'&&clean.is_story===true&&clean.is_reels===true)fail(400,'Story и Reel — разные режимы Instagram: выберите один');
+    if(platform==='instagram'&&Object.hasOwn(clean,'graduation_strategy')&&clean.is_reels!==true)fail(400,'Пробный Reels доступен только для формата «Ролик»');
+    if(Object.hasOwn(clean,'delete_after_value')!==Object.hasOwn(clean,'delete_after_unit'))fail(400,'Для автоудаления укажите и число, и единицу времени');
+    const poll=['poll_question','poll_options','poll_multiple','poll_anonymous'].filter(key=>Object.hasOwn(clean,key));
+    if(poll.length&&!(Object.hasOwn(clean,'poll_question')&&Object.hasOwn(clean,'poll_options')))fail(400,'Для опроса нужны вопрос и от 2 до 10 вариантов');
     if(Object.keys(clean).length)out[platform]=Object.fromEntries(Object.keys(clean).sort().map(key=>[key,clean[key]]));
   }
   return Object.fromEntries(Object.keys(out).sort().map(key=>[key,out[key]]));
@@ -194,7 +239,7 @@ function captions(value) {
   return result;
 }
 const mediaKind=urls=>urls.some(u=>VIDEO_RE.test(u))?'video':urls.some(u=>IMAGE_RE.test(u))?'image':urls.length?'file':'none';
-function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,now=Date.now,logger=console}={}) {
+function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,publicationCopies,now=Date.now,logger=console}={}) {
   if(!information||!transport)throw Error('Autoposting requires company information and publication adapters');
   /* Охрана связи с версией контент-плана включена всегда: отдельного «выключателя» нет,
      иначе появился бы путь отправки в обход согласования. Подменить её из запроса нельзя. */
@@ -294,6 +339,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     root_post_id rootPostId,root_content_revision rootContentRevision FROM autoposting_variant_links WHERE post_id=? AND company_id=?`).get(row.id,row.company_id);
   const variantOrigin=row=>{const link=variantLinkOf(row);return {variantOf:link?{postId:link.postId,revision:link.revision,contentRevision:link.contentRevision}:null,
     rootIdea:link?{postId:link.rootPostId,contentRevision:link.rootContentRevision}:null};};
+  require('./publication-evidence.cjs').initialize(db);
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
   const history=(row,action,comment,actor={})=>db.prepare('INSERT INTO autoposting_reviews(post_id,company_id,action,content_revision,comment,actor_id,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?)')
@@ -452,6 +498,11 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     const mediaOnlyStory=mediaOnlyStoryRow(row,media,caps);
     if(!row.text&&!Object.keys(caps).length&&!mediaOnlyStory)issues.push('Нет текста и подписей площадок');
     for(const [platform,caption]of Object.entries(caps))if(caption.length>CAPTION_PLATFORMS[platform].limit)issues.push(`Подпись ${CAPTION_PLATFORMS[platform].label} длиннее лимита`);
+    if(ids.includes('tiktok')){
+      const options=JSON.parse(row.platform_options||'{}').tiktok||{};
+      if(!PLATFORM_OPTION_SCHEMA.tiktok.privacy.includes(options.privacy))issues.push('Выберите, кто увидит видео TikTok');
+      if(media.length!==1||!isShortsVideoUrl(media[0]))issues.push('Для TikTok нужно одно видео');
+    }
     return {ready:!issues.length,issues,mediaKind:mediaKind(media),textOnly,mediaOnlyStory};
   }
   /* Одобрение привязано к content_revision — версии содержимого (текст, подписи, материал, день, происхождение).
@@ -586,6 +637,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
   function capsIssues(channel,caption,mediaCount) {
     const caps=channel&&typeof channel.caps==='object'&&channel.caps?channel.caps:null,issues=[];
     if(!caps)return issues;
+    const blocker=deliveryBlocker(channel);if(blocker)issues.push(blocker.message);
     if(Number.isFinite(caps.maxText)&&caption.length>caps.maxText)issues.push(`Текст длиннее лимита площадки (${caps.maxText})`);
     if(Number.isFinite(caps.maxMedia)&&mediaCount>caps.maxMedia)issues.push(`Материалов больше, чем принимает площадка (${caps.maxMedia})`);
     if(Number.isFinite(caps.maxCaption)&&mediaCount&&caption.length>caps.maxCaption)issues.push(`Подпись к материалу длиннее лимита площадки (${caps.maxCaption})`);
@@ -996,6 +1048,10 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       if(row.revision!==payload.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
       // Без новой независимо согласованной версии плана копия обошла бы planLink guard.
       if(plan.linkOf(row.id,owner.id))fail(409,'Создайте и отдельно согласуйте версию нужной площадки в контент-плане.','PLAN_LINKED_POST');
+      return createVariantPrepared(row,owner,payload,serialized,body,actor);
+    });
+  }
+  function createVariantPrepared(row,owner,payload,serialized,body,actor) {
       const origin=variantOrigin(row),root=origin.rootIdea||{postId:row.id,contentRevision:row.content_revision};
       const target=payload.platformId,caps=JSON.parse(row.captions||'{}'),options=JSON.parse(row.platform_options||'{}'),sourceMeta=metaOf(row);
       const data=normalized({title:row.title,text:row.text,mediaUrls:JSON.parse(row.media_urls),platformIds:[target],timezone:row.timezone,
@@ -1015,6 +1071,27 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       db.prepare(`INSERT INTO autoposting_variant_requests(company_id,request_id,request_payload,post_id,result,created_at) VALUES(?,?,?,?,?,?)`)
         .run(owner.id,body.clientRequestId,serialized,childId,result,time);
       return JSON.parse(result);
+  }
+  const publishedRequestId=(userId,clientId)=>'published-'+require('node:crypto').createHash('sha256').update(String(userId)+'\0'+clientId).digest('hex');
+  async function createPublishedCopy(id,code,body,actor={}) {
+    if(!Number.isSafeInteger(actor.userId)||actor.userId<1||!(actor.role==='owner'||actor.canEdit===true||actor.permissions?.has?.('autoposting.edit')))fail(403,'Нет права создавать копии','FORBIDDEN');
+    object(body,['revision','clientRequestId','platformId','publishedContentRevision','copySource','currentContentRevision','confirmCurrentSource']);const currentSource=body.copySource==='current-material';if(body.copySource!==undefined&&!['published-snapshot','current-material'].includes(body.copySource))fail(400,'Выберите источник копии','CONTENT_COPY_SOURCE');if(currentSource?(!Number.isSafeInteger(body.currentContentRevision)||body.currentContentRevision<1||body.confirmCurrentSource!==true||body.publishedContentRevision!==undefined):(body.currentContentRevision!==undefined||body.confirmCurrentSource!==undefined))fail(400,'Подтвердите точную текущую версию','CONTENT_COPY_SOURCE');if(body.publishedContentRevision!==undefined&&(!Number.isSafeInteger(body.publishedContentRevision)||body.publishedContentRevision<1))fail(400,'Неверная опубликованная версия','VALIDATION_ERROR');const payload={...variantRequest(id,{revision:body.revision,clientRequestId:body.clientRequestId,platformId:body.platformId}),publishedContentRevision:body.publishedContentRevision??null,...(currentSource?{copySource:'current-material',currentContentRevision:body.currentContentRevision,confirmCurrentSource:true}:{})},settings=await transport.getSettings(code);
+    if(!settings.channels.some(c=>c.connected===true&&c.id===payload.platformId))fail(409,'Площадка больше не подключена','CONTENT_CHANNEL_CHANGED');
+    if(actor.assertCurrent)await actor.assertCurrent();
+    return transaction(()=>{
+      const owner=company(db,code),requestId=publishedRequestId(actor.userId,body.clientRequestId+(currentSource?'\0current-material':'')),scopedBody={...body,clientRequestId:requestId},scopedPayload={...payload,actorId:actor.userId,clientRequestId:body.clientRequestId,operation:currentSource?'current-copy-v1':'published-copy-v1'},serialized=JSON.stringify(scopedPayload);
+      const receipt=db.prepare('SELECT request_payload,result FROM autoposting_variant_requests WHERE company_id=? AND request_id=?').get(owner.id,requestId);
+      if(receipt){if(receipt.request_payload!==serialized)fail(409,'Ключ уже использован для другого материала','REQUEST_CONFLICT');return {...JSON.parse(receipt.result),created:false};}
+      const {row}=rowFor(payload.postId,code);if(row.revision!==payload.revision)fail(409,'Исходный материал изменился','REVISION_CONFLICT');
+      const legacy=currentSource?require('./publication-evidence.cjs').legacy(db,row,iso()):null;
+      if(currentSource&&(row.content_revision!==body.currentContentRevision||!legacy))fail(409,'Текущая версия или подтверждение старой публикации изменились','CONTENT_CURRENT_SOURCE_CHANGED');
+      const publishedSource=currentSource?row:require('./publication-evidence.cjs').published(db,row,body.publishedContentRevision??row.content_revision,iso());
+      if(!publishedSource)fail(409,'Текст этой публикации не сохранён или версия не подтверждена','CONTENT_PUBLICATION_UNCONFIRMED');
+      const sourceLink=plan.linkOf(row.id,owner.id);if(sourceLink&&!publicationCopies)fail(503,'Не подключён сервис версий плана','PLAN_COPY_SERVICE');
+      const result=createVariantPrepared(publishedSource,owner,payload,serialized,scopedBody,actor);
+      if(sourceLink){const child=db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? AND id=?').get(owner.id,result.post.id);result.planCopy=publicationCopies.capture(child,publishedSource,currentSource?{...sourceLink,copySource:'current-material',confirmedLegacyDelivery:legacy}:sourceLink,actor);db.prepare('UPDATE autoposting_variant_requests SET result=? WHERE company_id=? AND request_id=?').run(JSON.stringify(result),owner.id,requestId);}
+      result.copySource=currentSource?'current-material':'published-snapshot';result.sourceContentRevision=publishedSource.content_revision;if(currentSource)result.copyOrigin={copySource:'current-material',sourcePostId:row.id,sourceRevision:row.revision,sourceContentRevision:row.content_revision,confirmedLegacyDelivery:legacy};db.prepare('UPDATE autoposting_variant_requests SET result=? WHERE company_id=? AND request_id=?').run(JSON.stringify(result),owner.id,requestId);
+      return result;
     });
   }
   function requireAutomaticWorkflow(code) {
@@ -1067,7 +1144,16 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       const marked=receiptPlatforms(row.id);
       const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
-      if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(channels.some(channel=>!channel||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(channels.some(channel=>!channel.enabled))fail(409,'Отправка на выбранную площадку выключена','CHANNEL_DISABLED');
+      // Дополнительные параметры исполняет только Onlypult: прямой бот не должен молча отправить без них.
+      const chosenOptions=JSON.parse(row.platform_options||'{}');
+      const directWithOptions=data.platformIds.find((id,index)=>(channels[index].provider||'direct')!=='onlypult'&&Object.keys(chosenOptions[id]||{}).length);
+      if(directWithOptions)fail(409,`Дополнительные параметры площадки ${PLAN_PLATFORMS[directWithOptions]?.label||directWithOptions} работают только при подключении через Onlypult`,'OPTIONS_NEED_ONLYPULT');
+      // Не создавать частичную доставку на остальные каналы при заведомом отказе одного.
+      // Одобрение содержимого допустимо отдельно; approveAndSchedule откатится атомарно.
+      const deliveryBlocked=channels.map(deliveryBlocker).find(Boolean);
+      if(deliveryBlocked)fail(409,deliveryBlocked.message,deliveryBlocked.code);
       if(companyApprovalRequired(row)&&!data.mediaUrls.length){
         if(!readiness(row).textOnly||channels.some(channel=>(channel.provider||'direct')!=='direct'||!['telegram','vk'].includes(channel.platform||channel.id)))
           fail(409,'Для этого способа публикации нужен материал: текст без медиа поддержан только прямыми Telegram и ВКонтакте','NOT_READY');
@@ -1132,6 +1218,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
   function approvePrepared(id,code,body,actor) {
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      if(publicationCopies?.link(row))publicationCopies.decide(row,body.approved,actor);
       if(body.approved){
         const state=readiness(row);
         if(!state.ready)fail(409,`Материал не готов: ${state.issues.join('; ')}`,'NOT_READY');
@@ -1507,8 +1594,81 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     db.prepare("UPDATE autoposting_posts SET last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='needs_review'")
       .run(result.errorCode||'PROVIDER_PENDING',iso(),postId);
   }
-  let stopped=false,running=null;
+  let stopped=false,running=null,lastFollow=0;
+  /* 02.11.2026: сопровождение уже отправленного через Onlypult (раз в минуту, только чтение у провайдера).
+     1) Неясный ответ при создании: доставка связывается с постом, только если у этого профиля ровно один
+        ещё не связанный пост с тем же текстом, созданный в окне этой отправки. Повторной отправки нет.
+     2) Итог Onlypult становится итогом доставки: published — «Опубликовано (подтвердил Onlypult)» без
+        выдуманной ссылки, failed — ошибка площадки. Карточка получает общий итог, когда решены все площадки.
+     3) Ссылка ищется на самой площадке (сейчас YouTube через RSS канала) и сохраняется, только если найдена. */
+  async function bindUncertain(d) {
+    let posts;
+    try{posts=await transport.findPosts({companyCode:d.code,channelId:d.channel_id,channelRevision:d.channel_revision});}catch{return;}
+    const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(d.post_id);if(!row)return;
+    const view=dto(row,company(db,d.code));
+    const texts=new Set([view.text,...Object.values(view.captions||{})].filter(v=>typeof v==='string').map(v=>v.trim()).filter(Boolean));
+    const from=Number(d.started_at)-120000,to=Number(d.started_at)+LEASE_MS+300000;
+    const taken=new Set(db.prepare('SELECT provider_post_id FROM autoposting_deliveries WHERE provider_post_id IS NOT NULL').all().map(r=>r.provider_post_id));
+    const hits=posts.filter(p=>!taken.has(p.id)&&texts.has(p.content.trim())&&p.createdAt&&Date.parse(p.createdAt)>=from&&Date.parse(p.createdAt)<=to);
+    if(hits.length!==1)return;
+    db.prepare(`UPDATE autoposting_deliveries SET provider_post_id=?,provider_status=?,provider_checked_at=?,error_code='PROVIDER_PENDING'
+      WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_post_id IS NULL`).run(hits[0].id,hits[0].status,iso(),d.post_id,d.channel_id);
+  }
+  function rollup(postId) {
+    const states=db.prepare('SELECT status FROM autoposting_deliveries WHERE post_id=?').all(postId).map(r=>r.status);
+    if(!states.length||states.some(s=>['pending','publishing','needs_review'].includes(s)))return;
+    const published=states.filter(s=>s==='published').length,failed=states.filter(s=>s==='failed').length;
+    const [status,code]=published&&!failed?['published',null]:published?['needs_review','PUBLISH_FAILED']:['failed','PUBLISH_FAILED'];
+    db.prepare(`UPDATE autoposting_posts SET status=?,last_error_code=?,revision=revision+1,updated_at=?
+      WHERE id=? AND status='needs_review' AND (status<>? OR COALESCE(last_error_code,'')<>COALESCE(?,''))`).run(status,code,iso(),postId,status,code);
+  }
+  async function settle() {
+    const done=db.prepare(`SELECT d.post_id,d.channel_id,d.channel_revision,d.provider_post_id,d.provider_status,c.code FROM autoposting_deliveries d
+      JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id WHERE d.status='needs_review'
+      AND d.provider_post_id IS NOT NULL AND d.provider_status IN ('published','failed') LIMIT 50`).all();
+    for(const d of done){
+      // Время выхода — то, что сообщил Onlypult; если его не узнать, — момент подтверждения.
+      let at=iso();
+      if(d.provider_status==='published'&&transport.findPosts){
+        try{const hit=(await transport.findPosts({companyCode:d.code,channelId:d.channel_id,channelRevision:d.channel_revision})).find(p=>p.id===d.provider_post_id);
+          if(hit?.publishedAt&&Date.parse(hit.publishedAt)<=now())at=hit.publishedAt;}catch{}
+      }
+      if(d.provider_status==='published')db.prepare(`UPDATE autoposting_deliveries SET status='published',external_id=COALESCE(external_id,provider_post_id),
+        finished_at=?,error_code='PROVIDER_CONFIRMED' WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='published'`).run(at,d.post_id,d.channel_id);
+      else db.prepare(`UPDATE autoposting_deliveries SET status='failed',finished_at=?,error_code='PROVIDER_FAILED'
+        WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='failed'`).run(iso(),d.post_id,d.channel_id);
+    }
+    for(const postId of new Set(done.map(d=>d.post_id)))rollup(postId);
+  }
+  async function followProvider() {
+    if(!transport.findPosts||stopped||now()-lastFollow<60000)return;
+    lastFollow=now();
+    const recent=now()-48*3600000;
+    const uncertain=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id
+      WHERE c.is_deleted=0 AND p.deleted_at IS NULL AND d.status='needs_review' AND d.provider_post_id IS NULL
+      AND d.error_code='PUBLICATION_UNCERTAIN' AND d.started_at>=? ORDER BY d.started_at LIMIT 5`).all(recent);
+    for(const d of uncertain){if(stopped)return;await bindUncertain(d);}
+    await settle();
+    if(!transport.findLink)return;
+    const linkless=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id
+      WHERE c.is_deleted=0 AND p.deleted_at IS NULL AND d.status='published' AND d.url IS NULL AND d.provider_post_id IS NOT NULL
+      AND d.finished_at>=? AND (d.provider_checked_at IS NULL OR d.provider_checked_at<=?) ORDER BY d.finished_at DESC LIMIT 3`)
+      .all(new Date(recent).toISOString(),new Date(now()-180000).toISOString());
+    for(const d of linkless){
+      if(stopped)return;
+      db.prepare('UPDATE autoposting_deliveries SET provider_checked_at=? WHERE post_id=? AND channel_id=?').run(iso(),d.post_id,d.channel_id);
+      let link=null;
+      try{
+        const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(d.post_id),view=dto(row,company(db,d.code));
+        link=await transport.findLink({companyCode:d.code,channelId:d.channel_id,channelRevision:d.channel_revision,
+          title:view.title||'',text:view.captions?.[d.channel_id]||view.text||'',publishedAt:d.finished_at});
+      }catch{link=null;}
+      if(typeof link==='string'&&/^https:\/\//.test(link))db.prepare("UPDATE autoposting_deliveries SET url=? WHERE post_id=? AND channel_id=? AND status='published' AND url IS NULL")
+        .run(url(link),d.post_id,d.channel_id);
+    }
+  }
   async function processDue() {
+    try{await followProvider();}catch(error){logger.warn(`[crm] autoposting follow failed ${String(error?.code||error?.message||'').slice(0,60)}`);}
     // Poll only known pending jobs. Unknown/timeout attempts cannot be reconciled by guessing text.
     if(transport.reconcile&&!stopped){
       const pending=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id
@@ -1560,6 +1720,14 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       for(const delivery of conflicting)cancel.run(due.id,delivery.channel_id);
       review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
     }
+    // Применяется и к старой очереди: известный отказ одного ещё не отправленного,
+    // согласованного канала останавливает группу до первого POST. Результаты уже
+    // выполненных доставок и сохранённые pending-записи остаются нетронутыми.
+    const deliveryBlocked=deliveries.filter(item=>item.status==='pending'&&deliveryApproved(due,item.channel_id))
+      .map(item=>deliveryBlocker(settings.channels.find(channel=>channel.id===item.channel_id))).find(Boolean);
+    if(deliveryBlocked){review(due.id,deliveryBlocked.code);return;}
+    // Старые согласованные записи без явной аудитории также не дают частичной отправки.
+    if(deliveries.some(item=>item.status==='pending'&&item.channel_id==='tiktok'&&deliveryApproved(due,item.channel_id))&&!readiness(due).ready){review(due.id,'NOT_READY');return;}
     const lease=randomUUID();
     const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL AND archived_at IS NULL")
       .run(now(),lease,iso(),due.id,due.revision);
@@ -1610,6 +1778,8 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
               throw Object.assign(Error('Plan platform mismatch before provider submission'),{ambiguous:false});
             if(stopped||active?.status!=='publishing'||active.lease!==lease||information.get(due.code).revision!==due.profile_revision||!deliveryApproved(active,delivery.channel_id))
               throw Object.assign(Error('Publication changed before provider submission'),{ambiguous:false});
+            if(active.content_revision!==due.content_revision||require('./publication-evidence.cjs').fingerprint(active)!==require('./publication-evidence.cjs').fingerprint(due))throw Object.assign(Error('Publication content changed'),{ambiguous:false});
+            require('./publication-evidence.cjs').capture(db,due,delivery.channel_id);
           }});
         if(result?.provider==='onlypult'){
           if(typeof result.providerPostId!=='string'||!result.providerPostId||!['draft','scheduled','published','failed'].includes(result.providerStatus))throw Error('Invalid provider receipt');
@@ -1629,17 +1799,28 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
           review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
         }
         const ambiguous=error?.ambiguous!==false,status=ambiguous?'needs_review':'failed';
-        const code=ambiguous?'PUBLICATION_UNCERTAIN':'PUBLISH_FAILED';
+        // 02.11.2026: у явного отказа сохраняется понятная причина (тариф, размер файла, доступ), а не общий код.
+        const KNOWN=['CONTENT_LIMIT','FILE_TOO_LARGE','PROVIDER_PLAN_INACTIVE','ACCESS_DENIED','PLATFORM_REJECTED','PROFILE_INACTIVE','PROFILE_NOT_FOUND','CONNECTION_MISSING'];
+        const code=ambiguous?'PUBLICATION_UNCERTAIN':KNOWN.includes(error?.code)?error.code:'PUBLISH_FAILED';
         db.prepare("UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=? WHERE post_id=? AND channel_id=? AND status='publishing'")
           .run(status,code,iso(),due.id,delivery.channel_id);
+        logger.warn(`[crm] autoposting code=${code} cause=${String(error?.code||'').slice(0,40)} channel=${delivery.channel_id}`);
+        // 02.11.2026: отказ или неясный ответ провайдера по одной площадке не останавливает остальные —
+        // это разные площадки, повтора и дубля нет. Барьер версии/плана (без status 502) по-прежнему останавливает группу.
+        if(error?.status===502)continue;
         db.prepare("UPDATE autoposting_posts SET status=?,last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='publishing' AND lease=?")
           .run(status,code,iso(),due.id,lease);
-        logger.warn(`[crm] autoposting code=${code}`);return;
+        return;
       }
     }
     db.prepare(`UPDATE autoposting_posts SET status='needs_review',last_error_code=COALESCE((SELECT error_code FROM autoposting_deliveries
       WHERE post_id=? AND status='needs_review' LIMIT 1),'PROVIDER_PENDING'),revision=revision+1,updated_at=?
       WHERE id=? AND status='publishing' AND lease=? AND EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='needs_review')`)
+      .run(due.id,iso(),due.id,lease,due.id);
+    // Отказы отдельных площадок: ни одна не вышла — «Ошибка отправки», часть вышла — «Нужна проверка».
+    db.prepare(`UPDATE autoposting_posts SET status=CASE WHEN EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='published') THEN 'needs_review' ELSE 'failed' END,
+      last_error_code='PUBLISH_FAILED',revision=revision+1,updated_at=?
+      WHERE id=? AND status='publishing' AND lease=? AND EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='failed')`)
       .run(due.id,iso(),due.id,lease,due.id);
     db.prepare("UPDATE autoposting_posts SET status='published',last_error_code=NULL,revision=revision+1,updated_at=? WHERE id=? AND status='publishing' AND lease=? AND NOT EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status<>'published')")
       .run(iso(),due.id,lease,due.id);
@@ -1653,7 +1834,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     if(row?.deleted_at||row&&!row.archived_at&&db.prepare('SELECT 1 FROM autoposting_post_trash_events WHERE post_id=? AND company_id=? LIMIT 1').get(row.id,owner.id))return restoreTrash(id,code,body,actor);
     recovery.restore(id,code,body,actor);return get(id,code);
   }
-  return {history:readHistory,createVariant,attachSource,lookupSourceAttachment,sourceUsage,remove,trash,archive,restore,archived,get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
+  return {history:readHistory,createPublishedCopy,createVariant,attachSource,lookupSourceAttachment,sourceUsage,remove,trash,archive,restore,archived,get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
 module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};

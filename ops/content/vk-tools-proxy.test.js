@@ -20,22 +20,14 @@ test('real proxy enforces owner/company/CSRF and journals one explicit design mu
  require('node:net').Socket.prototype.connect=blocked;require('node:tls').connect=blocked;
  let description='Original fixture description';
  globalThis.fetch=async(url,options)=>{
-   if(url==='https://pu.vk.com/material-upload'){
-     if(options.redirect!=='error'||!options.body.get('photo'))blocked();
-     fs.appendFileSync(${JSON.stringify(marker)},JSON.stringify({method:'fixture.upload',group:'12345'})+'\\n');
-     return new Response(JSON.stringify({server:1,photos_list:'FIXTURE_PHOTOS',hash:'FIXTURE_HASH'}));
-   }
    if(typeof url!=='string'||!url.startsWith('https://api.vk.com/method/'))blocked();
    const method=url.split('/').pop(),p=Object.fromEntries(new URLSearchParams(options.body));
    fs.appendFileSync(${JSON.stringify(marker)},JSON.stringify({method,group:p.group_id||null})+'\\n');
    let response;
    if(method==='account.getProfileInfo')response={id:123,first_name:'Fixture',last_name:'User'};
    else if(method==='groups.getTokenPermissions')response={mask:4096,permissions:[{name:'manage',setting:1}]};
-   else if(method==='groups.getById')response={groups:[{id:Number(p.group_id),name:'Fixture group',description,members_count:25,cover:{enabled:0,images:[]},has_photo:1,photo_200:'https://sun.userapi.com/avatar.jpg'}]};
+   else if(method==='groups.getById')response={groups:[{id:Number(p.group_id),name:'Fixture group',description,members_count:25,cover:{enabled:0,images:[]}}]};
    else if(method==='stats.get')response=[{period_from:1,period_to:2,visitors:{views:7},reach:{reach:5},activity:{likes:2,comments:1,copies:0,subscribed:1,unsubscribed:0}}];
-   else if(method==='photos.getAlbums')response={count:1,items:[{id:55,owner_id:-12345,title:'Fixture album',size:0}]};
-   else if(method==='photos.getUploadServer')response={upload_url:'https://pu.vk.com/material-upload',album_id:55};
-   else if(method==='photos.save'||method==='photos.getById')response=[{id:99,owner_id:-12345,album_id:55,text:'Fixture album photo'}];
    else if(method==='groups.edit'){description=p.description;response=1;}else blocked();
    return new Response(JSON.stringify({response}));
  };`);
@@ -55,8 +47,7 @@ test('real proxy enforces owner/company/CSRF and journals one explicit design mu
  createAutopostingTransport(stored,{apiKey:key}).saveSettings('avokado',{channels:[{id:'vk',provider:'onlypult',name:'Fixture VK',target:'fixture_vk_profile',enabled:true,revision:0,token:'op_'+'f'.repeat(64)}]});
  stored.prepare("UPDATE autoposting_channels SET checked_revision=revision,status='connected' WHERE company_code='avokado' AND id='vk'").run();
  const publishingBefore=stored.prepare('SELECT * FROM autoposting_channels').all();
- for(const p of ['analytics/settings','design/settings','design/state','design/history','design/albums','design/material-history','design/avatar-history'])assert.equal((await through('editor',route(p))).status,403);
- for(const p of ['design/material-preview','design/material-apply','design/avatar-preview','design/avatar-apply'])assert.equal((await through('editor',route(p),{method:'POST',body:{}})).status,403);
+ for(const p of ['analytics/settings','design/settings','design/state','design/history'])assert.equal((await through('editor',route(p))).status,403);
  assert.equal((await through('owner','/vk-tools/design/settings')).status,400);
  assert.equal((await through('owner',route('design/settings'),{method:'PUT',body:{},headers:{'x-csrf-token':''}})).status,403);
  assert.equal((await getCalls()).length,0);
@@ -84,39 +75,6 @@ test('real proxy enforces owner/company/CSRF and journals one explicit design mu
  const duplicate=await through('owner',route('design/apply'),{method:'POST',body:action});assert.deepEqual(duplicate.body,applied.body);
  assert.equal((await getCalls()).filter(c=>c.method==='groups.edit').length,1);
  const history=await through('owner',route('design/history'));assert.equal(history.status,200);assert.equal(history.body.items.length,1);assert.ok(!JSON.stringify(history.body).includes(token));
- // Album writes require a deliberately checked user binding; community cover access is insufficient.
- const unsupported=await through('owner',route('design/albums')+'&revision=1');assert.ok(unsupported.status>=400);
- const userBinding=await through('owner',route('design/settings'),{method:'PUT',body:{revision:1,groupId:'12345',tokenType:'user',accessToken:token,enabled:true}});assert.equal(userBinding.status,200);
- assert.equal((await through('owner',route('design/check'),{method:'POST',body:{revision:2}})).body.connected,true);
- const albums=await through('owner',route('design/albums')+'&revision=2');assert.equal(albums.status,200,JSON.stringify(albums.body));assert.equal(albums.body.albums[0].id,55);
- const albumPreview=await through('owner',route('design/material-preview'),{method:'POST',body:{revision:2,albumId:55,caption:'Fixture album photo',image:{mime:'image/png',base64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII='}}});
- assert.equal(albumPreview.status,200,JSON.stringify(albumPreview.body));assert.equal((await getCalls()).filter(c=>c.method==='fixture.upload').length,0);
- const albumAction={revision:2,previewId:albumPreview.body.previewId,requestId:'fixture_material_request_0001'};
- assert.equal((await through('owner',route('design/material-apply'),{method:'POST',body:albumAction,headers:{'x-csrf-token':''}})).status,403);
- assert.ok((await through('owner','/vk-tools/design/material-apply?companyCode=alvi',{method:'POST',body:albumAction})).status>=400);
- assert.equal((await getCalls()).filter(c=>c.method==='fixture.upload').length,0);
- const uploaded=await through('owner',route('design/material-apply'),{method:'POST',body:albumAction});assert.equal(uploaded.status,200,JSON.stringify(uploaded.body));assert.equal(uploaded.body.status,'verified',JSON.stringify(uploaded.body));
- assert.deepEqual((await through('owner',route('design/material-apply'),{method:'POST',body:albumAction})).body,uploaded.body);
- assert.equal((await getCalls()).filter(c=>c.method==='fixture.upload').length,1);assert.equal((await getCalls()).filter(c=>c.method==='photos.save').length,1);
- const materialHistory=await through('owner',route('design/material-history')+'&revision=2');assert.equal(materialHistory.body.items.length,1);assert.doesNotMatch(JSON.stringify(materialHistory.body),/FIXTURE_HASH|FIXTURE_PHOTOS|FIXTURE_DIRECT_VK_TOKEN/);
- // Avatar preparation reads only; even a manually crafted explicit confirmation
- // cannot upload/save or enable the possible public wall-post side effect.
- const avatarBody={revision:2,image:{mime:'image/png',base64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII='}};
- const beforeAvatar=(await getCalls()).length;
- assert.equal((await through('owner',route('design/avatar-preview'),{method:'POST',body:avatarBody,headers:{'x-csrf-token':''}})).status,403);
- const avatarPreview=await through('owner',route('design/avatar-preview'),{method:'POST',body:avatarBody});assert.equal(avatarPreview.status,200,JSON.stringify(avatarPreview.body));
- assert.deepEqual((await getCalls()).slice(beforeAvatar).map(c=>c.method),['groups.getById']);
- assert.deepEqual(avatarPreview.body.capabilities,{applyEnabled:false,cropSupported:false});
- assert.equal(avatarPreview.body.before.photo200,'https://sun.userapi.com/avatar.jpg');
- const avatarAction={revision:2,previewId:avatarPreview.body.previewId,requestId:'fixture_avatar_request_0001',confirmPublicPost:true};
- assert.equal((await through('owner',route('design/avatar-apply'),{method:'POST',body:avatarAction,headers:{'x-csrf-token':''}})).status,403);
- assert.ok((await through('owner','/vk-tools/design/avatar-apply?companyCode=alvi',{method:'POST',body:avatarAction})).status>=400);
- const beforeBlocked=(await getCalls()).length;
- const blocked=await through('owner',route('design/avatar-apply'),{method:'POST',body:avatarAction});assert.equal(blocked.status,200,JSON.stringify(blocked.body));assert.equal(blocked.body.status,'blocked');assert.equal(blocked.body.code,'AVATAR_APPLY_DISABLED');
- assert.deepEqual((await through('owner',route('design/avatar-apply'),{method:'POST',body:avatarAction})).body,blocked.body);
- assert.equal((await through('owner',route('design/avatar-apply'),{method:'POST',body:{...avatarAction,applyEnabled:true}})).status,400);
- const avatarHistory=await through('owner',route('design/avatar-history')+'&revision=2');assert.equal(avatarHistory.status,200);assert.equal(avatarHistory.body.items.length,1);
- assert.equal((await getCalls()).length,beforeBlocked);assert.doesNotMatch(JSON.stringify(avatarHistory.body),/FIXTURE_DIRECT_VK_TOKEN|base64|image_bytes/);
  assert.deepEqual(stored.prepare('SELECT * FROM autoposting_channels').all(),publishingBefore);
- assert.equal((await getCalls()).some(c=>['messages.send','wall.post','photos.getOwnerPhotoUploadServer','photos.saveOwnerPhoto'].includes(c.method)),false);
+ assert.equal((await getCalls()).some(c=>c.method==='messages.send'||c.method==='wall.post'),false);
 });

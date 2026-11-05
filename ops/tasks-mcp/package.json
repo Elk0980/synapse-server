@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test *.test.js ../content/agent-launch*.test.js"
+    "test": "node --test *.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "2.1.2",

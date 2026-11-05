@@ -15,7 +15,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const ITEM_ID = /^[a-z0-9][a-z0-9_-]{0,79}$/i;
 const CHAT_ID = /^\d{5,20}$/;
 const BODY_FIELDS = new Set(['requestId', 'kind', 'name', 'phone', 'comment', 'consent', 'items', 'occasion', 'date', 'page', 'utm', 'website',
-  'contactChannel', 'contact', 'telegramUsername', 'deliveryAddress', 'deliveryDate', 'deliveryInterval']);
+  'contactChannel', 'contact', 'telegramUsername', 'deliveryAddress', 'deliveryDate', 'deliveryInterval', 'attributionToken']);
 const CONTACT_CHANNELS = Object.freeze({ phone: 'Звонок', telegram: 'Telegram', whatsapp: 'WhatsApp', max: 'MAX' });
 const phoneDigits = (value) => { const digits = value.replace(/\D/g, ''); return digits.length === 11 && digits.startsWith('8') ? `7${digits.slice(1)}` : digits; };
 const validPhone = (value) => value.length <= 32 && /^[+\d\s().-]+$/.test(value) && /^\d{10,15}$/.test(phoneDigits(value));
@@ -28,6 +28,7 @@ const TELEGRAM_LEASE = 10 * 60 * 1000;
 const MAX_KOPECKS = 10 ** 13;            // защита от переполнения итога: выше — цена неизвестна
 const PRICE_PATTERN = /^\s*(\d[\d\s ]*)(?:[.,](\d{1,2}))?\s*(?:руб\.?|р\.?|₽)?\s*$/i;
 const JOB_PREFIX = 'order:';
+const DELETED_REQUEST_PREFIX = 'palitra-love/order-cleanup/deleted-request/v1/';
 const LIST_LIMIT = 100;
 /* Канал доставки уведомлений о заявках: прежний бот Synapse (через мост общего чата проекта) или
    клиентский бот компании. По умолчанию — прежний; клиентский включает только владелец явно. */
@@ -62,6 +63,58 @@ const formatRub = (kopecks) => {
   const rub = Math.floor(kopecks / 100), rest = kopecks % 100;
   return `${rub.toLocaleString('ru-RU')}${rest ? `,${String(rest).padStart(2, '0')}` : ''} ₽`;
 };
+/* PALITRA_PRODUCT_SNAPSHOT_BEGIN — metadata is read from the accepted price, never the request. */
+const PALITRA_PRODUCT_ASSET = /^\/api\/assets\/[A-Za-z0-9][A-Za-z0-9._-]{0,194}\.(?:avif|gif|jpe?g|png|webp)$/i;
+function palitraProductText(value, max) {
+  const text = typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  return text.length > max ? text.slice(0, max - 1) + '…' : text;
+}
+function palitraProductSnapshot(item, category, version) {
+  const photos = [item.photo, ...(Array.isArray(item.gallery) ? item.gallery : [])]
+    .filter(value => typeof value === 'string' && PALITRA_PRODUCT_ASSET.test(value));
+  return { schema: 'palitra-order-product/v1', priceVersion: Number.isSafeInteger(version) && version > 0 ? version : null,
+    categoryId: palitraProductText(category.id, 80), categoryTitle: palitraProductText(category.title, 120),
+    composition: palitraProductText(item.composition, 1000), description: palitraProductText(item.desc, 1000),
+    note: palitraProductText(item.note, 300), photos: [...new Set(photos)].slice(0, 6) };
+}
+function palitraStoredProduct(value) {
+  if (!value || value.schema !== 'palitra-order-product/v1' || value.priceVersion !== null && (!Number.isSafeInteger(value.priceVersion) || value.priceVersion < 1)) return null;
+  for (const [key, max] of [['categoryId',80],['categoryTitle',120],['composition',1000],['description',1000],['note',300]])
+    if (typeof value[key] !== 'string' || value[key].length > max || /[\x00-\x1f\x7f]/.test(value[key])) return null;
+  if (!Array.isArray(value.photos) || value.photos.length > 6 || value.photos.some(src => typeof src !== 'string' || !PALITRA_PRODUCT_ASSET.test(src))) return null;
+  return value;
+}
+/* Preserve every original order line/contact/total. Extra descriptions share the remaining chat budget.
+   Complete metadata stays in the immutable row and is available through the existing exact order read. */
+function palitraProductMessage(text, items, limit = 8192) {
+  if (!Array.isArray(items) || !items.length || items.length > 30 || text.length >= limit) return text;
+  const identifiers = [], details = [];
+  for (const item of items) {
+    if (!item || typeof item.id !== 'string' || !ITEM_ID.test(item.id)) continue;
+    identifiers.push(`Артикул: ${item.id} · ${palitraProductText(item.title, 120)}`);
+    const product = palitraStoredProduct(item.product);
+    if (!product) continue;
+    const rows = [];
+    if (product.categoryTitle) rows.push(`Категория: ${product.categoryTitle}`);
+    if (product.composition) rows.push(`Состав набора: ${product.composition}`);
+    if (product.description && product.description !== product.composition) rows.push(`Описание: ${product.description}`);
+    if (product.note) rows.push(`Примечание: ${product.note}`);
+    if (product.photos.length) rows.push(`Фото: https://palitra-love.ru${product.photos[0]}`);
+    if (rows.length) details.push(`Товар ${item.id}\n${rows.join('\n')}`);
+  }
+  const hint = '\nПодробности товаров смотрите в карточке заявки.';
+  const header = '\n\nВыбранные товары:';
+  let output = text, omitted = false;
+  if (output.length + header.length + hint.length > limit) return output;
+  output += header;
+  for (const line of [...identifiers, ...details]) {
+    if (output.length + line.length + 1 + hint.length <= limit) output += '\n' + line;
+    else omitted = true;
+  }
+  return output + (omitted ? hint : '');
+}
+/* PALITRA_PRODUCT_SNAPSHOT_END */
+
 const isPrivateAddress = (ip) => {
   const value = String(ip || '').replace(/^::ffff:/i, '');
   return value === '::1' || /^127\./.test(value) || /^10\./.test(value) || /^192\.168\./.test(value)
@@ -84,7 +137,7 @@ const originOf = (request) => {
   return '';
 };
 
-function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = Date.now, groupNotificationSites = [], groupReader = () => null }) {
+function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = Date.now, groupNotificationSites = [], groupReader = () => null, onAcceptedOrder = null }) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS site_order_recipients (
       site TEXT PRIMARY KEY, company_code TEXT NOT NULL, telegram_chat_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',
@@ -161,7 +214,8 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     for (const category of doc.categories) {
       for (const item of Array.isArray(category?.items) ? category.items : []) {
         if (item && typeof item.id === 'string' && !index.has(item.id)) {
-          index.set(item.id, { title: shortText(item.title || item.id, 120), price: priceKopecks(item.price) });
+          index.set(item.id, { title: shortText(item.title || item.id, 120), price: priceKopecks(item.price),
+            ...(site === 'palitra' && siteConfig(site)?.companyCode === 'palitra-love' ? { product: palitraProductSnapshot(item, category, doc.version) } : {}) });
         }
       }
     }
@@ -196,8 +250,15 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       } else if (phone && !validPhone(phone)) fail(400, 'Некорректный дополнительный телефон', 'VALIDATION');
       if (contactChannel === 'telegram') {
         const handle = (value) => `@${value.replace(/^@/, '')}`;
-        if (!/^@?[a-z][a-z0-9_]{4,31}$/i.test(contact) || (telegramUsername && (!/^@?[a-z][a-z0-9_]{4,31}$/i.test(telegramUsername) || handle(telegramUsername).toLowerCase() !== handle(contact).toLowerCase()))) fail(400, 'Укажите Telegram @ник', 'VALIDATION');
-        contact = handle(contact).toLowerCase(); telegramUsername = contact;
+        if (validPhone(contact)) {
+          if (telegramUsername || (phone && phoneDigits(phone) !== phoneDigits(contact))) fail(400, 'Телефон и контакт Telegram не совпадают', 'VALIDATION');
+          contact = `+${phoneDigits(contact)}`; phone = contact; digits = phoneDigits(phone);
+          // A phone contact is not a verified Telegram identity/username and never binds a chat.
+          telegramUsername = '';
+        } else {
+          if (!/^@?[a-z][a-z0-9_]{4,31}$/i.test(contact) || (telegramUsername && (!/^@?[a-z][a-z0-9_]{4,31}$/i.test(telegramUsername) || handle(telegramUsername).toLowerCase() !== handle(contact).toLowerCase()))) fail(400, 'Укажите номер телефона или Telegram @ник', 'VALIDATION');
+          contact = handle(contact).toLowerCase(); telegramUsername = contact;
+        }
       } else if (telegramUsername) fail(400, 'Telegram ник допустим только для Telegram', 'VALIDATION');
       if (contactChannel === 'max') {
         if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(contact) || (/:/.test(contact) && !/^https:\/\//i.test(contact))) fail(400, 'Укажите контакт MAX, без email и небезопасных ссылок', 'VALIDATION');
@@ -265,7 +326,8 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     if (Object.keys(utm).length) lines.push(`Источник: ${Object.entries(utm).map(([k, v]) => `${k}=${v}`).join(', ')}`);
     // Длина уже ограничена валидатором (30 позиций, комментарий, utm); на части по 3500 текст делит мост
     // и не повторяет уже отправленные части — здесь ничего не обрезается.
-    return lines.join('\n');
+    const text = lines.join('\n');
+    return order.site === 'palitra' && order.company_code === 'palitra-love' ? palitraProductMessage(text, items) : text;
   }
   const recipientOf = (site) => db.prepare('SELECT * FROM site_order_recipients WHERE site=?').get(site) || null;
   function enqueue(site, config, kind, order, recipient, destination = 'manager') {
@@ -277,6 +339,17 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, order ? order.id : null, kind, recipient.telegram_chat_id, recipient.version, text, at, at, transport, destination).lastInsertRowid);
   }
 
+  /* A removed checkout UUID stays terminal without retaining its contact/body.
+     validate() has already canonicalized the v4 UUID to lowercase. Read presence only;
+     existing documents schema/index are owned by the server, never initialized here. */
+  function rejectRemovedRequest(site, config, requestId) {
+    if (site !== 'palitra' || config.companyCode !== 'palitra-love') return;
+    const key = `${DELETED_REQUEST_PREFIX}${sha256(`${site}\n${requestId}`)}`;
+    if (db.prepare('SELECT 1 AS removed FROM documents WHERE key=? LIMIT 1').get(key)) {
+      fail(410, 'Эта заявка удалена. Для нового заказа оформите новую заявку.', 'ORDER_REMOVED');
+    }
+  }
+
   /* ---------- публичный приём ---------- */
   const duplicateView = (row) => ({ ok: true, duplicate: true, orderId: row.id, requestId: row.request_id, status: 'accepted',
     message: `Заявка №${row.id} уже принята. Менеджер свяжется с вами, подтвердит состав и стоимость, согласует оплату и доставку.` });
@@ -284,8 +357,12 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     const config = siteConfig(site);
     if (!config) fail(404, 'Не найдено', 'NOT_FOUND');
     if (!origin || !config.origins.includes(origin)) fail(403, 'Запрос с этого адреса не принимается', 'ORIGIN');
+    if (body && Object.hasOwn(body, 'attributionToken')) {
+      if (site !== 'palitra' || config.companyCode !== 'palitra-love' || typeof body.attributionToken !== 'string' || !/^[0-9a-f-]{36}\.[0-9a-f]{64}$/i.test(body.attributionToken)) fail(400, 'Некорректная метка перехода', 'VALIDATION');
+    }
     const input = validate(body);
     if (input.honeypot) return { status: 200, body: { ok: true, status: 'accepted' } };
+    rejectRemovedRequest(site, config, input.requestId);
     // Повтор проверяется до лимита частоты: повторный клик не должен упираться в 429 и не ищет по контактам.
     const existing = db.prepare('SELECT id,request_id,fingerprint FROM site_orders WHERE site=? AND request_id=?').get(site, input.requestId);
     if (existing) {
@@ -306,12 +383,14 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       if (!known) { const error = new Error('Состав корзины устарел. Обновите корзину по прайсу'); throw Object.assign(error, { status: 400, code: 'ITEM_UNKNOWN', itemId: item.id }); }
       if (known.price === null) unknownCount += 1;
       else knownTotal += known.price * item.qty;
-      return { id: item.id, title: known.title, qty: item.qty, price: known.price };
+      return { id: item.id, title: known.title, qty: item.qty, price: known.price, ...(known.product ? { product: known.product } : {}) };
     });
     if (!Number.isSafeInteger(knownTotal) || knownTotal > MAX_KOPECKS) fail(400, 'Итог заявки слишком велик', 'VALIDATION');
     const recipient = recipientOf(site);
     try {
       const order = tx(() => {
+        // Recheck under the order transaction: a cleanup may commit after the first read.
+        rejectRemovedRequest(site, config, input.requestId);
         const id = Number(db.prepare(`INSERT INTO site_orders(site,company_code,request_id,fingerprint,kind,name,phone,phone_normalized,comment,items_json,known_total,unknown_count,page,utm_json,ip_hash,created_at,
           contact_channel,contact,telegram_username,delivery_address,delivery_date,delivery_interval,group_required)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, input.requestId, input.fingerprint, input.kind, input.name, input.phone, input.phoneNormalized,
@@ -319,6 +398,9 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
           input.contactChannel, input.contact, input.telegramUsername, input.deliveryAddress, input.deliveryDate, input.deliveryInterval, groupEnabled(site) ? 1 : 0).lastInsertRowid);
         db.prepare('INSERT INTO site_order_rate(ip_hash,created_at) VALUES(?,?)').run(hash, stamp(at));
         const row = db.prepare('SELECT * FROM site_orders WHERE id=?').get(id);
+        if (site === 'palitra' && config.companyCode === 'palitra-love' && typeof onAcceptedOrder === 'function') {
+          onAcceptedOrder({ orderId: id, origin, token: body.attributionToken });
+        }
         // Получатель не настроен — заявка всё равно сохранена; уведомление владелец отправит явно после настройки.
         if (recipient) enqueue(site, config, 'order', row, recipient);
         const group = groupOf(site);
@@ -339,10 +421,15 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   }
 
   /* ---------- очередь для моста ---------- */
-  const jobJSON = (job) => ({ id: `${JOB_PREFIX}${job.id}`, companyCode: job.company_code, chatId: job.chat_id, messageId: null,
-    attempt: job.attempts, text: job.text, authorName: 'Заявка с сайта', authorType: 'system', attachments: [],
-    // Клиентскому боту нужны номер заявки и вид задания (кнопки статуса только у заявки, не у проверки).
-    ...(job.transport === 'client_bot' ? { site: job.site, orderId: job.order_id, orderKind: job.kind } : {}) });
+  const notificationText = createPalitraNotificationText({ db });
+  const jobJSON = (job) => {
+    const compact = job.site === 'palitra' && job.company_code === 'palitra-love' && job.kind === 'order' && job.destination === 'manager' && JSON.parse(job.external_ids || '[]').length === 0
+      ? notificationText.order(job.order_id) : null;
+    return { id: `${JOB_PREFIX}${job.id}`, companyCode: job.company_code, chatId: job.chat_id, messageId: null,
+      attempt: job.attempts, text: compact ? `${compact.title}\n${compact.body}` : job.text, ...(compact ? { compactNotification: true } : {}), authorName: 'Заявка с сайта', authorType: 'system', attachments: [],
+      // Клиентскому боту нужны номер заявки и вид задания (кнопки статуса только у заявки, не у проверки).
+      ...(job.transport === 'client_bot' ? { site: job.site, orderId: job.order_id, orderKind: job.kind } : {}) };
+  };
   /* Мост каждого канала забирает только свои задания. Общий чат проекта вызывает без аргумента — прежний канал.
      Вызывается внутри транзакции вызывающего модуля. */
   function pendingTelegram(transport = 'project_bot', site = null) {
@@ -549,23 +636,28 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     });
     return recipientStatus(site);
   }
-  /* Статус обработки меняет менеджер (кнопкой в Telegram) или владелец. Повтор того же статуса — без изменений. */
-  function setWorkStatus(site, orderId, status, actor = '') {
+  /* Статус обработки меняет менеджер (кнопкой в Telegram) или владелец. Повтор того же статуса — без изменений.
+     PALITRA-APP-WORKPLACE: чтение и сравнение — внутри одной транзакции; необязательный expected (статус, который видел
+     автор) защищает от устаревшей карточки: если статус уже другой и не равен целевому — 409, без записи. */
+  function setWorkStatus(site, orderId, status, actor = '', { expected } = {}) {
     if (!siteConfig(site)) fail(404, 'Не найдено');
     if (!WORK_STATUSES.has(status)) fail(400, 'Неизвестный статус обработки');
+    if (expected !== undefined && !WORK_STATUSES.has(expected)) fail(400, 'Неизвестный ожидаемый статус обработки');
     const id = Number(orderId);
     if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный номер заявки');
-    const order = db.prepare('SELECT id FROM site_orders WHERE id=? AND site=?').get(id, site);
-    if (!order) fail(404, 'Заявка не найдена');
-    const before = workJSON(id);
-    if (before.status === status) return { changed: false, work: before };
-    const at = stamp(), who = shortText(actor, 80);
-    tx(() => {
+    const who = shortText(actor, 80);
+    return tx(() => {
+      const order = db.prepare('SELECT id FROM site_orders WHERE id=? AND site=?').get(id, site);
+      if (!order) fail(404, 'Заявка не найдена');
+      const before = workJSON(id);
+      if (before.status === status) return { changed: false, work: before };
+      if (expected !== undefined && before.status !== expected) fail(409, 'Статус заявки уже изменён. Обновите карточку', 'WORK_STALE');
+      const at = stamp();
       db.prepare(`INSERT INTO site_order_work(order_id,status,updated_by,updated_at) VALUES(?,?,?,?)
         ON CONFLICT(order_id) DO UPDATE SET status=excluded.status,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).run(id, status, who, at);
       db.prepare('INSERT INTO site_order_work_events(order_id,status,actor,created_at) VALUES(?,?,?,?)').run(id, status, who, at);
+      return { changed: true, work: workJSON(id) };
     });
-    return { changed: true, work: workJSON(id) };
   }
   /* Ручное подтверждение менеджера, не событие доставки. Не создаёт outbox и не меняет обработку. */
   function checklistOrder(site, orderId) {
@@ -603,6 +695,30 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       return { changed: true, order: orderJSON(order) };
     });
   }
+  /* Internal checkout-only projection. Values and prices come from the accepted immutable row, not HTTP
+     fields or a later price reload. Keep the existing orderSummary DTO free of these personal details. */
+  function chatOrderSnapshot(site, orderId) {
+    const id = Number(orderId), config = siteConfig(site);
+    if (!config || !Number.isSafeInteger(id) || id < 1) return null;
+    const row = db.prepare('SELECT * FROM site_orders WHERE id=? AND site=? AND company_code=?').get(id, site, config.companyCode);
+    if (!row) return null;
+    const clean = value => String(value || '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+    const lines = [`Заказ №${id}`, `Имя: ${clean(row.name)}`];
+    if (row.contact_channel) lines.push(`Связаться через: ${CONTACT_CHANNELS[row.contact_channel]}`, `Контакт: ${clean(row.contact)}`);
+    else if (row.phone) lines.push(`Телефон: ${clean(row.phone)}`);
+    if (row.delivery_address) lines.push(`Адрес доставки: ${clean(row.delivery_address)}`);
+    if (row.delivery_date) lines.push(`Дата получения: ${clean(row.delivery_date)}`);
+    if (row.delivery_interval) lines.push(`Время получения: ${clean(row.delivery_interval)}`);
+    const items = JSON.parse(row.items_json);
+    if (items.length) {
+      lines.push('', 'Состав заказа:');
+      for (const item of items) lines.push(`• ${clean(item.title)} × ${item.qty}${item.price === null ? '' : ` — ${formatRub(item.price * item.qty)}`}`);
+      lines.push(`Итого: ${formatRub(row.known_total)}`);
+    }
+    if (row.comment) lines.push('', `Пожелания: ${clean(row.comment)}`);
+    const text = lines.join('\n');
+    return Object.freeze({ id, text: site === 'palitra' && config.companyCode === 'palitra-love' ? palitraProductMessage(text, items) : text });
+  }
   /* Короткая сводка заявки для клиентского бота: без контактов, только то, что нужно для связи с диалогом. */
   function orderSummary(site, orderId) {
     const id = Number(orderId);
@@ -613,11 +729,92 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   }
 
   return { submit, pendingTelegram, acknowledge, isOrderJob, orderJob, listOrders, recipientStatus, setRecipient, setTransport, testRecipient, renotify,
-    setWorkStatus, setChecklist, checklistOrder, orderSummary, sites: Object.keys(sites) };
+    setWorkStatus, setChecklist, checklistOrder, orderSummary, chatOrderSnapshot, sites: Object.keys(sites) };
 }
 
 /* Точный allowlist Origin для заявок Palitra: боевой домен без www (www отвечает 301 и страниц не отдаёт)
    и временный адрес, который работает до и после переключения DNS. Шаблонов и поддоменов нет. */
 const PALITRA_ORDER_ORIGINS = Object.freeze(['https://palitra-love.ru', 'https://palitra-love.synapsebusiness.ru']);
+
+/* Internal readonly notification projection. Stored orders, messages and outbox payloads remain intact.
+   Only the canonical Palitra order supplies name/comment/stage; HTTP and queued text never supply context. */
+function createPalitraNotificationText({ db }) {
+  const positive = n => Number.isSafeInteger(n) && n > 0;
+  const clean = (value, max) => {
+    const points = Array.from(String(value || '').replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim());
+    return points.length > max ? points.slice(0, max - 1).join('') + '…' : points.join('');
+  };
+  const record = key => {
+    const row = db.prepare('SELECT body FROM documents WHERE key=? ORDER BY version DESC LIMIT 1').get(key);
+    if (!row) return null;
+    try {
+      const value = JSON.parse(row.body);
+      return value && value.schema === 1 && Array.isArray(value.stages) ? value : { invalid: true };
+    } catch (_) { return { invalid: true }; }
+  };
+  function context(orderId) {
+    if (!positive(orderId)) return null;
+    const row = db.prepare("SELECT id,name,comment FROM site_orders WHERE id=? AND site='palitra' AND company_code='palitra-love'").get(orderId);
+    if (!row) return null;
+    const state = record(`palitra-love/order-workflow/orders/${row.id}`);
+    const config = state || record('palitra-love/order-workflow');
+    const work = db.prepare('SELECT status FROM site_order_work WHERE order_id=?').get(row.id);
+    const stages = config?.invalid ? [] : config?.stages || require('./palitra-workflow.cjs').DEFAULT.stages;
+    const stageId = state ? state.currentStageId : work?.status === 'done' ? stages.at(-1)?.id : stages[0]?.id;
+    const stage = stages.find(s => s && s.id === stageId);
+    const label = stage && typeof stage.label === 'string' && stage.label.trim()
+      ? stage.id === 'new' ? 'Новая заявка' : clean(stage.label, 64) : 'Заявка';
+    return { row, title: `${label} · №${row.id} · ${clean(row.name, 100) || 'Клиент'}` };
+  }
+  function order(orderId) {
+    const value = context(orderId);
+    return value ? { title: value.title, body: clean(value.row.comment, 500) || 'Клиент оформил заявку.' } : null;
+  }
+  function message(messageId, threadId, expectedOrderId = undefined, event = null) {
+    if (!positive(messageId) || !positive(threadId)) return null;
+    const row = db.prepare(`SELECT m.id,m.thread_id,m.text,m.web_session_id,t.order_id FROM chat_thread_messages m
+      JOIN chat_threads t ON t.id=m.thread_id WHERE m.id=? AND m.thread_id=? AND t.site='palitra' AND t.company_code='palitra-love'
+      AND m.direction='in' AND m.author_kind='customer' AND m.source_channel IN ('web','telegram')`).get(messageId, threadId);
+    if (!row) return null;
+    if (expectedOrderId !== undefined && row.order_id !== expectedOrderId) return null;
+    const value = context(row.order_id);
+    if (!value) return null;
+    const receipt = positive(row.web_session_id) && db.prepare(`SELECT fingerprint FROM chat_thread_requests WHERE actor_kind='web'
+      AND actor_ref=? AND request_id=? AND thread_id=? AND message_id=?`).get(`session:${row.web_session_id}`, `checkout-order:${row.order_id}`, threadId, messageId);
+    const checkout = receipt && receipt.fingerprint === sha256(JSON.stringify({ threadId, text: row.text }));
+    const title = event === 'message' ? `Сообщение · №${value.row.id} · ${clean(value.row.name, 100) || 'Клиент'}` : value.title;
+    return { title, body: clean(checkout ? value.row.comment : row.text, 500) || (checkout ? 'Клиент оформил заявку.' : 'Клиент отправил вложение.') };
+  }
+  function legacyMessage(messageId, dialogId, botKey) {
+    if (!positive(messageId) || !positive(dialogId) || typeof botKey !== 'string' || !botKey) return null;
+    const row = db.prepare(`SELECT m.text,d.order_id FROM client_dialog_messages m JOIN client_dialogs d ON d.id=m.dialog_id
+      WHERE m.id=? AND m.dialog_id=? AND m.bot_key=? AND d.bot_key=? AND m.company_code='palitra-love'
+      AND d.company_code='palitra-love' AND m.direction='in' AND m.author_type='client'`).get(messageId, dialogId, botKey, botKey);
+    if (!row) return null;
+    const value = context(row.order_id);
+    return value ? { title: value.title, body: clean(row.text, 500) || 'Клиент отправил вложение.' } : null;
+  }
+  return Object.freeze({ order, message, legacyMessage });
+}
+
+/* Preserve receipt indices and security-bearing params. Partially delivered jobs and media parts never change.
+   Copied/captioned media already carries customer text; an upload without caption still needs its preview. */
+function projectStaffNotificationParts(parts, formatted, externalIds = []) {
+  if (!formatted || !Array.isArray(parts) || !Array.isArray(externalIds)) return parts;
+  if (externalIds.length) return parts;
+  const indices = parts.map((p, i) => p?.method === 'sendMessage' && typeof p.params?.text === 'string' && i >= externalIds.length ? i : -1).filter(i => i >= 0);
+  if (!indices.length) return parts;
+  const carriesText = parts.some(p => p?.method === 'copyMessage' || (p?.method !== 'sendMessage' && p?.params?.caption));
+  const text = carriesText ? formatted.title : `${formatted.title}\n${formatted.body}`;
+  const points = Array.from(text);
+  if (points.length < indices.length) return parts;
+  const result = parts.map(p => ({ ...p, params: { ...p.params } }));
+  let offset = 0;
+  indices.forEach((index, n) => {
+    const size = Math.ceil((points.length - offset) / (indices.length - n));
+    result[index].params.text = points.slice(offset, offset + size).join(''); offset += size;
+  });
+  return result;
+}
 module.exports = { createSiteOrders, clientIp, originOf, priceKopecks, isPrivateAddress, ORDER_STATUSES, JOB_PREFIX, PALITRA_ORDER_ORIGINS,
-  TRANSPORTS, WORK_STATUSES };
+  TRANSPORTS, WORK_STATUSES, createPalitraNotificationText, projectStaffNotificationParts };

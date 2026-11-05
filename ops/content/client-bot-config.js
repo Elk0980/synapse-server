@@ -10,6 +10,7 @@ function clientCompanyConfig(env, companies) {
         origins: (env.PALITRA_ORDER_ORIGINS || PALITRA_ORDER_ORIGINS.join(',')).split(',').map(s => s.trim()).filter(Boolean) },
       // Получатель и диалоги доступны владельцу. Публичный приём заявок ALVI не включается.
       alvi: { companyCode: companies.alvi, title: 'ALVI', origins: [] },
+      avokado: { companyCode: companies.avokado, title: 'Авокадо', origins: [] },
     },
     bots: {
       palitra: { companyCode: companies.palitra, site: 'palitra', title: 'Palitra', username: username('PALITRA'),

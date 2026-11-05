@@ -16,6 +16,8 @@ const { createEmailDiagnostics } = require('./email-diagnostics');
 const { companyPublicLinks } = require('./company-links');
 const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
+const {create:createContentDay}=require('./content-day.cjs');
+const {create:createContentDayHttp}=require('./content-day-http.cjs');
 const {createContentFactorySourceHandler}=require('./content-factory-source-http');
 const {createContentFactoryContextHandler}=require('./content-factory-context-http');
 const {createReviewTasks}=require('./autoposting-review-tasks');
@@ -34,8 +36,6 @@ const { createVkCommunity } = require('./vk-community');
 const { createVkCommunityHandler } = require('./vk-community-http');
 const { createVkDirect } = require('./vk-direct');
 const { createVkDesign } = require('./vk-design');
-const { createVkMaterials } = require('./vk-materials');
-const { createVkAvatar } = require('./vk-avatar');
 const { createVkToolsHandler } = require('./vk-tools-http');
 const { createReviews } = require('./reviews');
 const { createReviewsHandler } = require('./reviews-http');
@@ -648,8 +648,11 @@ const taskDispatch = createTaskDispatch(db,{onAccept:taskCoordination.acceptDisp
 const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
-const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow});
+const mediaMentor = createMediaMentor(db);
+const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow,publicationCopies:mediaMentor.publicationCopies});
 const handleContentFactoryCompletion=require('./content-factory-completion-http').createContentFactoryCompletionHandler({autoposting,companyModuleContext,readJson,send});
+const contentDay=createContentDay({db,getSettings:code=>autopostingTransport.getSettings(code),readCalendar:(code,q)=>autoposting.calendar(code,q),createVariant:(id,code,body,actor)=>autoposting.createPublishedCopy(id,code,body,actor)});
+const handleContentDay=createContentDayHttp({service:contentDay,context:companyModuleContext,readJson,reply:(req,res,status,result,cors)=>send(res,status,result,{...cors,'cache-control':'no-store'})});
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
@@ -661,7 +664,6 @@ const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,co
 const handleClientIntakes = createClientIntakesHandler({intakes:createClientIntakes(db),companyModuleContext,readJson,send});
 const mediaMentorRollout = createMediaMentorRollout(db);
 const handleMediaMentorRollout = createMediaMentorRolloutHandler({rollout:mediaMentorRollout,companyModuleContext,readJson,send});
-const mediaMentor = createMediaMentor(db);
 const handlePeople = createPeopleHandler({db,taskCoordination,mentor:mediaMentor,identity:crmIdentity,readJson,send});
 const mediaMentorTransfer = createMediaMentorTransfer(db,{mentor:mediaMentor,autoposting,information:companyInformation});
 const contentPlanJobs = createContentPlanJobs(db,{requireWorker:true});
@@ -676,9 +678,7 @@ const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 const vkDirect = createVkDirect(db,{apiKey:API_KEY});
 const vkDesign = createVkDesign(db,{direct:vkDirect});
-const vkMaterials = createVkMaterials(db,{direct:vkDirect});
-const vkAvatar = createVkAvatar(db,{direct:vkDirect});
-const handleVkTools = createVkToolsHandler({direct:vkDirect,design:vkDesign,materials:vkMaterials,avatar:vkAvatar,companyModuleContext,readJson,send});
+const handleVkTools = createVkToolsHandler({direct:vkDirect,design:vkDesign,companyModuleContext,readJson,send});
 const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
@@ -1822,9 +1822,8 @@ async function handleEntityRoutes(request, response, url, cors) {
         if (company) values.companyCode = company.code.toLowerCase();
         if (values.sourceRef) {
           const duplicate = db.prepare(
-            `SELECT * FROM tasks WHERE source_ref = ? AND company_code = ? COLLATE NOCASE
-              AND source = ? AND is_deleted = 0 ORDER BY id LIMIT 1`
-          ).get(values.sourceRef, values.companyCode, values.source);
+            'SELECT * FROM tasks WHERE source_ref = ? AND is_deleted = 0 ORDER BY id LIMIT 1'
+          ).get(values.sourceRef);
           if (duplicate) {
             send(response, 200, { ...serializeEntity(config, duplicate), duplicate: true }, cors);
             return true;
@@ -2690,6 +2689,7 @@ async function route(request, response) {
       scheduledAt: p.scheduledAt, timezone: p.timezone, mediaKind: p.readiness?.mediaKind || 'none' }));
     return send(response, 200, { companyCode: company.code.toLowerCase(), items }, { ...cors, 'cache-control': 'no-store' });
   }
+  if(await handleContentDay(request,response,url,cors))return;
   if(await handleContentFactoryCompletion(request,response,url,cors))return;
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
     const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
@@ -3498,13 +3498,6 @@ const autopostingTimer = IS_MAIN ? setInterval(() => {void autoposting.drain().c
 autopostingTimer?.unref();
 server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
 
-// Dormant unless both explicit task-only socket settings are supplied. No shared API key is delegated.
-const evaTaskReaderReady = IS_MAIN
-  ? require('./eva-task-reader').startTaskReader({db}).catch(() => {
-    console.error('[crm] Eva task reader unavailable'); return null;
-  })
-  : Promise.resolve(null);
-
 if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
@@ -3517,10 +3510,7 @@ function shutdown() {
   clearInterval(pipelineRulesTimer);
   clearInterval(emailOutboxTimer);
   clearInterval(autopostingTimer);
-  const evaTaskReaderStopped = evaTaskReaderReady.then(reader => reader?.close()).catch(() => {
-    console.error('[crm] Eva task reader shutdown failed');
-  });
-  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped]);
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop()]);
   server.close(async () => {
     await emailWorkersStopped;
     db.close();
