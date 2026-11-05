@@ -18,6 +18,7 @@
 .shoot-row__num { font-weight: 700; color: var(--accent); }
 .shoot-row__main { display: grid; gap: 3px; overflow-wrap: anywhere; }
 .shoot-row__meta { color: var(--muted); font-size: .88rem; margin: 0; overflow-wrap: anywhere; }
+.shoot-row__kind { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
 .shoot-row__late { color: var(--red); font-size: .85rem; }
 .shoot-chip { padding: 3px 9px; border-radius: 999px; font-size: .8rem; white-space: nowrap; border: 1px solid var(--line); }
 .shoot-chip--approved { color: var(--accent); }
