@@ -168,6 +168,17 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
     db.prepare('INSERT INTO task_watchdog_comment_auth VALUES(?,?,?,?,?)').run(commentId,id,p.key,p.kind,new Date(now()).toISOString());
     if(p.key===executorKey(db,row(id).assignee_name))db.prepare('INSERT INTO task_watchdog_reports VALUES(?,?,?) ON CONFLICT(task_id,executor) DO UPDATE SET at=excluded.at').run(id,p.key,now());
   }
+  function commentIdentity(comment) {
+    const unverified={source:'task-watchdog',verified:false};
+    // Только immutable server journal, с привязкой к обоим ID; author не участвует.
+    const auth=db.prepare('SELECT principal,kind FROM task_watchdog_comment_auth WHERE comment_id=? AND task_id=?')
+      .get(comment.id,comment.task_id);
+    const match=/^(agent|person):([1-9]\d*)$/.exec(auth?.principal||'');
+    if(!match)return unverified;
+    const id=Number(match[2]),kinds=match[1]==='agent'?['agent','claude','release']:['person','vlad'];
+    if(!Number.isSafeInteger(id)||!kinds.includes(auth.kind))return unverified;
+    return {source:'task-watchdog',verified:true,principal:{kind:auth.kind,key:auth.principal,id}};
+  }
   function author(actor,fallback) {const p=principal(actor);return p?.name||fallback;}
   function report(name,event,codes,actor) {
     const p=principal(actor);const requested=executorKey(db,name);
@@ -242,6 +253,6 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       }
     } finally {running=false;}
   }
-  return {authorize,prepare,guard:check,record,comment,author,accept,report,canGrant:actor=>principal(actor)?.kind==='vlad',mode,snapshot,digest,audit,installGuards,prepareScheduledDigest,silence:t=>silence(db,t,now())};
+  return {authorize,prepare,guard:check,record,comment,commentIdentity,author,accept,report,canGrant:actor=>principal(actor)?.kind==='vlad',mode,snapshot,digest,audit,installGuards,prepareScheduledDigest,silence:t=>silence(db,t,now())};
 }
 module.exports={createTaskWatchdog,createEvidenceVerifier,silence,activity};
