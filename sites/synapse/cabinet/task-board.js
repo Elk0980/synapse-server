@@ -152,13 +152,18 @@
       }
       return {tasks:await hydrateOverview(records), products:allProducts, agents:agentData.agents || []};
     }
-    async function render(next = {}) {
+    // Background refresh must not replace the search field or quick-task input while someone types.
+    const editingField = () => { const field = document.activeElement; return !!field && container.contains(field) && !!field.matches?.('[data-board-search],[data-quick-task] input'); };
+    let deferredRefresh = false;
+    async function render(next = {}, {background = false} = {}) {
       Object.assign(state, next);
       const version = ++sequence;
       if (!tasks.length) container.innerHTML = '<p class="tb-loading" role="status">Загрузка задач…</p>';
       try {
         const data = await load(); if (!alive || version !== sequence) return;
-        ({tasks, products, agents} = data); draw();
+        ({tasks, products, agents} = data);
+        if (background && editingField()) { deferredRefresh = true; return; }
+        draw();
         if (next.taskId) await openTask(Number(next.taskId));
       } catch (error) {
         if (!alive || version !== sequence) return;
@@ -536,10 +541,12 @@
       saveDraft(); form.elements.title.focus(); if (draft.title) searchDuplicates();
     }
     let recovery=null;
-    const recover = () => {
+    const recover = ({force = false} = {}) => {
       if (!alive || document.visibilityState === 'hidden') return Promise.resolve();
+      if (!force && editingField()) { deferredRefresh = true; return Promise.resolve(); }
       if(recovery)return recovery;
-      recovery=render().then(()=>{if(alive&&(taskSheet||createSheet))notice('Доска обновлена. Открытый черновик сохранён.');}).finally(()=>{recovery=null;});
+      deferredRefresh = false;
+      recovery=render({}, {background:!force}).then(()=>{if(alive&&(taskSheet||createSheet))notice('Доска обновлена. Открытый черновик сохранён.');}).finally(()=>{recovery=null;});
       return recovery;
     };
     const pageShow = () => { void recover(); };
@@ -556,15 +563,17 @@
       pull.distance=dy>dx*2?dy:0;
       if(pull.distance>20&&event.cancelable)event.preventDefault();
     };
-    const touchEnd=()=>{const distance=pull?.distance||0;pull=null;if(distance>=75){notice('Обновляем доску…');void recover();}};
+    const touchEnd=()=>{const distance=pull?.distance||0;pull=null;if(distance>=75){notice('Обновляем доску…');void recover({force:true});}};
+    // Apply a postponed refresh once the field loses focus (checked after focus settles).
+    const focusOut=()=>{ if(!deferredRefresh)return; window.setTimeout(()=>{ if(alive&&deferredRefresh&&!editingField())void recover(); },0); };
     const touchCancel=()=>{pull=null;};
     const refreshTimer=window.setInterval(()=>void recover(),45000);
-    container.addEventListener('touchstart',touchStart,{passive:true});container.addEventListener('touchmove',touchMove,{passive:false});container.addEventListener('touchend',touchEnd);container.addEventListener('touchcancel',touchCancel);
+    container.addEventListener('touchstart',touchStart,{passive:true});container.addEventListener('touchmove',touchMove,{passive:false});container.addEventListener('touchend',touchEnd);container.addEventListener('touchcancel',touchCancel);container.addEventListener('focusout',focusOut);
     const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
     window.addEventListener('pageshow',pageShow);window.addEventListener('focus',focus); document.addEventListener('visibilitychange',visibility);
     window.addEventListener('sb-waiting-reply-settled',replySettled);
     mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel);container.removeEventListener('focusout',focusOut); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});

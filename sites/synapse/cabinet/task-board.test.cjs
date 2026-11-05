@@ -295,3 +295,24 @@ test('45s refresh, focus and pull update waiting while preserving open drafts; d
  f.controller.destroy();assert.equal(cleared,true);
  }finally{f.close();}
 });
+test('auto refresh does not redraw while search or quick task has focus; applies after blur; pull still forces',async()=>{
+ let tick;const f=fixture('owner',{view:'board',project:'synapse-business'},w=>{
+ Object.defineProperty(w.document,'visibilityState',{configurable:true,value:'visible'});
+ w.setInterval=(callback,ms)=>{tick=callback;return 123;};w.clearInterval=()=>{};
+ });try{await settle();const wait=()=>new Promise(r=>setTimeout(r,5));
+ for(const selector of ['[data-board-search]','[data-quick-task] input']){
+  const field=f.d.querySelector(selector);field.focus();field.value='набираю';assert.equal(f.d.activeElement,field);
+  const before=f.refreshCount();tick();f.w.dispatchEvent(new f.w.Event('focus'));await settle();
+  assert.equal(f.refreshCount(),before,'no reload while typing in '+selector);assert.ok(field.isConnected);assert.equal(f.d.activeElement,field);assert.equal(field.value,'набираю');
+  field.blur();await wait();await settle();assert.equal(f.refreshCount(),before+1,'postponed refresh applied after blur');assert.equal(field.isConnected,false);
+ }
+ // Load already in flight when the person starts typing: data is kept, DOM is not replaced.
+ let release;f.intercept('tasks_list',()=>new Promise(resolve=>{release=()=>resolve({tasks:[f.task],pagination:{total:1}});}));
+ tick();await settle();const search=f.d.querySelector('[data-board-search]');search.focus();release();await settle();
+ assert.ok(search.isConnected);assert.equal(f.d.activeElement,search);
+ f.intercept('tasks_list',undefined);
+ // Explicit pull-to-refresh is not postponed.
+ const container=f.d.querySelector('#board'),event=(type,touches)=>{const e=new f.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:touches});container.querySelector('.tb-columns').dispatchEvent(e);};
+ const pulls=f.refreshCount();event('touchstart',[{clientX:20,clientY:10}]);event('touchmove',[{clientX:20,clientY:100}]);event('touchend',[]);await settle();assert.equal(f.refreshCount(),pulls+1);
+ }finally{f.close();}
+});
