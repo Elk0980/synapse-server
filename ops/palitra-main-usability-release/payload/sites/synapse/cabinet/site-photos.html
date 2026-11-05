@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Фото сайта Palitra — Synapse</title>
+<link rel="stylesheet" href="/cabinet/site-photos.css">
+<link rel="stylesheet" href="/cabinet/palitra-nav.css?v=20261013-38">
+</head>
+<body>
+<header class="sp-header">
+  <nav class="pnav" aria-label="Редакторы Palitra">
+    <details class="pnav__menu">
+      <summary class="pnav__toggle" aria-label="Меню редакторов Palitra"><svg class="pnav__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Меню</span></summary>
+      <ul class="pnav__list">
+        <li class="pnav__item"><a class="pnav__link" href="/cabinet/site-photos.html" aria-current="page">Фото сайта</a></li>
+        <li class="pnav__item"><a class="pnav__link" href="/price-editor-palitra.html?v=20261013-38&amp;site=https%3A%2F%2Fpalitra-love.ru">Товары и прайс</a></li>
+        <li class="pnav__item"><a class="pnav__link" href="https://palitra-love.ru/" target="_blank" rel="noopener">Открыть сайт<span class="pnav__sr"> (откроется в новой вкладке)</span><span aria-hidden="true">↗</span></a></li>
+        <li class="pnav__item"><a class="pnav__link" href="/palitra-review/">Задачник</a></li>
+      </ul>
+    </details>
+  </nav>
+  <a href="/cabinet/palitra-editor.html">← Редактор Palitra</a>
+  <h1>Фото сайта Palitra</h1>
+  <p class="sp-scope">Здесь можно менять фотографии в блоках сайта.</p>
+  <a id="open-site" target="_blank" rel="noopener" hidden>Открыть черновик сайта</a>
+  <a id="access-link" href="/cabinet/site-photos-access.html" hidden>Доступ к фото (владелец)</a>
+</header>
+<p id="status" role="status" aria-live="polite">Открываем фото черновика…</p>
+<p id="error" role="alert"></p>
+<div id="readonly" class="sp-banner" hidden>Только просмотр: у вашего аккаунта нет права менять фото сайта.</div>
+<div id="decoder-off" class="sp-banner sp-banner--warn" hidden>Загрузка новых фото пока отключена: на сервере не подключена полная проверка фото. Порядок, подписи и уже стоящие на сайте фото менять можно.</div>
+<div id="conflict" class="sp-banner sp-banner--warn" hidden>
+  <p>Черновик сайта изменился после начала ваших правок (сохранил кто-то другой или другая вкладка). Ваши правки сохранены в этом браузере и не записаны.</p>
+  <p>Проверьте их на свежем состоянии ниже. Если всё верно — перенесите правки на новую версию и сохраните ещё раз.</p>
+  <button type="button" id="rebase">Перенести правки на новую версию</button>
+</div>
+<main id="workspace" hidden>
+  <div class="sp-savebar" id="savebar">
+    <p id="pending">Несохранённых правок нет</p>
+    <input id="save-message" maxlength="240" aria-label="Описание правки" placeholder="Что изменили — необязательно">
+    <div class="sp-row">
+      <button type="button" id="save" disabled>Сохранить в черновик</button>
+      <button type="button" id="discard" class="secondary" disabled>Отменить мои правки</button>
+      <button type="button" id="reload" class="secondary">Обновить состояние</button>
+    </div>
+  </div>
+
+  <section class="sp-section" aria-labelledby="hero-title">
+    <h2 id="hero-title">Первый экран: 5 сцен</h2>
+    <p class="sp-help">Для сцены нужны три кадра: для компьютера (горизонтальный, на сайте 16:9), для планшета (горизонтальный, 4:3) и для телефона (вертикальный). Тексты, кнопки и смена сцен не меняются.</p>
+    <div class="sp-grid sp-grid--wide" id="hero-list"></div>
+  </section>
+
+  <section class="sp-section" aria-labelledby="categories-title">
+    <h2 id="categories-title">«Выберите свой праздник»: 11 категорий</h2>
+    <p class="sp-help">При замене фото у этой карточки отключается прежний ролик, чтобы не показывать чужой набор. Новое фото плавно движется, как у карточки «День рождения мужчины». Остальные карточки не меняются.</p>
+    <div class="sp-grid" id="category-list"></div>
+  </section>
+
+  <section class="sp-section" aria-labelledby="budget-title">
+    <h2 id="budget-title">«По стоимости»: 3 карточки</h2>
+    <p class="sp-help">Меняется только фото и его подпись. Ссылки, суммы и надписи остаются прежними.</p>
+    <div class="sp-grid" id="budget-list"></div>
+  </section>
+
+  <section class="sp-section" aria-labelledby="gallery-title">
+    <h2 id="gallery-title">«Ваши праздники»</h2>
+    <p class="sp-help" id="gallery-help">Первые 4 фото видны сразу, остальные открываются кнопкой «Показать ещё» (если фото 4 или меньше, кнопки нет). В галерее остаётся хотя бы одно фото. Фото, убранное из показа, остаётся в хранилище материалов, и его можно вернуть.</p>
+    <ol class="sp-gallery" id="gallery-list"></ol>
+    <div class="sp-row"><button type="button" id="gallery-add">Добавить фото</button></div>
+    <h3>Убрано из показа</h3>
+    <ul class="sp-gallery sp-gallery--removed" id="gallery-removed"></ul>
+    <p class="sp-help" id="gallery-removed-empty">Пока ничего не убрано.</p>
+  </section>
+</main>
+
+<dialog id="picker" aria-labelledby="picker-title">
+  <form id="picker-form" novalidate>
+    <h2 id="picker-title">Новое фото</h2>
+    <div id="picker-fields"></div>
+    <label id="picker-alt-wrap" class="sp-field">Что на фото (подпись для незрячих и поисковиков)
+      <input id="picker-alt" maxlength="250" autocomplete="off">
+    </label>
+    <p id="picker-error" class="sp-error" role="alert"></p>
+    <div class="sp-row">
+      <button type="button" id="picker-cancel" class="secondary">Отмена</button>
+      <button type="submit" id="picker-ok">Готово</button>
+    </div>
+  </form>
+</dialog>
+<script src="/cabinet/palitra-photo-model.js" defer></script>
+<script src="/cabinet/site-photos-core.js" defer></script>
+<script src="/cabinet/site-photos.js" defer></script>
+</body>
+</html>

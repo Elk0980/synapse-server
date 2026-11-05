@@ -1,0 +1,195 @@
+{
+  "schema": 1,
+  "package": "palitra-production-checkout-review39-20261013",
+  "base_image": "palitra-production-base:20261013",
+  "expected_runtime_baseline": [
+    {
+      "relativepath": "server.js",
+      "sha256": "66869d85466ef82a571eff3da77ee8da4fb2badf2288a5ca536b1779a2893063"
+    },
+    {
+      "relativepath": "project-chat.js",
+      "sha256": "701ea16712a793618e3332a1ddf8a86896fb809118d2a02e26d8fb3301a943a2"
+    },
+    {
+      "relativepath": "site-workspace-http.js",
+      "sha256": "e1b0eb7257042c9fb31f648b22727250cdd94c2d53603013699fca42009d75cc"
+    },
+    {
+      "relativepath": "site-workspace-feature.js",
+      "sha256": "22925876f06c97efaf2622f058a7c36eaf944419ad80a4a679ec7cd39c453b09"
+    },
+    {
+      "relativepath": "draft-account-service.cjs",
+      "sha256": "b81eca0884979e5d4a586bbf2d7fbf88381afe4124d014a6f8130390eef5660b"
+    }
+  ],
+  "expected_static_baseline": [
+    {
+      "relativepath": "palitra-editor.js",
+      "sha256": "085c51e97ed6b5e1c91e467bd425b57b90fa6d60fee888dbeec04a630c53eaf5"
+    }
+  ],
+  "files": [
+    {
+      "relativepath": "payload/content/draft-account-service.cjs",
+      "sha256": "3fe8f4fb9e822178d386ce5e391d3f449ce676146c118772907383449c264c82",
+      "bytes": 10370
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/api-routes.js",
+      "sha256": "afcaa654d52fc7c94296dde14b95b9d39d87bf59fbff8aae06caf6f20dd03aa3",
+      "bytes": 4283
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/crm-access.js",
+      "sha256": "eec5efcb7b7cdf3274fb2ca30464458649a23f88c9971726f14c76df69a532db",
+      "bytes": 24846
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/crm-http.js",
+      "sha256": "f3468d3537f01ab24c2c107bcb956c3c02bdb4347d87aee81790f995567e41af",
+      "bytes": 8626
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/email-address.js",
+      "sha256": "fbeea13f51e24c0dc27d86378759fd9dec948a3510bb9f49f76904b228f1579a",
+      "bytes": 1262
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/email-fallback.js",
+      "sha256": "8ef5b32e41388f321f38f7af52d4603b18e7e0f82b22ebe43189df4dedf2eba8",
+      "bytes": 18420
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/email-transport.js",
+      "sha256": "29015bad0ae07c472ff147ff3939d37ab1a43eaffc6fc3e8f61f0d1a95f582d2",
+      "bytes": 6304
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/host-integration.js",
+      "sha256": "72c83161c5eb8de923ec7edc04a253948182e744dae11620bce27127c4bedd70",
+      "bytes": 19957
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/instagram-hook.js",
+      "sha256": "53c1f57ab46a228a831a9dd59af7a03616bb8cc373f4d313f7ea21fdc475741d",
+      "bytes": 6705
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/team-notify.js",
+      "sha256": "37839daa92b265e7ab44078b24a48e1dd48a556c98497af15e2b947842bbebff",
+      "bytes": 13685
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/telegram-team-transport.js",
+      "sha256": "c560eed65fd4da2b7f2df27b43c2bfe37dbc259df4aa8ce959939e771a2978e1",
+      "bytes": 5080
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/lib/workspace.js",
+      "sha256": "f85ecde79ae2f5bbed9f78c18b53cc0db6c04627852971442441d0d271d8bb0d",
+      "bytes": 81893
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/public/app.css",
+      "sha256": "a7e1a690f33ef161ed8401d7cf67bdb5ea0598e5fecf6f828589251cbd244a5b",
+      "bytes": 29630
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/public/app.js",
+      "sha256": "6a60727bda5fad332f450a062000544037400c1fac3dba045ae27ebd99b53c58",
+      "bytes": 147205
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/public/crm-session.js",
+      "sha256": "c37638c80ce0cb15a27167a98f1eeabc8318a242f5962d6b094b42554d6cdaf7",
+      "bytes": 10545
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/public/miniapp.html",
+      "sha256": "ea80485e39e7f480c282a1d406ffe22970027ecd338658e76f63891da15756af",
+      "bytes": 1901
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/app/public/site.html",
+      "sha256": "2878519ec2b0de47b6b323b79592c43df0037e86ecc2dc488e5a38f68649c66c",
+      "bytes": 2015
+    },
+    {
+      "relativepath": "payload/content/palitra-crm/telegram-ingest/lib/telegram-ingest.js",
+      "sha256": "086c5830d9b965d2f2e91278d05e875bde9535b451285f3f92809e4f82d757c8",
+      "bytes": 43663
+    },
+    {
+      "relativepath": "payload/content/palitra-host-adapter.cjs",
+      "sha256": "248876a57a863492a2f8a0196e94a67ff57921a3a61fbdd1237d66dcefdc995f",
+      "bytes": 28566
+    },
+    {
+      "relativepath": "payload/content/palitra-review-public/app.css",
+      "sha256": "670d338b7a015a762101807ace421ad8140c011c7d20c65a36204d7bd0eded2f",
+      "bytes": 5492
+    },
+    {
+      "relativepath": "payload/content/palitra-review-public/app.js",
+      "sha256": "0cef11b1832603e89dc04d23301b8579d02355bfed866f2094a7f6a21bc3d631",
+      "bytes": 16899
+    },
+    {
+      "relativepath": "payload/content/palitra-review-public/index.html",
+      "sha256": "ca4ed556bf64e46537e7c80d2bab64c06384343c7f537dfd305ce4bbd316d759",
+      "bytes": 4937
+    },
+    {
+      "relativepath": "payload/content/palitra-task-review.cjs",
+      "sha256": "93b4d07a49726432aba20bb37bd31c2d451a7cc2212a94a5a33881b2ab0e546e",
+      "bytes": 17219
+    },
+    {
+      "relativepath": "payload/content/project-chat.js",
+      "sha256": "f60b18567b81c8ed0ea28e1609c208d75fa78e95bad3cbbd6d24ea595d9bbf44",
+      "bytes": 179739
+    },
+    {
+      "relativepath": "payload/content/server.js",
+      "sha256": "edce3534900e9188511f2a1caa51157c75bc3dfb3897d20e0dab3f0e24e92de9",
+      "bytes": 100007
+    },
+    {
+      "relativepath": "payload/content/site-workspace-feature.js",
+      "sha256": "d064fe1b45b3953beb70de483c06857a8532a6bf7e5a08c0539d1c705af640b1",
+      "bytes": 3985
+    },
+    {
+      "relativepath": "payload/content/site-workspace-http.js",
+      "sha256": "cbb87d8f6f76c7187bfdb5518137a73729f34c0c2bbe14cce68ee14dece79b52",
+      "bytes": 7166
+    },
+    {
+      "relativepath": "payload/static/palitra-editor.js",
+      "sha256": "60b29bae2c9bac3c8e912f962f7612ed42392cd5fde073fa1a0207ca48d7ac44",
+      "bytes": 85627
+    }
+  ],
+  "checks": {
+    "payload_files": 28,
+    "content_files": 27,
+    "static_files": 1,
+    "mvp_whitelisted": 17,
+    "production_overlays": 4,
+    "all_hashes_readback_exact": true,
+    "relative_requires_contained": true,
+    "conditional_exclusions": [
+      {
+        "relativepath": "payload/content/palitra-crm/app/lib/workspace.js",
+        "request": "../vendor/site-orders",
+        "reason": "lazy demo fallback; integration requires supplied native siteOrders"
+      }
+    ],
+    "secret_private_path_scan": "no_detected_matches",
+    "data_price_auth_secrets_included": false,
+    "tests_run_by_packager": 0,
+    "server_actions": 0
+  }
+}

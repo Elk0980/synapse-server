@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru" data-mode="integration" data-auth="site">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F6F1E7">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <title>Palitra Love — мои заказы</title>
+  <link rel="stylesheet" href="app.css">
+  <!-- Вход через сайт: сервер сам проверяет cookie аккаунта и CSRF; страница не передаёт личность. -->
+  <script src="crm-session.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">К содержимому</a>
+  <header class="topbar">
+    <div class="brand" aria-label="Palitra Love">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="10" fill="#55642F"/><path d="M9 24c4-7 8-11 14-15" stroke="#FBF7EE" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="22" cy="9" r="3" fill="#F3D7CC"/></svg>
+      Palitra<span class="brand-love">love</span>
+    </div>
+    <div id="who" class="who"></div>
+  </header>
+  <nav id="tabs" class="tabs" aria-label="Разделы" hidden></nav>
+  <main id="main" class="main" tabindex="-1">
+    <section id="list" class="pane-list" aria-label="Список"></section>
+    <section id="detail" class="pane-detail" aria-label="Карточка"></section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+  <dialog id="sheet" class="sheet" aria-labelledby="sheetTitle"><div id="sheetBody" class="sheet-inner"></div></dialog>
+  <noscript><p class="noscript">Для работы приложения нужен включённый JavaScript.</p></noscript>
+</body>
+</html>

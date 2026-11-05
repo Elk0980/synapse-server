@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Редактор Palitra — Synapse</title>
+<link rel="stylesheet" href="/cabinet/site-photos.css">
+<link rel="stylesheet" href="/cabinet/palitra-nav.css?v=20261013-38">
+</head>
+<body>
+<header class="sp-header">
+  <nav class="pnav" aria-label="Редакторы Palitra">
+    <details class="pnav__menu">
+      <summary class="pnav__toggle" aria-label="Меню редакторов Palitra"><svg class="pnav__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Меню</span></summary>
+      <ul class="pnav__list">
+        <li class="pnav__item"><a class="pnav__link" href="/cabinet/site-photos.html">Фото сайта</a></li>
+        <li class="pnav__item"><a class="pnav__link" href="/price-editor-palitra.html?v=20261013-38&amp;site=https%3A%2F%2Fpalitra-love-draft-1.synapsebusiness.ru">Товары и прайс</a></li>
+        <li class="pnav__item"><a class="pnav__link" href="https://palitra-love-draft-1.synapsebusiness.ru/" target="_blank" rel="noopener">Открыть сайт<span class="pnav__sr"> (откроется в новой вкладке)</span><span aria-hidden="true">↗</span></a></li>
+        <li class="pnav__item"><a class="pnav__link" href="/cabinet.html#tasks">Задачник</a></li>
+      </ul>
+    </details>
+  </nav>
+  <a href="/cabinet.html">← Кабинет</a>
+  <h1>Редактор Palitra</h1>
+  <p class="sp-scope">Вход — обычным аккаунтом кабинета. Что доступно, определяют права вашего аккаунта.</p>
+</header>
+<p id="status" role="status" aria-live="polite">Проверяем вход…</p>
+<p id="error" role="alert"></p>
+<main class="sp-hub" id="hub" hidden>
+  <article class="sp-card">
+    <h2>Товары и прайс</h2>
+    <p><strong>Прайс общий для всего Palitra:</strong> изменения цен, товаров и их фото видны везде, где показывается прайс Palitra, а не только в черновике сайта.</p>
+    <a class="button" id="price-link" hidden>Открыть общий прайс</a>
+    <p class="sp-help" id="price-missing" hidden>Адрес редактора прайса не настроен. Откройте прайс из кабинета обычным способом.</p>
+  </article>
+  <article class="sp-card">
+    <h2>Фото сайта</h2>
+    <p>Фото первого экрана, 11 категорий, карточек «По стоимости» и галереи «Ваши праздники». Меняется только черновик сайта, основной сайт не меняется.</p>
+    <a class="button" id="photos-link">Открыть фото сайта</a>
+  </article>
+  <article class="sp-card" id="access-card" hidden>
+    <h2>Доступ к фото</h2>
+    <p>Только для владельца: кому из сотрудников Palitra можно смотреть и менять фото этого черновика.</p>
+    <a class="button" id="access-hub-link">Открыть доступ к фото</a>
+  </article>
+</main>
+<script src="/cabinet/editor-config.js" defer></script>
+<script src="/cabinet/palitra-editor.js" defer></script>
+</body>
+</html>

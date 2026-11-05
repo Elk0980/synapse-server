@@ -1,0 +1,13 @@
+{
+  "targets": [
+    {
+      "base_sha256": "e85dd6f00b7b31a51f9d2228fd89b729714f02207078d7a1ef728357a1fc7d9b",
+      "group": "static",
+      "sha256": "83a00e6d68ca69a156715388df79ae5f90fd233fcf09155256a91c5e754b42f5",
+      "source": "payload/sites/synapse/cabinet/client-dialogs.js",
+      "target": "sites/synapse/cabinet/client-dialogs.js"
+    }
+  ],
+  "schema": 1,
+  "package_id": "palitra-manager-entry-20261013"
+}

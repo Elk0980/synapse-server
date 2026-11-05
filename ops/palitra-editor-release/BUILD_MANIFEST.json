@@ -1,0 +1,214 @@
+{
+  "schema": 1,
+  "release": "PALITRA-BOT-EDITOR-35+12-18",
+  "serverBaseSha256": "7b60187397cb11fe7e382682fb65e5a1600b35255bf85c8bbdfe2b122c35d8a2",
+  "expectedPublicUrl": "https://palitra-love-draft-1.synapsebusiness.ru/",
+  "payloadFiles": 27,
+  "files": [
+    {
+      "path": "Dockerfile.overlay",
+      "bytes": 273,
+      "sha256": "583f0a8614110b58db9a5381ed1c93b8268e9d8b766f0727dac5b258c70c3db7"
+    },
+    {
+      "path": "FONT_MANIFEST.json",
+      "bytes": 5050,
+      "sha256": "92cb7d348d1cbd4fcbed0f9dca28b4bd66675874153c781c3235b362f4ea9bf5"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11157,
+      "sha256": "d7c9a62742a5dc549193a16fb2e55dbe14de699dadffb737e444a41ebfe59d45"
+    },
+    {
+      "path": "SOURCE_INTEGRATION_MANIFEST.json",
+      "bytes": 2931,
+      "sha256": "2b80670bd53f1526f674dd1a041c5bd174057a9080389a39e05aae29a7b260e5"
+    },
+    {
+      "path": "SOURCE_PROVENANCE.json",
+      "bytes": 10459,
+      "sha256": "daf4d9f2d9f211b0d36590c489b271780bd48765b8956ca82f78a1a156e411fd"
+    },
+    {
+      "path": "build-manifest.cjs",
+      "bytes": 1650,
+      "sha256": "8a6481f65c02262a34d20978f4fc03d07b02135dc0d8635b958b674889edc953"
+    },
+    {
+      "path": "download.py",
+      "bytes": 4093,
+      "sha256": "7ce6a6215c99536d35429686969b2731e85fd1a75a64e6ef8808bcf748dd0414"
+    },
+    {
+      "path": "install.cjs",
+      "bytes": 24066,
+      "sha256": "992812e9e51ab358f5c8300b8609bb88edabf78afb996e4bdb00bdf2ea2d8ad3"
+    },
+    {
+      "path": "patch-access-dialog.py",
+      "bytes": 2276,
+      "sha256": "e5f46b32149e2f341c3c90385f32c69ad9da104a8e0d4ad4e23822b8074f01fe"
+    },
+    {
+      "path": "patch-editor-timezone.py",
+      "bytes": 2322,
+      "sha256": "f5bc18517f69120a72e538c33d9ad637161f1295f83fdc29dee5cffa0807cbec"
+    },
+    {
+      "path": "patches/release-patches.cjs",
+      "bytes": 1748,
+      "sha256": "df33ec6126bfd49badc3fd3c1cfd6ecbceac3cf0b8db93a3fab4b0136170c725"
+    },
+    {
+      "path": "patches/upstream-patches.cjs",
+      "bytes": 6915,
+      "sha256": "a25a90c336445e46eacdd778055a7e4b255e96fe2ee0e05da2abb3d198a62a82"
+    },
+    {
+      "path": "payload/server/palitra-image-check.js",
+      "bytes": 15600,
+      "sha256": "37c9b0393af2156796d81f66fc1dbf4b58dc4a37b7f5625c152a211905e30cec"
+    },
+    {
+      "path": "payload/server/palitra-image-decoder.js",
+      "bytes": 2197,
+      "sha256": "5135ef7063f7a4ff44fc58033fdafb31eec3f17267166b8328f16e796b9b340c"
+    },
+    {
+      "path": "payload/server/palitra-occasions.js",
+      "bytes": 15161,
+      "sha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609"
+    },
+    {
+      "path": "payload/server/palitra-photo-feature.js",
+      "bytes": 30020,
+      "sha256": "69f4ece7dec72384c180af09bd6293cce32f170fe74af0bafa232120903a7e1b"
+    },
+    {
+      "path": "payload/server/palitra-photo-model.js",
+      "bytes": 32392,
+      "sha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31"
+    },
+    {
+      "path": "payload/server/palitra-price-validate.js",
+      "bytes": 13779,
+      "sha256": "2cb93a1cb6443590ab8a6b504babbb5552ee278f8e4434731ca42ba2434778c1"
+    },
+    {
+      "path": "payload/static/cabinet/editor-config.js",
+      "bytes": 779,
+      "sha256": "d2c233abedf7a1e10bca1a18c9f3437985547a08817ef9ed73cf043a4e5244b0"
+    },
+    {
+      "path": "payload/static/cabinet/palitra-editor.html",
+      "bytes": 2324,
+      "sha256": "e0939ffd9a2f35a6adca97e44b4aa23f2f6535da2127e4feed0f4b627040ea29"
+    },
+    {
+      "path": "payload/static/cabinet/palitra-editor.js",
+      "bytes": 2533,
+      "sha256": "2211e0cc7a4687c39f863ee5a06a4438492df70c9fb51cca1e34b4611e04babe"
+    },
+    {
+      "path": "payload/static/cabinet/palitra-photo-model.js",
+      "bytes": 32392,
+      "sha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31"
+    },
+    {
+      "path": "payload/static/cabinet/site-photos-access.html",
+      "bytes": 1997,
+      "sha256": "936bd46f4b50599ba1f378a2d92ca460e2038dd6af23e40b777d32261990a663"
+    },
+    {
+      "path": "payload/static/cabinet/site-photos-access.js",
+      "bytes": 9134,
+      "sha256": "06771895f1e5aa4fd53932277a90eaa038d9362fbcb1583a098661bd15625600"
+    },
+    {
+      "path": "payload/static/cabinet/site-photos-core.js",
+      "bytes": 12319,
+      "sha256": "dbd488f8d58e0f12b86775b448359ac7a0486ff85fb82d99aa06f0de3ab5096c"
+    },
+    {
+      "path": "payload/static/cabinet/site-photos.css",
+      "bytes": 5329,
+      "sha256": "a021fce989773086ea87c93f9b5165d3da58ebaa5d1ea0a32edf5a454772f3bb"
+    },
+    {
+      "path": "payload/static/cabinet/site-photos.html",
+      "bytes": 6104,
+      "sha256": "98e45ec7d271f7ce9b425c7eaac3f5bae52aa33826d33eaae069ab9c1a9ea763"
+    },
+    {
+      "path": "payload/static/cabinet/site-photos.js",
+      "bytes": 25961,
+      "sha256": "3692736f889d6c0dbb592fae12980a52ec2fbf571f1ea3e219e612a62632aea8"
+    },
+    {
+      "path": "payload/static/palitra-editor-fonts/NunitoSans-OFL.txt",
+      "bytes": 4393,
+      "sha256": "efbb0c9e864cef973982d9a17567e6be5c3d1759695574586f3f18c7ecca064b"
+    },
+    {
+      "path": "payload/static/palitra-editor-fonts/nunito-sans-v19-cyrillic-ext.woff2",
+      "bytes": 21752,
+      "sha256": "8a8e11bad67c3ae75ba03c969fbe5742b8bf088f1b2ca2dd04610a352475ee37"
+    },
+    {
+      "path": "payload/static/palitra-editor-fonts/nunito-sans-v19-cyrillic.woff2",
+      "bytes": 16388,
+      "sha256": "d3fe75d4c86f6df84f37c76ad44fa21c45778d7e14160b0294f92ec248fa144a"
+    },
+    {
+      "path": "payload/static/palitra-editor-fonts/nunito-sans-v19-latin-ext.woff2",
+      "bytes": 27908,
+      "sha256": "c648ee5bfda70d44b9fb628f4114d1cc4f984d050cbb4881052237ede3638a2e"
+    },
+    {
+      "path": "payload/static/palitra-editor-fonts/nunito-sans-v19-latin.woff2",
+      "bytes": 31076,
+      "sha256": "29e3890496844a9ea81975c52771c587c872b4eb317026422d1995b88d21b57d"
+    },
+    {
+      "path": "payload/static/palitra-editor-model.js",
+      "bytes": 44576,
+      "sha256": "62802bebc8c16ca021c7e2f113e795bea1583113c05572610c01ea9962da0042"
+    },
+    {
+      "path": "payload/static/palitra-editor-session.js",
+      "bytes": 18198,
+      "sha256": "20e45590095a0a1fd7f8242e2d93b7f5f6dd19cbb91277d32738c39317ccfb26"
+    },
+    {
+      "path": "payload/static/palitra-editor.css",
+      "bytes": 18525,
+      "sha256": "7d71701dad773dfa9cacd0c6a6ae5bb9b97a862a31074e7d9de0c145a2ad151c"
+    },
+    {
+      "path": "payload/static/palitra-editor.js",
+      "bytes": 71992,
+      "sha256": "787bd664cc1f0b453adf3a7f85c246ce6103ca64c2ca127924cca2a3400760c3"
+    },
+    {
+      "path": "payload/static/palitra-occasions.js",
+      "bytes": 15161,
+      "sha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609"
+    },
+    {
+      "path": "payload/static/price-editor-palitra.html",
+      "bytes": 4317,
+      "sha256": "5a6a3883ea05d48e3e12ec6e7059d033b394abf71146569c9de32b8cac503703"
+    },
+    {
+      "path": "tests/package-checks.cjs",
+      "bytes": 18066,
+      "sha256": "97dc6131dbc1a847d169b9d29d065b82f232d7fd43f72ab62f7ceeab1e053355"
+    },
+    {
+      "path": "verify-decoder.cjs",
+      "bytes": 4362,
+      "sha256": "5c1e0cff15309fee3b1cee7dc1ffeb283387a3179e25caa33969503515e6c5fc"
+    }
+  ]
+}

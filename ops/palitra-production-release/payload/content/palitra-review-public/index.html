@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Проверка задач Palitra</title>
+  <link rel="stylesheet" href="/palitra-review/app.css">
+  <script src="/palitra-review/app.js" defer></script>
+</head>
+<body>
+  <header class="page-header">
+    <details class="menu">
+      <summary aria-label="Открыть меню Palitra"><span aria-hidden="true">☰</span> Меню</summary>
+      <nav aria-label="Разделы Palitra">
+        <a href="/cabinet/site-photos.html">Фото сайта</a>
+        <a href="/price-editor-palitra.html?v=20261013-38&amp;site=https%3A%2F%2Fpalitra-love-draft-1.synapsebusiness.ru">Товары и прайс</a>
+        <a href="https://palitra-love-draft-1.synapsebusiness.ru/" target="_blank" rel="noopener">Открыть сайт ↗</a>
+        <a href="/palitra-review/" aria-current="page">Проверка задач</a>
+        <a href="/cabinet.html#tasks">Задачник Synapse</a>
+        <a href="/cabinet/palitra-guide.html">Инструкция</a>
+      </nav>
+    </details>
+    <a class="cabinet-link" href="/cabinet.html">Кабинет Synapse</a>
+  </header>
+  <main>
+    <h1>Проверка задач Palitra</h1>
+    <p class="intro">Выберите, что уже проверили. Выполнение задачи и ваша проверка отмечаются отдельно.</p>
+    <p id="message" class="message" role="status" aria-live="polite">Проверяем вход…</p>
+    <p id="error" class="error" role="alert" hidden></p>
+    <section id="login-needed" class="notice" hidden>
+      <h2>Войдите в кабинет</h2>
+      <p>После входа вернитесь к проверке задач.</p>
+      <a class="button" href="/cabinet.html">Войти в Synapse</a>
+    </section>
+    <section id="seed-tools" class="notice" aria-labelledby="seed-title" hidden>
+      <h2 id="seed-title">Загрузить список задач</h2>
+      <p>Это нужно сделать один раз. Выберите подготовленный файл со всеми 39 задачами. Существующие проверки повторной загрузкой заменить нельзя.</p>
+      <label for="seed-file">Файл списка задач</label>
+      <input id="seed-file" type="file" accept=".json,application/json">
+      <p class="muted">Из файла сохранятся только номера, названия, выполнение, ваша проверка и комментарий.</p>
+      <button id="seed-submit" class="button" type="button">Загрузить список задач</button>
+    </section>
+    <section id="review" aria-labelledby="list-title" hidden>
+      <div class="list-heading">
+        <div><h2 id="list-title">Задачи Дарьи и Влада</h2><p id="totals" class="muted"></p></div>
+        <button id="reload" class="button secondary" type="button">Обновить список</button>
+      </div>
+      <form class="filters" role="search" id="filters">
+        <label>Найти задачу<input id="search" type="search" placeholder="Название или номер" autocomplete="off"></label>
+        <label>Выполнение<select id="stage-filter"><option value="all">Все задачи</option><option value="ready">Готово</option><option value="in_progress">В работе</option><option value="needs_recheck">Нужна повторная проверка</option><option value="planned">Запланировано</option><option value="waiting_data">Ждём данные</option><option value="separate_release">Отдельное обновление</option></select></label>
+        <label>Ваша проверка<select id="check-filter"><option value="all">Все</option><option value="not_checked">Не проверено</option><option value="checked">Проверено</option><option value="needs_fix">Нужна правка</option></select></label>
+      </form>
+      <p class="muted">Выбранная проверка сохраняется сразу. Комментарий — по кнопке «Сохранить комментарий».</p>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Список задач Palitra и ваша проверка</caption>
+          <thead><tr><th scope="col">№</th><th scope="col">Задача</th><th scope="col">Выполнение</th><th scope="col">Ваша проверка</th></tr></thead>
+          <tbody id="task-rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="notice" hidden>По этим фильтрам задач нет.</p>
+      <p id="updated" class="muted"></p>
+    </section>
+  </main>
+</body>
+</html>

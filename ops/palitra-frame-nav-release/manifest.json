@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "package_id": "palitra-frame-nav-36-38-20261013",
+  "targets": [
+    {
+      "group": "backend",
+      "target": "ops/content/palitra-price-validate.js",
+      "source": "payload/ops/content/palitra-price-validate.js",
+      "base_sha256": "2cb93a1cb6443590ab8a6b504babbb5552ee278f8e4434731ca42ba2434778c1",
+      "sha256": "75df6a98b2a12fdf18448b00dce520aac00e4253d01336f5beefd4bf615aa97c"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/palitra-editor-model.js",
+      "source": "payload/sites/synapse/palitra-editor-model.js",
+      "base_sha256": "62802bebc8c16ca021c7e2f113e795bea1583113c05572610c01ea9962da0042",
+      "sha256": "47c1ad68b2911ab54afdcd42b1974d0c3f73f4b5f68df608fec60252dbf0f9c7"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/palitra-editor.js",
+      "source": "payload/sites/synapse/palitra-editor.js",
+      "base_sha256": "787bd664cc1f0b453adf3a7f85c246ce6103ca64c2ca127924cca2a3400760c3",
+      "sha256": "085c51e97ed6b5e1c91e467bd425b57b90fa6d60fee888dbeec04a630c53eaf5"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/palitra-editor.css",
+      "source": "payload/sites/synapse/palitra-editor.css",
+      "base_sha256": "7d71701dad773dfa9cacd0c6a6ae5bb9b97a862a31074e7d9de0c145a2ad151c",
+      "sha256": "913e47a484437dcecd2183bb273bfceeb17c37175580ff0e178979d02c33c8fa"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/price-editor-palitra.html",
+      "source": "payload/sites/synapse/price-editor-palitra.html",
+      "base_sha256": "5a6a3883ea05d48e3e12ec6e7059d033b394abf71146569c9de32b8cac503703",
+      "sha256": "aba56f64007c173e9a59c7026059a3e0ad5c6b7267453467960f1bdd43dba345"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-editor.js",
+      "source": "payload/sites/synapse/cabinet/palitra-editor.js",
+      "base_sha256": "2211e0cc7a4687c39f863ee5a06a4438492df70c9fb51cca1e34b4611e04babe",
+      "sha256": "3871fc7e6f45b4008c418d372eece7897ed475a085757695a6c5d719d2cad2fe"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-editor.html",
+      "source": "payload/sites/synapse/cabinet/palitra-editor.html",
+      "base_sha256": "e0939ffd9a2f35a6adca97e44b4aa23f2f6535da2127e4feed0f4b627040ea29",
+      "sha256": "4bdaf162300694bae772da8155a985d1bd42a6ec312e99adb4123dd7637832db"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/site-photos.html",
+      "source": "payload/sites/synapse/cabinet/site-photos.html",
+      "base_sha256": "98e45ec7d271f7ce9b425c7eaac3f5bae52aa33826d33eaae069ab9c1a9ea763",
+      "sha256": "e6ef82ff4cbcc8ae1df1da1e63c3fbc55960855305c678261b2dd6be5eb9d099"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-nav.css",
+      "source": "payload/sites/synapse/cabinet/palitra-nav.css",
+      "base_sha256": null,
+      "sha256": "4f24f586d74b7366748554717e1a74343dfa523e46339bb068b1f51f9fdf7cf9"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-guide.html",
+      "source": "payload/sites/synapse/cabinet/palitra-guide.html",
+      "base_sha256": null,
+      "sha256": "ade54b22d4e8672216363174a17c3b4343ffe0c39c8227f93e9583a74bf51f07"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/Palitra-инструкция.txt",
+      "source": "payload/sites/synapse/cabinet/Palitra-инструкция.txt",
+      "base_sha256": null,
+      "sha256": "14a87314eb8d0327afbbb0c1f7b02028e1a20561602a09ee4ef0a056a88a196f"
+    }
+  ]
+}

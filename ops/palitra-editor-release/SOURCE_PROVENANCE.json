@@ -1,0 +1,211 @@
+{
+  "schema": 1,
+  "sourceFiles": 29,
+  "exactCopies": 27,
+  "nodePathAdaptations": 2,
+  "files": [
+    {
+      "source": "35/WORK/server-adapter/sharp-decoder.cjs",
+      "packaged": "payload/server/palitra-image-decoder.js",
+      "sourceSha256": "5135ef7063f7a4ff44fc58033fdafb31eec3f17267166b8328f16e796b9b340c",
+      "packagedSha256": "5135ef7063f7a4ff44fc58033fdafb31eec3f17267166b8328f16e796b9b340c",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/photo-model/image-probe.js",
+      "packaged": "payload/server/palitra-image-check.js",
+      "sourceSha256": "37c9b0393af2156796d81f66fc1dbf4b58dc4a37b7f5625c152a211905e30cec",
+      "packagedSha256": "37c9b0393af2156796d81f66fc1dbf4b58dc4a37b7f5625c152a211905e30cec",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/server-adapter/native-feature.cjs",
+      "packaged": "payload/server/palitra-photo-feature.js",
+      "sourceSha256": "69f4ece7dec72384c180af09bd6293cce32f170fe74af0bafa232120903a7e1b",
+      "packagedSha256": "69f4ece7dec72384c180af09bd6293cce32f170fe74af0bafa232120903a7e1b",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/photo-model/palitra-photo-model.js",
+      "packaged": "payload/server/palitra-photo-model.js",
+      "sourceSha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31",
+      "packagedSha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31",
+      "adaptation": null
+    },
+    {
+      "source": "35/INPUTS/palitra-price-validate.js",
+      "packaged": "payload/server/palitra-price-validate.js",
+      "sourceSha256": "2cb93a1cb6443590ab8a6b504babbb5552ee278f8e4434731ca42ba2434778c1",
+      "packagedSha256": "2cb93a1cb6443590ab8a6b504babbb5552ee278f8e4434731ca42ba2434778c1",
+      "adaptation": null
+    },
+    {
+      "source": "35/INPUTS/palitra-occasions.js",
+      "packaged": "payload/server/palitra-occasions.js",
+      "sourceSha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609",
+      "packagedSha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/palitra-editor.html",
+      "packaged": "payload/static/cabinet/palitra-editor.html",
+      "sourceSha256": "e0939ffd9a2f35a6adca97e44b4aa23f2f6535da2127e4feed0f4b627040ea29",
+      "packagedSha256": "e0939ffd9a2f35a6adca97e44b4aa23f2f6535da2127e4feed0f4b627040ea29",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/palitra-editor.js",
+      "packaged": "payload/static/cabinet/palitra-editor.js",
+      "sourceSha256": "2211e0cc7a4687c39f863ee5a06a4438492df70c9fb51cca1e34b4611e04babe",
+      "packagedSha256": "2211e0cc7a4687c39f863ee5a06a4438492df70c9fb51cca1e34b4611e04babe",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/editor-config.js",
+      "packaged": "payload/static/cabinet/editor-config.js",
+      "sourceSha256": "d2c233abedf7a1e10bca1a18c9f3437985547a08817ef9ed73cf043a4e5244b0",
+      "packagedSha256": "d2c233abedf7a1e10bca1a18c9f3437985547a08817ef9ed73cf043a4e5244b0",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/site-photos.html",
+      "packaged": "payload/static/cabinet/site-photos.html",
+      "sourceSha256": "98e45ec7d271f7ce9b425c7eaac3f5bae52aa33826d33eaae069ab9c1a9ea763",
+      "packagedSha256": "98e45ec7d271f7ce9b425c7eaac3f5bae52aa33826d33eaae069ab9c1a9ea763",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/site-photos.js",
+      "packaged": "payload/static/cabinet/site-photos.js",
+      "sourceSha256": "3692736f889d6c0dbb592fae12980a52ec2fbf571f1ea3e219e612a62632aea8",
+      "packagedSha256": "3692736f889d6c0dbb592fae12980a52ec2fbf571f1ea3e219e612a62632aea8",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/site-photos.css",
+      "packaged": "payload/static/cabinet/site-photos.css",
+      "sourceSha256": "a021fce989773086ea87c93f9b5165d3da58ebaa5d1ea0a32edf5a454772f3bb",
+      "packagedSha256": "a021fce989773086ea87c93f9b5165d3da58ebaa5d1ea0a32edf5a454772f3bb",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/site-photos-core.js",
+      "packaged": "payload/static/cabinet/site-photos-core.js",
+      "sourceSha256": "2c83a7091948280a27abbfc443aa3dc0a7c2c0ae9376699c2c0f723518cec0e2",
+      "packagedSha256": "dbd488f8d58e0f12b86775b448359ac7a0486ff85fb82d99aa06f0de3ab5096c",
+      "adaptation": "Node require перенесён с ../photo-model/palitra-photo-model.js на ./palitra-photo-model.js; ветка браузера сохранена"
+    },
+    {
+      "source": "35/WORK/frontend/site-photos-access.html",
+      "packaged": "payload/static/cabinet/site-photos-access.html",
+      "sourceSha256": "936bd46f4b50599ba1f378a2d92ca460e2038dd6af23e40b777d32261990a663",
+      "packagedSha256": "936bd46f4b50599ba1f378a2d92ca460e2038dd6af23e40b777d32261990a663",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/frontend/site-photos-access.js",
+      "packaged": "payload/static/cabinet/site-photos-access.js",
+      "sourceSha256": "f62bd13a10215592812a83566a20666392cc6a71d6324bf08c38bd4072d95d5d",
+      "packagedSha256": "f62bd13a10215592812a83566a20666392cc6a71d6324bf08c38bd4072d95d5d",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/photo-model/palitra-photo-model.js",
+      "packaged": "payload/static/cabinet/palitra-photo-model.js",
+      "sourceSha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31",
+      "packagedSha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/price-editor-palitra.html",
+      "packaged": "payload/static/price-editor-palitra.html",
+      "sourceSha256": "5a6a3883ea05d48e3e12ec6e7059d033b394abf71146569c9de32b8cac503703",
+      "packagedSha256": "5a6a3883ea05d48e3e12ec6e7059d033b394abf71146569c9de32b8cac503703",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/palitra-editor.css",
+      "packaged": "payload/static/palitra-editor.css",
+      "sourceSha256": "7d71701dad773dfa9cacd0c6a6ae5bb9b97a862a31074e7d9de0c145a2ad151c",
+      "packagedSha256": "7d71701dad773dfa9cacd0c6a6ae5bb9b97a862a31074e7d9de0c145a2ad151c",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/palitra-editor.js",
+      "packaged": "payload/static/palitra-editor.js",
+      "sourceSha256": "a9ccdaef0d2a98ff801b9d0b0f02b74dc8bfee0156765d929dea12af864b0e46",
+      "packagedSha256": "a9ccdaef0d2a98ff801b9d0b0f02b74dc8bfee0156765d929dea12af864b0e46",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/palitra-editor-model.js",
+      "packaged": "payload/static/palitra-editor-model.js",
+      "sourceSha256": "b6604bc80fa21de52ee39a643327da79c3f0795297c5c59f46ba3639d574c5f8",
+      "packagedSha256": "62802bebc8c16ca021c7e2f113e795bea1583113c05572610c01ea9962da0042",
+      "adaptation": "Node require перенесён с ./reader/palitra-occasions.js на ./palitra-occasions.js; ветка браузера сохранена"
+    },
+    {
+      "source": "12-18/WORK/palitra-editor-session.js",
+      "packaged": "payload/static/palitra-editor-session.js",
+      "sourceSha256": "20e45590095a0a1fd7f8242e2d93b7f5f6dd19cbb91277d32738c39317ccfb26",
+      "packagedSha256": "20e45590095a0a1fd7f8242e2d93b7f5f6dd19cbb91277d32738c39317ccfb26",
+      "adaptation": null
+    },
+    {
+      "source": "35/INPUTS/palitra-occasions.js",
+      "packaged": "payload/static/palitra-occasions.js",
+      "sourceSha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609",
+      "packagedSha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/fonts/nunito-sans-v19-cyrillic-ext.woff2",
+      "packaged": "payload/static/palitra-editor-fonts/nunito-sans-v19-cyrillic-ext.woff2",
+      "sourceSha256": "8a8e11bad67c3ae75ba03c969fbe5742b8bf088f1b2ca2dd04610a352475ee37",
+      "packagedSha256": "8a8e11bad67c3ae75ba03c969fbe5742b8bf088f1b2ca2dd04610a352475ee37",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/fonts/nunito-sans-v19-cyrillic.woff2",
+      "packaged": "payload/static/palitra-editor-fonts/nunito-sans-v19-cyrillic.woff2",
+      "sourceSha256": "d3fe75d4c86f6df84f37c76ad44fa21c45778d7e14160b0294f92ec248fa144a",
+      "packagedSha256": "d3fe75d4c86f6df84f37c76ad44fa21c45778d7e14160b0294f92ec248fa144a",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/fonts/nunito-sans-v19-latin-ext.woff2",
+      "packaged": "payload/static/palitra-editor-fonts/nunito-sans-v19-latin-ext.woff2",
+      "sourceSha256": "c648ee5bfda70d44b9fb628f4114d1cc4f984d050cbb4881052237ede3638a2e",
+      "packagedSha256": "c648ee5bfda70d44b9fb628f4114d1cc4f984d050cbb4881052237ede3638a2e",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/fonts/nunito-sans-v19-latin.woff2",
+      "packaged": "payload/static/palitra-editor-fonts/nunito-sans-v19-latin.woff2",
+      "sourceSha256": "29e3890496844a9ea81975c52771c587c872b4eb317026422d1995b88d21b57d",
+      "packagedSha256": "29e3890496844a9ea81975c52771c587c872b4eb317026422d1995b88d21b57d",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/server-candidate/patches.cjs",
+      "packaged": "patches/upstream-patches.cjs",
+      "sourceSha256": "a25a90c336445e46eacdd778055a7e4b255e96fe2ee0e05da2abb3d198a62a82",
+      "packagedSha256": "a25a90c336445e46eacdd778055a7e4b255e96fe2ee0e05da2abb3d198a62a82",
+      "adaptation": null
+    },
+    {
+      "source": "35/WORK/INTEGRATION_MANIFEST.json",
+      "packaged": "SOURCE_INTEGRATION_MANIFEST.json",
+      "sourceSha256": "2b80670bd53f1526f674dd1a041c5bd174057a9080389a39e05aae29a7b260e5",
+      "packagedSha256": "2b80670bd53f1526f674dd1a041c5bd174057a9080389a39e05aae29a7b260e5",
+      "adaptation": null
+    },
+    {
+      "source": "12-18/WORK/FONT_MANIFEST.json",
+      "packaged": "FONT_MANIFEST.json",
+      "sourceSha256": "92cb7d348d1cbd4fcbed0f9dca28b4bd66675874153c781c3235b362f4ea9bf5",
+      "packagedSha256": "92cb7d348d1cbd4fcbed0f9dca28b4bd66675874153c781c3235b362f4ea9bf5",
+      "adaptation": null
+    }
+  ]
+}

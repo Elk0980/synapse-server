@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Редактор Palitra — Synapse</title>
+<link rel="stylesheet" href="/cabinet/site-photos.css">
+</head>
+<body>
+<header class="sp-header">
+  <a href="/cabinet.html">← Кабинет</a>
+  <h1>Редактор Palitra</h1>
+  <p class="sp-scope">Вход — обычным аккаунтом кабинета. Что доступно, определяют права вашего аккаунта.</p>
+</header>
+<p id="status" role="status" aria-live="polite">Проверяем вход…</p>
+<p id="error" role="alert"></p>
+<main class="sp-hub" id="hub" hidden>
+  <article class="sp-card">
+    <h2>Товары и прайс</h2>
+    <p><strong>Прайс общий для всего Palitra:</strong> изменения цен, товаров и их фото видны везде, где показывается прайс Palitra, а не только в черновике сайта.</p>
+    <a class="button" id="price-link" hidden>Открыть общий прайс</a>
+    <p class="sp-help" id="price-missing" hidden>Адрес редактора прайса не настроен. Откройте прайс из кабинета обычным способом.</p>
+  </article>
+  <article class="sp-card">
+    <h2>Фото сайта</h2>
+    <p>Фото первого экрана, 11 категорий, карточек «По стоимости» и галереи «Ваши праздники». Меняется только черновик сайта, основной сайт не меняется.</p>
+    <a class="button" id="photos-link">Открыть фото сайта</a>
+  </article>
+  <article class="sp-card" id="access-card" hidden>
+    <h2>Доступ к фото</h2>
+    <p>Только для владельца: кому из сотрудников Palitra можно смотреть и менять фото этого черновика.</p>
+    <a class="button" id="access-hub-link">Открыть доступ к фото</a>
+  </article>
+</main>
+<script src="/cabinet/editor-config.js" defer></script>
+<script src="/cabinet/palitra-editor.js" defer></script>
+</body>
+</html>

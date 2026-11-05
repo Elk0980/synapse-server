@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "package_id": "palitra-main-usability-20261013",
+  "targets": [
+    {
+      "group": "static",
+      "sha256": "bc626184fce44d8875a379d79798c2e8d3ed9e3a321d9c1ba491d01708fd1207",
+      "base_sha256": "4bdaf162300694bae772da8155a985d1bd42a6ec312e99adb4123dd7637832db",
+      "target": "sites/synapse/cabinet/palitra-editor.html",
+      "source": "payload/sites/synapse/cabinet/palitra-editor.html"
+    },
+    {
+      "group": "static",
+      "sha256": "57f2daed26cab2199f2ec80b5e02893ee91e24a12df20d3aa4b3ff4ef4b9df62",
+      "base_sha256": "1119adf81df61cab8f3b6ef58091b54ecbbe0fe8e225ed7a51b2132eb087ae31",
+      "target": "sites/synapse/cabinet/palitra-photo-model.js",
+      "source": "payload/sites/synapse/cabinet/palitra-photo-model.js"
+    },
+    {
+      "group": "static",
+      "sha256": "78c59589c84857783c9d99771cda91d4ef791d5e652c80e3f5ff0cb0012b9d7b",
+      "base_sha256": "aba56f64007c173e9a59c7026059a3e0ad5c6b7267453467960f1bdd43dba345",
+      "target": "sites/synapse/price-editor-palitra.html",
+      "source": "payload/sites/synapse/price-editor-palitra.html"
+    },
+    {
+      "group": "static",
+      "sha256": "b9ea20cc031deceb4413daf4279b4d2850fd90f6ac5f8cfacccd87e6324361f6",
+      "base_sha256": "e6ef82ff4cbcc8ae1df1da1e63c3fbc55960855305c678261b2dd6be5eb9d099",
+      "target": "sites/synapse/cabinet/site-photos.html",
+      "source": "payload/sites/synapse/cabinet/site-photos.html"
+    }
+  ]
+}

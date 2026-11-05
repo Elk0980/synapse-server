@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "package_id": "palitra-app-workplace-20261013",
+  "targets": [
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-work.html",
+      "source": "payload/sites/synapse/cabinet/palitra-work.html",
+      "base_sha256": null,
+      "sha256": "4e632871379b035bb947935bfe27248190bc16af292bd5440813352cbabb3172"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-work.js",
+      "source": "payload/sites/synapse/cabinet/palitra-work.js",
+      "base_sha256": null,
+      "sha256": "343fabbcf995e8bcb69e19c47c5cfb717632a4442b38c26fa108c247b27d0c4b"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/cabinet/palitra-work.css",
+      "source": "payload/sites/synapse/cabinet/palitra-work.css",
+      "base_sha256": null,
+      "sha256": "a9f4a2b4544cbe7e93140d4963bdf6cf80675eec377062e861f37b782c88335f"
+    }
+  ]
+}
