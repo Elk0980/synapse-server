@@ -32,30 +32,46 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
     if (!columns.has(name)) db.exec(`ALTER TABLE team_chat_messages ADD COLUMN ${name} ${type}`);
   db.exec('CREATE INDEX IF NOT EXISTS team_chat_room_idx ON team_chat_messages(company_code,room,id)');
   const running = new Map();
+  // №127: участник «Чатов» — исполнитель своих задач (people) или любой аккаунт ЛК, которому
+  // владелец открыл эту компанию с какими-либо правами (без прав — доступ отозван). Второму доступны только общий и личные чаты: без лога Хью,
+  // задач и ответов Хью (для них нужен доступ к задачам). Компания проверяется здесь, на сервере.
+  function chatAccess(userId, code, write=false) {
+    let denied;
+    try { return {...tasks.access(userId, code, write), tasksAccess:true}; } catch (error) { if (error.status !== 403) throw error; denied = error; }
+    let row;
+    try {
+      row = db.prepare(`SELECT u.id,u.display_name,u.must_change_password FROM auth_users u
+        JOIN auth_user_companies c ON c.user_id=u.id AND c.company_code=? WHERE u.id=? AND u.role='editor'
+        AND EXISTS (SELECT 1 FROM auth_user_permissions p WHERE p.user_id=u.id)`).get(code, userId);
+    } catch { row = null; }
+    if (!row || row.must_change_password === 1) throw denied;
+    return {id:row.id, displayName:row.display_name, role:'editor', tasksAccess:false};
+  }
   function room(user, code, value='common') {
     if (value === 'common') return {room:value};
     let match = /^hugh:([1-9]\d{0,15})$/.exec(value);
-    if (match) { if (Number(match[1]) !== user.id) fail(403,'Чат недоступен'); return {room:value, hugh:true}; }
+    if (match) { if (Number(match[1]) !== user.id || !user.tasksAccess) fail(403,'Чат недоступен'); return {room:value, hugh:true}; }
     match = /^dm:([1-9]\d{0,15})-([1-9]\d{0,15})$/.exec(value);
     if (!match) fail(400,'Некорректный чат');
     const pair = [Number(match[1]), Number(match[2])];
     if (!(pair[0] < pair[1]) || !pair.includes(user.id)) fail(403,'Чат недоступен');
-    try { tasks.access(pair[0] === user.id ? pair[1] : pair[0], code); } catch { fail(403,'Собеседник не работает в этой компании'); }
+    try { chatAccess(pair[0] === user.id ? pair[1] : pair[0], code); } catch { fail(403,'Собеседник не работает в этой компании'); }
     return {room:value, dm:pair};
   }
   function members(userId, code) {
-    const user = tasks.access(userId, code);
+    const user = chatAccess(userId, code);
     let rows = [];
     try {
       rows = db.prepare(`SELECT id,display_name FROM auth_users WHERE role='owner' UNION SELECT u.id,u.display_name FROM auth_users u
-        JOIN company_team_members m ON m.user_id=u.id WHERE m.company_code=? AND m.staff_role='human_executor' ORDER BY 2`).all(code);
+        JOIN company_team_members m ON m.user_id=u.id WHERE m.company_code=? AND m.staff_role='human_executor'
+        UNION SELECT u.id,u.display_name FROM auth_users u JOIN auth_user_companies c ON c.user_id=u.id WHERE c.company_code=? AND u.role='editor' ORDER BY 2`).all(code, code);
     } catch { rows = []; }
-    const people = rows.filter(r => r.id !== user.id && (() => { try { tasks.access(r.id, code); return true; } catch { return false; } })())
+    const people = rows.filter(r => r.id !== user.id && (() => { try { chatAccess(r.id, code); return true; } catch { return false; } })())
       .map(r => ({id:r.id, name:r.display_name, room:`dm:${Math.min(r.id,user.id)}-${Math.max(r.id,user.id)}`}));
-    return {viewerId:user.id, common:'common', hugh:`hugh:${user.id}`, people};
+    return {viewerId:user.id, common:'common', hugh:user.tasksAccess ? `hugh:${user.id}` : null, people};
   }
   function list(userId,code,before,roomName='common') {
-    const user=tasks.access(userId,code),owner=user.role==='owner',scope=room(user,code,roomName||'common');
+    const user=chatAccess(userId,code),owner=user.role==='owner',scope=room(user,code,roomName||'common');
     const cursor = before == null ? Number.MAX_SAFE_INTEGER : Number(before);
     if (!Number.isSafeInteger(cursor) || cursor < 1) fail(400,'Некорректная страница');
     // Apply audience before pagination, including already stored answers.
@@ -98,14 +114,16 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
     return running.get(row.id);
   }
   async function send(userId,code,body) {
-    let user = tasks.access(userId,code,true);
+    let user = chatAccess(userId,code,true);
     const keys = body && typeof body === 'object' ? Object.keys(body) : [];
     if (!body || !keys.includes('text') || !keys.includes('clientMessageId') || keys.some(k => !['clientMessageId','text','room','taskId'].includes(k)) ||
         typeof body.text !== 'string' || !body.text.trim() || body.text.length > 8000 || !/^[a-zA-Z0-9_.:-]{8,128}$/.test(body.clientMessageId) ||
         body.room !== undefined && typeof body.room !== 'string' || body.taskId !== undefined && (!Number.isSafeInteger(body.taskId) || body.taskId < 1)) fail(400,'Проверьте сообщение');
     const scope = room(user, code, body.room || 'common');
     if (body.taskId && !scope.hugh) fail(400,'Чат по задаче ведётся в личном чате с Хью');
-    const text = body.text.trim(), title = body.taskId ? '' : taskTitle(text), request = title || body.taskId ? '' : hughTitle(text, scope.hugh);
+    if (body.taskId && !user.tasksAccess) fail(403,'Нет доступа к задачам');
+    // Без доступа к задачам сообщение остаётся обычным: задачу не ставим, Хью не зовём.
+    const text = body.text.trim(), title = body.taskId || !user.tasksAccess ? '' : taskTitle(text), request = title || body.taskId || !user.tasksAccess ? '' : hughTitle(text, scope.hugh);
     if (title.length > 1000 || request.length > 1000) fail(400,'Название задачи слишком длинное');
     let row = db.prepare('SELECT * FROM team_chat_messages WHERE company_code=? AND user_id=? AND client_id=?').get(code,userId,body.clientMessageId);
     if (row && (row.text !== text || row.room !== scope.room || (row.ref_task_id || undefined) !== body.taskId)) fail(409,'Идентификатор уже использован');
@@ -131,11 +149,11 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
         db.prepare("UPDATE team_chat_messages SET command_state='done' WHERE id=?").run(row.id);
       });
     }
-    tasks.access(userId,code,true);
-    if(!title&&!request&&answers&&(scope.hugh||addressed(text)))await answers.answer(row);
-    tasks.access(userId,code,true);
+    user = chatAccess(userId,code,true);
+    if(!title&&!request&&answers&&user.tasksAccess&&(scope.hugh||addressed(text)))await answers.answer(row);
+    chatAccess(userId,code,true);
     return {message:db.prepare('SELECT * FROM team_chat_messages WHERE id=?').get(row.id)};
   }
-  return {list,send,members};
+  return {list,send,members,access:chatAccess};
 }
 module.exports = {createTeamChat,taskTitle,hughTitle,addressed,similar};

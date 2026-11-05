@@ -262,14 +262,15 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
         if (options.is_reels === true && (post.mediaUrls.length !== 1 || !isVideoUrl(post.mediaUrls[0]))) throw failure('CONTENT_LIMIT');
         if (!post.mediaUrls.length) throw failure('CONTENT_LIMIT');
       }
-      /* Здесь потребитель Onlypult REST, а не приложение нативного TikTok API.
-         В Onlypult передаётся ровно согласованный режим из его закрытого контракта.
-         Это не список возможностей конкретного автора: неподдерживаемый выбор должен
-         отклонить провайдер. Умолчания, замены аудитории и повторный POST запрещены. */
+      /* Барьер из main (снимок №84, решение оркестратора): контракт Onlypult не сообщает,
+         какие режимы доступны конкретному профилю TikTok. Выбранный режим сохраняется в плане
+         и согласуется, но отправка честно останавливается отдельной причиной, пока возможности
+         профиля не подтверждены контрактом. Боевая версия без барьера в git не переносится. */
       if (row.id === 'tiktok') {
-        if (!['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'].includes(options.privacy)) throw failure('TIKTOK_PRIVACY_REQUIRED');
+        if (!['PUBLIC_TO_EVERYONE', 'SELF_ONLY'].includes(options.privacy)) throw failure('TIKTOK_PRIVACY_REQUIRED');
         if (['disable_comment','disable_duet','disable_stitch'].some(key => Object.hasOwn(options,key) && typeof options[key] !== 'boolean')) throw failure('CONTENT_LIMIT');
         if (post.mediaUrls.filter(isVideoUrl).length !== 1 || post.mediaUrls.length !== 1) throw failure('CONTENT_LIMIT');
+        throw failure('TIKTOK_PRIVACY_UNCONFIRMED');
       }
       if (row.id === 'instagram' && Object.hasOwn(options, 'graduation_strategy') && options.is_reels !== true) throw failure('CONTENT_LIMIT');
       if (row.id === 'youtube_shorts') {

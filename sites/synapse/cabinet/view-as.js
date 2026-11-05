@@ -1,7 +1,14 @@
  'use strict';
 (() => {
-  const key='synapse-view-as', nativeFetch=window.fetch.bind(window);
+  const key='synapse-view-as', companyKey='synapse-view-as-company', nativeFetch=window.fetch.bind(window);
   const token=()=>sessionStorage.getItem(key);
+  /* №137: компания владельца в момент входа в режим. Выбор кабинета хранится по userId; в режиме
+     просмотра userId — сотрудника, поэтому берём сохранённый выбор владельца так же, как кабинет. */
+  const ownerCompany=(profile)=>{
+    const ids=(Array.isArray(profile.companies)?profile.companies:[]).map(company=>company.id);
+    let saved=null;try{saved=localStorage.getItem(`synapse_cabinet_project_v2:${profile.userId}`);}catch{}
+    return ids.includes(saved)?saved:ids[0]||'';
+  };
   window.fetch=(input,options={})=>{
     const url=new URL(input instanceof Request?input.url:input,location.href);
     if (url.origin===location.origin && url.pathname.startsWith('/content/') && token()) {
@@ -11,8 +18,15 @@
     }
     return nativeFetch(input,options);
   };
-  const exit=()=>{sessionStorage.removeItem(key);location.reload();};
-  window.SynapseViewAs={render(profile){
+  const exit=()=>{sessionStorage.removeItem(key);sessionStorage.removeItem(companyKey);location.reload();};
+  window.SynapseViewAs={
+  /* №137: в режиме просмотра выбор компании живёт только в этой вкладке (sessionStorage) и
+     начинается с компании владельца; сохранённый выбор владельца и сотрудника в localStorage не меняется. */
+  projectStore(profile){
+    if(!profile?.viewAs&&!token())return null;
+    return {get:()=>sessionStorage.getItem(companyKey),set:(id)=>sessionStorage.setItem(companyKey,id)};
+  },
+  render(profile){
     const start=document.getElementById('view-as-start');
     if (start) {
       start.hidden=profile.role!=='owner'||!!profile.viewAs;
@@ -28,7 +42,9 @@
             button.onclick=async()=>{
               const r=await fetch('/content/view-as',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':profile.csrfToken},body:JSON.stringify({userId:user.id})});
               if (!r.ok) {title.textContent='Не удалось включить просмотр';return;}
-              sessionStorage.setItem(key,(await r.json()).token);location.reload();
+              sessionStorage.setItem(key,(await r.json()).token);
+              const company=ownerCompany(profile);if(company)sessionStorage.setItem(companyKey,company);else sessionStorage.removeItem(companyKey);
+              location.reload();
             };dialog.append(button);
           }
           const close=document.createElement('button');close.textContent='Отмена';close.onclick=()=>{dialog.close();dialog.remove();};dialog.append(close);

@@ -8,7 +8,7 @@
 <title>Кабинет — Synapse Business</title>
 <link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
 <link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
-<script src="cabinet/view-as.js?v=20261105-1"></script>
+<script src="cabinet/view-as.js?v=20261105-2"></script>
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -1090,7 +1090,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20261105-night98-expenses";
+  window.SB_CABINET_ASSET_VERSION = "20261105-night98-expenses-board-links-108-permission-help-110";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1099,8 +1099,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
-  const cabinetAssets = ["platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "project-forms", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetAssets = ["platform-links", "home", "task-overview", "task-text", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "project-forms", "analytics",
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "permission-help", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
   const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
@@ -1266,10 +1266,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
 
   const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
+  // №137: «Посмотреть как» хранит выбор компании отдельно и не трогает сохранённый выбор владельца.
+  const viewAsProjects = () => window.SynapseViewAs?.projectStore?.(identity) || null;
   const readSelectedProject = () => {
     let saved = null;
     try {
-      saved = localStorage.getItem(projectStorageKey());
+      const viewAs = viewAsProjects();
+      saved = viewAs ? viewAs.get() : localStorage.getItem(projectStorageKey());
     } catch (error) {
       saved = null;
     }
@@ -1278,7 +1281,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const saveSelectedProject = () => {
     if (!selectedProjectId) return;
     try {
-      localStorage.setItem(projectStorageKey(), selectedProjectId);
+      const viewAs = viewAsProjects();
+      if (viewAs) viewAs.set(selectedProjectId); else localStorage.setItem(projectStorageKey(), selectedProjectId);
     } catch (error) {
       // The selected project remains available in memory for this session.
     }

@@ -24,7 +24,7 @@ function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],cont
     if(parsed.pathname==='/content/people/friday-rule')return response({rule:{enabled:false,userId:7,timezone:'Asia/Irkutsk',metric:'pendingIdeas',weekStart:'2026-11-09',morningHour:9,eveningHour:18}});
     return response({});
   };
-  setup?.(w);w.eval(script);return {w,dom,calls,byId:id=>w.document.getElementById(id)};
+  setup?.(w);w.eval(fs.readFileSync(path.join(__dirname,'permission-help.js'),'utf8'));w.eval(script);return {w,dom,calls,byId:id=>w.document.getElementById(id)};
 }
 test('обычный вход показывает назначенные задачи и не запускает подписки или отправки',async t=>{
   const f=fixture(t);await flush();
@@ -209,6 +209,17 @@ test('SW для текущего адресата показывает текс�
 test('manifest устанавливает точку входа людей, worker не перехватывает страницы',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'people.webmanifest'),'utf8'));
   assert.equal(manifest.start_url,'/cabinet/people.html');assert.equal(manifest.scope,'/cabinet/');assert.equal(sw.includes("addEventListener('fetch'"),false);
+});
+test('права участника выводятся по фактическим правам аккаунта, а не по роли',async t=>{
+  const f=fixture(t,{owner:true,handler:async route=>route.startsWith('/content/people/members')?response({members:[
+    {id:7,displayName:'Исполнитель',login:'one',staffRole:'human_executor',permissions:['tasks.self.view']},
+    {id:8,displayName:'Администратор',login:'two',staffRole:'administrator',permissions:['crm.view','crm.edit']},
+    {id:9,displayName:'Без прав',login:'three',staffRole:'human_executor',permissions:[]}]}):undefined});
+  await flush();const rows=[...f.byId('member-list').querySelectorAll('.member-row')];
+  const codes=row=>[...row.querySelectorAll('.permission-code')].map(node=>node.textContent).filter(code=>code!=='content-plan.approve');
+  assert.deepEqual(codes(rows[0]),['tasks.self.view'],'исполнитель без права менять статус не показывает tasks.self.edit');
+  assert.deepEqual(codes(rows[1]),['crm.view','crm.edit'],'администратор показывает свои права');
+  assert.deepEqual(codes(rows[2]),[]);assert.match(rows[2].textContent,/Права не назначены/);
 });
 
 test('push deep link chooses company then opens the task card; bad IDs never open',async t=>{

@@ -4,6 +4,7 @@
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const RANK={urgent:0,high:1,normal:2,low:3};
 const SYSTEM_SOURCES=new Set(['claude','gpt','chat','telegram','pipeline']);
+const {assigneeMatches}=require('./people-assignee');
 function migratePeopleBoard(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS people_task_prefs (
     company_code TEXT NOT NULL, user_id INTEGER NOT NULL, task_id INTEGER NOT NULL REFERENCES tasks(id),
@@ -15,12 +16,13 @@ function migratePeopleBoard(db) {
 function createPeopleBoard({db,view,now=()=>new Date().toISOString()}) {
   migratePeopleBoard(db);
   const rows=code=>db.prepare('SELECT * FROM tasks WHERE company_code=? COLLATE NOCASE AND is_deleted=0 ORDER BY id').all(code);
-  // Назначение человеку: прямое или унаследованное от ветки; роль owner не расширяет «мои задачи».
-  function assigned(row,map,userId,code) {
+  // Назначение человеку (person:<id> или имя/логин этого человека): прямое или унаследованное от ветки;
+  // роль owner не расширяет «мои задачи».
+  function assigned(row,map,actor,code) {
     const seen=new Set();
     while(row&&!seen.has(row.id)&&String(row.company_code).toLowerCase()===code) {
       seen.add(row.id);
-      if(row.assignee_name)return row.assignee_name===`person:${userId}`;
+      if(row.assignee_name)return assigneeMatches(row.assignee_name,actor);
       row=map.get(row.parent_task_id);
     }
     return false;
@@ -32,7 +34,7 @@ function createPeopleBoard({db,view,now=()=>new Date().toISOString()}) {
   function scope(code,actor) {
     const all=rows(code),map=new Map(all.map(r=>[r.id,r])),userId=actor.userId;
     const prefs=new Map(db.prepare('SELECT * FROM people_task_prefs WHERE company_code=? AND user_id=?').all(code,userId).map(p=>[p.task_id,p]));
-    const items=all.filter(r=>viaHugh(r,userId,code)||assigned(r,map,userId,code)).map(row=>({row,section:viaHugh(row,userId,code)?'hugh':'assigned',pref:prefs.get(row.id)}));
+    const items=all.filter(r=>viaHugh(r,userId,code)||assigned(r,map,actor,code)).map(row=>({row,section:viaHugh(row,userId,code)?'hugh':'assigned',pref:prefs.get(row.id)}));
     return {items,byId:new Map(items.map(i=>[i.row.id,i]))};
   }
   function item({row,section,pref}) {

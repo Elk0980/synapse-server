@@ -38,6 +38,8 @@
 `PUT /reels/:ideaId/status {status:'editing'|'draft'}`.
 Конфиг (необязательный, без ключей): `/data/shooting.json` `{companyQuotaBytes, minFreeBytes, minFreePercent,
 sketchDailyLimit, uploadTtlHours (24), maxOpenUploads (12)}`; нет файла — значения по умолчанию.
+Резерв диска (№119): после загрузки должно остаться не меньше `minFreeBytes` (по умолчанию 2 ГБ, минимум 512 МБ),
+то есть нужно свободно ≥ запас + размер файла; `minFreePercent` по умолчанию 0. Env `SHOOTING_MIN_FREE_MB` важнее файла.
 
 ## Проверки
 `node --test ops/content/shooting*.test.js`, jsdom `sites/synapse/cabinet/shooting*.test.cjs`,

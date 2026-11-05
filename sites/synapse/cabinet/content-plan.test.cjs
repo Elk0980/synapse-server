@@ -224,3 +224,46 @@ test('№128: server answer brief_incomplete is shown with the questionnaire wor
   assert.match(hint, /Отметьте площадки в анкете выше/); assert.doesNotMatch(hint, /бриф/i);
   assert.equal(a.root.querySelector('[data-cp="accept"]'), null);
 });
+
+test('№136: empty questionnaire with a leftover platform in the hidden brief — hint, no model call, no brief write', async () => {
+  const a = api({ qPlatforms: [], briefPlatforms: ['instagram'] }); await a.mount();
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick();
+  assert.match(a.root.querySelector('[data-cp-suggest]').textContent, /Отметьте площадки в анкете выше/);
+  assert.equal(a.calls.some((c) => c.path === 'media-mentor-suggest'), false, 'model is not called');
+  assert.equal(a.calls.some((c) => c.path === 'crm/media-mentor/brief'), false, 'brief is not written');
+  assert.equal(a.window.document.activeElement, a.root.querySelector('[data-cp-platforms] input'));
+});
+
+test('№136: unticked platform counts as not chosen even before the autosave reaches the server', async () => {
+  const a = api({ qPlatforms: ['vk'], briefPlatforms: ['vk'] }); await a.mount();
+  const box = a.root.querySelector('[data-q-platform="vk"]');
+  box.checked = false; box.dispatchEvent(new a.window.Event('change'));
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick(); await tick();
+  assert.match(a.root.querySelector('[data-cp-suggest]').textContent, /Отметьте площадки в анкете выше/);
+  assert.equal(a.calls.some((c) => c.path === 'media-mentor-suggest'), false);
+});
+
+test('№136: Hugh gets only questionnaire platforms; brief gains missing ones without losing old; foreign rows are dropped', async () => {
+  const a = api({ qPlatforms: ['telegram'], briefPlatforms: ['vk'],
+    suggest: { status: 'ok', notice: 'n', items: [{ date: '2026-11-20', platform: 'vk', format: 'reel', role: 'reach', topic: 'Старая площадка' },
+      { date: '2026-11-21', platform: 'telegram', format: 'reel', role: 'reach', topic: 'Видимая площадка' }] } });
+  await a.mount();
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick();
+  assert.deepEqual(a.calls.find((c) => c.path === 'crm/media-mentor/brief').body.brief.platforms, ['vk', 'telegram']);
+  assert.deepEqual(a.calls.find((c) => c.path === 'media-mentor-suggest').body.platforms, ['telegram']);
+  const shown = a.root.querySelector('.cp-suggest').textContent;
+  assert.match(shown, /Видимая площадка/); assert.doesNotMatch(shown, /Старая площадка/);
+});
+
+test('№136: server before the fix rejects the new field — one retry without it', async () => {
+  const a = api({ qPlatforms: ['vk'], briefPlatforms: ['vk'] }); await a.mount();
+  const post = a.ctx.api.post, bodies = [];
+  a.ctx.api.post = async (p, b) => { if (p === 'media-mentor-suggest') { bodies.push(plain(b)); if (b.platforms) throw Object.assign(Error('Переданы лишние поля'), { status: 400 }); } return post(p, b); };
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick(); await tick();
+  assert.deepEqual(bodies.map((b) => 'platforms' in b), [true, false]);
+  assert.ok(a.root.querySelector('[data-cp="accept"]'));
+});

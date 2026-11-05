@@ -1,6 +1,7 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
+const {personAliases}=require('./people-aliases');
+function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch,authStore=null}) {
   const actions=new Set(['ownerDecisionEvents','tasks_list','task_get','task_update','teamChatTask','teamChatContext','mediaMentor','taskRecords','planVariantsDecision',
     'hughTask','myBoard','myBoardAction','taskChatComment']);
   const writes=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'];
@@ -15,7 +16,10 @@ function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
     // компанию и назначение. Человек никогда не представляется владельцем.
     const permissions=[permission];
     if(action==='teamChatContext'&&user.permissions?.includes('content-plan.approve'))permissions.push('content-plan.approve');
-    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode]};
+    // Однозначные в компании имена человека: исполнитель на доске часто записан именем.
+    const userAliases=authStore?personAliases(authStore.list(),user,companyCode):[];
+    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode],
+      ...(userAliases.length?{userAliases}:{})};
     const readOnly=['ownerDecisionEvents','mediaMentor','taskRecords','teamChatContext','myBoard'].includes(action);
     const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
       (action==='ownerDecisionEvents'?`&offset=${Number(args.offset)||0}${args.taskId?`&taskId=${Number(args.taskId)}`:''}`:'')+

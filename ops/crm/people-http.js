@@ -2,6 +2,7 @@
 
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const stages=['code','connected','verified','accepted'];
+const {assigneeMatches}=require('./people-assignee');
 function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}) {
   function access(request,code,permission) {
     const actor=identity(request);
@@ -18,7 +19,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     const seen=new Set();
     while(row&&!seen.has(row.id)&&String(row.company_code).toLowerCase()===code) {
       seen.add(row.id);
-      if(row.assignee_name)return row.assignee_name===`person:${actor.userId}`;
+      if(row.assignee_name)return assigneeMatches(row.assignee_name,actor);
       row=map.get(row.parent_task_id);
     }
     return false;

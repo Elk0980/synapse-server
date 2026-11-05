@@ -20,6 +20,11 @@ const { randomUUID } = require('node:crypto');
 
 const MIN_DAYS = 7, MAX_DAYS = 14, MAX_ITEMS_PER_DAY = 3;
 const FORMAT_KEYS = ['post', 'story', 'reel', 'carousel'];
+/* №121: площадки плана, которые означают только видео. В словаре плана instagram — «Instagram /
+   Reels», TikTok и YouTube Shorts принимают только ролики. Модель ставила таким строкам post/story,
+   и видео выпадало из «Съёмки». Здесь формат приводится к reel с явной пометкой в adjusted; уже
+   сохранённые планы модуль не трогает — он только строит новое предложение. */
+const VIDEO_ONLY_PLATFORMS = Object.freeze({ instagram: 'Instagram / Reels', tiktok: 'TikTok', youtube_shorts: 'YouTube Shorts' });
 const ROLE_KEYS = ['reach', 'affection', 'sale'];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NOTICE = 'Это предложение модели, а не согласованный план. Ни одна позиция не сохранена ' +
@@ -68,7 +73,9 @@ function buildPrompt(brief, { startDate, days }) {
     'Отвечай ТОЛЬКО массивом JSON, без пояснений и без разметки. ' +
     'Каждый элемент: {"date":"ГГГГ-ММ-ДД","platform":"...","format":"post|story|reel|carousel",' +
     '"role":"reach|affection|sale","topic":"...","hook":"...","assetId":"","mentorNote":"..."}. ' +
-    'Площадку бери только из списка площадок брифа. Материал (assetId) указывай только из списка ' +
+    'Площадку бери только из списка площадок брифа. Для площадок instagram (это Instagram / Reels), ' +
+    'tiktok и youtube_shorts формат только reel: это короткое видео, его снимают. ' +
+    'Материал (assetId) указывай только из списка ' +
     'исходников брифа, иначе оставляй пустым. Не выдумывай факты, цифры, акции и цены: ' +
     'если сведений нет, пиши тему без них. ' +
     'Роль материала по ОВП: reach — охват незнакомых людей через их вопрос; ' +
@@ -117,7 +124,7 @@ function normalize(rows, { brief, startDate, days }) {
   const allowedPlatforms = new Set(brief.platforms || []);
   const allowedAssets = new Set((brief.assets || []).map((a) => a.id));
   const perDay = new Map();
-  const items = [], dropped = [];
+  const items = [], dropped = [], adjusted = [];
   for (const row of rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) { dropped.push('позиция не является объектом'); continue; }
     const date = clean(row.date, 10);
@@ -126,6 +133,11 @@ function normalize(rows, { brief, startDate, days }) {
     if (!allowedPlatforms.has(platform)) { dropped.push(`площадка не выбрана в брифе: ${platform || 'пусто'}`); continue; }
     const format = clean(row.format, 20).toLowerCase();
     if (!FORMAT_KEYS.includes(format)) { dropped.push(`формат вне словаря: ${format || 'пусто'}`); continue; }
+    let finalFormat = format;
+    if (Object.hasOwn(VIDEO_ONLY_PLATFORMS, platform) && format !== 'reel') {
+      finalFormat = 'reel';
+      adjusted.push(`${date} · ${VIDEO_ONLY_PLATFORMS[platform]}: формат «${format}» заменён на «reel» — на этой площадке только видео`);
+    }
     const role = clean(row.role, 20).toLowerCase();
     if (!ROLE_KEYS.includes(role)) { dropped.push(`роль вне словаря: ${role || 'пусто'}`); continue; }
     const topic = clean(row.topic, 300);
@@ -136,12 +148,12 @@ function normalize(rows, { brief, startDate, days }) {
     const assetId = clean(row.assetId, 100);
     const known = assetId && allowedAssets.has(assetId);
     if (assetId && !known) dropped.push(`материал ${assetId} не найден в брифе — ссылка удалена`);
-    items.push({ date, platform, format, role, topic,
+    items.push({ date, platform, format: finalFormat, role, topic,
       hook: clean(row.hook, 300), assetId: known ? assetId : '',
       mentorNote: clean(row.mentorNote, 1000) });
   }
   items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return { items, dropped };
+  return { items, dropped, adjusted };
 }
 
 /* Ответ модели берётся тем же транспортом, что и личная переписка владельца
@@ -359,12 +371,12 @@ function createMediaMentorSuggest({ ask }) {
       return { status: 'unusable', items: [], dropped: [], notice: UNUSABLE,
         provider: answer.provider || null, model: answer.model || null };
     }
-    const { items, dropped } = normalize(rows, { brief, startDate, days });
+    const { items, dropped, adjusted } = normalize(rows, { brief, startDate, days });
     if (!items.length) {
       return { status: 'unusable', items: [], dropped, notice: UNUSABLE,
         provider: answer.provider || null, model: answer.model || null };
     }
-    return { status: 'ok', items, dropped, notice: NOTICE,
+    return { status: 'ok', items, dropped, adjusted, notice: NOTICE,
       provider: answer.provider || null, model: answer.model || null,
       capabilities: { saved: false, approved: false, factsVerified: false } };
   }
@@ -453,9 +465,18 @@ function createMediaMentorSuggestRoute({ suggester, loadBrief, loadStats, requir
     // Права те же, что у плана: подсказка — подготовка правки плана, а не отдельная власть.
     if (session.user?.role !== 'owner') requirePermission(request, 'autoposting.edit', code);
     const body = await readBody(request);
-    const allowed = analysing ? [] : reviewing ? ['from', 'to'] : ['startDate', 'days'];
+    const allowed = analysing ? [] : reviewing ? ['from', 'to'] : ['startDate', 'days', 'platforms'];
     const extra = Object.keys(body).filter((key) => !allowed.includes(key));
     if (extra.length) fail(400, 'Переданы лишние поля');
+    /* №136: экран «Контент-план» передаёт площадки, отмеченные в видимой анкете. Они только сужают
+       площадки брифа, прочитанного на сервере: добавить площадку, которой нет в брифе, нельзя.
+       Пустой список — площадки не выбраны, модель не вызывается (brief_incomplete). */
+    let only = null;
+    if (body.platforms !== undefined) {
+      if (!Array.isArray(body.platforms) || body.platforms.length > 20
+        || body.platforms.some((value) => typeof value !== 'string' || value.length > 50)) fail(400, 'Площадки передаются списком');
+      only = new Set(body.platforms.map((value) => value.toLowerCase()));
+    }
     let result;
     const context = { companyCode: code, userId: session.user.id,
       audience: session.user.role === 'owner' ? 'owner-private' : 'actor-private' };
@@ -465,8 +486,9 @@ function createMediaMentorSuggestRoute({ suggester, loadBrief, loadStats, requir
         if (!stats) fail(404, 'Статистика компании не найдена');
         result = await suggester.review(stats.overview, stats.plan || null, context);
       } else {
-        const brief = await loadBrief(code, session.user);
-        if (!brief) fail(404, 'Бриф компании не найден');
+        const loaded = await loadBrief(code, session.user);
+        if (!loaded) fail(404, 'Бриф компании не найден');
+        const brief = only ? { ...loaded, platforms: (loaded.platforms || []).filter((p) => only.has(String(p).toLowerCase())) } : loaded;
         result = analysing ? await suggester.analyze(brief, context)
           : await suggester.suggest(brief, { startDate: body.startDate, days: body.days ?? MIN_DAYS }, context);
       }
