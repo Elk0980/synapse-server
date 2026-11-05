@@ -4,4 +4,5 @@
 - [x] T3 workflow: issue_comment, issues: read, concurrency для посторонних комментариев
 - [x] T4 тесты по всем сценариям приёмки
 - [x] T5 docs/production-sites/PLAN.md, MAIN_PROTECTION.md
+- [x] T7 ревью 923: полный sha, вердикт только первой строкой по шаблону, любой поздний «НЕ ПРИНЯТ» закрывает
 - [ ] T6 draft PR, CI; метка Влада в последний раз (PR меняет .github и guard)

@@ -51,12 +51,14 @@ PUBLIC_TOKENS = {
     'ops/crm/server.js': re.compile(r"'/leads'|'/events'|\bpublicPost\b|\bcheckPublicOrigin\b|\bcompanyDomains\b"),
 }
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
-# Независимое ревью вместо метки Влада (поручение 05.11 15:37, задача №163):
-# комментарий PR «ПРИНЯТ PR <номер> @<первые 8+ символов head sha>» на точный текущий head,
-# оставленный после даты head-коммита участником репозитория. «НЕ ПРИНЯТ» на тот же head,
-# оставленный позже, снова закрывает проверку. Новый коммит меняет sha — нужен новый «ПРИНЯТ».
-VERDICT = re.compile(r'(?<!\w)(НЕ[\s\-\u2010-\u2015_]*)?ПРИНЯТ\s+PR\s*#?(\d+)\s+`?@([0-9a-fA-F]{8,40})(?![0-9a-zA-Z])',
-                     re.IGNORECASE)
+# Независимое ревью вместо метки Влада (поручение 05.11 15:37, задача №163, ревью 923):
+# первая строка комментария участника репозитория целиком «ПРИНЯТ PR <номер> @<полный sha>»
+# на текущий head. Полный 40-символьный sha нельзя подобрать и нельзя знать до push, поэтому
+# дата коммита (её задаёт клиент) не нужна. Любой более поздний комментарий участника, у которого
+# первая строка — «НЕ ПРИНЯТ…» или иной неоднозначный вердикт со словом «принят», закрывает
+# проверку независимо от sha. Новый коммит меняет sha — нужен новый «ПРИНЯТ».
+APPROVAL = re.compile(r'ПРИНЯТ PR (\d+) `?@?`?([0-9a-f]{40})`?')
+VERDICT_WORD = re.compile(r'(?:^|\s)(?:не\s*)?принят(?:\s|$)')
 TRUSTED_ASSOCIATIONS = {'OWNER', 'MEMBER', 'COLLABORATOR'}
 MAX_COMMENT_PAGES = 30
 
@@ -153,39 +155,56 @@ def required_labels(paths):
 
 def parse_time(value):
     if not isinstance(value, str) or not value:
-        raise ValueError('Нет времени комментария или коммита; закрытый отказ')
+        raise ValueError('Нет времени комментария; закрытый отказ')
     return datetime.fromisoformat(value.replace('Z', '+00:00'))
 
 
-def review_approval(number, head_sha, comments, head_date):
-    """Approval comment for the exact head after the last push, or ValueError."""
+def comment_verdict(body, number, head_sha):
+    """'approve' for the exact template on the first line, 'reject' for any other verdict, else None."""
+    if not isinstance(body, str):
+        return None
+    lines = body.split('\n')
+    first = lines[0].rstrip('\r \t')
+    match = APPROVAL.fullmatch(first)
+    if match:
+        if int(match.group(1)) != int(number) or match.group(2) != head_sha:
+            return None  # точное одобрение другого PR/head — не вердикт этому head
+        # Одобрение и строка «НЕ ПРИНЯТ» в одном комментарии — неоднозначно, отказ.
+        return 'reject' if any(is_rejection(line) for line in lines[1:]) else 'approve'
+    if is_rejection(first) or VERDICT_WORD.search(normalized(first)):
+        return 'reject'  # отказ или неоднозначный вердикт — закрытый отказ
+    return None
+
+
+def normalized(line):
+    # Разметка, цитаты, пунктуация и регистр не важны: «**НЕ** ПРИНЯТ», «НЕ: ПРИНЯТ», «> не принят».
+    return re.sub(r'[^0-9a-zа-я]+', ' ', line.lower().replace('ё', 'е')).strip()
+
+
+def is_rejection(line):
+    words = normalized(line)
+    return words.startswith('не принят') or words.startswith('непринят')
+
+
+def review_approval(number, head_sha, comments):
+    """Approval comment for the exact current head, or ValueError."""
     if not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha):
         raise ValueError('Неизвестен head sha для ревью')
-    pushed = parse_time(head_date)
     verdicts = []
     for comment in comments:
         if comment.get('author_association') not in TRUSTED_ASSOCIATIONS:
             continue  # публичный репозиторий: посторонний не принимает и не блокирует
-        body = comment.get('body')
-        if not isinstance(body, str):
+        kind = comment_verdict(comment.get('body'), number, head_sha)
+        if kind is None:
             continue
-        kinds = set()
-        for negative, pr_number, sha in VERDICT.findall(body):
-            if int(pr_number) == int(number) and head_sha.startswith(sha.lower()):
-                kinds.add('reject' if negative else 'approve')
-        if not kinds:
-            continue
-        created = parse_time(comment.get('created_at'))
-        kind = 'reject' if 'reject' in kinds else 'approve'
-        if kind == 'approve' and created <= pushed:
-            continue  # «ПРИНЯТ» раньше последнего push не действует
-        verdicts.append((created, comment.get('id') or 0, kind, comment))
+        verdicts.append((parse_time(comment.get('created_at')), comment.get('id') or 0, kind, comment))
     if not verdicts:
-        raise ValueError('Нет метки и нет комментария «ПРИНЯТ PR %s @%s» после последнего push'
-                         % (number, head_sha[:8]))
+        raise ValueError('Нет метки и нет комментария первой строкой «ПРИНЯТ PR <номер> @<полный sha>»'
+                         ' на текущий head')
     created, _, kind, comment = max(verdicts, key=lambda item: (item[0], item[1]))
     if kind != 'approve':
-        raise ValueError('Последний вердикт ревью на head %s — «НЕ ПРИНЯТ»' % head_sha[:8])
+        raise ValueError('Последний вердикт ревью — «НЕ ПРИНЯТ» или неоднозначный; нужен новый'
+                         ' «ПРИНЯТ PR <номер> @<полный sha>»')
     return {'by': (comment.get('user') or {}).get('login', ''), 'at': comment.get('created_at'),
             'comment': comment.get('html_url', '')}
 
@@ -223,9 +242,8 @@ def evaluate(pr, files, expected_sha, base_sources=None, load_review=None):
     if missing:
         if load_review is None:
             raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)))
-        comments, head_date = load_review()
         try:
-            result['review'] = review_approval(pr.get('number'), expected_sha, comments, head_date)
+            result['review'] = review_approval(pr.get('number'), expected_sha, load_review())
         except ValueError as error:
             raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)) + '; ' + str(error))
         result['admission'] = 'review'
@@ -271,8 +289,8 @@ def merge_base_sources(repo, pr, files):
     return sources
 
 
-def fetch_review(repo, number, head_sha):
-    """All PR conversation comments and the head commit date (read-only API)."""
+def fetch_review(repo, number):
+    """All PR conversation comments (read-only API)."""
     comments = []
     for page in range(1, MAX_COMMENT_PAGES + 1):
         chunk = fetch_json(repo, '/issues/' + str(number) + '/comments?per_page=100&page=' + str(page))
@@ -283,10 +301,7 @@ def fetch_review(repo, number, head_sha):
             break
     else:
         raise ValueError('Слишком много комментариев PR; закрытый отказ')
-    commit = fetch_json(repo, '/commits/' + head_sha)
-    if commit.get('sha') != head_sha:
-        raise ValueError('Коммит head не совпадает; закрытый отказ')
-    return comments, (commit.get('commit') or {}).get('committer', {}).get('date')
+    return comments
 
 
 def check_remote(repo, number, expected_sha):
@@ -310,7 +325,7 @@ def check_remote(repo, number, expected_sha):
     if admission_state(latest) != admission_state(pr):
         raise ValueError('PR изменился во время проверки; повторите CI')
     return evaluate(latest, files, expected_sha, sources,
-                    load_review=lambda: fetch_review(repo, number, expected_sha))
+                    load_review=lambda: fetch_review(repo, number))
 
 
 def publish_status(repo, sha, state):

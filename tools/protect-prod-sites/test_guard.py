@@ -280,7 +280,7 @@ class AdmissionTests(unittest.TestCase):
 
 HEAD = 'abcdef12' + '3' * 32
 OLD_HEAD = '0123abcd' + '4' * 32
-PUSHED = '2026-11-05T08:00:00Z'
+OK = 'ПРИНЯТ PR 161 @' + HEAD
 
 
 def comment(body, at='2026-11-05T09:00:00Z', association='COLLABORATOR', cid=1):
@@ -289,75 +289,105 @@ def comment(body, at='2026-11-05T09:00:00Z', association='COLLABORATOR', cid=1):
 
 
 class ReviewApprovalTests(unittest.TestCase):
-    """Задача №163: независимое ревью точного head вместо метки Влада."""
+    """Задача №163: независимое ревью точного head вместо метки Влада (с правками ревью 923)."""
 
-    def check(self, comments, paths=('.github/workflows/ci.yml',), labels=(), head_date=PUSHED):
+    def check(self, comments, paths=('.github/workflows/ci.yml',), labels=(), head=HEAD):
         files = [{'filename': path, 'status': 'modified'} for path in paths]
-        pr = {'number': 161, 'state': 'open', 'head': {'sha': HEAD}, 'changed_files': len(files),
+        pr = {'number': 161, 'state': 'open', 'head': {'sha': head}, 'changed_files': len(files),
               'labels': [{'name': label} for label in labels]}
-        return guard.evaluate(pr, files, HEAD, SOURCES, load_review=lambda: (comments, head_date))
+        return guard.evaluate(pr, files, head, SOURCES, load_review=lambda: comments)
+
+    def red(self, comments, **kwargs):
+        with self.assertRaises(ValueError) as error:
+            self.check(comments, **kwargs)
+        return str(error.exception)
 
     def test_label_passes_without_review(self):
-        result = self.check([], labels=[guard.INFRA])
-        self.assertEqual(result['admission'], 'labels')
+        self.assertEqual(self.check([], labels=[guard.INFRA])['admission'], 'labels')
         result = self.check([], paths=['sites/alvi/index.html'], labels=['сайт alvi'])
         self.assertEqual(result['admission'], 'labels')
 
     def test_approval_of_current_head_passes(self):
-        for body in ('ПРИНЯТ PR 161 @abcdef12', 'КОД ПРИНЯТ PR #161 `@abcdef12`',
-                     'Ревью: принят pr 161 @' + HEAD, 'ПРИНЯТ PR 161 @ABCDEF12 — замечаний нет'):
+        for body in (OK, 'ПРИНЯТ PR 161 `@' + HEAD + '`', 'ПРИНЯТ PR 161 @`' + HEAD + '`',
+                     'ПРИНЯТ PR 161 ' + HEAD, OK + '  \r\nЗамечаний нет, тесты 38 OK.'):
             with self.subTest(body=body):
                 result = self.check([comment(body)])
                 self.assertEqual(result['admission'], 'review')
                 self.assertEqual(result['review']['by'], 'reviewer')
         # Клиентский сайт тоже принимается ревью, не только инфраструктура.
-        self.check([comment('ПРИНЯТ PR 161 @abcdef12')], paths=['sites/alvi/index.html'])
+        self.check([comment(OK)], paths=['sites/alvi/index.html'])
 
     def test_approval_of_old_head_fails(self):
-        for body in ('ПРИНЯТ PR 161 @0123abcd', 'ПРИНЯТ PR 161 @abcdef1', 'ПРИНЯТ PR 161 @abcdef13',
-                     'ПРИНЯТ PR 160 @abcdef12', 'ПРИНЯТ PR 161', 'ПРИНЯТ'):
-            with self.subTest(body=body), self.assertRaises(ValueError):
-                self.check([comment(body)])
+        for body in ('ПРИНЯТ PR 161 @' + OLD_HEAD, 'ПРИНЯТ PR 160 @' + HEAD):
+            with self.subTest(body=body):
+                self.red([comment(body)])
 
-    def test_approval_before_push_fails(self):
-        for at in ('2026-11-05T07:59:59Z', PUSHED):
-            with self.subTest(at=at), self.assertRaises(ValueError):
-                self.check([comment('ПРИНЯТ PR 161 @abcdef12', at=at)])
-        with self.assertRaises(ValueError):
-            self.check([comment('ПРИНЯТ PR 161 @abcdef12')], head_date=None)
+    def test_approval_before_push_does_not_carry_to_new_head(self):
+        # Одобрение старого head, затем новый push: прежний «ПРИНЯТ» больше не действует.
+        self.check([comment('ПРИНЯТ PR 161 @' + OLD_HEAD)], head=OLD_HEAD)
+        self.red([comment('ПРИНЯТ PR 161 @' + OLD_HEAD)], head=HEAD)
+
+    def test_bypass_a_prefix_collision_requires_full_sha(self):
+        # Обход A (ревью 923): коммит с тем же 8-символьным префиксом и датой задним числом.
+        forged = HEAD[:8] + 'f' * 32
+        for body in ('ПРИНЯТ PR 161 @' + HEAD[:8], 'ПРИНЯТ PR 161 @' + HEAD[:39]):
+            with self.subTest(body=body):
+                self.red([comment(body)])
+                self.red([comment(body)], head=forged)
+        self.red([comment(OK)], head=forged)
+        self.red([comment('ПРИНЯТ PR 161 @' + HEAD.upper())])
+
+    def test_bypass_b_quotes_and_instructions_do_not_approve(self):
+        # Обход B: цитата ошибки guard, инструкция, цитата и код в первой строке.
+        for body in ('CI красный: Отсутствуют метки; нет «' + OK + '»',
+                     'Ревьюер, напиши «' + OK + '», если всё ок',
+                     '> ' + OK, '```\n' + OK + '\n```', '`' + OK + '`', ' ' + OK,
+                     'Итог\n' + OK, OK + ' — замечаний нет', 'КОД ' + OK, '**' + OK + '**'):
+            with self.subTest(body=body):
+                self.red([comment(body)])
+        # Ошибка guard не печатает готовую фразу одобрения.
+        message = self.red([])
+        self.assertIn('ПРИНЯТ PR <номер> @<полный sha>', message)
+        self.assertNotIn(HEAD[:8], message)
+        self.assertIsNone(guard.APPROVAL.search(message.replace('<номер>', '161')))
+
+    def test_bypass_c_any_later_rejection_closes(self):
+        # Обход C: отказ без sha, с разметкой, с двоеточием, в любом регистре.
+        for body in ('НЕ ПРИНЯТ: обход guard.py:178', '**НЕ** ПРИНЯТ PR 161 @' + HEAD,
+                     'НЕ: ПРИНЯТ PR 161 @' + HEAD, 'не принят', 'НеПРИНЯТ PR 161',
+                     '> НЕ ПРИНЯТ', '  НЕ   ПРИНЯТ PR 161 @' + OLD_HEAD, 'НЕ-ПРИНЯТ',
+                     'ПРИНЯТ PR 161 @' + HEAD[:8], 'Принят частично'):
+            with self.subTest(body=body):
+                self.red([comment(OK, cid=1), comment(body, at='2026-11-05T09:10:00Z', cid=2)])
+                self.red([comment(body, at='2026-11-05T09:10:00Z', cid=2), comment(OK, cid=1)])
 
     def test_rejection_fails(self):
-        for body in ('НЕ ПРИНЯТ PR 161 @abcdef12', 'КОД НЕ ПРИНЯТ PR 161 @abcdef12',
-                     'не принят pr 161 @abcdef12', 'НЕ-ПРИНЯТ PR 161 @abcdef12',
-                     'НЕПРИНЯТ PR 161 @abcdef12'):
-            with self.subTest(body=body), self.assertRaises(ValueError):
-                self.check([comment(body)])
+        self.red([comment('НЕ ПРИНЯТ PR 161 @' + HEAD)])
 
-    def test_later_rejection_over_approval_fails(self):
-        approve = comment('ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T09:00:00Z', cid=1)
-        reject = comment('НЕ ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T09:30:00Z', cid=2)
-        with self.assertRaises(ValueError):
-            self.check([approve, reject])
-        with self.assertRaises(ValueError):
-            self.check([reject, approve])  # порядок ответа API не важен, важно время
-        # Повторное ревью после «НЕ ПРИНЯТ» на тот же head снова принимает.
-        again = comment('ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T10:00:00Z', cid=3)
+    def test_later_rejection_over_approval_fails_and_new_approval_reopens(self):
+        approve = comment(OK, at='2026-11-05T09:00:00Z', cid=1)
+        reject = comment('НЕ ПРИНЯТ PR 161 @' + HEAD, at='2026-11-05T09:30:00Z', cid=2)
+        self.red([approve, reject])
+        self.red([reject, approve])  # порядок ответа API не важен, важно время
+        again = comment(OK, at='2026-11-05T10:00:00Z', cid=3)
         self.assertEqual(self.check([approve, reject, again])['admission'], 'review')
-        # Один комментарий с обоими вердиктами — закрытый отказ.
-        with self.assertRaises(ValueError):
-            self.check([comment('ПРИНЯТ PR 161 @abcdef12, но НЕ ПРИНЯТ PR 161 @abcdef12')])
+        # Оба вердикта в одном комментарии в любом порядке — отказ.
+        self.red([comment('НЕ ПРИНЯТ\n' + OK)])
+        self.red([comment(OK + '\n**НЕ** ПРИНЯТ PR 161 @' + HEAD)])
+        self.red([comment(OK, cid=1), comment(OK + '\nНЕ ПРИНЯТ: тесты', at='2026-11-05T09:30:00Z', cid=2)])
 
-    def test_rejection_of_other_head_does_not_block(self):
-        self.check([comment('ПРИНЯТ PR 161 @abcdef12', cid=1),
-                    comment('НЕ ПРИНЯТ PR 161 @0123abcd', at='2026-11-05T09:30:00Z', cid=2)])
+    def test_unrelated_comments_and_exact_other_head_do_not_block(self):
+        self.check([comment(OK, cid=1),
+                    comment('Спасибо, смотрю CI', at='2026-11-05T09:30:00Z', cid=2),
+                    comment('ПРИНЯТ PR 161 @' + OLD_HEAD, at='2026-11-05T09:40:00Z', cid=3),
+                    comment('ПРИНЯТ PR 999 @' + HEAD, at='2026-11-05T09:50:00Z', cid=4)])
 
     def test_outsider_cannot_approve_or_block(self):
         for association in ('NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', None):
-            with self.subTest(association=association), self.assertRaises(ValueError):
-                self.check([comment('ПРИНЯТ PR 161 @abcdef12', association=association)])
-        self.check([comment('ПРИНЯТ PR 161 @abcdef12', association='OWNER', cid=1),
-                    comment('НЕ ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T09:30:00Z',
-                            association='NONE', cid=2)])
+            with self.subTest(association=association):
+                self.red([comment(OK, association=association)])
+        self.check([comment(OK, association='OWNER', cid=1),
+                    comment('НЕ ПРИНЯТ', at='2026-11-05T09:30:00Z', association='NONE', cid=2)])
 
     def test_regular_paths_pass_without_review_or_api(self):
         def no_api():
@@ -366,12 +396,12 @@ class ReviewApprovalTests(unittest.TestCase):
         pr = {'number': 161, 'state': 'open', 'head': {'sha': HEAD}, 'changed_files': 1, 'labels': []}
         self.assertEqual(guard.evaluate(pr, files, HEAD, SOURCES, load_review=no_api)['admission'], 'labels')
 
-    def test_remote_reads_comments_and_head_commit(self):
+    def test_remote_reads_all_comment_pages_without_client_dates(self):
         pr = {'number': 161, 'state': 'open', 'head': {'sha': HEAD}, 'base': {'sha': 'b' * 40},
               'changed_files': 1, 'labels': []}
         files = [{'filename': '.github/workflows/ci.yml', 'status': 'modified'}]
         page1 = [comment('просто текст', cid=i) for i in range(100)]
-        page2 = [comment('ПРИНЯТ PR 161 @abcdef12', cid=200)]
+        page2 = [comment(OK, cid=200)]
         calls = []
         def fake_json(repo, endpoint):
             calls.append(endpoint)
@@ -379,14 +409,12 @@ class ReviewApprovalTests(unittest.TestCase):
                 return files
             if '/comments' in endpoint:
                 return page1 if endpoint.endswith('page=1') else page2
-            if endpoint == '/commits/' + HEAD:
-                return {'sha': HEAD, 'commit': {'committer': {'date': PUSHED}}}
             return pr
         with patch.object(guard, 'fetch_json', side_effect=fake_json):
             result = guard.check_remote('owner/repo', 161, HEAD)
         self.assertEqual(result['admission'], 'review')
         self.assertIn('/issues/161/comments?per_page=100&page=2', calls)
-        self.assertIn('/commits/' + HEAD, calls)
+        self.assertFalse([c for c in calls if c.startswith('/commits/')])
 
     def test_issue_comment_event_publishes_on_current_head(self):
         event = {'issue': {'number': 161, 'pull_request': {'url': 'x'}}, 'comment': {'body': 'ПРИНЯТ'}}
