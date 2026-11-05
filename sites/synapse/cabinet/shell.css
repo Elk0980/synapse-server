@@ -50,7 +50,8 @@ body[data-cabinet-view="chats"] .sb-chat-fab { display: none; }
   body.drawer-open .sb-chat-fab,
   body.sb-chat-open .sb-chat-fab { display: none; }
   .mobile-shortcuts a, .mobile-shortcuts button { font-size: 11px; padding-inline: 2px; }
-  .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  /* Конец экрана выше кнопки Хью: её bottom 76px + высота 52px + запас 12px (замечание к №126). */
+  .main { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
 }
 /* На ПК конец любого экрана (поле ввода, кнопки формы) не уходит под плавающую кнопку: 24 + 58 + запас. */
 @media (min-width: 761px) {

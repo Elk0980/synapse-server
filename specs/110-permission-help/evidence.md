@@ -45,3 +45,7 @@ CI обнаружил известный baseline400!=201 в people HTTP peer fi
 
 ## Слияние с main 464460a и связь с №112 (Claude — код, 05.11.2026)
 Конфликты: people-http.test.js — версия main (531); cabinet.html — версия ресурсов `20261105-night98-permission-help-110`; task-board-routing.test — регулярка main. Каталог пояснений точно совпадает с PERMISSIONS этой ветки. Пояснение `autoposting.channels` и новые тексты `autoposting.edit`/`autoposting.approve` переносит PR 537, который построен поверх этой ветки (ревью 712/715). Прогон 37/37.
+
+## Выпуск после 524: точечная вставка в живой cabinet.html (05.11.2026)
+Слит main 54d9ff9 (524, 532, 545). Правка cabinet.html в 523 — только две строки: `"permission-help"` в cabinetAssets перед `"account"` и версия ресурсов. Для выпуска — `specs/110-permission-help/cabinet-html.live-insert.py <cabinet.html> [--write]`: якорь `"site-orders", "account"` ровно один, `permission-help` ещё не подключён, строка `SB_CABINET_ASSET_VERSION` ровно одна (к текущей версии добавляется `-permission-help-110`); иначе отказ без записи; печатает diff и проверяет, что изменены ровно 2 строки.
+Проверка: на cabinet.html из main 54d9ff9 и из снимка PR 540 — ровно 2 строки; повторный запуск — отказ («уже подключён»); результат на main байт-в-байт равен cabinet.html ветки. Тесты 88/88.
