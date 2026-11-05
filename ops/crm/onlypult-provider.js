@@ -29,6 +29,8 @@ function isVideoUrl(value) {
   try {url = new URL(value);} catch {return false;}
   return url.protocol === 'https:' && url.hash === '' && /\.(mp4|mov|m4v|webm)$/i.test(url.pathname);
 }
+// Похоже на видео по расширению пути, даже если ссылка с фрагментом: такой файл в довесок к фото не уходит.
+const looksLikeVideo = value => {try {return /\.(mp4|mov|m4v|webm)$/i.test(new URL(value).pathname);} catch {return false;}};
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
 /* Instagram Story без подписи. Контракт https://onlypult.com/dev/openapi.yaml (OpenAPI 3.0.3, info.version 1.0.0,
    проверен root 30.09.2026): PostCreateRequest.required = [profile_ids]; content — string без minLength,
@@ -190,6 +192,11 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       // Опции для площадки, у которой публикуемых опций нет, не отправляются вовсе.
       throw failure('CONTENT_LIMIT');
     }
+    /* Telegram через Onlypult — «фото или одно видео»: до 10 фото либо ровно одно видео (рилс) с подписью.
+       Видео вместе с фото или второе видео не отправляются. Контракт Onlypult (media_urls — «Public image/video
+       URLs») видео для Telegram не запрещает, но и отдельно не описывает: живой отправкой не подтверждено. */
+    if (row.id === 'telegram' && post.mediaUrls.some(looksLikeVideo) &&
+        (post.mediaUrls.length !== 1 || !isVideoUrl(post.mediaUrls[0]))) throw failure('CONTENT_LIMIT');
     /* Пустой текст допустим только для Instagram Story с материалом; вторая защита после транспорта. */
     const withoutText = !post.text.trim();
     if (withoutText && (!storyMode || !post.mediaUrls.length)) throw failure('CONTENT_LIMIT');

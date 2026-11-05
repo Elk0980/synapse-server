@@ -632,6 +632,9 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
         if(!channel.connected)hard.push(`Канал «${channel.name||id}» не подключён`);
         if(channel.caps?.mediaMode==='photos'&&channel.provider!=='onlypult'&&media.some(value=>VIDEO_RE.test(value)))
           hard.push('Подключение отправляет фотографии: для видео нужен подходящий способ публикации');
+        // «Фото или одно видео» (Telegram через Onlypult): рилс уходит один, без фото и второго ролика.
+        if(channel.caps?.mediaMode==='photos_or_video'&&media.some(value=>VIDEO_RE.test(value))&&media.length!==1)
+          hard.push('Видео публикуется одно, без фото и других файлов');
       }
       if(id===YOUTUBE_SHORTS)hard.push(...youtubeShortsIssues(row.title,media));
       const caption=caps[platform]||row.text||'';
