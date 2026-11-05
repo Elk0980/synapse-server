@@ -140,3 +140,18 @@ test('контракт А: без csrfToken байты идут через api.r
   assert.ok([...noneRoot.querySelectorAll('.shoot-upload')].every((b) => b.disabled));
   assert.match(noneRoot.querySelector('.shoot-slot__reason').textContent, /Загрузка недоступна/);
 });
+
+test('№120: «Общий план» рилса без реквизита не выводит текст «null»', async () => {
+  const card = page({path: 'r-late'}), root = card.d.getElementById('m');
+  await card.registered['content-shooting'].mount(root, card.ctx); await settle();
+  const body = root.querySelector('.shoot-frames').parentElement;
+  assert.ok(!root.querySelector('.shoot-props'), 'у рилса нет реквизита');
+  assert.doesNotMatch(root.textContent, /\bnull\b|\bundefined\b/);
+  assert.deepEqual([...body.childNodes].filter((node) => node.nodeType === 3).map((node) => node.textContent), [], 'в теле вкладки нет голых текстовых узлов');
+  assert.equal(body.firstElementChild.className, 'shoot-frames', 'список кадров идёт сразу под вкладками');
+  // С реквизитом строка «Реквизит» остаётся первой.
+  const full = page({path: 'r-first'}), fullRoot = full.d.getElementById('m');
+  await full.registered['content-shooting'].mount(fullRoot, full.ctx); await settle();
+  assert.equal(fullRoot.querySelector('.shoot-frames').parentElement.firstElementChild.className, 'shoot-props');
+  assert.doesNotMatch(fullRoot.textContent, /\bnull\b/);
+});
