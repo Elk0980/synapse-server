@@ -27,48 +27,69 @@ function board(records) {
   }};
   for (const file of ['task-text.js', 'task-overview.js', 'task-board.js']) w.eval(read(file));
   const controller = w.SbTaskBoard.mount(d.getElementById('board'), ctx, {view:'projects'});
-  return {w, d, ctx, controller, close:() => { controller?.destroy(); w.close(); }};
+  return {w, d, ctx, controller, sent:[], close:() => { controller?.destroy(); w.close(); }};
 }
 
-test('№148·1: у владельца «Ждут вашего решения» и «Мои задачи» стоят первыми, с инструкцией и ссылками; цель и модули ниже', async () => {
+test('№148·1: «Ждут Влада» первым экраном — все незакрытые задачи с вопросом, «ждёт Влада» или исполнителем «Влад»; срочность → срок; да/нет, ссылки, карточка', async () => {
   const records = [
     record(100, {title:'Цель · Понятная система'}),
     record(110, {title:'Модуль · Доска', parent_task_id:100, description:'ЦКП: видно всё\nСостав: №201, №202'}),
-    record(201, {title:'Решить про макет', status:'in_progress', coordination:{blocker:'ждёт Влада: выбрать макет', ...question}}),
-    record(202, {title:'Вход для Гули', status:'in_progress', assignee_name:'Влад', coordination:{blocker:'Открыть ЛК → Люди → Добавить. Займёт 2 минуты.', nextAction:'Сообщить Гуле логин', links:[{kind:'link', label:'Открыть ЛК', url:'https://example.test/people'}, {kind:'link', label:'Опасная', url:'javascript:alert(1)'}]}}),
-    record(203, {title:'Закрытая', status:'done', assignee_name:'Влад'}),
-    record(204, {title:'Чужая', status:'in_progress'})
+    record(96, {title:'Модуль · Люди', parent_task_id:100, status:'in_progress', priority:'normal', coordination:{blocker:'ждёт Влада: завести вход Тане'}}),
+    record(151, {title:'Оплата Onlypult', status:'in_progress', priority:'urgent', due_date:'2026-11-09', coordination:{owner_question:'Оплатить Onlypult на месяц (3 000 ₽)?', if_yes:'Постинг Авокадо идёт по плану.', if_no:'Постинг встанет с 10 ноября.', owner_minutes:5, links:[{kind:'link', label:'Счёт', url:'https://example.test/invoice'}]}}),
+    record(201, {title:'Решить про макет', status:'in_progress', priority:'urgent', due_date:'2026-11-06', coordination:{blocker:'ждёт Влада: выбрать макет', ...question}}),
+    record(202, {title:'Вход для Гули', status:'in_progress', priority:'high', assignee_name:'Влад', coordination:{blocker:'Открыть ЛК → Люди → Добавить. Займёт 2 минуты.', nextAction:'Сообщить Гуле логин', links:[{kind:'link', label:'Открыть ЛК', url:'https://example.test/people'}, {kind:'link', label:'Опасная', url:'javascript:alert(1)'}]}}),
+    record(203, {title:'Закрытая', status:'done', assignee_name:'Влад', coordination:{owner_question:'Старый вопрос?'}}),
+    record(204, {title:'Чужая', status:'in_progress', coordination:{blocker:'ждёт Codex: собрать'}})
   ];
   const f = board(records);
   try {
     await settle();
-    const first = f.d.querySelector('.tb-board').firstElementChild;
-    assert.ok(first.matches('.tb-overview'), 'обзор стоит до панели инструментов');
-    const blocks = [...first.children];
-    assert.equal(blocks[0].dataset.waiting, '', 'сначала «Ждут вашего решения»');
-    assert.match(blocks[0].querySelector('h2').textContent, /Ждут вашего решения/);
-    const mine = blocks[1];
-    assert.equal(mine.dataset.myTasks, '', 'затем блок «Мои задачи»');
-    assert.deepEqual([...mine.querySelectorAll('[data-my-task]')].map(row => row.dataset.myTask), ['202'], 'только открытые задачи Влада без оформленного вопроса');
-    const row = mine.querySelector('[data-my-task="202"]');
-    assert.equal(row.querySelector('[data-task-open]').dataset.taskOpen, '202', 'заголовок открывает карточку');
-    assert.match(row.textContent, /Вход для Гули/);
-    assert.equal(row.querySelector('[data-my-instructions]').open, true, 'инструкция видна сразу');
-    assert.match(row.querySelector('[data-my-instructions]').textContent, /Открыть ЛК → Люди → Добавить. Займёт 2 минуты\./);
-    assert.match(row.querySelector('[data-my-instructions]').textContent, /Следующий шаг[\s\S]*Сообщить Гуле логин/);
-    assert.equal(row.querySelector('a[href="https://example.test/people"]').textContent.trim(), 'Открыть ЛК ↗');
-    assert.equal(row.querySelector('a[href^="javascript:"]'), null, 'небезопасные ссылки не попадают на экран');
-    assert.equal(mine.querySelector('a[href="#tasks/mine"]').hidden, false, 'ссылка на полный список своих задач');
-    const order = [...f.d.querySelector('.tb-board').querySelectorAll('[data-waiting],[data-my-tasks],[data-goal],[data-modules]')].map(node => node.dataset.waiting !== undefined ? 'waiting' : node.dataset.myTasks !== undefined ? 'mine' : node.dataset.goal ? 'goal' : 'modules');
-    assert.deepEqual(order, ['waiting', 'mine', 'goal', 'modules'], 'цель и модули ниже задач владельца');
-    // На других видах доски («Доска», «План») задачи владельца тоже стоят первыми.
+    const boardNode = f.d.querySelector('.tb-board');
+    assert.ok(boardNode.firstElementChild.matches('.tb-overview'), 'обзор стоит до панели инструментов');
+    const waiting = boardNode.firstElementChild.firstElementChild;
+    assert.equal(waiting.dataset.waiting, '', 'первый блок — «Ждут Влада»');
+    assert.match(waiting.querySelector('h2').textContent, /Ждут Влада/);
+    assert.deepEqual([...waiting.querySelectorAll('[data-wait-row]')].map(row => row.dataset.waitRow), ['201', '151', '202', '96'], 'все три признака; закрытые и чужие не входят; порядок — срочность, затем срок');
+    assert.equal(f.d.querySelector('[data-my-tasks]'), null, 'второй системы «Мои задачи» на доске нет');
+    const pay = waiting.querySelector('[data-wait-row="151"]');
+    assert.match(pay.querySelector('.tb-waiting-open strong').textContent, /Оплатить Onlypult на месяц/, 'вопрос виден сразу, даже с латиницей');
+    assert.match(pay.querySelector('.tb-waiting-task').textContent, /Оплата Onlypult/);
+    assert.match(pay.querySelector('[data-wait-quick]').textContent, /Да → Постинг Авокадо идёт по плану\.[\s\S]*Нет → Постинг встанет/);
+    assert.deepEqual([...pay.querySelectorAll('[data-wait-quick-choice]')].map(b => b.textContent), ['Да', 'Нет']);
+    assert.equal(pay.querySelector('a[href="https://example.test/invoice"]').textContent.trim(), 'Счёт ↗');
+    const gulya = waiting.querySelector('[data-wait-row="202"]');
+    assert.equal(gulya.querySelector('[data-wait-quick]'), null, 'без if_yes/if_no кнопок нет');
+    assert.equal(gulya.querySelector('[data-waiting-instructions]').open, true, 'инструкция видна сразу');
+    assert.match(gulya.querySelector('[data-waiting-instructions]').textContent, /Открыть ЛК → Люди → Добавить. Займёт 2 минуты\.[\s\S]*Следующий шаг[\s\S]*Сообщить Гуле логин/);
+    assert.equal(gulya.querySelector('a[href="https://example.test/people"]').textContent.trim(), 'Открыть ЛК ↗');
+    assert.equal(gulya.querySelector('a[href^="javascript:"]'), null, 'небезопасные ссылки не попадают на экран');
+    assert.match(waiting.querySelector('[data-wait-row="96"] strong').textContent, /Люди/, 'модуль с «ждёт Влада» тоже в блоке');
+    assert.ok(waiting.querySelector('a[href="#tasks/mine"]'), 'ссылка на личный список с порядком и паузой');
+    const order = [...boardNode.querySelectorAll('[data-waiting],[data-goal],[data-modules]')].map(node => node.dataset.waiting !== undefined ? 'waiting' : node.dataset.goal ? 'goal' : 'modules');
+    assert.deepEqual(order, ['waiting', 'goal', 'modules'], 'цель и модули ниже');
     await f.controller.render({view:'board'});
-    assert.equal(f.d.querySelector('.tb-board').firstElementChild.dataset.waiting, '');
-    assert.equal(f.d.querySelector('.tb-board').children[1].dataset.myTasks, '');
-    // Кнопка заголовка открывает ту же карточку, что и общая доска.
-    row.querySelector('[data-task-open]').click(); await settle();
+    assert.equal(f.d.querySelector('.tb-board').firstElementChild.dataset.waiting, '', 'и на виде «Доска» блок первый');
+    // Да/Нет уходят комментарием «ОТВЕТ: …» от Влада; повторное нажатие во время отправки не дублирует.
+    let finish; f.ctx.crmQuery = (orig => async (route, q, o) => { if (route.endsWith('/task_comment')) { f.sent.push(o.body); return new Promise(resolve => { finish = resolve; }); } return orig(route, q, o); })(f.ctx.crmQuery);
+    const yes = f.d.querySelector('[data-wait-row="151"] [data-wait-quick-choice="Да"]');
+    yes.click(); yes.click(); await settle();
+    assert.deepEqual(JSON.parse(JSON.stringify(f.sent)), [{task_id:151, author:'Влад', text:'ОТВЕТ: Да'}]);
+    assert.equal(yes.disabled, true);
+    finish({comment:{id:9}}); await settle();
+    // Карточка задачи с латиницей в вопросе не прячет вопрос и инструкцию («Вопрос пока не оформлен» — дефект).
+    await f.controller.openTask(151); await settle();
+    const card = f.d.querySelector('.tb-sheet [data-owner-waiting]');
+    assert.ok(card, 'карточка ждущей задачи показывает вопрос');
+    assert.match(card.querySelector('h3').textContent, /Оплатить Onlypult на месяц/);
+    assert.ok(card.querySelector('a[href="https://example.test/invoice"]'));
+    assert.deepEqual([...card.querySelectorAll('[data-wait-quick-choice]')].map(b => b.textContent), ['Да', 'Нет']);
+    assert.doesNotMatch(f.d.querySelector('.tb-sheet').textContent, /Вопрос пока не оформлен/);
+    f.d.querySelector('[data-sheet-close]').click();
+    // Заголовок открывает ту же карточку, что и общая доска.
+    f.d.querySelector('[data-wait-row="202"] [data-task-open]').click(); await settle();
     assert.match(f.d.querySelector('.tb-sheet .tb-task-title').textContent, /Вход для Гули/);
-    assert.match(f.d.querySelector('.tb-sheet').textContent, /Открыть ЛК → Люди → Добавить/);
+    assert.match(f.d.querySelector('.tb-sheet [data-owner-waiting]').textContent, /Открыть ЛК → Люди → Добавить[\s\S]*Сообщить Гуле логин/, 'инструкция в карточке видна сразу');
+    assert.equal(f.d.querySelector('.tb-sheet .tb-simple-next'), null, 'без обрезанного дубля следующего шага');
   } finally { f.close(); }
 });
 

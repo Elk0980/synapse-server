@@ -23,11 +23,11 @@
 .tb-waiting-actions [hidden]{display:none!important}.tb-waiting-actions [data-owner-question]{font-size:16px;line-height:1.35}.tb-waiting-actions>p{margin:9px 0}.tb-simple-next{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}[data-task-technical]>summary{cursor:pointer;padding:12px 0;color:var(--tb-muted)}[data-question-queue] button{display:block;margin:6px 0}
 
 .tb-diagnostic{white-space:pre-wrap;overflow-wrap:anywhere}
-/* №148: первый экран владельца — «Ждут вашего решения» и «Мои задачи». */
-.tb-mine{margin-bottom:16px}.tb-overview .tb-mine{margin-bottom:0}
-.tb-mine{border:1px solid color-mix(in srgb,var(--tb-accent) 40%,var(--tb-line));background:color-mix(in srgb,var(--tb-accent) 6%,var(--tb-bg));border-radius:12px;padding:14px;min-width:0}
-.tb-mine h2{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;font-size:17px;margin:0 0 10px}.tb-mine h2>span{font-size:12px;color:var(--tb-muted)}.tb-mine-all{margin-left:auto;font-size:12px;font-weight:400;color:var(--tb-accent)}
-.tb-board .tb-mine-row{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;width:100%;padding:10px 0;border-top:1px solid var(--tb-line);min-width:0}.tb-mine-row:first-child{border-top:0;padding-top:0}
-.tb-board .tb-mine-row .tb-waiting-open{width:100%;padding:8px 10px;border-radius:9px}.tb-mine-row strong{font-size:14px;overflow-wrap:anywhere}
-.tb-mine-row .tb-waiting-links:empty{display:none}.tb-mine-row .tb-waiting-links{margin:0}
-@media(max-width:700px){.tb-mine{padding:11px}.tb-mine h2{font-size:16px}.tb-mine-all{margin-left:0;flex-basis:100%}}
+/* №148: первый экран владельца — один блок «Ждут Влада»: заголовок, вопрос/инструкция, ссылки, да/нет, карточка по нажатию. */
+.tb-waiting h2{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}.tb-mine-all{margin-left:auto;font-size:12px;font-weight:400;color:var(--tb-accent)}
+.tb-board .tb-waiting-row{grid-template-areas:"open time" "links links" "text text" "quick quick"}.tb-waiting-row>.tb-wait-quick{grid-area:quick}
+.tb-board .tb-waiting-row .tb-waiting-open{width:100%;padding:8px 10px;border-radius:9px}.tb-waiting-task{font-size:12px;color:var(--tb-muted);overflow-wrap:anywhere}
+.tb-wait-quick{display:grid;gap:6px;margin:0;padding:10px;border:1px solid var(--tb-line);border-radius:10px;background:var(--tb-soft)}.tb-wait-quick>p{margin:0;font-size:13px;overflow-wrap:anywhere}.tb-wait-quick [data-wait-quick-result]{font-size:12px;color:var(--tb-muted)}.tb-wait-quick [data-wait-quick-result]:empty{display:none}
+@media(max-width:700px){.tb-board .tb-waiting-row{grid-template-areas:"open" "links" "text" "quick" "time"}.tb-mine-all{margin-left:0;flex-basis:100%}}
+@media(max-width:600px){.tb-board .tb-waiting-row{grid-template-areas:"open" "links" "text" "quick" "time"}}
+.tb-owner-waiting{display:grid;gap:8px;border:1px solid color-mix(in srgb,#d39b32 45%,var(--tb-line));padding:12px;border-radius:10px;margin:12px 0}.tb-owner-waiting h3{font-size:16px;line-height:1.35;margin:0;overflow-wrap:anywhere}.tb-owner-waiting .tb-waiting-task{margin:0}.tb-owner-waiting .tb-waiting-links{margin:0}.tb-owner-waiting .tb-waiting-links:empty{display:none}
