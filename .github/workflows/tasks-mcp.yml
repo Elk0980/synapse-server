@@ -1,0 +1,38 @@
+name: tasks-mcp
+on:
+  pull_request:
+    paths:
+      - 'ops/tasks-mcp/**'
+      - 'ops/crm/task-mcp*'
+      - 'sites/synapse/cabinet/tasks.js'
+      - '.github/workflows/tasks-mcp.yml'
+  push:
+    branches: [main, 'codex/tasks-mcp-token-rotation-*']
+    paths:
+      - 'ops/tasks-mcp/**'
+      - 'ops/crm/task-mcp*'
+      - 'sites/synapse/cabinet/tasks.js'
+      - '.github/workflows/tasks-mcp.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NODE_PATH: ${{ github.workspace }}/ops/tasks-mcp/node_modules
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Установить зафиксированные тестовые зависимости без lifecycle scripts
+        run: npm ci --prefix ops/tasks-mcp --ignore-scripts --no-audit --no-fund
+      - name: Проверить MCP, синтетическую ротацию, Linux mode/symlink и прежний кабинет
+        run: node --test ops/tasks-mcp/*.test.js
+      # Только изолированные локальные стенды: без secrets, публикации и deploy.
