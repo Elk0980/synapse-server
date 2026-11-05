@@ -31,6 +31,10 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
   for (const [name, type] of [['room',"TEXT NOT NULL DEFAULT 'common'"],['kind',"TEXT NOT NULL DEFAULT 'message'"],['ref_task_id','INTEGER'],['audience_id','INTEGER']])
     if (!columns.has(name)) db.exec(`ALTER TABLE team_chat_messages ADD COLUMN ${name} ${type}`);
   db.exec('CREATE INDEX IF NOT EXISTS team_chat_room_idx ON team_chat_messages(company_code,room,id)');
+  // Отметки прочтения: по человеку, компании и комнате — id последнего прочитанного сообщения. Только счётчик, содержимого не хранит.
+  db.exec(`CREATE TABLE IF NOT EXISTS team_chat_reads (
+    user_id INTEGER NOT NULL, company_code TEXT NOT NULL, room TEXT NOT NULL, last_read_id INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL, PRIMARY KEY(user_id,company_code,room))`);
   const running = new Map();
   // №127: участник «Чатов» — исполнитель своих задач (people) или любой аккаунт ЛК, которому
   // владелец открыл эту компанию с какими-либо правами (без прав — доступ отозван). Второму доступны только общий и личные чаты: без лога Хью,
@@ -68,7 +72,35 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
     } catch { rows = []; }
     const people = rows.filter(r => r.id !== user.id && (() => { try { chatAccess(r.id, code); return true; } catch { return false; } })())
       .map(r => ({id:r.id, name:r.display_name, room:`dm:${Math.min(r.id,user.id)}-${Math.max(r.id,user.id)}`}));
-    return {viewerId:user.id, common:'common', hugh:user.tasksAccess ? `hugh:${user.id}` : null, people};
+    const hugh = user.tasksAccess ? `hugh:${user.id}` : null;
+    const unread = {};
+    for (const name of ['common', ...(hugh ? [hugh] : []), ...people.map(p => p.room)]) unread[name] = unreadCount(user, code, name);
+    return {viewerId:user.id, common:'common', hugh, people, unread, unreadTotal:Object.values(unread).reduce((a, b) => a + b, 0)};
+  }
+  // Непрочитанные: чужие сообщения комнаты новее отметки, только из видимых этому человеку (те же условия, что в list()).
+  function unreadCount(user, code, roomName) {
+    const owner = user.role === 'owner', mark = db.prepare('SELECT last_read_id FROM team_chat_reads WHERE user_id=? AND company_code=? AND room=?').get(user.id, code, roomName)?.last_read_id || 0;
+    const sql = answers ? `SELECT count(*) AS n FROM team_chat_messages m
+      LEFT JOIN team_chat_answers a ON a.reply_id=m.id
+      LEFT JOIN team_chat_messages source ON source.id=a.message_id AND source.company_code=m.company_code
+      WHERE m.company_code=? AND m.room=? AND m.id>? AND m.user_id<>? AND (m.audience_id IS NULL OR m.audience_id=?)
+      AND (m.user_id<>0 OR m.audience_id=? OR ? OR source.user_id=?)`
+      : 'SELECT count(*) AS n FROM team_chat_messages WHERE company_code=? AND room=? AND id>? AND user_id<>? AND (audience_id IS NULL OR audience_id=?) AND (user_id<>0 OR audience_id=? OR ?)';
+    const args = [code, roomName, mark, user.id, user.id, user.id, Number(owner)];
+    return db.prepare(sql).get(...(answers ? [...args, user.id] : args)).n;
+  }
+  // Отметка «прочитано до»: комната проверяется как в list(), значение не выше последнего сообщения комнаты и не назад.
+  function markRead(userId, code, body) {
+    const user = chatAccess(userId, code);
+    const keys = body && typeof body === 'object' ? Object.keys(body) : [];
+    if (!keys.includes('room') || keys.some(k => !['room', 'upTo'].includes(k)) || typeof body.room !== 'string' ||
+        body.upTo !== undefined && (!Number.isSafeInteger(body.upTo) || body.upTo < 0)) fail(400,'Проверьте отметку прочтения');
+    const scope = room(user, code, body.room);
+    const top = db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM team_chat_messages WHERE company_code=? AND room=?').get(code, scope.room).id;
+    const upTo = Math.min(body.upTo ?? top, top);
+    db.prepare(`INSERT INTO team_chat_reads(user_id,company_code,room,last_read_id,updated_at) VALUES(?,?,?,?,?)
+      ON CONFLICT(user_id,company_code,room) DO UPDATE SET last_read_id=MAX(last_read_id,excluded.last_read_id),updated_at=excluded.updated_at`).run(user.id, code, scope.room, upTo, now());
+    return {room:scope.room, unread:unreadCount(user, code, scope.room)};
   }
   function list(userId,code,before,roomName='common') {
     const user=chatAccess(userId,code),owner=user.role==='owner',scope=room(user,code,roomName||'common');
@@ -154,6 +186,6 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
     chatAccess(userId,code,true);
     return {message:db.prepare('SELECT * FROM team_chat_messages WHERE id=?').get(row.id)};
   }
-  return {list,send,members,access:chatAccess};
+  return {list,send,members,markRead,access:chatAccess};
 }
 module.exports = {createTeamChat,taskTitle,hughTitle,addressed,similar};

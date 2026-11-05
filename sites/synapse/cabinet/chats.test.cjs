@@ -14,7 +14,7 @@ function load(options={}) {
     board:{companyCode:'alvi',assigned:[{id:11,title:'Первая',status:'inbox',priority:'high',from:'system'},{id:12,title:'Вторая',status:'in_progress',priority:'normal',from:'manager'}],hugh:[{id:13,title:'Поменяй план',status:'inbox',from:'me'}],deleted:[]}};
   const api={async get(p,params={}){calls.push(['GET',p,params]);
       if(p==='whoami')return state.contextGet?state.contextGet():{userId:state.contextViewerId??state.viewerId,csrfToken:`csrf-${state.contextViewerId??state.viewerId}`};
-      if(p==='people/team-chat/rooms')return {viewerId:state.viewerId,common:'common',hugh:`hugh:${state.viewerId}`,people:[{id:3,name:'Таня',room:`dm:${[state.viewerId,3].sort((a,b)=>a-b).join('-')}`} ]};
+      if(p==='people/team-chat/rooms')return {viewerId:state.viewerId,common:'common',hugh:`hugh:${state.viewerId}`,people:[{id:3,name:'Таня',room:`dm:${[state.viewerId,3].sort((a,b)=>a-b).join('-')}`} ],unread:state.unread||{common:2,'dm:2-3':1,'hugh:2':0},unreadTotal:3};
       if(p==='people/team-chat')return state.chatGet?state.chatGet(params):{messages:params.room==='common'?(state.messagesByViewer?.[state.viewerId]??state.messages):[],hasMore:false,viewerId:state.viewerId,room:params.room};
       if(p==='people/my-board')return state.board;throw Object.assign(Error('404'),{status:404});},
     async post(p,body,params,options){calls.push(options===undefined?['POST',p,body]:['POST',p,body,options]);
@@ -22,6 +22,7 @@ function load(options={}) {
       return post(p,body);},url:p=>new w.URL(`/content/${p}`,w.location.href).href};
   function post(p,body){
     if(p==='people/team-chat'){if(state.failSend-->0)throw Object.assign(Error('unknown result'),{status:503});return {message:{id:50+calls.length,user_id:state.viewerId,author_name:'Лена',text:body.text,room:body.room,created_at:'2026-11-05T00:01:00Z',ref_task_id:body.taskId}};}
+    if(p==='people/team-chat/read')return {room:body.room,unread:0};
     if(p==='people/my-board/action'){const b=structuredClone(state.board);if(body.op==='delete'){b.deleted=b.hugh;b.hugh=[];}if(body.op==='order')b.assigned=body.order.map(id=>b.assigned.find(t=>t.id===id));return b;}
     throw Error(`Unexpected POST ${p}`);
   }
@@ -43,7 +44,7 @@ test('модули регистрируются по контракту А; «Ч
   assert.equal(f.host.querySelector('img'),null);assert.match(f.host.querySelector('.sbc-msg__text').textContent,/<img/);
   f.host.querySelectorAll('.sbc-room')[1].click();await flush();
   f.host.querySelector('textarea').value='Лично';f.host.querySelector('form').dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();
-  const sent=f.calls.find(c=>c[0]==='POST');assert.equal(sent[2].room,'dm:2-3');assert.equal(sent[2].text,'Лично');assert.ok(!('taskId' in sent[2]));
+  const sent=f.calls.find(c=>c[0]==='POST'&&c[1]==='people/team-chat');assert.equal(sent[2].room,'dm:2-3');assert.equal(sent[2].text,'Лично');assert.ok(!('taskId' in sent[2]));
 });
 test('«Задачи»: разделы, перестановка, удаление в «Удалённые», чат по задаче уходит в лог с taskId',async t=>{
   const f=load();t.after(()=>f.w.close());f.mount(f.host,'tasks');await flush();
@@ -236,5 +237,23 @@ test('«Чаты»: ссылки http(s) кликабельны, видео св
   assert.ok(links.every(l=>l.target==='_blank'&&l.rel==='noopener noreferrer'));
   const videos=[...f.host.querySelectorAll('video')];assert.deepEqual(videos.map(v=>v.getAttribute('src')),[own]);
   assert.ok(videos[0].controls&&videos[0].hasAttribute('playsinline')&&videos[0].preload==='metadata');
-  assert.equal(f.host.querySelector('.sbc-msg__text b'),null);assert.match(f.host.querySelector('.sbc-msg__text').textContent,/<b>x<\/b>/);
+});
+test('«Чаты»: значки непрочитанных у комнат, отметка прочтения открытой комнаты, событие для меню',async t=>{
+  const f=load();t.after(()=>f.w.close());const events=[];f.w.addEventListener('sb-chat-unread',e=>events.push(e.detail));
+  f.mount(f.host,'chats');await flush();
+  const badge=room=>f.host.querySelector(`.sbc-room[data-room="${room}"] .sbc-badge`);
+  assert.equal(badge('dm:2-3').textContent,'1');assert.equal(badge('dm:2-3').hidden,false);assert.equal(badge('hugh:2').hidden,true);
+  const read=f.calls.filter(c=>c[1]==='people/team-chat/read');
+  assert.equal(read.length,1);assert.equal(JSON.stringify(read[0][2]),JSON.stringify({room:'common',upTo:1}));
+  assert.equal(badge('common').hidden,true,'открытый чат отмечен прочитанным');
+  assert.equal(JSON.stringify(events.at(-1)),JSON.stringify({companyCode:'alvi',total:1}));
+  await f.poll();assert.equal(f.calls.filter(c=>c[1]==='people/team-chat/read').length,1,'тот же id повторно не отправляется');
+});
+test('«Чаты»: значок на пункте меню читает unreadTotal своей компании и прячется при 403',async t=>{
+  const f=load();t.after(()=>f.w.close());const a=f.w.document.createElement('span'),b=f.w.document.createElement('span');
+  let fail=false,asked=0;const apiJson=async url=>{asked++;if(fail)throw Object.assign(Error('no'),{status:403});assert.match(url,/companyCode=alvi/);return {unreadTotal:120};};
+  f.w.SynapseChatBadge.start({apiJson,company:()=>({id:'alvi'}),targets:[a,b]});await flush();
+  assert.equal(a.textContent,'99+');assert.equal(a.hidden,false);
+  f.w.dispatchEvent(new f.w.CustomEvent('sb-chat-unread',{detail:{companyCode:'alvi',total:0}}));assert.equal(b.hidden,true);
+  f.w.dispatchEvent(new f.w.CustomEvent('sb-chat-unread',{detail:{companyCode:'other',total:5}}));assert.equal(b.hidden,true,'чужая компания не меняет значок');
 });

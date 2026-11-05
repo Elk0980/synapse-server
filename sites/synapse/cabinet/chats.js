@@ -29,8 +29,23 @@
   const time = value => { const d = new Date(value); return Number.isNaN(d) ? '' : d.toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); };
   const human = error => error?.status === 403 ? 'Нет доступа к этому чату.' : error?.status === 401 ? 'Сессия закончилась. Войдите снова.' : 'Связь не подтвердила результат. Повтор той же отправки безопасен.';
 
+  // Непрочитанные: серверные отметки прочтения (people/team-chat/read), счёт приходит с people/team-chat/rooms.
+  const badge = (value, className = 'sbc-badge') => { const n = Number(value) || 0; const b = node('span', className, n > 99 ? '99+' : String(n)); b.hidden = n < 1; b.setAttribute('aria-label', `Непрочитанных: ${n}`); return b; };
+  const setBadge = (b, value) => { const n = Number(value) || 0; if (!b) return; b.textContent = n > 99 ? '99+' : String(n); b.hidden = n < 1; b.setAttribute('aria-label', `Непрочитанных: ${n}`); };
+  const announce = (companyCode, total) => { try { window.dispatchEvent(new CustomEvent('sb-chat-unread', { detail: { companyCode, total } })); } catch {} };
+  // Отмечает комнату прочитанной до последнего показанного сообщения; повтор того же id не отправляется.
+  function readMarker(ctx, onUnread) {
+    const marked = new Map();
+    return (room, ids) => {
+      const top = Math.max(0, ...ids);
+      if (!top || document.hidden || (marked.get(room) || 0) >= top) return;
+      marked.set(room, top);
+      ctx.api.post('people/team-chat/read', { room, upTo: top }).then(r => onUnread?.(room, r?.unread), () => marked.delete(room));
+    };
+  }
+
   // Один разговор: используется и в «Чатах», и в плавающей панели. Хью отвечает по обращению (сервер).
-  function conversation(host, ctx, { room, title, hint, task, onClearTask, placeholder }) {
+  function conversation(host, ctx, { room, title, hint, task, onClearTask, placeholder, onLoaded }) {
     const box = node('section', 'sbc-conv');
     const head = node('header', 'sbc-conv__head'), list = node('ol', 'sbc-messages'), notice = node('p', 'sbc-notice');
     const older = node('button', 'plain-button sbc-older', 'Ранние сообщения'); older.type = 'button'; older.hidden = true;
@@ -46,7 +61,7 @@
     }
     list.setAttribute('role', 'log'); list.setAttribute('aria-live', 'polite'); notice.setAttribute('role', 'status');
     const form = node('form', 'sbc-compose'), text = node('textarea'), send = node('button', 'sbc-send', '➤');
-    text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Чтобы позвать Хью: «Хью, …»';
+    text.rows = 1; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Чтобы позвать Хью: «Хью, …»';
     text.setAttribute('aria-label', 'Сообщение'); send.type = 'submit'; send.setAttribute('aria-label', 'Отправить');
     form.append(text, send); box.append(head, older, list, notice, form); host.replaceChildren(box);
     const companyCode = ctx.companyCode, taskId = task?.id || null, initialViewer = ctx.user?.id;
@@ -56,7 +71,10 @@
     const draftKey = id => `sbc:v2:${id}:${companyCode}:${room}:${taskId || ''}`;
     const persist = (id, value) => { if (validViewer(id)) { try { sessionStorage.setItem(draftKey(id), JSON.stringify(value)); } catch {} } };
     const save = () => persist(viewer, { text: text.value, pending });
+    // Поле растёт вместе с текстом, как в мессенджере (до ~40% высоты окна), затем прокручивается внутри.
+    const fit = () => { text.style.height = 'auto'; text.style.height = `${Math.min(text.scrollHeight + 2, Math.round((window.innerHeight || 800) * 0.4))}px`; };
     const compose = () => {
+      fit();
       text.readOnly = busy || !validViewer(viewer) || Boolean(pending); send.disabled = busy || !validViewer(viewer);
       if (taskBar) {
         const ownTask = validViewer(viewer) && viewer === initialViewer;
@@ -114,6 +132,7 @@
       for (const m of data.messages) messages.set(m.id, m);
       if (before || messages.size <= data.messages.length) older.hidden = !data.hasMore;
       render();
+      onLoaded?.([...messages.keys()]);
       notice.textContent = previous !== null && changed ? 'Аккаунт изменился. Проверьте черновик перед отправкой.'
         : pending ? 'Есть неподтверждённая отправка. Нажмите ➤, чтобы проверить её результат.' : '';
       return { viewerId: viewer, changed };
@@ -147,7 +166,7 @@
         if (!stopped && !ctx.signal?.aborted) { if ([401, 403].includes(error?.status)) suspend(); notice.textContent = human(error); }
       } finally { busy = false; compose(); }
     };
-    text.oninput = save;
+    text.oninput = () => { save(); fit(); };
     text.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) form.requestSubmit(); };
     const timer = setInterval(() => { if (!document.hidden && !busy) load().catch(() => {}); }, 5000);
     const stop = () => { stopped = true; clearInterval(timer); save(); };
@@ -178,9 +197,11 @@
       const rooms = await ctx.api.get('people/team-chat/rooms');
       if (ctx.signal?.aborted) return;
       if (!rooms.hugh) { el.replaceChildren(node('p', 'sbc-notice', 'Личный чат с Хью доступен исполнителям задач компании. Доступ выдаёт владелец.')); return; }
+      const mark = readMarker(ctx, (_room, unread) => { if (unread !== undefined) ctx.api.get('people/team-chat/rooms').then(r => announce(ctx.companyCode, r.unreadTotal), () => {}); });
       const start = task => {
         el._sbc?.stop();
         el._sbc = conversation(el, ctx, { room: rooms.hugh, title: 'Хью · личный чат', hint: 'Видите только вы. Хью сведёт ваш запрос с похожими запросами коллег по проекту.',
+          onLoaded: ids => { if (!task) mark(rooms.hugh, ids); },
           task, onClearTask: () => start(null), placeholder: task ? 'Уточнение к задаче…' : 'Спросите или поручите: «Сделай …», «Измени …»' });
       };
       start(opened?.task || null);
@@ -192,38 +213,78 @@
   const chats = {
     title: 'Чаты',
     async mount(el, ctx) {
-      const shell = node('div', 'sbc-chats'), side = node('aside', 'sbc-rooms'), main = node('div', 'sbc-main');
-      side.append(node('h1', 'sbc-rooms__title', 'Чаты'), node('p', 'sbc-rooms__company', ctx.companyName || ''));
+      const wrap = node('div', 'sbc-wrap'), shell = node('div', 'sbc-chats'), side = node('aside', 'sbc-rooms'), main = node('div', 'sbc-main');
+      const sideHead = node('header', 'sbc-rooms__head'); sideHead.append(node('h1', 'sbc-rooms__title', 'Чаты'), node('p', 'sbc-rooms__company', ctx.companyName || ''));
+      side.append(sideHead);
       const nav = node('nav', 'sbc-rooms__list'); nav.setAttribute('aria-label', 'Чаты компании'); side.append(nav);
-      shell.append(side, main); el.replaceChildren(shell);
+      shell.append(side, main); wrap.append(shell); el.replaceChildren(wrap);
       main.append(node('p', 'sbc-notice', 'Загрузка…'));
       const rooms = await ctx.api.get('people/team-chat/rooms');
       if (ctx.signal?.aborted) return;
-      const entries = [{ room: 'common', name: 'Общий чат компании', hint: 'Видят все сотрудники компании. Хью читает и отвечает, только когда к нему обращаются: «Хью, …».' },
-        ...rooms.people.map(p => ({ room: p.room, name: p.name, hint: 'Личный чат. Видите только вы двое. Хью отвечает по обращению «Хью, …», ответ видите только вы.' })),
+      const entries = [{ room: 'common', name: 'Общий чат компании', sub: 'Вся команда', hint: 'Видят все сотрудники компании. Хью читает и отвечает, только когда к нему обращаются: «Хью, …».' },
+        ...rooms.people.map(p => ({ room: p.room, name: p.name, sub: 'Личный чат', hint: 'Личный чат. Видите только вы двое. Хью отвечает по обращению «Хью, …», ответ видите только вы.' })),
         // Без доступа к задачам лога Хью нет (№127): сервер отдаёт hugh: null.
-        ...(rooms.hugh ? [{ room: rooms.hugh, name: 'Хью · мой личный чат', hint: 'Видите только вы. Здесь ваши запросы и уточнения Хью.' }] : [])];
-      let current = null;
+        ...(rooms.hugh ? [{ room: rooms.hugh, name: 'Хью · мой личный чат', sub: 'Лог · только вы', hint: 'Видите только вы. Здесь ваши запросы и уточнения Хью.' }] : [])];
+      const badges = new Map(), counts = new Map();
+      const applyUnread = data => {
+        for (const entry of entries) { const n = data?.unread?.[entry.room]; if (n !== undefined) { counts.set(entry.room, n); setBadge(badges.get(entry.room), n); } }
+        announce(ctx.companyCode, [...counts.values()].reduce((a, n) => a + n, 0));
+      };
+      applyUnread(rooms);
+      const refreshUnread = () => ctx.api.get('people/team-chat/rooms').then(applyUnread, () => {});
+      const mark = readMarker(ctx, (room, unread) => { if (unread !== undefined) { counts.set(room, unread); setBadge(badges.get(room), unread); announce(ctx.companyCode, [...counts.values()].reduce((a, n) => a + n, 0)); } });
+      let current = null, currentRoom = null;
+      const narrow = () => { const w = wrap.getBoundingClientRect().width; return w > 0 && w <= 700; };
+      const phoneRoom = open => document.body.classList.toggle('sb-chat-room-open', Boolean(open));
       const open = entry => {
-        current?.stop(); shell.classList.add('sbc-chats--open');
+        current?.stop(); shell.classList.add('sbc-chats--open'); currentRoom = entry.room; phoneRoom(true);
         for (const b of nav.children) b.setAttribute('aria-current', String(b.dataset.room === entry.room));
-        const holder = node('div', 'sbc-holder'), back = node('button', 'plain-button sbc-back', '← Чаты'); back.type = 'button';
-        back.onclick = () => { shell.classList.remove('sbc-chats--open'); };
-        main.replaceChildren(back, holder);
-        current = conversation(holder, ctx, { room: entry.room, title: entry.name, hint: entry.hint });
+        const holder = node('div', 'sbc-holder'), back = node('button', 'sbc-back', '←'); back.type = 'button'; back.setAttribute('aria-label', 'К списку чатов');
+        back.onclick = () => { shell.classList.remove('sbc-chats--open'); phoneRoom(false); };
+        main.replaceChildren(holder);
+        current = conversation(holder, ctx, { room: entry.room, title: entry.name, hint: entry.hint, onLoaded: ids => { if (currentRoom === entry.room) mark(entry.room, ids); } });
+        holder.querySelector('.sbc-conv__head')?.prepend(back);
       };
       for (const entry of entries) {
         const b = node('button', 'sbc-room'); b.type = 'button'; b.dataset.room = entry.room;
-        b.append(node('span', 'sbc-room__name', entry.name), node('small', '', entry.room === 'common' ? 'Вся команда' : entry.room.startsWith('hugh:') ? 'Лог · только вы' : 'Личный чат'));
+        const text = node('span', 'sbc-room__text'); text.append(node('span', 'sbc-room__name', entry.name), node('small', '', entry.sub));
+        const dot = badge(counts.get(entry.room)); badges.set(entry.room, dot);
+        b.append(node('span', 'sbc-room__avatar', (entry.room.startsWith('hugh:') ? 'Х' : entry.room === 'common' ? '#' : entry.name.trim().charAt(0).toUpperCase()) || '?'), text, dot);
         b.onclick = () => open(entry); nav.append(b);
       }
       if (!rooms.people.length) nav.insertBefore(node('p', 'sbc-muted', 'Других сотрудников компании пока нет.'), nav.children[1]);
       const wanted = ctx.route?.params?.get('room');
       open(entries.find(e => e.room === wanted) || entries[0]);
-      if (!wanted && window.matchMedia?.('(max-width: 720px)').matches) shell.classList.remove('sbc-chats--open');
-      el._sbc = { stop: () => current?.stop() };
+      // Телефон/узкая область: сначала список чатов; прямая ссылка ?room= открывает чат сразу.
+      if (!wanted && narrow()) { shell.classList.remove('sbc-chats--open'); phoneRoom(false); }
+      // Клавиатура телефона: высота чата — видимая область (visualViewport), поле ввода остаётся над клавиатурой.
+      const vv = window.visualViewport;
+      const fitViewport = () => { if (vv && window.matchMedia?.('(max-width: 760px)').matches) { wrap.style.setProperty('--sbc-h', `${Math.round(vv.height)}px`); if (vv.offsetTop) window.scrollTo(0, 0); } else wrap.style.removeProperty('--sbc-h'); };
+      vv?.addEventListener('resize', fitViewport); vv?.addEventListener('scroll', fitViewport); fitViewport();
+      const poll = setInterval(() => { if (!document.hidden) refreshUnread(); }, 15000);
+      el._sbc = { stop: () => { current?.stop(); clearInterval(poll); vv?.removeEventListener('resize', fitViewport); vv?.removeEventListener('scroll', fitViewport); phoneRoom(false); } };
     },
     unmount(el) { el._sbc?.stop(); }
+  };
+
+  // Общий значок непрочитанных у пункта «Чаты» (меню и нижняя панель телефона). Запускает оболочка кабинета.
+  window.SynapseChatBadge = {
+    start({ apiJson, company, targets }) {
+      const spans = (targets || []).filter(Boolean); let denied = new Set(), stopped = false;
+      const show = total => spans.forEach(s => setBadge(s, total));
+      const refresh = async () => {
+        const code = company()?.id;
+        if (stopped || !code || document.hidden) return;
+        if (denied.has(code)) { show(0); return; }
+        try { const data = await apiJson(`/content/people/team-chat/rooms?companyCode=${encodeURIComponent(code)}`); if (company()?.id === code) show(data.unreadTotal || 0); }
+        catch (error) { if ([401, 403].includes(error?.status)) { denied.add(code); show(0); } }
+      };
+      window.addEventListener('sb-chat-unread', event => { if (event.detail?.companyCode === company()?.id) show(event.detail.total || 0); });
+      document.addEventListener('visibilitychange', refresh);
+      window.addEventListener('hashchange', () => setTimeout(refresh, 0));
+      const timer = setInterval(refresh, 30000); refresh();
+      return () => { stopped = true; clearInterval(timer); };
+    }
   };
   const register = (id, definition) => {
     if (window.SynapseModules?.register) window.SynapseModules.register(id, definition);
