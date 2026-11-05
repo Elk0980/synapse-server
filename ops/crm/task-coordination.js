@@ -98,8 +98,11 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
     }
     return data;
   };
-  const save = (id,body,actor) => {
+  // №142: правила доски (якорь, «проверено», «готово») проверяются до сторожа и до записи.
+  const checkRules=(row,after,status,actor)=>watchdog?.rules?.beforeUpdate(row,{before:entry(row),after,status},actor);
+  const save = (id,body,actor,{status,rulesChecked=false}={}) => {
     const data=normalize(id,body,actor);
+    if(!rulesChecked)checkRules(task(id),data,status,actor);
     const permit=watchdog?.guard(id,data,actor);
     const ownTransaction = !db.isTransaction;
     if (ownTransaction) db.exec('BEGIN IMMEDIATE');
@@ -140,6 +143,7 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if(String(row.company_code).toLowerCase()!==companyCode||actor.role!=='owner'&&row.assignee_name!==`person:${actor.userId}`)fail(404,'Задача не найдена');
       const previous=db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(id);
       if((previous?.revision||0)!==body.revision)fail(409,'Задача изменилась. Обновите карточку');
+      if(body.status==='done')checkRules(row,entry(row),'done',actor);
       // Статус не нормализует и не выбрасывает неизвестные прежние метаданные.
       const json=previous?.data||JSON.stringify({...empty(),executorName:row.assignee_name}),revision=body.revision+1,stamp=new Date(now()).toISOString();
       withCoordinatedWrite(db,id,()=>db.prepare('UPDATE tasks SET status=?,updated_at=? WHERE id=?').run(body.status,stamp,id));
@@ -150,10 +154,11 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if(own)db.exec('COMMIT');return result;
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
-  const tool=createTaskTools(db,{now,owner,entry,save,watchdog});
-  const saveAsync=async(id,body,actor)=>{const data=normalize(id,body,actor);await watchdog?.prepare(id,data,actor);return save(id,body,actor);};
+  const rulesChecked=new WeakSet();
+  const tool=createTaskTools(db,{now,owner,entry,save,watchdog,rulesChecked});
+  const saveAsync=async(id,body,actor)=>{const data=normalize(id,body,actor);checkRules(task(id),data,undefined,actor);await watchdog?.prepare(id,data,actor);return save(id,body,actor,{rulesChecked:true});};
   const toolAsync=async(name,args,actor)=>{
-    if(name==='task_update'&&args.stage){
+    if(name==='task_update'&&object(args)&&(args.stage||args.status==='done')){
       const current=tool('task_get',{task_id:args.task_id},actor).coordination;
       const data=Object.fromEntries([...TEXT_FIELDS,...OWNER_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
       Object.assign(data,ownerQuestionFields(args));
@@ -161,8 +166,12 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if('blocker' in args)data.blocker=args.blocker;
       if('next_step' in args)data.nextAction=args.next_step;
       if('links' in args)data.links=args.links;
-      data.milestones={...data.milestones,[args.stage]:{state:'confirmed',evidence:args.evidence,checkedAt:args.checked_at}};
-      await watchdog?.prepare(args.task_id,normalize(args.task_id,{revision:current.revision,data},actor),actor);
+      if(args.stage)data.milestones={...data.milestones,[args.stage]:{state:'confirmed',evidence:args.evidence,checkedAt:args.checked_at}};
+      const normalized=normalize(args.task_id,{revision:current.revision,data},actor);
+      // Правила — до сторожа: без якоря не нужен запрос к GitHub за доказательством.
+      checkRules(db.prepare('SELECT * FROM tasks WHERE id=? AND is_deleted=0').get(args.task_id),normalized,args.status==='done'?'done':undefined,actor);
+      rulesChecked.add(args);
+      if(args.stage)await watchdog?.prepare(args.task_id,normalized,actor);
     }
     return tool(name,args,actor);
   };
@@ -402,10 +411,11 @@ function taskExtras(db, row, now) {
   return {reviewer_name:row.reviewer_name, parent_task_id:row.parent_task_id, source:row.source,
     due_date:row.due_date, subtask_count:counts.total, subtask_done:counts.done,
     ...boardFields(db,row),
-    ...(require('./task-watchdog').silence(db,row,now))};
+    ...(require('./task-watchdog').silence(db,row,now)),
+    rules_anchor:require('./task-rules').anchorStatus(db,row)};
 }
 
-function createTaskTools(db, {now,owner,entry,save,watchdog}) {
+function createTaskTools(db, {now,owner,entry,save,watchdog,rulesChecked=new WeakSet()}) {
   // Архив устанавливается отдельно с резервной копией; чтение старых задач не запускает DDL.
   const archive = require('./module-archive').createModuleArchive(db, {now});
   const stamp = () => new Date(now()).toISOString();
@@ -497,11 +507,11 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
     }
     return result;
   };
-  const touch = (row, changes, actor) => {
+  const touch = (row, changes, actor, options) => {
     const previous = entry(row);
     const data = Object.fromEntries([...TEXT_FIELDS,...OWNER_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(key => [key,previous[key] ?? empty()[key]]));
     Object.assign(data,changes);
-    save(row.id,{revision:previous.revision,data},actor);
+    save(row.id,{revision:previous.revision,data},actor,options);
   };
   const update = (args, actor) => transaction(() => {
     const row = scopedTask(args.task_id,actor);
@@ -536,7 +546,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
     if (Object.keys(updates).length) withCoordinatedWrite(db, row.id, () =>
       db.prepare(`UPDATE tasks SET ${Object.keys(updates).map(key=>`${key}=?`).join(',')},updated_at=? WHERE id=?`)
         .run(...Object.values(updates),stamp(),row.id));
-    touch({...row,...updates},changes,actor);
+    touch({...row,...updates},changes,actor,{status:complete?'done':undefined,rulesChecked:rulesChecked.has(args)});
     if(complete)withCoordinatedWrite(db,row.id,()=>db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),row.id));
     return {task:taskView(scopedTask(row.id,actor),actor,true)};
   });
@@ -631,6 +641,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       }
       const title=text(args.title,1000); if(!title)fail(400,'Укажите название задачи');
       if(args.force!==undefined&&typeof args.force!=='boolean')fail(400,'force должен быть логическим');
+      watchdog?.rules?.beforeCreate({title,description:args.description||''},actor);
       const executor=text(args.executor || '',200), reviewer=text(args.reviewer || '',200);validateReviewer(executor,reviewer);
       const parent=args.parent_id==null?null:integer(args.parent_id,'parent_id');
       if(parent!==null) {
@@ -674,6 +685,8 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
     if(name==='agent_report')return transaction(()=>({agent:reportAgent(args,actor)}));
     if(name==='session_start')return transaction(()=>{
       const request=text(args.request,4000), agent=reportAgent({...args,state:'work',last_event:'подключился'},actor);
+      // №142: версия правил приходит от tasks-mcp вместе с текстом правил; сервер запоминает её для проверки якорей.
+      watchdog?.rules?.seen(args);
       const existing=db.prepare('SELECT * FROM agent_sessions WHERE agent_id=? AND ended_at IS NULL').get(agent.id);
       const projects=JSON.stringify([...allowed(actor)].sort());
       if(existing) {

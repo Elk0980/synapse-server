@@ -120,7 +120,8 @@ function mcpServer(config, callCrm, revisions) {
           const context = await sessionContext(config.docsDir, args.request);
           const key = JSON.stringify([args.kind, args.agent.toLocaleLowerCase('ru')]);
           const previous = revisions.get(key);
-          result = {...await callCrm(tool.name, args), ...context,
+          // №142: CRM запоминает версию правил, чтобы проверять якорь «Сэр · правила · код» в задачах.
+          result = {...await callCrm(tool.name, {...args, rules_revision:context.rules_revision, rules_version:context.rules_version || ''}), ...context,
             rules_changed:previous === undefined ? null : previous !== context.rules_revision,
             rules_notice:previous && previous !== context.rules_revision ?
               'Правила изменились, перечитайте полный текст.' : 'Прочитайте полный текст правил перед работой.'};
