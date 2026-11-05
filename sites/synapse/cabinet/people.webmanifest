@@ -1,7 +1,7 @@
 {
   "id": "/cabinet/people.html",
-  "name": "Моя работа — Synapse Business",
-  "short_name": "Моя работа",
+  "name": "Синапс · Моя работа",
+  "short_name": "Синапс",
   "lang": "ru",
   "start_url": "/cabinet/people.html",
   "scope": "/cabinet/",
@@ -9,7 +9,8 @@
   "background_color": "#102137",
   "theme_color": "#102137",
   "icons": [
-    {"src":"../brand/hugh-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"../brand/hugh-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+    {"src":"../brand/synapse-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"../brand/synapse-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"../brand/synapse-icon-512-maskable.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
   ]
 }
