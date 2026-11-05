@@ -11,6 +11,7 @@ test('all registered rights have Russian labels and accessible click/keyboard/ho
  for(const code of PERMISSIONS){const info=w.SynapsePermissionHelp.describe(code);assert.match(info.label,/[А-Яа-я]/);assert.ok(info.description.length>30);assert.ok(info.source);}
  assert.match(w.SynapsePermissionHelp.describe('account.view').description,/смена паролей/);assert.equal(w.SynapsePermissionHelp.describe('account.view').caution,true);
  assert.match(w.SynapsePermissionHelp.describe('chat.reply').description,/Пока не используется/);
+ const crmEdit=w.SynapsePermissionHelp.describe('crm.edit').description;assert.match(crmEdit,/отзыв/);assert.match(crmEdit,/статистик/);assert.match(crmEdit,/Расходы вносит только владелец/);
  const hostile=w.SynapsePermissionHelp.row('<img src=x onerror=alert(1)>');assert.equal(hostile.querySelector('img'),null);
  }finally{dom.window.close();}
 });
