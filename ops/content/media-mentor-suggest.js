@@ -47,6 +47,21 @@ function dates(startDate, days) {
   return out;
 }
 
+/* №98 Б: анкета контент-плана (цели, тон, рубрики, частота, кто в кадре, ограничения).
+   Пустые поля не передаются; цены по-прежнему только из подтверждённых фактов брифа. */
+const QUESTIONNAIRE_LABELS = { goals: 'Цели контента', audience: 'Аудитория по анкете', platforms: 'Площадки по анкете',
+  tone: 'Тон', rubrics: 'Рубрики', frequency: 'Частота (если указана — количество материалов определяется ею, а не правилом 3–5)',
+  onCamera: 'Кто в кадре', constraints: 'Ограничения' };
+function questionnaireLines(q) {
+  if (!q || typeof q !== 'object') return [];
+  const lines = Object.entries(QUESTIONNAIRE_LABELS).map(([key, label]) => {
+    const value = Array.isArray(q[key]) ? q[key].join(', ') : clean(q[key], 1000);
+    return value ? `${label}: ${value}.` : '';
+  }).filter(Boolean);
+  return lines.length ? ['Анкета контент-плана:', ...lines,
+    'Цены, скидки и акции называй только из фактов, разрешённых для контента.'] : [];
+}
+
 function buildPrompt(brief, { startDate, days }) {
   const list = (rows, map) => (rows || []).map(map).join('; ') || 'не указано';
   const system = 'Ты медиа-наставник. Составляешь контент-план по брифу компании. ' +
@@ -80,6 +95,7 @@ function buildPrompt(brief, { startDate, days }) {
       (f) => `${clean(f.statement, 300)} (источник: ${clean(f.source, 120)})`)}.`,
     `Исходники: ${list(brief.assets, (a) => `${a.id} — ${clean(a.title, 200)} [${a.kind}]`)}.`,
     `Готовность к съёмке: ${brief.shootingComfort?.level || 'unknown'}. ${clean(brief.shootingComfort?.notes, 500)}`,
+    ...questionnaireLines(brief.questionnaire),
   ].join('\n');
   return { system, messages: [{ role: 'user', content: user }], responseProfile: 'structured-draft' };
 }

@@ -67,6 +67,18 @@ async function seedBrief(f, identity = OWNER) {
   return saved.result;
 }
 
+test('импорт проверяет компанию и edit до чтения файла, preview ничего не сохраняет', async t => {
+  const f=fixture(t),editor={...EDITOR,permissions:['autoposting.view','autoposting.edit']};
+  const body={filename:'sample.csv',base64:Buffer.from('Дата,Тема\n2026-11-04,SAMPLE').toString('base64')};
+  const result=await f.call('POST','/media-mentor/plan/import-preview',editor,body);
+  assert.deepEqual(result.result,{companyCode:'alvi',rows:[['Дата','Тема'],['2026-11-04','SAMPLE']]});
+  assert.equal(f.mentor.get('alvi').plan,null);assert.deepEqual(f.transfers,[]);
+  for(const identity of [null,{...EDITOR,permissions:['autoposting.view']}])
+    await assert.rejects(f.call('POST','/media-mentor/plan/import-preview',identity,body),e=>e.status===403);
+  await assert.rejects(f.call('POST','/media-mentor/plan/import-preview',editor,{},'avokado'),e=>e.status===403);
+  assert.equal(f.mentor.get('avokado').plan,null);
+});
+
 test('маршрут не перехватывает соседние адреса и отвечает на свои', async (t) => {
   const f = fixture(t);
   for (const path of ['/media-mentor-rollout', '/media-mentor-rollout/survey', '/leads', '/autoposting/posts']) {
@@ -141,12 +153,12 @@ test('устаревшая версия брифа и плана не переп
   (error) => error.status === 409 && error.details.code === 'BRIEF_CHANGED');
 });
 
-test('план проверяется по брифу: площадка, исходник, окно 7–14 дней', async (t) => {
+test('план проверяется по брифу: площадка, исходник, окно 1–31 день', async (t) => {
   const f = fixture(t);
   const brief = await seedBrief(f);
   const base = {planRevision: 0, briefRevision: brief.brief.revision};
   for (const body of [
-    {...base, days: days(6)},
+    {...base, days: []},
     {...base, days: days(7, 'instagram')},
     {...base, days: days(7).map((day) => ({...day, assetId: 'missing'}))},
     {...base, days: days(7).map((day) => ({...day, topic: ''}))},
