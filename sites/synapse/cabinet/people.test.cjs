@@ -9,8 +9,8 @@ const sw=fs.readFileSync(path.join(__dirname,'people-sw.js'),'utf8');
 const flush=async()=>{for(let i=0;i<8;i++)await new Promise(setImmediate);};
 const response=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
 const task=(extra={})=>({id:35,title:'Контент проекта',description:'ЦКП: 7 публикаций\nОписание',company_code:'alvi',status:'in_progress',subtask_count:4,subtask_done:2,canEdit:true,coordination:{revision:3,milestones:{}},...extra});
-function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],contextStatus=200}={}) {
-  const dom=new JSDOM(html,{url:'https://synapse.synapsebusiness.ru/cabinet/people.html',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,calls=[];
+function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],contextStatus=200,url='https://synapse.synapsebusiness.ru/cabinet/people.html'}={}) {
+  const dom=new JSDOM(html,{url,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,calls=[];
   t.after(()=>w.close());
   w.fetch=async(route,options={})=>{
     calls.push({route,options});const parsed=new URL(route,w.location.href);
@@ -194,7 +194,7 @@ function serviceWorker({context,contextStatus=200,data}={}) {
   const handlers={},shown=[],opened=[],calls=[];
   const self={location:{origin:'https://synapse.synapsebusiness.ru'},registration:{showNotification:async(title,options)=>shown.push({title,options})},clients:{matchAll:async()=>[],openWindow:async url=>opened.push(url)},addEventListener:(type,handler)=>{handlers[type]=handler;}};
   vm.runInNewContext(sw,{self,URL,fetch:async(route,options)=>{calls.push({route,options});return response(context,contextStatus);}});
-  return {shown,opened,calls,async push(){let pending;handlers.push({data:{json:()=>data},waitUntil:p=>{pending=p;}});await pending;},async click(){let pending;handlers.notificationclick({notification:{close(){},data:{url:'https://attacker.invalid'}},waitUntil:p=>{pending=p;}});await pending;}};
+  return {shown,opened,calls,async push(){let pending;handlers.push({data:{json:()=>data},waitUntil:p=>{pending=p;}});await pending;},async click(url='https://attacker.invalid'){let pending;handlers.notificationclick({notification:{close(){},data:{url}},waitUntil:p=>{pending=p;}});await pending;}};
 }
 test('SW не показывает личный текст другому пользователю или после выхода',async()=>{
   const data={audienceUserId:7,companyCode:'alvi',title:'Личная задача',body:'Закрытые сведения'};
@@ -220,4 +220,19 @@ test('права участника выводятся по фактически
   assert.deepEqual(codes(rows[0]),['tasks.self.view'],'исполнитель без права менять статус не показывает tasks.self.edit');
   assert.deepEqual(codes(rows[1]),['crm.view','crm.edit'],'администратор показывает свои права');
   assert.deepEqual(codes(rows[2]),[]);assert.match(rows[2].textContent,/Права не назначены/);
+});
+
+test('push deep link chooses company then opens the task card; bad IDs never open',async t=>{
+ const f=fixture(t,{owner:true,url:'https://synapse.synapsebusiness.ru/cabinet/people.html?company=avokado&task=35'});await flush();
+ assert.equal(f.byId('company').value,'avokado');assert.equal(f.byId('task-overlay').hidden,false);
+ assert.ok(f.calls.some(c=>c.route.includes('/content/people/tasks/35')&&c.route.includes('avokado')));
+ const bad=fixture(t,{url:'https://synapse.synapsebusiness.ru/cabinet/people.html?company=alvi&task=javascript:1'});await flush();assert.equal(bad.byId('task-overlay').hidden,true);
+});
+
+test('SW preserves safe task link for current audience and strips hostile target',async()=>{
+ const safe='/cabinet/people.html?company=alvi&task=106';
+ const f=serviceWorker({context:{user:{id:7},companies:[{id:'alvi'}]},data:{audienceUserId:7,companyCode:'alvi',title:'Решение',body:'Ответ',eventKey:'owner-decision:106:created',url:safe}});
+ await f.push();assert.equal(f.shown[0].options.data.url,safe);assert.equal(f.shown[0].options.tag,'owner-decision:106:created');
+ await f.click(f.shown[0].options.data.url);assert.deepEqual(f.opened,['https://synapse.synapsebusiness.ru'+safe]);
+ await f.click('/cabinet/people.html?company=alvi&task=javascript:1');assert.equal(f.opened.at(-1),'https://synapse.synapsebusiness.ru/cabinet/people.html');
 });

@@ -19,6 +19,13 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
     resolveTelegram:createPeopleTelegramResolver({db,authStore,env}),
     canReceive:(id,code)=>{try{tasks.access(id,code);return true;}catch{return false;}},
     validateEvent:async({userId,companyCode,eventKey,payload})=>{
+      const decision=/^owner-decision:(\d+):(?:created|blocker:\d+)$/.exec(eventKey);
+      if(decision) {
+        const actor=authStore.getById(userId);
+        if(actor?.role!=='owner'||!actor.companyCodes.includes(companyCode))return false;
+        const result=await call('ownerDecisionEvents',{taskId:Number(decision[1])},actor,companyCode);
+        return result.events.some(event=>event.eventKey===eventKey && event.title.slice(0,1000)===payload.body);
+      }
       const match=/^people-task:(\d+):(\d+):(inbox|planned|in_progress|done|cancelled)$/.exec(eventKey);
       if(match) {
         try {const {task}=await tasks.get(userId,companyCode,Number(match[1]));
