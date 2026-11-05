@@ -3,6 +3,28 @@
    Сервер: /content/people/team-chat (PR 480/493 + комнаты), права и компания проверяются там. */
 (() => {
   const node = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
+  // Ссылки в тексте: только http(s), target=_blank, rel=noopener noreferrer; остальное — текст без HTML.
+  // Видео из хранилища ЭТОЙ компании (…/content/publishing-assets/<код>/<имя>.mp4|.webm) дополнительно показывается плеером.
+  const ASSET_ORIGIN = 'https://synapse.synapsebusiness.ru';
+  const ownVideo = (url, companyCode) => {
+    const m = companyCode && url.origin === ASSET_ORIGIN && /^\/content\/publishing-assets\/([^/]+)\/[^/]+\.(?:mp4|webm)$/i.exec(url.pathname);
+    try { return Boolean(m) && decodeURIComponent(m[1]) === companyCode; } catch { return false; }
+  };
+  const richText = (target, value, companyCode) => {
+    const text = String(value ?? ''), re = /https?:\/\/[^\s<>"']+/giu, seen = new Set(); let last = 0, match;
+    while ((match = re.exec(text))) {
+      let raw = match[0];
+      while (/[.,;:!?)»\]]$/u.test(raw) && !(raw.endsWith(')') && raw.includes('('))) raw = raw.slice(0, -1);
+      let url; try { url = new URL(raw); } catch { continue; }
+      if (!/^https?:$/.test(url.protocol)) continue;
+      if (match.index > last) target.append(document.createTextNode(text.slice(last, match.index)));
+      const link = document.createElement('a'); link.className = 'sbc-link'; link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = raw; target.append(link);
+      last = match.index + raw.length; re.lastIndex = last;
+      if (ownVideo(url, companyCode)) seen.add(url.href);
+    }
+    if (last < text.length) target.append(document.createTextNode(text.slice(last)));
+    return [...seen].map(href => { const v = document.createElement('video'); v.className = 'sbc-video'; v.controls = true; v.setAttribute('playsinline', ''); v.preload = 'metadata'; v.src = href; return v; });
+  };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-zA-Z0-9_.:-]/g, '');
   const time = value => { const d = new Date(value); return Number.isNaN(d) ? '' : d.toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); };
   const human = error => error?.status === 403 ? 'Нет доступа к этому чату.' : error?.status === 401 ? 'Сессия закончилась. Войдите снова.' : 'Связь не подтвердила результат. Повтор той же отправки безопасен.';
@@ -67,7 +89,9 @@
       for (const m of [...messages.values()].sort((a, b) => a.id - b.id)) {
         const li = node('li', m.user_id === 0 ? 'sbc-msg sbc-msg--hugh' : m.user_id === viewer ? 'sbc-msg sbc-msg--own' : 'sbc-msg');
         if (m.kind === 'hugh-merge') li.classList.add('sbc-msg--merge');
-        li.append(node('strong', '', m.author_name), node('span', 'sbc-msg__text', m.text), node('time', '', time(m.created_at)));
+        const body = node('span', 'sbc-msg__text'), videos = richText(body, m.text, companyCode);
+        if (videos.length) li.classList.add('sbc-msg--video');
+        li.append(node('strong', '', m.author_name), body, ...videos, node('time', '', time(m.created_at)));
         if (m.task_id && m.kind !== 'hugh-merge') li.append(node('span', 'sbc-msg__task', m.kind === 'hugh-task' ? `Я поставил Хью · задача №${m.task_id}` : `Задача №${m.task_id} на доске`));
         else if (m.ref_task_id && m.kind === 'task-note') li.append(node('span', 'sbc-msg__task', m.command_state === 'done' ? `Комментарий в задаче №${m.ref_task_id}` : 'Комментарий ещё не подтверждён'));
         else if (m.command_state === 'pending') li.append(node('span', 'sbc-msg__task', 'Задача ещё не подтверждена — повторите отправку'));

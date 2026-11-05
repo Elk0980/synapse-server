@@ -79,3 +79,7 @@
 }
 .sbt-mine-link { display: inline-flex; margin: 0 0 10px; text-decoration: none; }
 .sbt-mine-link[hidden] { display: none; }
+/* Ссылки и видео в сообщениях: длинная ссылка переносится внутри пузыря, плеер — по ширине пузыря (9:16, не выше 70vh). */
+.sbc-link { color: var(--sbc-accent); text-decoration: underline; overflow-wrap: anywhere; word-break: break-all; }
+.sbc-msg--video { width: min(100%, 360px); }
+.sbc-video { display: block; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; max-height: 70vh; margin-top: 6px; border-radius: 10px; background: #000; object-fit: contain; }

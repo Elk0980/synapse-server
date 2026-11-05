@@ -39,3 +39,16 @@ test('ссылка из старой задачи открывает сообщ�
   w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();
   assert.ok(w.document.getElementById('message-1'));assert.ok(w.document.getElementById('message-200'));assert.equal(scrolled,'message-1');
 });
+
+test('ссылки в сообщениях: http(s) кликабельны, видео своей компании — плеер, остальное текстом',async t=>{
+  const own='https://synapse.synapsebusiness.ru/content/publishing-assets/alpha/r.mp4',other='https://synapse.synapsebusiness.ru/content/publishing-assets/beta/r.mp4';
+  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+  t.after(()=>w.close());w.HTMLElement.prototype.scrollIntoView=()=>{};w.AbortSignal=AbortSignal;
+  w.fetch=async url=>{let data={messages:[{id:1,user_id:3,author_name:'Т',text:`${own} ${other} javascript:alert(1) <i>x</i> https://e.com/a.`,created_at:new Date().toISOString()}],hasMore:false};
+    if(url.endsWith('context'))data={user:{id:2},csrfToken:'t',companies:[{id:'alpha',name:'Альфа'}]};return {ok:true,status:200,json:async()=>data};};
+  w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();
+  const links=[...w.document.querySelectorAll('#messages a')];
+  assert.deepEqual(links.map(a=>a.getAttribute('href')),[own,other,'https://e.com/a']);assert.ok(links.every(a=>a.target==='_blank'&&a.rel==='noopener noreferrer'));
+  assert.deepEqual([...w.document.querySelectorAll('#messages video')].map(v=>v.getAttribute('src')),[own]);
+  assert.equal(w.document.querySelector('#messages i'),null);
+});
