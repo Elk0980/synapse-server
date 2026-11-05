@@ -4,9 +4,10 @@ const fail=(status,message)=>{throw Object.assign(new Error(message),{status});}
 const key=id=>`person:${id}`;
 const same=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
 function createPeopleTasks({authStore,db,call}) {
-  function access(userId,companyCode,write=false) {
+  function access(userId,companyCode,write=false,{allowPasswordChange=false}={}) {
     const user=authStore.getById(userId);
     if(!user)fail(401,'Требуется вход в кабинет');
+    if(user.mustChangePassword&&!allowPasswordChange)fail(403,'Нужно сменить пароль');
     if(!user.companyCodes.includes(companyCode))fail(403,'Компания недоступна');
     if(user.role!=='owner') {
       const member=db.prepare("SELECT 1 FROM company_team_members WHERE user_id=? AND company_code=? AND staff_role='human_executor'").get(userId,companyCode);
@@ -81,9 +82,11 @@ function createPeopleTasks({authStore,db,call}) {
     return {task:dto(result,user,children)};
   }
   async function update(userId,code,id,body) {
+    const version=access(userId,code,true).sessionVersion;
     if(!body||Object.keys(body).sort().join(',')!=='revision,status'||!Number.isSafeInteger(body.revision)||
       !['inbox','planned','in_progress','done','cancelled'].includes(body.status))fail(400,'Передайте только статус и ревизию задачи');
     const {task}=await get(userId,code,id);let user=access(userId,code,true);
+    if(user.sessionVersion!==version)fail(401,'Сессия изменилась. Войдите заново');
     if(user.role!=='owner'&&task.assignee_name!==key(user.id))fail(403,'Статус меняет назначенный исполнитель');
     if(task.coordination.revision!==body.revision)fail(409,'Задача изменилась. Обновите карточку');
     const result=await call('task_update',{task_id:id,status:body.status,revision:body.revision},user,code);
@@ -91,6 +94,25 @@ function createPeopleTasks({authStore,db,call}) {
     if(!result.task||!same(result.task.company_code,code)||user.role!=='owner'&&result.task.assignee_name!==key(user.id))fail(409,'Доступ к задаче изменился. Обновите список');
     return {task:dto(result.task,user)};
   }
-  return {access,list,get,update};
+  // «Задачи» сотрудника: разделы доски по человеку; CRM повторно проверяет компанию и назначение.
+  function checkBoard(result,code) {
+    if(!result||result.companyCode!==code||!['assigned','hugh','deleted'].every(k=>Array.isArray(result[k]))||
+      ['assigned','hugh','deleted'].some(k=>result[k].some(t=>!same(t.company_code,code))))fail(502,'Некорректный список задач');
+    const pick=t=>({id:t.id,title:t.title,status:t.status,priority:t.priority,due_date:t.due_date||'',section:t.section,from:t.from,
+      paused:t.paused===true,deletedAt:t.deletedAt||'',subtask_count:t.subtask_count||0,subtask_done:t.subtask_done||0});
+    return {companyCode:code,assigned:result.assigned.map(pick),hugh:result.hugh.map(pick),deleted:result.deleted.map(pick)};
+  }
+  async function board(userId,code) {
+    const result=await call('myBoard',{},access(userId,code),code);access(userId,code);
+    return checkBoard(result,code);
+  }
+  async function boardAction(userId,code,body) {
+    const ok=body&&typeof body==='object'&&!Array.isArray(body)&&(['pause','resume','delete','restore'].includes(body.op)&&Object.keys(body).sort().join(',')==='op,taskId'&&Number.isSafeInteger(body.taskId)||
+      body.op==='order'&&Object.keys(body).sort().join(',')==='op,order,section'&&['assigned','hugh'].includes(body.section)&&Array.isArray(body.order)&&body.order.length<=500&&body.order.every(Number.isSafeInteger));
+    if(!ok)fail(400,'Некорректное действие с задачей');
+    const result=await call('myBoardAction',body,access(userId,code,true),code);access(userId,code,true);
+    return checkBoard(result,code);
+  }
+  return {access,list,get,update,board,boardAction};
 }
 module.exports={createPeopleTasks,executorKey:key};

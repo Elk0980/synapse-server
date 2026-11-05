@@ -30,6 +30,7 @@ const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
 const { resolveSessionSecret } = require('./session-secret');
+const { normalizeCrmPath } = require('./crm-proxy-path');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -117,6 +118,7 @@ function publicIdentity(identity) {
     userId: identity.id, login: identity.login, displayName: identity.displayName,
     author: identity.displayName, role: identity.role, companies: identity.companies,
     permissions: identity.permissions,
+    mustChangePassword: identity.mustChangePassword,
     sites: identity.companies.map((company) => company.contentSiteId).filter(Boolean),
   };
 }
@@ -149,7 +151,8 @@ function sessionData(request) {
     const token = JSON.parse(Buffer.from(payload, 'base64url').toString());
     if (token.exp < Math.floor(Date.now() / 1000)) return null;
     const current = authStore.getById(token.uid);
-    if (!current || current.sessionVersion !== token.sessionVersion) return null;
+    if (!current || current.sessionVersion !== token.sessionVersion ||
+        (current.mustChangePassword && !(Date.parse(current.tempPasswordExpiresAt) > Date.now()))) return null;
     return { user: current, csrf: token.csrf };
   } catch { return null; }
 }
@@ -177,6 +180,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+// №98 Б: согласующие контент-плана из «Настроек → Контент» — доверенным заголовком в CRM.
+const contentPlanApprovers = require('./content-plan-approvers').createContentPlanApprovers({ db, authStore });
 const companyTeam = require('./company-team').createCompanyTeam(authStore);
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
@@ -227,8 +232,15 @@ const contentPlanRunner = require('./content-plan-runner').createContentPlanRunn
 const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, requireCsrf, sendJson:send,
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
+// Настройки → Контент (№98): по компании, запись — владелец или settings.edit.
+const contentSettings=require('./content-settings').createContentSettings({db,authStore,requireSession,requireCsrf,readJson,sendJson:send});
+// Контент → Съёмка: дубли частями с продолжением; монтажёр работает по сессии кабинета. Лимиты — приватный файл тома (нет — по умолчанию).
+const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,providers:hughProviders,
+  config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
+// Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
+const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
   requireSession,requireCsrf,readJson,sendJson:send,publishingOrigin:PUBLISHING_ASSET_ORIGIN,
   maxImageBytes:MAX_PUBLISHING_ASSET,maxVideoBytes:MAX_PUBLISHING_VIDEO,ready:()=>Boolean(CRM_API_KEY),
@@ -273,7 +285,8 @@ const mediaMentorSuggestRoute = createMediaMentorSuggestRoute({
       {headers: {'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: crmIdentityHeader(identity)}});
     if (!upstream.ok) return null;
     const data = await upstream.json();
-    return data?.brief?.fields ?? null;
+    // №98 Б: анкета контент-плана идёт в подсказку рядом с брифом, но не становится брифом.
+    return data?.brief?.fields ? {...data.brief.fields, questionnaire: data.questionnaire ?? null} : null;
   },
   // Разбор результатов читает и статистику, и текущий план: выводы без плана были бы «в воздух».
   loadStats: async (code, {from, to} = {}, identity) => {
@@ -371,6 +384,7 @@ function requireAuth(request, site) {
   let identity;
   if (!given) identity = sessionData(request)?.user;
   if (!identity) fail(401, given ? 'Неверный ключ доступа' : 'Требуется вход в кабинет или ключ доступа');
+  if (identity.mustChangePassword) passwordRequired(sessionData(request));
   if (identity.id && site && identity.role !== 'owner' && !identity.companyCodes.includes(CONTENT_COMPANIES[site])) {
     fail(403, 'У вашей учётной записи нет доступа к этому сайту');
   }
@@ -500,7 +514,13 @@ const siteStore = createSiteStore(db, authStore, saveVersion);
 function requireSession(request) {
   const session = sessionData(request);
   if (!session) fail(401, 'Требуется вход в кабинет');
+  if (session.user.mustChangePassword) passwordRequired(session);
   return session;
+}
+
+function passwordRequired(session) {
+  throw Object.assign(Error('Нужно сменить пароль'), {status:403,
+    details:{mustChangePassword:true,csrfToken:session.csrf}});
 }
 
 function requirePermission(request, permission, companyCode, obscure = false) {
@@ -588,8 +608,11 @@ async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
-  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
-  if (crmPath.startsWith('/internal/')) fail(403, 'Служебный маршрут недоступен');
+  // Проверки ниже и запрос в CRM используют один нормализованный путь.
+  const normalizedPath = normalizeCrmPath(url.pathname.slice('/content/crm'.length));
+  if (!normalizedPath.ok && normalizedPath.status === 403) fail(403, 'Служебный маршрут недоступен');
+  if (!normalizedPath.ok) fail(404, 'Адрес не найден');
+  const crmPath = normalizedPath.path;
   if (/^\/coordination(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403, 'Координация доступна владельцу');
   if (/^\/(?:vk-community|vk-tools)(?:\/|$)/.test(crmPath)) {
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
@@ -645,8 +668,10 @@ async function proxyCrm(request, response, url, cors) {
     if (crmPath === '/media-mentor/plan/decision' && identity.role !== 'owner') {
       fail(403, 'Согласовывать и отклонять план может только владелец');
     }
+    // Отметку согласующего ставит человек с content-plan.approve; список и слот проверяет CRM.
+    const signoffWrite = crmPath === '/media-mentor/plan/signoffs' && !readOnly;
     if (identity.role !== 'owner') {
-      requirePermission(request, `autoposting.${readOnly ? 'view' : 'edit'}`, code);
+      requirePermission(request, signoffWrite ? 'content-plan.approve' : `autoposting.${readOnly ? 'view' : 'edit'}`, code);
     }
   }
   if (/^\/(?:email-campaigns|email-subscriptions)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') {
@@ -662,7 +687,15 @@ async function proxyCrm(request, response, url, cors) {
   if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
     fail(403, 'Аккаунту не назначена компания');
   }
-  if (identity.role !== 'owner' && !companyModule && !mentorRollout && !mentorPlan) {
+  // Контент → Подключения: только чтение, право публикаций ИЛИ аналитики в своей компании.
+  const contentConnections = crmPath === '/content-connections';
+  if (contentConnections) {
+    const code = url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+    if (!readOnly) fail(405, 'Метод не поддерживается');
+    if (identity.role !== 'owner') requirePermission(request, identity.permissions.includes('autoposting.view') ? 'autoposting.view' : 'analytics.view', code.toLowerCase());
+  }
+  if (identity.role !== 'owner' && !companyModule && !mentorRollout && !mentorPlan && !contentConnections) {
     if (readOnly) {
       const permission = analyticsReadPath && identity.permissions.includes('analytics.view')
         ? 'analytics.view' : 'crm.view';
@@ -782,6 +815,11 @@ async function proxyCrm(request, response, url, cors) {
   delete headers[CRM_IDENTITY_HEADER];
   headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(forwardIdentity);
   delete headers['x-synapse-task-principal'];
+  delete headers['x-synapse-content-approvers'];
+  if (crmPath === '/media-mentor/plan/signoffs') {
+    const approvers = contentPlanApprovers.header(url.searchParams.get('companyCode'));
+    if (approvers) headers['x-synapse-content-approvers'] = approvers;
+  }
   const taskPrincipal=Buffer.from(JSON.stringify({v:1,source:'cabinet',identityHash:crypto.createHash('sha256').update(headers[CRM_IDENTITY_HEADER]).digest('hex'),userId:forwardIdentity.id,at:Date.now(),method:request.method,path:crmPath})).toString('base64url');
   headers['x-synapse-task-principal']=taskPrincipal+'.'+crypto.createHmac('sha256',CRM_API_KEY).update(taskPrincipal).digest('base64url');
   if (requestBody) {
@@ -792,6 +830,7 @@ async function proxyCrm(request, response, url, cors) {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };
     response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
     upstreamResponse.pipe(response);
+    upstreamResponse.on('end', () => { reelHughLog.afterProxy(crmPath, request.method, upstreamResponse.statusCode, url.searchParams.get('companyCode'), forwardIdentity); });
   });
   upstream.on('error', (error) => {
     console.error('content: ошибка прокси CRM:', error);
@@ -837,6 +876,19 @@ const server = http.createServer(async (request, response) => {
     }
     const url = new URL(request.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);
+    // A fresh database-backed check also protects aliases and open tabs before dispatch.
+    const restricted=sessionData(request);
+    if(restricted?.user.mustChangePassword && !(
+      request.method==='POST' && ['/content/password','/content/logout'].includes(url.pathname)))passwordRequired(restricted);
+    if(url.pathname==='/content/password'&&request.method==='POST') {
+      if(!restricted)fail(401,'Требуется вход в кабинет');
+      requireCsrf(request,restricted);
+      const body=await readJson(request);
+      if(Object.keys(body).join(',')!=='password')fail(400,'Переданы лишние поля');
+      const current=authStore.setOwnPassword(restricted.user.id,restricted.user.sessionVersion,body.password);
+      return reply(200,{ok:true},{'cache-control':'private, no-store',
+        'set-cookie':`synapse_session=${makeSession(current)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL}`});
+    }
 
     // Локальный обработчик Хью: свой ключ, проверка до чтения тела, только известные маршруты.
     if (url.pathname.startsWith('/content/project-chat-worker/')) {
@@ -946,9 +998,11 @@ const server = http.createServer(async (request, response) => {
       } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
+    await reelHughLog.beforePeople(request,url,requireSession);
     if (await peopleService.handle(request,response,url)) return;
     if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
+    if (await shooting.handle(request,response,url)) return;
     if (await projectChat.handle(request,response,url)) return;
 
     if (await actorOnboarding.handle(request,response,url)) return;
@@ -968,6 +1022,10 @@ const server = http.createServer(async (request, response) => {
         return reply(200, hughSettingsStore.save(body.settings, session.user.id));
       }
       fail(405, 'Метод не поддерживается');
+    }
+    // Настройки → Контент (№98); права и компания проверяются в модуле.
+    if (url.pathname === '/content/content-settings') {
+      if (await contentSettings.handle(request, response, url)) return;
     }
     // Личная переписка владельца по проектам. Область проверяется внутри модуля по серверной
     // сессии; ни один клиентский маршрут к этим таблицам не обращается.
@@ -993,7 +1051,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readJson(request);
       const login = String(body.login || '').trim().toLowerCase();
       const identity = authStore.getByLogin(login);
-      if (!identity || !verifyPassword(String(body.password || ''), identity.passwordHash)) {
+      if (!identity || (identity.mustChangePassword && !(Date.parse(identity.tempPasswordExpiresAt)>now)) ||
+          !verifyPassword(String(body.password || ''), identity.passwordHash)) {
         failures.push(now); loginFailures.set(ip, failures);
         const error = new Error('Неверный логин или пароль');
         error.status = 401;
@@ -1120,7 +1179,9 @@ const server = http.createServer(async (request, response) => {
       if (request.method === 'GET') return reply(200, {members: companyTeam.list(session.user.id, url.searchParams.get('companyCode'))});
       if (request.method === 'POST') {
         requireCsrf(request, session);
-        return reply(201, companyTeam.create(session.user.id, await readJson(request)));
+        const body=await readJson(request);
+        if(body.staffRole==='human_executor')fail(400,'Создайте временный доступ через /cabinet/people.html');
+        return reply(201, companyTeam.create(session.user.id, body));
       }
       fail(405, 'Метод не поддерживается');
     }
@@ -1398,6 +1459,8 @@ const server = http.createServer(async (request, response) => {
     fail(404, 'Не найдено');
   } catch (error) {
     const status = error.status || 500;
+    const current=sessionData(request);
+    if(status===403&&current?.user.mustChangePassword)error.details={mustChangePassword:true,csrfToken:current.csrf};
     if (status === 401 || status === 403) logAuthorizationDenial(request, error);
     if (status >= 500) console.error(error);
     reply(status, { error: error.message, details: error.details || undefined });

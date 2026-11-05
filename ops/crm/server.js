@@ -2,7 +2,7 @@ const {createCommercial}=require('./commercial');
 'use strict';
 
 const http = require('node:http');
-const { createHash, randomUUID } = require('node:crypto');
+const { createHash, randomUUID, timingSafeEqual } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
@@ -47,6 +47,7 @@ const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
 const { createTelegramChannelStatsClient } = require('./telegram-channel-stats');
 const { createSocialStatsHandler } = require('./social-stats-http');
+const { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteSource } = require('./content-connections');
 const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
 const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
@@ -559,6 +560,7 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=10').get()) {
   require('./task-products').backupTasksBoard(db,DATABASE_PATH);
   migrate(10, () => require('./task-products').migrateTasksBoard(db));
 }
+migrate(12, () => require('./task-owner-question').migrateOwnerQuestions(db));
 
 // Расходы по компании (spec 111): добавочная колонка, проверенный бэкап до транзакции.
 if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(companyExpenses.MIGRATION_VERSION)) {
@@ -651,6 +653,8 @@ const handleContentFactoryCompletion=require('./content-factory-completion-http'
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
+const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation}),
+  companyModuleContext,readJson,send,trustedService:request=>!request.headers[CRM_IDENTITY_HEADER]});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
@@ -666,7 +670,8 @@ const contentPlanGeneration = createContentPlanService({mentor:mediaMentor,jobs:
 const handleContentFactoryContext=createContentFactoryContextHandler({generation:contentPlanGeneration,jobs:contentPlanJobs,companyModuleContext,readJson,send,
   planningInsights:{capture:(code,month)=>require('./content-factory-planning-insights').createPlanningInsights({stats:socialStats}).capture(code,month)}});
 const contentPlanDrafts = createContentPlanDrafts(db,{jobs:contentPlanJobs,autoposting});
-const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,companyModuleContext,readJson,send});
+const contentPlanWorkspace = require('./content-plan-workspace').createContentPlanWorkspace(db,{mentor:mediaMentor});
+const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,workspace:contentPlanWorkspace,companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 const vkDirect = createVkDirect(db,{apiKey:API_KEY});
@@ -698,6 +703,9 @@ const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
   analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
+const handleContentConnections = createContentConnectionsHandler({companyModuleContext, send,
+  connections: createContentConnections(db, {declared: declaredFromEnv(process.env.CONTENT_CONNECTIONS_DECLARED),
+    siteSource: createMetrikaSiteSource({sitesDir: process.env.CONTENT_CONNECTIONS_SITES_DIR || ''})})});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -728,6 +736,17 @@ const updateSale = db.prepare(
 const insertExpense = db.prepare(
   'INSERT INTO expenses (created_at, spent_at, source, amount, comment, company_code) VALUES (?, ?, ?, ?, ?, ?)'
 );
+// Первое касание посетителя для сшивки заявки с визитом (spec 112).
+const FIRST_TOUCH_DAYS = 30;
+const FIRST_TOUCH_FIELDS = {
+  utmSource: 'utm_source', utmMedium: 'utm_medium', utmCampaign: 'utm_campaign',
+  utmContent: 'utm_content', utmTerm: 'utm_term', referrer: 'referrer',
+};
+const leadFirstTouch = db.prepare(`
+  SELECT source, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer FROM events
+  WHERE company_code = ? COLLATE NOCASE AND client_id = ? AND type = 'visit' AND created_at >= ?
+  ORDER BY created_at ASC, id ASC LIMIT 1
+`);
 const insertEvent = db.prepare(`
   INSERT INTO events (
     created_at, type, company_code, client_id, page, landing_page, referrer, utm_source,
@@ -1422,8 +1441,20 @@ function takeRateLimit(request) {
   rateLimits.set(ip, recent);
 }
 
+// Сравнение секретов за постоянное время: сравниваются SHA-256 одинаковой длины,
+// поэтому ни длина, ни совпавший префикс ключа по времени ответа не угадываются.
+function sameSecret(value, expected) {
+  if (typeof value !== 'string' || typeof expected !== 'string' || !expected) return false;
+  const digest = (text) => createHash('sha256').update(text, 'utf8').digest();
+  return timingSafeEqual(digest(value), digest(expected));
+}
+
+function hasApiKey(request) {
+  return sameSecret(request.headers['x-api-key'], API_KEY);
+}
+
 function requireApiKey(request) {
-  if (request.headers['x-api-key'] !== API_KEY) fail(401, 'Неверный API-ключ');
+  if (!hasApiKey(request)) fail(401, 'Неверный API-ключ');
 }
 
 function crmIdentity(request) {
@@ -2611,6 +2642,7 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
+  if (await handleContentConnections(request,response,url,cors)) return;
   if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/quote','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
@@ -2637,6 +2669,7 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
+  if(await handleReelMaterials(request,response,url))return;
   // Детерминированные напоминания: ключ сервиса уже проверен общим маршрутом.
   // Сессионный proxy не получает новый способ обхода прав через служебный GET.
   if (url.pathname === '/autoposting/review-reminders' && request.method === 'GET') {
@@ -3163,18 +3196,43 @@ async function route(request, response) {
         { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
       checkPublicOrigin(request, company, url.pathname);
     }
+    // Публичная форма получает только номер заявки и признак дубля. Полная запись — только
+    // доверенным сервисам с API-ключом: иначе по телефону можно прочитать чужую заявку (№97).
+    const trusted = hasApiKey(request);
+    const leadResponse = (lead, deduplicated) => trusted
+      ? { ...serializeLead(lead), deduplicated } : { id: lead.id, deduplicated };
     const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) {
       emailOutbox.enqueue(duplicate, {repeated: true});
-      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
+      send(response, 200, leadResponse(duplicate, true), cors);
       void deliverLeadEmails();
       return;
     }
-    const utmSource = optionalString(body.utmSource, 'utmSource');
-    const referrer = optionalString(body.referrer, 'referrer');
+    const clientId = optionalString(body.clientId, 'clientId');
     const sourceInput = optionalString(body.source, 'source');
+    const tags = {
+      utmSource: optionalString(body.utmSource, 'utmSource'),
+      utmMedium: optionalString(body.utmMedium, 'utmMedium'),
+      utmCampaign: optionalString(body.utmCampaign, 'utmCampaign'),
+      utmContent: optionalString(body.utmContent, 'utmContent'),
+      utmTerm: optionalString(body.utmTerm, 'utmTerm'),
+      referrer: optionalString(body.referrer, 'referrer'),
+    };
+    // Сшивка с визитом (spec 112): без своих utmSource, referrer и source заявка берёт первое касание
+    // того же посетителя этой компании за 30 дней. Поля, заполненные формой, не перезаписываются.
+    const firstTouch = companyCode && clientId && !sourceInput && !tags.utmSource && !tags.referrer
+      ? leadFirstTouch.get(companyCode, clientId, new Date(Date.now() - FIRST_TOUCH_DAYS * 86400000).toISOString())
+      : null;
+    if (firstTouch) {
+      // Данные формы важнее: из визита заполняются только пустые поля.
+      for (const [field, column] of Object.entries(FIRST_TOUCH_FIELDS)) {
+        if (!tags[field]) tags[field] = firstTouch[column] || null;
+      }
+    }
+    const { utmSource, referrer } = tags;
     const derived = deriveSource({ utmSource, referrer });
-    const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
+    const source = sourceInput || (firstTouch && firstTouch.source !== 'direct' ? firstTouch.source : null) ||
+      (utmSource ? derived : (derived === 'direct' ? null : derived));
     const landingPage = optionalString(body.landingPage, 'landingPage');
     let row;
     db.exec('BEGIN IMMEDIATE');
@@ -3191,11 +3249,11 @@ async function route(request, response) {
         optionalString(body.firstQuestion, 'firstQuestion'),
         optionalString(body.comment, 'comment'),
         utmSource,
-        optionalString(body.utmMedium, 'utmMedium'),
-        optionalString(body.utmCampaign, 'utmCampaign'),
-        optionalString(body.utmContent, 'utmContent'),
-        optionalString(body.utmTerm, 'utmTerm'),
-        optionalString(body.clientId, 'clientId'),
+        tags.utmMedium,
+        tags.utmCampaign,
+        tags.utmContent,
+        tags.utmTerm,
+        clientId,
         referrer,
         landingPage,
         companyCode
@@ -3208,7 +3266,7 @@ async function route(request, response) {
       db.exec('ROLLBACK');
       throw error;
     }
-    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    send(response, 201, leadResponse(row, false), cors);
     void deliverLeadEmails();
     return;
   }
@@ -3470,7 +3528,7 @@ function shutdown() {
   });
 }
 
-module.exports = { deriveSource };
+module.exports = { deriveSource, sameSecret };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

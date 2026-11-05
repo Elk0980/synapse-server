@@ -24,7 +24,7 @@ async function unusedPort() {
   return port;
 }
 
-async function startFixture({installDocuments = true, installArchive = false,watchdogMode='observe',agentId=null} = {}) {
+async function startFixture({installDocuments = true, installArchive = false,watchdogMode='observe',agentId=null,claudeAgentId=0} = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-mcp-integration-'));
   const key = randomBytes(32).toString('hex');
   const token = randomBytes(32).toString('hex');
@@ -83,7 +83,7 @@ async function startFixture({installDocuments = true, installArchive = false,wat
         backupPath:path.join(dir, 'crm-before-archive.sqlite'), offlineConfirmation:'CRM_STOPPED'});
     }
     const crmUrl = await service('ops/crm', { DATABASE_PATH: path.join(dir, 'crm.sqlite'),
-      API_KEY: key, RATE_LIMIT_MAX: '10000',TASK_WATCHDOG_MODE:watchdogMode });
+      API_KEY: key, RATE_LIMIT_MAX: '10000',TASK_WATCHDOG_MODE:watchdogMode,TASK_WATCHDOG_CLAUDE_AGENT_ID:String(claudeAgentId) });
     const owner = Buffer.from(JSON.stringify({ v: 1, userId: 1, userName: 'Owner fixture',
       role: 'owner', permissions: ['crm.edit'], companyCodes: ['synapse-business', 'palitra-love'] })).toString('base64url');
     async function crm(route, method = 'GET', body, identity = owner) {

@@ -177,8 +177,14 @@ test('бриф и план Медиа-наставника через прокс
     assert.equal(savedPlan.body.plan.windowDays, 7);
     assert.equal(savedPlan.body.approval.status, 'pending');
     const shortPlan = await through('editor', ROOT + '/plan' + SCOPE,
-      {method: 'PUT', body: {planRevision: 1, briefRevision: 1, days: days(6)}});
+      {method: 'PUT', body: {planRevision: 1, briefRevision: 1, days: []}});
     assert.equal(shortPlan.status, 400);
+    const file={filename:'sample.csv',base64:Buffer.from('Дата,Тема\n2026-10-01,SAMPLE').toString('base64')};
+    const preview=ROOT+'/plan/import-preview'+SCOPE,options={method:'POST',body:file};
+    assert.deepEqual((await through('editor',preview,options)).body.rows,[['Дата','Тема'],['2026-10-01','SAMPLE']]);
+    for(const who of ['viewer','stranger','crmonly'])assert.equal((await through(who,preview,options)).status,403);
+    assert.equal((await through('editor',preview,{...options,headers:{'x-csrf-token':''}})).status,403);
+    assert.equal((await through('editor',ROOT+SCOPE)).body.plan.revision,1);
 
     // Решение по версии плана — только владелец, даже с правом autoposting.edit.
     const decision = {planRevision: 1, briefRevision: 1, decision: 'approved', comment: 'Берём в работу'};

@@ -390,3 +390,13 @@ test('маршрут разбора статистики зовёт статис
   assert.equal(which, 'review');
   assert.equal(briefAsked, false);
 });
+
+test('анкета контент-плана №98 попадает в задание Хью, пустые поля — нет', () => {
+  const s = createMediaMentorSuggest({ ask: fake('[]') });
+  const content = s.buildPrompt({ ...BRIEF, questionnaire: { goals: 'SAMPLE цель', tone: '', rubrics: 'SAMPLE рубрика',
+    frequency: '7 рилсов в неделю', platforms: ['vk'] } }, { startDate: '2026-09-21', days: 7 }).messages[0].content;
+  assert.ok(content.includes('Анкета контент-плана:'));
+  assert.ok(content.includes('Цели контента: SAMPLE цель.') && content.includes('Рубрики: SAMPLE рубрика.'));
+  assert.ok(content.includes('7 рилсов в неделю') && !content.includes('Тон:'));
+  assert.ok(!s.buildPrompt(BRIEF, { startDate: '2026-09-21', days: 7 }).messages[0].content.includes('Анкета'));
+});

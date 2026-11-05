@@ -1,0 +1,47 @@
+/* Упрощённый редактор рилса (агент Г, №98). Полноэкранная панель на телефоне, крупное окно на ПК. */
+.re-editor { position:fixed; inset:0; z-index:60; display:flex; flex-direction:column; gap:12px; padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  overflow-y:auto; overflow-x:hidden; background:var(--bg,#0f0d0c); color:var(--text,#f4f0eb); font-size:16px; }
+@media (min-width:900px) { .re-editor { inset:24px; border:1px solid var(--line,#34404d); border-radius:20px; box-shadow:0 30px 80px #000a; padding:20px 24px; } }
+.re-editor [hidden] { display:none !important; }
+.re-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.re-head h2 { margin:0; font-size:1.15rem; overflow-wrap:anywhere; }
+.re-head [data-close] { min-width:44px; min-height:44px; font-size:22px; }
+.re-body { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+@media (min-width:900px) { .re-body { grid-template-columns:minmax(220px,300px) minmax(0,1fr); } }
+.re-stage { min-width:0; }
+.re-stage video { display:block; width:100%; max-width:300px; max-height:52vh; aspect-ratio:9/16; margin:0 auto; background:#000; border-radius:16px; object-fit:contain; }
+.re-transport, .re-row { display:flex; flex-wrap:wrap; align-items:end; gap:8px; margin:8px 0; min-width:0; }
+.re-transport { justify-content:center; align-items:center; }
+.re-editor label { display:grid; gap:4px; font-size:14px; min-width:0; }
+.re-editor .re-inline { display:flex; align-items:center; gap:6px; }
+.re-editor :is(input[type=number],input[type=text],select,textarea) { min-height:44px; width:100%; min-width:0; padding:8px 10px; font:inherit; font-size:16px;
+  border:1px solid var(--line,#34404d); border-radius:10px; color:inherit; background:var(--surface-soft,#181513); }
+.re-row label { flex:1 1 90px; max-width:160px; }
+.re-editor input[type=range] { width:100%; min-width:0; margin:12px 0; accent-color:var(--accent,#9fd4ff); }
+.re-row .plain-button { min-height:44px; }
+.re-tools { min-width:0; }
+.re-captions ul { list-style:none; padding:0; display:grid; gap:6px; }
+.re-captions li { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:6px; align-items:center; }
+.re-captions summary { cursor:pointer; min-height:44px; display:flex; align-items:center; font-weight:600; }
+.re-mark > span { align-self:center; font-weight:600; }
+.re-tracks { display:grid; gap:8px; min-width:0; }
+.re-lane { display:grid; grid-template-columns:56px minmax(0,1fr); gap:8px; align-items:center; }
+.re-lane__name { font-size:13px; color:var(--muted,#b9afa7); }
+.re-clips { list-style:none; margin:0; padding:4px; display:flex; gap:3px; min-width:0; border-radius:10px; background:var(--surface-soft,#181513); }
+.re-clips li { flex-basis:0; min-width:28px; }
+.re-clip { width:100%; min-height:44px; padding:4px; font:inherit; font-size:12px; color:#fff; border:1px solid transparent; border-radius:8px; cursor:grab;
+  background:#3a5f8a; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+[data-track=audio].re-clip { background:#3d7a5a; }
+.re-clip.is-muted { background:repeating-linear-gradient(45deg,#3d4a44,#3d4a44 6px,#2b332f 6px,#2b332f 12px); }
+.re-clip.is-selected { border-color:#fff; outline:2px solid var(--accent,#9fd4ff); }
+.re-total { margin:0; font-size:14px; }
+.re-foot { display:flex; flex-wrap:wrap; align-items:end; gap:10px; }
+.re-grow { flex:1 1 220px; }
+.re-status:empty { display:none; }
+.re-status { margin:0; color:var(--muted,#b9afa7); overflow-wrap:anywhere; }
+.re-ask { position:fixed; inset:auto 0 0 0; z-index:61; padding:16px; border-top:1px solid var(--line,#34404d); background:var(--surface,#14110f); box-shadow:0 -20px 50px #000a; max-height:80vh; overflow-y:auto; }
+@media (min-width:900px) { .re-ask { inset:auto auto 48px 50%; transform:translateX(-50%); width:min(720px,90vw); border:1px solid var(--line,#34404d); border-radius:16px; } }
+.re-ask h3 { margin:0 0 8px; }
+.re-frames { display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px; margin:0 0 12px; }
+.re-frames figure { margin:0; text-align:center; font-size:12px; }
+.re-frames img, .re-noframe { display:block; width:100%; aspect-ratio:9/16; object-fit:cover; border-radius:6px; background:#222; }
