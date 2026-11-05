@@ -16,7 +16,7 @@ function load({permissions=['autoposting.view','autoposting.edit','autoposting.a
       if(p==='people/team-chat/rooms')return {viewerId:9,common:'common',hugh:'hugh:9',people:[]};
       if(p==='people/team-chat')return {messages:params.room==='common'?messages:[],hasMore:false,viewerId:9,room:params.room};
       throw Object.assign(Error('404'),{status:404});},
-    async post(p,body){calls.push(['POST',p,body]);return onPost?onPost(p,body):{};},
+    async post(p,body){calls.push(['POST',p,body]);if(p==='people/team-chat/read')return {unread:0};return onPost?onPost(p,body):{};},
     async raw(method,p,body,options){calls.push(['RAW',method,p,options?.headers]);return {ok:true,status:201,json:async()=>({url:'https://cabinet.test/content/publishing-assets/avokado/'+'d'.repeat(32)+'.jpg'})};}};
   const ctx={moduleId:'chats',companyCode:'avokado',companyName:'Авокадо',user:{id:9,role},permissions,can:p=>role==='owner'||permissions.includes(p),
     signal:new w.AbortController().signal,route:{path:'',params:new w.URLSearchParams({room:'common'})},api,navigate(){}};
@@ -60,7 +60,7 @@ test('«Согласовано»: один клик → существующий
   const f=load({onPost:(p)=>{if(fail)throw Object.assign(Error('Недостаточно прав'),{status:403});return {approval:{id:3,...card({status:'approved',statusLabel:'Согласовано — ждёт публикации',open:false,approvedBy:'Лена',approvedAt:'2026-11-05T10:05:00Z'})}};}});
   t.after(()=>f.w.close());await f.mount();await flush();
   f.host.querySelector('.rc-btn--ok').click();await flush();
-  const post=f.calls.find(c=>c[0]==='POST');
+  const post=f.calls.find(c=>c[0]==='POST'&&String(c[1]).startsWith('crm/'));
   assert.equal(JSON.stringify(post),JSON.stringify(['POST','crm/autoposting/reels/8/chat-approvals/3/approve',{}]));
   assert.equal(f.host.querySelector('.rc-status').textContent,'Согласовано — ждёт публикации');
   assert.match(f.host.querySelector('.rc-note').textContent,/Согласовано/);
@@ -82,13 +82,13 @@ test('«Нужны правки»: окно с текстом и скриншо�
   f.host.querySelector('.rc-btn--warn').click();
   const dialog=f.host.querySelector('.rc-dialog');assert.equal(dialog.getAttribute('role'),'dialog');
   dialog.querySelector('form').dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();
-  assert.equal(f.calls.filter(c=>c[0]==='POST').length,0,'пустой текст не отправляется');
+  assert.equal(f.calls.filter(c=>c[0]==='POST'&&String(c[1]).startsWith('crm/')).length,0,'пустой текст не отправляется');
   dialog.querySelector('textarea').value='Убери первые 2 секунды';
   const file=dialog.querySelector('input[type=file]'),shot=new f.w.File(['x'],'shot.png',{type:'image/png'});
   Object.defineProperty(file,'files',{value:[shot]});file.dispatchEvent(new f.w.Event('change'));
   dialog.querySelector('form').dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();
   assert.equal(JSON.stringify(f.calls.find(c=>c[0]==='RAW')),JSON.stringify(['RAW','POST','publishing-assets',{'Content-Type':'image/png'}]));
-  const post=f.calls.find(c=>c[0]==='POST');
+  const post=f.calls.find(c=>c[0]==='POST'&&String(c[1]).startsWith('crm/'));
   assert.equal(post[1],'crm/autoposting/reels/8/chat-approvals/3/changes');
   assert.equal(JSON.stringify(post[2]),JSON.stringify({comment:'Убери первые 2 секунды',screenshotUrl:'https://cabinet.test/content/publishing-assets/avokado/'+'d'.repeat(32)+'.jpg'}));
   assert.equal(f.host.querySelector('.rc-dialog'),null,'окно закрылось');

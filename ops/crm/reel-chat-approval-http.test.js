@@ -134,3 +134,17 @@ test('Итоги публикации: прямые ссылки, Onlypult бе�
   const ig=view.publication.items.find(i=>i.platformId==='instagram');
   assert.deepEqual([ig.state,ig.url,ig.source],['published','https://www.instagram.com/reel/AbCdE12345/','receipt']);
 });
+
+test('Устаревание: площадку запроса убрали из публикации в «Постинге» → карточка закрыта, решение 409 (площадки не входят в версию содержимого)',async t=>{
+  const {request}=await startCrm(t);
+  await request('POST','/companies',{identity:owner,body:{code:'avokado',name:'Авокадо',timezone:'UTC'}});
+  const reel=(await request('POST','/autoposting/reels?companyCode=avokado',{identity:smm,body:{title:'Рилс №4',platforms:['instagram','vk'],mediaUrl:asset('avokado','f'),durationMs:9000}})).body;
+  const a=(await request('POST',`/autoposting/reels/${reel.id}/chat-approvals?companyCode=avokado`,{identity:smm,body:{clientRequestId:'s1',version:1,platformIds:['instagram','vk'],text:'Подпись'}})).body.approval;
+  const post=(await request('GET',`/autoposting/posts/${a.postId}?companyCode=avokado`,{identity:owner})).body;
+  const patched=await request('PATCH',`/autoposting/posts/${a.postId}?companyCode=avokado`,{identity:owner,body:{revision:post.revision,platformIds:['vk']}});
+  assert.equal(patched.status,200,JSON.stringify(patched.body));assert.equal(patched.body.contentRevision,post.contentRevision,'версия содержимого не изменилась');
+  const view=(await request('GET',`/autoposting/reels/${reel.id}/chat-approvals/${a.id}?companyCode=avokado`,{identity:lena})).body.approval;
+  assert.equal(view.status,'stale');assert.equal(view.open,false);
+  assert.equal((await request('POST',`/autoposting/reels/${reel.id}/chat-approvals/${a.id}/approve?companyCode=avokado`,{identity:lena,body:{}})).status,409);
+  assert.equal((await request('POST',`/autoposting/reels/${reel.id}/chat-approvals/${a.id}/changes?companyCode=avokado`,{identity:lena,body:{comment:'x'}})).status,409);
+});

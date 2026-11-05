@@ -45,6 +45,10 @@ function createReelChatApproval(db,{materials,autoposting,mediaOrigins=process.e
   const postOf=(code,id)=>{try{return autoposting.get(id,code);}catch(error){if([404,409].includes(error.status))return null;throw error;}};
   const caption=post=>String(post?.text||'').trim()||Object.values(post?.captions||{}).find(v=>String(v).trim())||'';
   const same=(a,b)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
+  /* Решение относится к тексту, файлу и площадкам на момент отправки. Площадки не входят в content_revision
+     автопостинга, поэтому убранная из публикации площадка запроса проверяется отдельно. */
+  const changed=(post,row)=>post.contentRevision!==row.content_revision||post.mediaUrls[0]!==row.media_url
+    ||!parse(row.platform_ids,[]).every(p=>post.platformIds.includes(p));
 
   /* Отправка в чат. Порядок: проверить вход до создания черновика → найти/создать публикацию версии →
      подпись и площадки → «на согласование» → запрос. Функции автопостинга транзакционны сами по себе. */
@@ -90,15 +94,14 @@ function createReelChatApproval(db,{materials,autoposting,mediaOrigins=process.e
     const row=rowFor(owner,reelId,id);
     if(row.state==='superseded')fail(409,'Рилс уже отправлен на согласование заново — решайте по новой карточке','APPROVAL_SUPERSEDED');
     const post=postOf(owner.code,row.post_id);
-    if(!post||post.contentRevision!==row.content_revision||post.mediaUrls[0]!==row.media_url)
+    if(!post||changed(post,row))
       fail(409,'Публикация изменилась после отправки в чат — отправьте рилс на согласование заново','APPROVAL_STALE');
     return {row,post};
   }
   function approve(code,reelId,id,actor){
     const owner=company(db,code),{row,post}=openFor(owner,reelId,id);
     if(row.state==='changes_requested')fail(409,'По этой карточке уже попросили правки','APPROVAL_CLOSED');
-    const ids=parse(row.platform_ids,[]).filter(p=>post.platformIds.includes(p));
-    if(!ids.length)fail(409,'Площадки публикации изменились после отправки в чат — отправьте рилс заново','APPROVAL_STALE');
+    const ids=parse(row.platform_ids,[]);
     const already=ids.length&&ids.every(p=>post.platformApprovals.find(item=>item.platformId===p)?.approved);
     if(!already&&!post.approval?.approved)autoposting.approve(post.id,owner.code,{revision:post.revision,approved:true,platformIds:ids},actor);
     db.prepare('UPDATE reel_chat_approvals SET updated_at=? WHERE id=?').run(iso(),row.id);
@@ -170,7 +173,7 @@ function createReelChatApproval(db,{materials,autoposting,mediaOrigins=process.e
     else if(!post)status='unavailable';
     else if(started&&items.every(i=>TERMINAL.has(i.state)||i.state==='none'))status=items.every(i=>i.state==='published')?'published':'partial';
     else if(started||post.status==='publishing')status='publishing';
-    else if(post.contentRevision!==row.content_revision)status='stale';
+    else if(changed(post,row))status='stale';
     else if(approved)status=post.status==='scheduled'?'scheduled':'approved';
     else if(post.review?.state==='rejected')status='returned';
     else status='pending';
