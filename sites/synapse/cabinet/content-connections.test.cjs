@@ -38,8 +38,8 @@ test('Подключения: статусы 🟢/🟡/🔴, ссылки тол
   assert.equal(status('instagram'), 'green'); assert.equal(status('metrika'), 'yellow'); assert.equal(status('vk'), 'red');
   assert.match(el.querySelector('[data-cc-summary]').textContent, /🟢 1 .*🟡 1 .*🔴 2/);
   assert.match(el.querySelector('[data-cc-platform="metrika"]').textContent, /данные в ЛК ещё не приходят/);
-  assert.equal(el.querySelector('[data-cc-platform="vk"] a').href, 'https://vk.com/demo');
-  assert.equal(el.querySelector('[data-cc-platform="max"] a'), null);
+  assert.equal(el.querySelector('[data-cc-platform="vk"] a[target="_blank"]').href, 'https://vk.com/demo');
+  assert.equal(el.querySelector('[data-cc-platform="max"] a[target="_blank"]'), null, 'javascript: не ссылка; остаётся только кнопка «Подключить» (№149)');
   assert.equal(el.querySelector('img'), null);
   assert.match(el.querySelector('[data-cc-platform="instagram"]').textContent, /LIVE/);
 });
@@ -79,4 +79,41 @@ test('Статистика: вкладка площадки, период, пр�
   const noRights = setup({ perms: ['autoposting.view'] });
   await noRights.registered['content-stats'].mount(noRights.el, noRights.ctx);
   assert.equal(noRights.calls.length, 0); assert.match(noRights.el.textContent, /Аналитика: просмотр/);
+});
+
+test('№149: кнопка «Подключить»/«Настроить» ведёт к полю ввода ключа; без поля в ЛК кнопки нет', async () => {
+  const platforms = [
+    { id: 'instagram', label: 'Instagram', status: 'green', statusText: 'Подключено', dataMode: 'live', facts: [], next: '' },
+    { id: 'youtube', label: 'YouTube', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: 'Ключ Onlypult' },
+    { id: 'telegram_channel', label: 'Telegram-канал', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: 'Токен бота' },
+    { id: 'vk', label: 'ВКонтакте', status: 'yellow', statusText: 'Частично', dataMode: 'manual', facts: [], next: '' },
+    { id: 'max', label: 'MAX', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: '' },
+    { id: 'tiktok', label: 'TikTok', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: '' },
+    { id: 'two_gis', label: '2ГИС', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: 'Организация 2ГИС' },
+    { id: 'metrika', label: 'Яндекс Метрика', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: 'Доступ к API' },
+    { id: 'yandex_direct', label: 'Яндекс Директ', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: '' },
+    { id: 'telegram_bot', label: 'Telegram-бот', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: '' },
+    { id: 'yclients', label: 'YCLIENTS', status: 'red', statusText: 'Не подключено', dataMode: 'none', facts: [], next: '' }];
+  const reply = () => ({ companyCode: 'demo-a', days: 14, checkedAt: '2026-11-05T05:00:00Z', platforms });
+  const { el, registered, ctx } = setup({ reply });
+  await registered['content-connections'].mount(el, ctx);
+  const setup149 = (id) => el.querySelector(`[data-cc-platform="${id}"] [data-cc-setup]`);
+  assert.equal(setup149('youtube').dataset.ccChannel, 'youtube_shorts'); assert.equal(setup149('youtube').tagName, 'BUTTON');
+  assert.equal(setup149('youtube').textContent, 'Подключить');
+  assert.equal(setup149('instagram').dataset.ccChannel, 'instagram');
+  assert.equal(setup149('instagram').textContent, 'Настроить', 'подключённой площадке — «Настроить»');
+  assert.equal(setup149('telegram_channel').dataset.ccChannel, 'telegram');
+  assert.equal(setup149('vk').dataset.ccChannel, 'vk');
+  assert.equal(setup149('max').dataset.ccChannel, 'max');
+  assert.equal(setup149('tiktok').dataset.ccChannel, 'tiktok');
+  assert.equal(setup149('two_gis').getAttribute('href'), '#platform-demand');
+  for (const id of ['metrika', 'yandex_direct', 'telegram_bot', 'yclients']) assert.equal(setup149(id), null, `${id}: поля ввода в ЛК нет — кнопки нет`);
+  assert.ok(el.querySelector('[data-cc-channels]'), 'секция «Подключение площадок» есть на экране');
+  assert.equal(el.querySelector('[data-cc-channels]').closest('details'), null, 'без свёрток');
+  assert.match(el.querySelector('[data-cc-platform="youtube"] .cc-next').textContent, /Что нужно: Ключ Onlypult/, 'текст «Что нужно» остаётся');
+  // Только право аналитики: кнопок постинга нет, 2ГИС остаётся.
+  const analytics = setup({ perms: ['analytics.view'], reply });
+  await analytics.registered['content-connections'].mount(analytics.el, analytics.ctx);
+  assert.equal(analytics.el.querySelector('[data-cc-platform="youtube"] [data-cc-setup]'), null);
+  assert.ok(analytics.el.querySelector('[data-cc-platform="two_gis"] [data-cc-setup]'));
 });

@@ -40,3 +40,11 @@
   .cs-table td::before { content: attr(data-label); color: var(--muted, #5b6472); text-align: left; }
   .cs-table td:empty { display: none; }
 }
+/* №149: кнопка «Подключить»/«Настроить» рядом со ссылкой на площадку; на 390 px — в столбик без обрезки. */
+.cc-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.cc-root a.cc-setup { color: var(--text, inherit); text-decoration: none; }
+.cc-channels { display: grid; gap: 12px; }
+.cc-channels h2 { margin: 0; font-size: 1.15rem; }
+.cc-channels .ap-channels { min-width: 0; }
+.cc-channels .ap-channels > .card { margin: 0 0 16px; }
+.cc-channels .autoposting-channel { min-width: 0; overflow-wrap: anywhere; }
