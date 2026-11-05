@@ -423,3 +423,28 @@ test('анкета контент-плана №98 попадает в зада�
   assert.ok(content.includes('7 рилсов в неделю') && !content.includes('Тон:'));
   assert.ok(!s.buildPrompt(BRIEF, { startDate: '2026-09-21', days: 7 }).messages[0].content.includes('Анкета'));
 });
+
+test('№136: площадки из тела только сужают бриф сервера; чужую площадку добавить нельзя', async () => {
+  const seen = [];
+  const r = createMediaMentorSuggestRoute(routeDeps({
+    suggester: { ...routeDeps().suggester, suggest: async (brief) => { seen.push(brief.platforms); return { status: 'ok', items: [], dropped: [], notice: 'n' }; } },
+    readBody: async (request) => ({ startDate: '2026-09-21', days: 7, platforms: request.platforms }),
+  }));
+  for (const platforms of [['telegram'], ['telegram', 'instagram'], [], undefined]) await r.handle({ ...req(), platforms }, {}, link());
+  assert.deepEqual(seen, [['telegram'], ['telegram'], [], ['vk', 'telegram']]);
+  assert.deepEqual(BRIEF.platforms, ['vk', 'telegram'], 'бриф не изменён');
+});
+
+test('№136: пустой список площадок — brief_incomplete без обращения к модели', async () => {
+  let asked = false;
+  const s = createMediaMentorSuggest({ ask: async () => { asked = true; return { text: '[]' }; } });
+  let sent;
+  const r2 = createMediaMentorSuggestRoute(routeDeps({ suggester: s, sendJson: (_res, _status, body) => { sent = body; }, readBody: async () => ({ startDate: '2026-09-21', days: 7, platforms: [] }) }));
+  await r2.handle(req(), {}, link());
+  assert.equal(sent.status, 'brief_incomplete'); assert.equal(asked, false);
+});
+
+test('№136: площадки не списком — 400', async () => {
+  const r = createMediaMentorSuggestRoute(routeDeps({ readBody: async () => ({ startDate: '2026-09-21', days: 7, platforms: 'vk' }) }));
+  await assert.rejects(() => r.handle(req(), {}, link()), /списком/);
+});

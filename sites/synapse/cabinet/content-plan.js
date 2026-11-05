@@ -181,12 +181,17 @@
     await mount(container, ctx);
   }
 
-  /* Пустые поля брифа дополняются из анкеты; заполненные подтверждённые поля не переписываются. */
+  /* Пустые поля брифа дополняются из анкеты; заполненные подтверждённые поля не переписываются.
+     №136: площадки анкеты только добавляются в бриф — прежние не снимаются, чтобы строки уже
+     сохранённого плана по ним оставались допустимыми; Хью получает только площадки анкеты. */
+  const visiblePlatforms = () => { const boxes = [...state.container.querySelectorAll('[data-q-platform]')];
+    return boxes.length ? boxes.filter((box) => box.checked).map((box) => box.dataset.qPlatform) : [...(state.questionnaire.fields?.platforms || [])]; };
   async function briefFromQuestionnaire() {
     const {mentor, questionnaire: q, api} = state, b = mentor.brief.fields || {}, patch = {};
     if (!b.goal && q.fields.goals) patch.goal = q.fields.goals;
     if (!b.audience && q.fields.audience) patch.audience = q.fields.audience;
-    if (!(b.platforms || []).length && q.fields.platforms.length) patch.platforms = q.fields.platforms;
+    const known = b.platforms || [], missing = visiblePlatforms().filter((p) => !known.includes(p));
+    if (missing.length) patch.platforms = [...known, ...missing];
     if (!Object.keys(patch).length) return;
     state.mentor = await api.put('/brief', {revision: mentor.brief.revision, brief: patch, reason: 'Пустые поля брифа дополнены из анкеты контент-плана'});
   }
@@ -205,12 +210,23 @@
     const mine = state, node = mine.container.querySelector('[data-cp-suggest]');
     button.disabled = true; node.innerHTML = '<p class="cp-note" role="status">Хью составляет план… это может занять до минуты.</p>';
     try {
-      clearTimeout(mine.timer); await flush(); await mine.saving; await briefFromQuestionnaire();
+      clearTimeout(mine.timer); await flush(); await mine.saving;
       if (state !== mine) return;
-      if (!(mine.questionnaire.fields?.platforms || []).length && !(mine.mentor.brief.fields?.platforms || []).length) { askPlatforms(node); return; }
-      const answer = await mine.api.suggest({startDate: mine.container.querySelector('[data-cp-start]').value,
-        days: Number(mine.container.querySelector('[data-cp-days]').value)});
+      // №136: площадки — только из видимой анкеты; скрытый бриф не в счёт. Пусто — модель не вызывается.
+      const platforms = visiblePlatforms();
+      if (!platforms.length) { askPlatforms(node); return; }
+      await briefFromQuestionnaire();
+      const request = {startDate: mine.container.querySelector('[data-cp-start]').value,
+        days: Number(mine.container.querySelector('[data-cp-days]').value)};
+      let answer;
+      try { answer = await mine.api.suggest({...request, platforms}); }
+      catch (err) {
+        // Сервер до №136 не знает поле platforms: повтор без него, лишние площадки отсекаются ниже.
+        if (!/лишние поля/i.test(err.message || '')) throw err;
+        answer = await mine.api.suggest(request);
+      }
       if (state !== mine) return;
+      if (Array.isArray(answer.items)) answer = {...answer, items: answer.items.filter((i) => platforms.includes(i.platform))};
       if (answer.status === 'brief_incomplete') { askPlatforms(node); return; }
       mine.suggestion = answer.status === 'ok' ? answer.items : [];
       node.innerHTML = mine.suggestion.length ? `<p class="cp-note">${esc(answer.notice || '')}</p><ol class="cp-suggest">${mine.suggestion.map((i) =>
