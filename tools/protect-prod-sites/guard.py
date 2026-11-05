@@ -3,6 +3,8 @@ import argparse
 import json
 import os
 import re
+import unicodedata
+from datetime import datetime
 import urllib.parse
 import urllib.request
 from pathlib import PurePosixPath, Path
@@ -50,6 +52,20 @@ PUBLIC_TOKENS = {
     'ops/crm/server.js': re.compile(r"'/leads'|'/events'|\bpublicPost\b|\bcheckPublicOrigin\b|\bcompanyDomains\b"),
 }
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+# Независимое ревью вместо метки Влада (поручение 05.11 15:37, задача №163, ревью 923):
+# «отказ ищется везде, одобрение — строго» (ревью 923, 934). Одобрение: первая строка исходного
+# текста комментария участника репозитория целиком «ПРИНЯТ PR <номер> @<полный sha>» на текущий
+# head и ни одного признака отказа в комментарии. Полный 40-символьный sha нельзя подобрать и
+# нельзя знать до push, поэтому дата коммита (её задаёт клиент) не нужна. Отказ: «не принят» /
+# «непринят» где угодно в нормализованном тексте (NFKC, без невидимых символов и разметки,
+# латинские двойники -> кириллица) или иной неоднозначный вердикт со словом «принят» в первой
+# строке. Более поздний отказ закрывает проверку независимо от sha; новый коммит — новый «ПРИНЯТ».
+APPROVAL = re.compile(r'ПРИНЯТ PR ([0-9]+) `?@?`?([0-9a-f]{40})`?')
+REJECTION = re.compile(r'(?:^| )не ?принят')
+VERDICT_WORD = re.compile(r'(?:^| )принят(?: |$)')
+LOOKALIKES = str.maketrans('HEPATOMKCXaeopcx', 'НЕРАТОМКСХаеорсх')
+TRUSTED_ASSOCIATIONS = {'OWNER', 'MEMBER', 'COLLABORATOR'}
+MAX_COMMENT_PAGES = 30
 
 
 def protected_blocks(path, source):
@@ -142,7 +158,63 @@ def required_labels(paths):
     return required
 
 
-def evaluate(pr, files, expected_sha, base_sources=None):
+def parse_time(value):
+    if not isinstance(value, str) or not value:
+        raise ValueError('Нет времени комментария; закрытый отказ')
+    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+
+def normalized(text):
+    """Text for verdict search: invisible chars, markup, lookalikes, case and punctuation removed."""
+    text = unicodedata.normalize('NFKC', text)
+    # Невидимые символы (soft hyphen U+00AD, zero-width U+200B–U+200F, U+2060, BOM — категория Cf)
+    # и разметка удаляются, а не заменяются пробелом: «ПРИ\u00adНЯТ», «**НЕ**ПРИНЯТ».
+    text = ''.join(ch for ch in text if unicodedata.category(ch) != 'Cf' and ch not in '*_~`#')
+    text = text.translate(LOOKALIKES).lower().replace('ё', 'е')
+    return re.sub(r'[^0-9a-zа-я]+', ' ', text).strip()
+
+
+def comment_verdict(body, number, head_sha):
+    """'reject' for any rejection or ambiguous verdict, 'approve' for the exact template, else None."""
+    if not isinstance(body, str):
+        return None
+    if REJECTION.search(normalized(body)):
+        return 'reject'  # отказ ищется во всём комментарии, в том числе рядом с одобрением
+    first = body.split('\n', 1)[0].rstrip('\r \t')
+    match = APPROVAL.fullmatch(first)
+    if match:
+        if int(match.group(1)) != int(number) or match.group(2) != head_sha:
+            return None  # точное одобрение другого PR/head — не вердикт этому head
+        return 'approve'
+    if VERDICT_WORD.search(normalized(first)):
+        return 'reject'  # неоднозначный вердикт первой строкой — закрытый отказ
+    return None
+
+
+def review_approval(number, head_sha, comments):
+    """Approval comment for the exact current head, or ValueError."""
+    if not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha):
+        raise ValueError('Неизвестен head sha для ревью')
+    verdicts = []
+    for comment in comments:
+        if comment.get('author_association') not in TRUSTED_ASSOCIATIONS:
+            continue  # публичный репозиторий: посторонний не принимает и не блокирует
+        kind = comment_verdict(comment.get('body'), number, head_sha)
+        if kind is None:
+            continue
+        verdicts.append((parse_time(comment.get('created_at')), comment.get('id') or 0, kind, comment))
+    if not verdicts:
+        raise ValueError('Нет метки и нет комментария первой строкой «ПРИНЯТ PR <номер> @<полный sha>»'
+                         ' на текущий head')
+    created, _, kind, comment = max(verdicts, key=lambda item: (item[0], item[1]))
+    if kind != 'approve':
+        raise ValueError('Последний вердикт ревью — «НЕ ПРИНЯТ» или неоднозначный; нужен новый'
+                         ' «ПРИНЯТ PR <номер> @<полный sha>»')
+    return {'by': (comment.get('user') or {}).get('login', ''), 'at': comment.get('created_at'),
+            'comment': comment.get('html_url', '')}
+
+
+def evaluate(pr, files, expected_sha, base_sources=None, load_review=None):
     if pr.get('state') != 'open' or pr.get('head', {}).get('sha') != expected_sha:
         raise ValueError('PR закрыт или событие относится к прежнему SHA')
     count = pr.get('changed_files')
@@ -170,9 +242,17 @@ def evaluate(pr, files, expected_sha, base_sources=None):
         required.add(INFRA)
     actual = {label['name'] for label in pr.get('labels', [])}
     missing = required - actual
+    result = {'head': expected_sha, 'requiredLabels': sorted(required), 'files': count,
+              'admission': 'labels'}
     if missing:
-        raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)))
-    return {'head': expected_sha, 'requiredLabels': sorted(required), 'files': count}
+        if load_review is None:
+            raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)))
+        try:
+            result['review'] = review_approval(pr.get('number'), expected_sha, load_review())
+        except ValueError as error:
+            raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)) + '; ' + str(error))
+        result['admission'] = 'review'
+    return result
 
 
 def fetch_json(repo, endpoint):
@@ -214,6 +294,21 @@ def merge_base_sources(repo, pr, files):
     return sources
 
 
+def fetch_review(repo, number):
+    """All PR conversation comments (read-only API)."""
+    comments = []
+    for page in range(1, MAX_COMMENT_PAGES + 1):
+        chunk = fetch_json(repo, '/issues/' + str(number) + '/comments?per_page=100&page=' + str(page))
+        if not isinstance(chunk, list):
+            raise ValueError('Некорректный ответ API комментариев')
+        comments.extend(chunk)
+        if len(chunk) < 100:
+            break
+    else:
+        raise ValueError('Слишком много комментариев PR; закрытый отказ')
+    return comments
+
+
 def check_remote(repo, number, expected_sha):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or not str(number).isdigit():
         raise ValueError('Некорректный репозиторий/PR')
@@ -234,7 +329,8 @@ def check_remote(repo, number, expected_sha):
                 sorted(label['name'] for label in value.get('labels', [])))
     if admission_state(latest) != admission_state(pr):
         raise ValueError('PR изменился во время проверки; повторите CI')
-    return evaluate(latest, files, expected_sha, sources)
+    return evaluate(latest, files, expected_sha, sources,
+                    load_review=lambda: fetch_review(repo, number))
 
 
 def publish_status(repo, sha, state):
@@ -259,12 +355,24 @@ def main():
     parser.add_argument('--publish-status', action='store_true')
     args = parser.parse_args()
     event = json.loads(Path(args.event).read_text(encoding='utf-8'))
-    pr = event['pull_request']
-    sha = pr['head']['sha']
+    if 'pull_request' in event:
+        number = event['pull_request']['number']
+        sha = event['pull_request']['head']['sha']
+    else:
+        # issue_comment: ревью-комментарий перезапускает проверку; статус — на текущий head.
+        issue = event.get('issue') or {}
+        if not issue.get('pull_request') or not str(issue.get('number', '')).isdigit():
+            raise ValueError('Событие не относится к PR')
+        number = issue['number']
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repo):
+            raise ValueError('Некорректный репозиторий/PR')
+        sha = fetch_json(args.repo, '/pulls/' + str(number)).get('head', {}).get('sha')
+        if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+            raise ValueError('Неизвестен head sha PR')
     if args.publish_status:
         publish_status(args.repo, sha, 'pending')
     try:
-        result = check_remote(args.repo, pr['number'], sha)
+        result = check_remote(args.repo, number, sha)
     except Exception:
         if args.publish_status:
             publish_status(args.repo, sha, 'failure')
