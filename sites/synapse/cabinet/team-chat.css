@@ -3,3 +3,4 @@
 #compose .attachment{background:transparent;border:0;min-width:24px;padding:4px;opacity:.5;cursor:default}.shell{height:var(--chat-height,100dvh)}
 
 #review-queue{max-height:25dvh;overflow:auto;overflow-wrap:anywhere}#review-queue p{margin:8px 0}
+.msg-link{overflow-wrap:anywhere;word-break:break-all}#messages li.has-video{width:min(100%,360px)}.msg-video{display:block;width:100%;max-width:100%;aspect-ratio:9/16;max-height:70vh;margin-top:6px;border-radius:10px;background:#000;object-fit:contain}

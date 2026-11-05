@@ -5,6 +5,28 @@
   const drafts=new Map(), messages=new Map();
   const fit=()=>document.documentElement.style.setProperty('--chat-height',String(window.visualViewport?.height || window.innerHeight)+'px');
   fit();window.visualViewport?.addEventListener('resize',fit);window.addEventListener('resize',fit);
+  // Ссылки в тексте: только http(s), target=_blank, rel=noopener noreferrer; остальное — текст без HTML.
+  // Видео из хранилища ЭТОЙ компании (…/content/publishing-assets/<код>/<имя>.mp4|.webm) дополнительно показывается плеером.
+  const ASSET_ORIGIN = 'https://synapse.synapsebusiness.ru';
+  const ownVideo = (url, companyCode) => {
+    const m = companyCode && url.origin === ASSET_ORIGIN && /^\/content\/publishing-assets\/([^/]+)\/[^/]+\.(?:mp4|webm)$/i.exec(url.pathname);
+    try { return Boolean(m) && decodeURIComponent(m[1]) === companyCode; } catch { return false; }
+  };
+  const richText = (target, value, companyCode) => {
+    const text = String(value ?? ''), re = /https?:\/\/[^\s<>"']+/giu, seen = new Set(); let last = 0, match;
+    while ((match = re.exec(text))) {
+      let raw = match[0];
+      while (/[.,;:!?)»\]]$/u.test(raw) && !(raw.endsWith(')') && raw.includes('('))) raw = raw.slice(0, -1);
+      let url; try { url = new URL(raw); } catch { continue; }
+      if (!/^https?:$/.test(url.protocol)) continue;
+      if (match.index > last) target.append(document.createTextNode(text.slice(last, match.index)));
+      const link = document.createElement('a'); link.className = 'msg-link'; link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = raw; target.append(link);
+      last = match.index + raw.length; re.lastIndex = last;
+      if (ownVideo(url, companyCode)) seen.add(url.href);
+    }
+    if (last < text.length) target.append(document.createTextNode(text.slice(last)));
+    return [...seen].map(href => { const v = document.createElement('video'); v.className = 'msg-video'; v.controls = true; v.setAttribute('playsinline', ''); v.preload = 'metadata'; v.src = href; return v; });
+  };
   const storageKey=code=>`team-chat:${context.user.id}:${code}`;
   const save=()=>{if(!company)return;drafts.set(company,$('text').value);try{sessionStorage.setItem(storageKey(company),JSON.stringify({text:$('text').value,pending}));}catch{}};
   async function api(path,body) {
@@ -20,7 +42,8 @@
     list.replaceChildren();
     for(const m of [...messages.values()].sort((a,b)=>a.id-b.id)) {
       const li=node('li','');li.id=`message-${m.id}`;if(m.user_id===context.user.id)li.className='own';
-      li.append(node('strong',m.author_name),node('span',m.text),node('time',new Date(m.created_at).toLocaleString('ru-RU')));
+      const body=node('span',''),videos=richText(body,m.text,company);if(videos.length)li.classList.add('has-video');
+      li.append(node('strong',m.author_name),body,...videos,node('time',new Date(m.created_at).toLocaleString('ru-RU')));
       if(m.answerAudit)li.append(node('small',`${m.answerAudit.model?m.answerAudit.model+' · ':''}${m.answerAudit.status==='approved'?'Проверено':m.answerAudit.status==='refused'?'Запрос отклонён':'Передано на проверку'}`));
       if(m.task_id)li.append(node('span',`Хью · задача №${m.task_id} на доске`));
       else if(m.command_state==='pending')li.append(node('span','Хью · создание задачи ещё не подтверждено'));

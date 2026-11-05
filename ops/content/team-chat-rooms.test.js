@@ -108,3 +108,28 @@ test('№127: личные чаты со всеми аккаунтами, кот
   await assert.rejects(f.send(5,'alvi','x',{room:'dm:5-6'}),{status:403},'собеседник из другой компании');
   await assert.rejects(f.send(6,'alvi','x'),{status:403});
 });
+test('непрочитанные: счёт по комнатам, отметка прочтения, личное и чужие компании не протекают',async t=>{
+  const f=fixture(t);
+  f.db.exec(`CREATE TABLE auth_users(id INTEGER PRIMARY KEY,display_name TEXT,role TEXT,must_change_password INTEGER DEFAULT 0);
+    CREATE TABLE auth_user_companies(user_id INTEGER,company_code TEXT);CREATE TABLE auth_user_permissions(user_id INTEGER,permission TEXT);CREATE TABLE company_team_members(user_id INTEGER PRIMARY KEY,company_code TEXT,staff_role TEXT)`);
+  for(const [id,name,role,codes,member] of [[1,'Влад','owner',[]],[2,'Лена','editor',['alvi'],'alvi'],[3,'Таня','editor',['alvi'],'alvi'],[4,'Петя','editor',['avokado'],'avokado']]) {
+    f.db.prepare('INSERT INTO auth_users VALUES(?,?,?,0)').run(id,name,role);f.db.prepare("INSERT INTO auth_user_permissions VALUES(?,'autoposting.view')").run(id);
+    for(const code of codes)f.db.prepare('INSERT INTO auth_user_companies VALUES(?,?)').run(id,code);
+    if(member)f.db.prepare("INSERT INTO company_team_members VALUES(?,?,'human_executor')").run(id,member);
+  }
+  await f.send(2,'alvi','Общее 1');await f.send(2,'alvi','Общее 2');await f.send(2,'alvi','Лично Тане',{room:'dm:2-3'});await f.send(2,'alvi','Мой лог',{room:'hugh:2'});
+  const tanya=f.chat.members(3,'alvi');
+  assert.equal(tanya.unread.common,2);assert.equal(tanya.unread['dm:2-3'],1);assert.equal(tanya.unreadTotal,3);
+  assert.ok(!('hugh:2' in tanya.unread),'чужой лог Хью не считается');
+  assert.equal(f.chat.members(2,'alvi').unread.common,0,'свои сообщения не непрочитанные');
+  assert.equal(f.chat.members(1,'alvi').unread['dm:2-3'],undefined,'владелец не видит счёт чужого личного чата');
+  assert.deepEqual(f.chat.markRead(3,'alvi',{room:'common'}),{room:'common',unread:0});
+  assert.equal(f.chat.members(3,'alvi').unreadTotal,1);
+  await f.send(2,'alvi','Общее 3');assert.equal(f.chat.members(3,'alvi').unread.common,1);
+  f.chat.markRead(3,'alvi',{room:'common',upTo:1});assert.equal(f.chat.members(3,'alvi').unread.common,1,'отметка не идёт назад');
+  assert.throws(()=>f.chat.markRead(3,'alvi',{room:'hugh:2'}),{status:403});
+  assert.throws(()=>f.chat.markRead(3,'alvi',{room:'dm:1-2'}),{status:403});
+  assert.throws(()=>f.chat.markRead(4,'alvi',{room:'common'}),{status:403},'другая компания');
+  assert.throws(()=>f.chat.markRead(3,'alvi',{room:'common',x:1}),{status:400});
+  assert.equal(f.chat.members(4,'avokado').unreadTotal,0,'сообщения alvi не считаются в avokado');
+});

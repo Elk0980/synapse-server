@@ -7,7 +7,7 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
     const reply=(status,body)=>{fresh(null);sendJson(response,status,body,{'cache-control':'private, no-store'});return true;};
     const company=()=>{const values=url.searchParams.getAll('companyCode');if(values.length!==1||!session.user.companyCodes.includes(values[0]))fail(403,'Выберите доступную компанию');return values[0];};
     // «Чаты» (№127): участник — исполнитель или аккаунт с доступом к компании; проверка в chat.access.
-    const chatRoute=path==='/team-chat'||path==='/team-chat/rooms';
+    const chatRoute=path==='/team-chat'||path==='/team-chat/rooms'||path==='/team-chat/read';
     const fresh=(code,owner=false)=>{
       const current=requireSession(request);
       if(current.user.id!==session.user.id||current.user.sessionVersion!==session.user.sessionVersion)fail(401,'Сессия изменилась. Войдите заново');
@@ -61,6 +61,7 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
     const code=company();fresh(code);
     if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before'),url.searchParams.get('room')||'common'));
     if(path==='/team-chat/rooms'&&method==='GET')return reply(200,chat.members(session.user.id,code));
+    if(path==='/team-chat/read'&&method==='POST')return reply(200,chat.markRead(session.user.id,code,await read(code)));
     if(path==='/my-board'&&method==='GET')return reply(200,await tasks.board(session.user.id,code));
     if(path==='/my-board/action'&&method==='POST')return reply(200,await tasks.boardAction(session.user.id,code,await read(code)));
     if(path==='/team-chat'&&method==='POST')return reply(200,await chat.send(session.user.id,code,await read(code)));

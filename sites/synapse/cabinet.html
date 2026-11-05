@@ -592,7 +592,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <div class="shell" id="app" hidden>
   <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
     <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы Контент завода">Контент завод</button><a href="#crm" data-view-link="crm">Заявки</a>
-    <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
+    <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты<span class="sbc-badge sbc-badge--tab" id="chats-badge-mobile" hidden></span></a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
   </nav>
   <div class="mobile-bar">
     <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
@@ -1664,6 +1664,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     chats.setAttribute("href", "#chats");
     Object.assign(chats.dataset, {viewLink: "chats", viewAlso: "hugh"});
     chats.textContent = "Чаты";
+    const chatsBadge = document.createElement("span");
+    chatsBadge.className = "nav-badge sbc-badge"; chatsBadge.id = "chats-badge"; chatsBadge.hidden = true;
+    chats.append(chatsBadge);
     byId("tasks-link").after(chats);
   })();
   let moduleController = null;
@@ -1944,6 +1947,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       if (identity.role === "owner") SbCabinet.initHughProviders?.({identity, byId, apiJson, escapeHTML});
       window.SynapseModules?.attachShell({identity: () => identity, company: selectedProject, apiJson, crmQuery,
         navigate: (route) => { location.hash = route; }, escapeHTML});
+      window.SynapseChatBadge?.start({apiJson, company: selectedProject, targets: [byId("chats-badge"), byId("chats-badge-mobile")]});
       window.SynapseModules?.onRegister(id => {
         // Поздняя регистрация: открытый экран модуля или его прежняя замена перерисовываются.
         if (id === currentView || MODULE_ROUTES[id]?.legacy === currentView || id === "content-materials") setView(viewFromHash());
