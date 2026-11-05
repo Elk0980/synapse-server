@@ -1471,7 +1471,8 @@ function crmIdentity(request) {
   if (!identity || Array.isArray(identity) || typeof identity !== 'object' || identity.v !== 1 ||
       !Number.isSafeInteger(identity.userId) || identity.userId < 1 ||
       !['companyCodes,permissions,userId,v', 'companyCodes,permissions,userId,userName,v',
-        'companyCodes,permissions,role,userId,v', 'companyCodes,permissions,role,userId,userName,v']
+        'companyCodes,permissions,role,userId,v', 'companyCodes,permissions,role,userId,userName,v',
+        'companyCodes,permissions,role,userId,userLogin,userName,v']
         .includes(Object.keys(identity).sort().join(','))) return null;
   if (!Array.isArray(identity.permissions) || identity.permissions.length > 100 ||
       !Array.isArray(identity.companyCodes) || identity.companyCodes.length > 100) return null;
@@ -1484,7 +1485,11 @@ function crmIdentity(request) {
   if (identity.userName !== undefined && (typeof identity.userName !== 'string' ||
       !identity.userName.trim() || identity.userName.length > 200)) return null;
   if (identity.role !== undefined && !['owner','editor'].includes(identity.role)) return null;
+  // Логин нужен «Задачам» сотрудника: исполнитель на доске может быть записан логином.
+  if (identity.userLogin !== undefined && (typeof identity.userLogin !== 'string' ||
+      !/^[a-z0-9_-]{1,64}$/.test(identity.userLogin))) return null;
   return taskPrincipals.bind(request,{ userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`, role: identity.role || 'editor',
+    ...(identity.userLogin ? { userLogin: identity.userLogin } : {}),
     permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) });
 }
 

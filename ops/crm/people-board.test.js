@@ -59,3 +59,36 @@ test('«Задачи» сотрудника на реальной CRM: разд�
     assert.ok(notes.some(t=>/«Удалённые»/.test(t))&&notes.some(t=>/Вернул/.test(t)));
   }finally{db.close();}
 });
+
+test('№125: «Мне поставили» видит задачи доски с исполнителем по имени или логину, только своей компании',async t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'crm-people-board-names-')),key=crypto.randomBytes(24).toString('hex');let child;
+  t.after(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}fs.rmSync(dir,{recursive:true,force:true});});
+  const probe=http.createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');const port=probe.address().port;await new Promise(r=>probe.close(r));
+  let output='';
+  child=spawn(process.execPath,[path.join(__dirname,'server.js')],{env:{PATH:process.env.PATH||'',PORT:String(port),DATABASE_PATH:path.join(dir,'crm.sqlite'),API_KEY:key},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+  for(let i=0;i<200&&!output.includes('слушает');i++)await new Promise(r=>setTimeout(r,25));assert.match(output,/слушает/);
+  const base=`http://127.0.0.1:${port}`,owner={v:1,userId:1,userName:'Владелец',role:'owner',companyCodes:['alpha'],permissions:['crm.view','crm.edit']};
+  const request=async(route,method,body,actor=owner)=>{const r=await fetch(base+route,{method,headers:{'content-type':'application/json','x-api-key':key,'x-synapse-crm-identity':Buffer.from(JSON.stringify(actor)).toString('base64url')},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+  for(const code of ['alpha','beta'])assert.equal((await request('/companies','POST',{code,name:code})).status,201);
+  let n=0;const create=async(title,executor,code='alpha')=>{const r=await request('/coordination/mcp/task_create','POST',{project:code,title,executor,client_ref:`board-names:${++n}`},{...owner,companyCodes:[code]});assert.ok([200,201].includes(r.status),JSON.stringify(r.body));return r.body.task;};
+  const byName=await create('Лена: сторис к акции','Лена'),byFull=await create('Пост про мастера','лена петрова'),byLogin=await create('Ответить на отзыв','lena_p');
+  const toVlad=await create('Влад: метка','Влад'),other=await create('Таня: прайс','Таня'),agent=await create('Код','Claude — код');
+  const foreign=await create('Лена в другой компании','Лена','beta');
+  const call=createPeopleCrmClient({crmUrl:base,apiKey:key});
+  const lena={id:2,login:'lena_p',displayName:'Лена Петрова',role:'editor',companyCodes:['alpha'],permissions:['tasks.self.view','tasks.self.edit']};
+  const board=await call('myBoard',{},lena,'alpha');
+  assert.deepEqual(board.assigned.map(t=>t.id).sort((a,b)=>a-b),[byName.id,byFull.id,byLogin.id]);
+  const text=JSON.stringify(board);
+  for(const hidden of [toVlad,other,agent,foreign])assert.ok(!text.includes(hidden.title),`не своё: ${hidden.title}`);
+  // Карточка открывается по тем же правилам, чужая — нет.
+  assert.equal((await call('task_get',{task_id:byName.id},lena,'alpha')).id,byName.id);
+  await assert.rejects(call('task_get',{task_id:other.id},lena,'alpha'),{status:404});
+  await assert.rejects(call('myBoard',{},lena,'beta'),{status:403});
+  // Владелец «Влад» (логин не совпадает с именем доски) видит свою задачу и не получает чужие в «Мне поставили».
+  const vlad={id:1,login:'vladislav',displayName:'vladislav',role:'owner',companyCodes:['alpha'],permissions:[]};
+  assert.deepEqual((await call('myBoard',{},vlad,'alpha')).assigned.map(t=>t.id),[toVlad.id]);
+  // Ошибочный логин в личности отклоняется CRM.
+  const bad=await request('/internal/people/myBoard?companyCode=alpha','GET',undefined,{v:1,userId:2,userName:'Лена',userLogin:'Лена!',role:'editor',companyCodes:['alpha'],permissions:['tasks.self.view']});
+  assert.ok([401,403].includes(bad.status),String(bad.status));
+});

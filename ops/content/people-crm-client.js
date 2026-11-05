@@ -15,7 +15,8 @@ function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
     // компанию и назначение. Человек никогда не представляется владельцем.
     const permissions=[permission];
     if(action==='teamChatContext'&&user.permissions?.includes('content-plan.approve'))permissions.push('content-plan.approve');
-    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode]};
+    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode],
+      ...(typeof user.login==='string'&&/^[a-z0-9_-]{1,64}$/.test(user.login)?{userLogin:user.login}:{})};
     const readOnly=['mediaMentor','taskRecords','teamChatContext','myBoard'].includes(action);
     const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
       (action==='taskRecords'?`&offset=${Number(args.offset)||0}`:'');
