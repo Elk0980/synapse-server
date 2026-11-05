@@ -8,6 +8,7 @@
 <title>Кабинет — Synapse Business</title>
 <link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
 <link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
+<script src="cabinet/view-as.js?v=20261105-1"></script>
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -683,6 +684,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div class="sidebar-footer">
       <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
         <div><strong id="account-name"></strong><span id="account-role"></span></div></div>
+      <button class="logout" id="view-as-start" type="button" hidden>Посмотреть как…</button>
       <button class="logout" id="logout" type="button">Выйти</button>
     </div>
   </aside>
@@ -1881,6 +1883,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         throw new Error("INVALID_IDENTITY");
       }
       identity = profile;
+      window.SynapseViewAs?.render(profile);
       identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
       allowedProjects = allowedProjectsFor(identity);
       selectedProjectId = readSelectedProject();
