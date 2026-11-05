@@ -285,6 +285,8 @@ function create(container, context) {
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Согласование относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и согласование ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без согласования; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></details>`;
   const get=id=>container.querySelector("#"+id), form=get("autoposting-form");
+  // №112: подключения каналов и ключи — отдельное право поверх правки материалов.
+  const channelsAllowed=()=>permitted(ctx,"edit")&&permitted(ctx,"channels");
   const edit=()=>permitted(ctx,"edit"), zone=()=>information?.profile?.timezone||settings?.timezone||"UTC";
   const channels=()=>Array.isArray(settings?.channels)?settings.channels:[];
   /* Готовность доставки — отдельно от согласования. Согласование говорит «владелец принял версию»,
@@ -442,7 +444,7 @@ function create(container, context) {
       const card=node.closest('[data-channel]');
       const needsProfile=node.matches('[data-channel-field="enabled"]')&&card.querySelector('[data-channel-field="provider"]').value==='onlypult'&&!card.querySelector('[data-channel-field="target"]').value.trim();
       if(needsProfile)node.checked=false;
-      node.disabled=busy||!edit()||needsProfile||(ctx.identity?.role!=='owner'&&node.closest('[data-owner-connection]')&&!node.matches('[data-check-channel]'));
+      node.disabled=busy||!channelsAllowed()||needsProfile||(ctx.identity?.role!=='owner'&&node.closest('[data-owner-connection]')&&!node.matches('[data-check-channel]'));
     });
     get("autoposting-preview").disabled=busy||!post||dirty();
     const approve=get("autoposting-approve");if(approve)approve.disabled=busy||!permitted(ctx,"approve")||!post||dirty()||!post.readiness?.ready;
@@ -1614,7 +1616,7 @@ function create(container, context) {
     const channel=channels().find(item=>item.id===node.dataset.channel);channelDrafts.set(companyCode+":"+channel.id,{revision:channel.revision,values:channelValues(node)});
   });
   get("autoposting-channels").addEventListener("change",event=>{
-    const node=event.target.closest('[data-channel]');if(!node||busy||!edit())return;
+    const node=event.target.closest('[data-channel]');if(!node||busy||!channelsAllowed())return;
     const channel=channels().find(item=>item.id===node.dataset.channel),values=channelValues(node);
     if(event.target.dataset.channelField==='provider'){values.target='';values.enabled=false;providerProfiles.delete(companyCode+':'+channel.id);}
     channelDrafts.set(companyCode+':'+channel.id,{revision:channel.revision,values});
@@ -1622,7 +1624,7 @@ function create(container, context) {
     controls();
   });
   get("autoposting-channels").addEventListener("submit",event=>{
-    const node=event.target.closest("[data-channel]");if(!node)return;event.preventDefault();if(busy||!edit()||!node.reportValidity())return;
+    const node=event.target.closest("[data-channel]");if(!node)return;event.preventDefault();if(busy||!channelsAllowed()||!node.reportValidity())return;
     const channel=channels().find(item=>item.id===node.dataset.channel), input=node.querySelector('[data-channel-field="token"]'), token=input.value.trim();
     if(ctx.identity?.role!=='owner'&&(channel.provider==='onlypult'||channelValues(node).provider==='onlypult')){message('Onlypult подключает владелец Synapse.');return;}
     const payload={id:channel.id,platform:channel.platform,...channelValues(node),revision:channelDrafts.get(companyCode+":"+channel.id)?.revision??channel.revision,...(token?{token}:{})};
@@ -1642,7 +1644,7 @@ function create(container, context) {
         providerProfiles.set(companyCode+':'+channel.id,result.profiles);renderChannels();if(!result.profiles.length)renderProfileDiagnostics(channel,result.diagnostics);message(result.profiles.length?'Выберите профиль этой компании, сохраните и проверьте доступ.':emptyProfilesMessage(channel,result.diagnostics));
       },'Загружаем профили…','Не удалось загрузить профили. Проверьте сохранённый ключ Onlypult.');return;
     }
-    const button=event.target.closest("[data-check-channel]");if(!button||busy||!edit())return;
+    const button=event.target.closest("[data-check-channel]");if(!button||busy||!channelsAllowed())return;
     const node=button.closest("[data-channel]"), channel=channels().find(item=>item.id===button.dataset.checkChannel);
     if(channelDrafts.has(companyCode+":"+channel.id)||node.querySelector('[data-channel-field="token"]').value){message("Сначала сохраните изменения подключения. Проверка использует сохранённые данные.");return;}
     void run(async current=>{const result=await request("/autoposting/settings/"+encodeURIComponent(channel.id)+"/check","POST",{});if(!current())return;const refreshed=await request("/autoposting/settings");if(!current())return;settings=refreshed;

@@ -16,6 +16,7 @@ const PERMISSIONS = Object.freeze([
   'site_editor.view', 'site_editor.edit', 'price.view', 'price.edit', 'chat.view', 'chat.reply',
   'settings.view', 'settings.edit', 'account.view', 'team.manage',
   'company-information.view', 'company-information.edit', 'autoposting.view', 'autoposting.edit', 'autoposting.approve',
+  'autoposting.channels',
   'actor-onboarding.self', 'actor-onboarding.manage',
   'tasks.self.view', 'tasks.self.edit',
   'content-plan.approve',
@@ -30,7 +31,9 @@ const DEPENDENCIES = Object.freeze({
   'settings.edit': ['settings.view'],
   'company-information.edit': ['company-information.view'],
   'autoposting.view': ['company-information.view'],
-  'autoposting.approve': ['autoposting.edit', 'autoposting.view', 'company-information.view'],
+  // Согласующему не нужны правка материалов и ключи каналов (№112).
+  'autoposting.approve': ['autoposting.view', 'company-information.view'],
+  'autoposting.channels': ['autoposting.edit', 'autoposting.view', 'company-information.view'],
   'autoposting.edit': ['autoposting.view', 'company-information.view'],
   'actor-onboarding.manage': ['actor-onboarding.self'],
   'tasks.self.edit': ['tasks.self.view'],
@@ -127,6 +130,18 @@ function createAuthStore(db, authUsers = '') {
         }
       }
       db.prepare("INSERT INTO auth_meta VALUES ('auth_users_imported_v1', ?)").run(now());
+    });
+  }
+
+  // №112: управление каналами и ключами выделено из autoposting.edit. Однократно выдать новое
+  // право всем, у кого уже есть edit, чтобы никто не потерял доступ. Только добавление строк.
+  if (!db.prepare("SELECT value FROM auth_meta WHERE key = 'autoposting_channels_v1'").get()) {
+    transaction(db, () => {
+      const users = db.prepare(`SELECT user_id FROM auth_user_permissions WHERE permission = 'autoposting.edit'
+        AND user_id NOT IN (SELECT user_id FROM auth_user_permissions WHERE permission = 'autoposting.channels')
+        ORDER BY user_id`).all().map((row) => row.user_id);
+      for (const userId of users) db.prepare("INSERT OR IGNORE INTO auth_user_permissions VALUES (?, 'autoposting.channels')").run(userId);
+      db.prepare("INSERT INTO auth_meta VALUES ('autoposting_channels_v1', ?)").run(JSON.stringify({ at: now(), users }));
     });
   }
 

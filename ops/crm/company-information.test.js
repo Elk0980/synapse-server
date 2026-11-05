@@ -72,7 +72,7 @@ test('real CRM API requires trusted identity, scopes editors and persists compan
   }
   const encode=identity=>Buffer.from(JSON.stringify({v:1,userId:1,permissions:[],companyCodes:[],...identity})).toString('base64url');
   const owner=encode({role:'owner'}),viewer=encode({role:'editor',permissions:['company-information.view','autoposting.view'],companyCodes:['qa']}),
-    editor=encode({role:'editor',permissions:['company-information.view','company-information.edit','autoposting.view','autoposting.edit'],companyCodes:['qa']}),
+    editor=encode({role:'editor',permissions:['company-information.view','company-information.edit','autoposting.view','autoposting.edit','autoposting.channels'],companyCodes:['qa']}),
     legacy=encode({permissions:['company-information.view'],companyCodes:['qa']});
   async function request(method,url,body,identity=owner,authenticated=true){
     const response=await fetch(`http://127.0.0.1:${port}${url}`,{method,headers:{...(authenticated?{'x-api-key':key}:{}),...(identity?{'x-synapse-crm-identity':identity}:{}),...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(5000)});

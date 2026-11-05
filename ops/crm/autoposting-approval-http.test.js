@@ -102,5 +102,20 @@ test('Palitra approve+schedule HTTP: existing edit/approve permissions, company 
   assert.equal(restored.status,200);assert.equal(restored.body.archive.archivedAt,null);
   assert.equal(restored.body.approval.approved,false);assert.equal(restored.body.scheduledAt,null);
   assert.deepEqual(restored.body.reviewNotes,rejected.body.reviewNotes);
-
+  // №112 на самой CRM (identity от доверенного прокси): решение без edit, ключи только с channels.
+  const approverOnly=encode({permissions:['autoposting.view','autoposting.approve'],companyCodes:['palitra-love']});
+  assert.equal((await request('POST',route,{body:{revision:restored.body.revision,approved:true,schedule:true},identity:approverOnly})).status,403,'schedule needs edit');
+  const decided=await request('POST',route,{body:{revision:restored.body.revision,approved:true},identity:approverOnly});
+  assert.equal(decided.status,200);assert.equal(decided.body.approval.approved,true);
+  assert.equal((await request('PATCH',`/autoposting/posts/${id}?companyCode=palitra-love`,{body:{revision:decided.body.revision,title:'x'},identity:approverOnly})).status,403);
+  const channel={id:'telegram',name:'QA',target:'@fixture_qa',enabled:false,revision:0,token:'123456:ABCDEFGHIJKLMNOPQRSTUVWX'};
+  for(const permissions of [['autoposting.view','autoposting.approve'],['autoposting.view','autoposting.edit'],['autoposting.view','autoposting.channels']]){
+    const identity=encode({permissions,companyCodes:['palitra-love']});
+    assert.equal((await request('PUT','/autoposting/settings?companyCode=palitra-love',{body:{channels:[channel]},identity})).status,403,permissions.join('+'));
+    assert.equal((await request('POST','/autoposting/settings/telegram/check?companyCode=palitra-love',{body:{},identity})).status,403,permissions.join('+'));
+    assert.equal((await request('GET','/autoposting/settings?companyCode=palitra-love',{identity})).status,200);
+  }
+  const keys=encode({permissions:['autoposting.view','autoposting.edit','autoposting.channels'],companyCodes:['palitra-love']});
+  const saved=await request('PUT','/autoposting/settings?companyCode=palitra-love',{body:{channels:[channel]},identity:keys});
+  assert.equal(saved.status,200);assert.equal(saved.body.channels.find(item=>item.id==='telegram').tokenConfigured,true);
 });

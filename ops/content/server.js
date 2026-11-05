@@ -645,7 +645,13 @@ async function proxyCrm(request, response, url, cors) {
     const code = url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
     if (identity.role !== 'owner') {
-      requirePermission(request, `${companyModule}.${readOnly ? 'view' : 'edit'}`, code);
+      // №112: согласование не требует правки материалов; каналы и ключи — отдельное право.
+      const decision = companyModule === 'autoposting' && /^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath);
+      requirePermission(request, `${companyModule}.${readOnly || decision ? 'view' : 'edit'}`, code);
+      if (companyModule === 'autoposting' && !readOnly &&
+          (crmPath === '/autoposting/settings' || /^\/autoposting\/settings\/[^/]+\/check$/.test(crmPath))) {
+        requirePermission(request, 'autoposting.channels', code);
+      }
     }
   }
   // Внедрение Медиа-наставника: этапы ведёт администратор Synapse, клиент читает их
