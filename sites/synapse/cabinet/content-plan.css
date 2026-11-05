@@ -70,8 +70,11 @@
   .cp-gen > button { grid-column:auto; height:44px; min-height:44px; padding-block:0; }
 }
 @media (max-width: 640px) {
-  .cp-line { grid-template-columns:auto 1fr; grid-template-areas:"n date" "topic topic" "pl st"; gap:4px 10px; }
-  .cp-n { grid-area:n; } .cp-date { grid-area:date; } .cp-topic { grid-area:topic; } .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; }
+  /* №143: площадки не делят колонку с номером — иначе колонка «auto» растягивается до их ширины,
+     дата переносится и обрезается, а статус налезает на площадки. Статус — отдельной строкой. */
+  .cp-line { grid-template-columns:max-content minmax(0,1fr); grid-template-areas:"n date" "topic topic" "pl pl" "st st"; gap:4px 10px; align-items:start; }
+  .cp-n { grid-area:n; } .cp-date { grid-area:date; white-space:nowrap; } .cp-topic { grid-area:topic; }
+  .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; justify-self:start; max-width:100%; white-space:normal; }
   .cp-actions { width:100%; } .cp-actions button { flex:1 1 140px; }
   .cp-script th { width:34%; }
   .cp-sheet-wrap { overflow:visible; border:0; }
