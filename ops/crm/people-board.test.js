@@ -60,7 +60,7 @@ test('«Задачи» сотрудника на реальной CRM: разд�
   }finally{db.close();}
 });
 
-test('№125: «Мне поставили» видит задачи доски с исполнителем по имени или логину, только своей компании',async t=>{
+test('№125: «Мне поставили» — исполнитель по однозначному имени/логину своей компании; тёзки и «Влад» не путаются',async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'crm-people-board-names-')),key=crypto.randomBytes(24).toString('hex');let child;
   t.after(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}fs.rmSync(dir,{recursive:true,force:true});});
   const probe=http.createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');const port=probe.address().port;await new Promise(r=>probe.close(r));
@@ -72,23 +72,34 @@ test('№125: «Мне поставили» видит задачи доски �
   const request=async(route,method,body,actor=owner)=>{const r=await fetch(base+route,{method,headers:{'content-type':'application/json','x-api-key':key,'x-synapse-crm-identity':Buffer.from(JSON.stringify(actor)).toString('base64url')},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
   for(const code of ['alpha','beta'])assert.equal((await request('/companies','POST',{code,name:code})).status,201);
   let n=0;const create=async(title,executor,code='alpha')=>{const r=await request('/coordination/mcp/task_create','POST',{project:code,title,executor,client_ref:`board-names:${++n}`},{...owner,companyCodes:[code]});assert.ok([200,201].includes(r.status),JSON.stringify(r.body));return r.body.task;};
-  const byName=await create('Лена: сторис к акции','Лена'),byFull=await create('Пост про мастера','лена петрова'),byLogin=await create('Ответить на отзыв','lena_p');
-  const toVlad=await create('Влад: метка','Влад'),other=await create('Таня: прайс','Таня'),agent=await create('Код','Claude — код');
-  const foreign=await create('Лена в другой компании','Лена','beta');
-  const call=createPeopleCrmClient({crmUrl:base,apiKey:key});
-  const lena={id:2,login:'lena_p',displayName:'Лена Петрова',role:'editor',companyCodes:['alpha'],permissions:['tasks.self.view','tasks.self.edit']};
-  const board=await call('myBoard',{},lena,'alpha');
-  assert.deepEqual(board.assigned.map(t=>t.id).sort((a,b)=>a-b),[byName.id,byFull.id,byLogin.id]);
-  const text=JSON.stringify(board);
-  for(const hidden of [toVlad,other,agent,foreign])assert.ok(!text.includes(hidden.title),`не своё: ${hidden.title}`);
-  // Карточка открывается по тем же правилам, чужая — нет.
-  assert.equal((await call('task_get',{task_id:byName.id},lena,'alpha')).id,byName.id);
-  await assert.rejects(call('task_get',{task_id:other.id},lena,'alpha'),{status:404});
-  await assert.rejects(call('myBoard',{},lena,'beta'),{status:403});
-  // Владелец «Влад» (логин не совпадает с именем доски) видит свою задачу и не получает чужие в «Мне поставили».
-  const vlad={id:1,login:'vladislav',displayName:'vladislav',role:'owner',companyCodes:['alpha'],permissions:[]};
-  assert.deepEqual((await call('myBoard',{},vlad,'alpha')).assigned.map(t=>t.id),[toVlad.id]);
-  // Ошибочный логин в личности отклоняется CRM.
-  const bad=await request('/internal/people/myBoard?companyCode=alpha','GET',undefined,{v:1,userId:2,userName:'Лена',userLogin:'Лена!',role:'editor',companyCodes:['alpha'],permissions:['tasks.self.view']});
-  assert.ok([401,403].includes(bad.status),String(bad.status));
+  const k={lena:await create('Лена: сторис','Лена'),petrova:await create('Пост про мастера','лена петрова'),login:await create('Ответить на отзыв','lena_p'),
+    vlad:await create('Влад: метка','Влад'),kozlov:await create('Козлов: макет','Влад Козлов'),tanya:await create('Таня: прайс','Таня'),
+    agent:await create('Код','Claude — код'),foreign:await create('Лена П. в другой компании','лена петрова','beta')};
+  const ed=(id,login,displayName,codes=['alpha'])=>({id,login,displayName,role:'editor',companyCodes:codes,permissions:['tasks.self.view','tasks.self.edit']});
+  const vlad={id:1,login:'vladislav',displayName:'vladislav',role:'owner',companyCodes:['alpha','beta'],permissions:[]};
+  const petrova=ed(2,'lena_p','Лена Петрова'),smirnova=ed(3,'lena_s','Лена Смирнова'),kozlov=ed(4,'vlad_k','Влад Козлов'),tanya=ed(5,'tanya','Таня'),
+    tanyaBeta=ed(6,'tanya_b','Таня Белова',['beta']);
+  const users=[vlad,petrova,smirnova,kozlov,tanya,tanyaBeta];
+  const call=createPeopleCrmClient({crmUrl:base,apiKey:key,authStore:{list:()=>users}});
+  const mine=async user=>(await call('myBoard',{},user,'alpha')).assigned.map(x=>x.id).sort((a,b)=>a-b);
+  // Тёзки: «Лена» не засчитывается ни Петровой, ни Смирновой; полное имя и логин — однозначны.
+  assert.deepEqual(await mine(petrova),[k.petrova.id,k.login.id]);
+  assert.deepEqual(await mine(smirnova),[]);
+  // «Влад» — только владельцу; редактор Влад Козлов видит лишь задачу на полное имя.
+  assert.deepEqual(await mine(vlad),[k.vlad.id]);
+  assert.deepEqual(await mine(kozlov),[k.kozlov.id]);
+  // Тёзка в другой компании не мешает: «Таня» в alpha однозначна.
+  assert.deepEqual(await mine(tanya),[k.tanya.id]);
+  // Карточка по тем же правилам; задача тёзки и другой компании закрыты.
+  assert.equal((await call('task_get',{task_id:k.petrova.id},petrova,'alpha')).id,k.petrova.id);
+  await assert.rejects(call('task_get',{task_id:k.lena.id},petrova,'alpha'),{status:404});
+  await assert.rejects(call('task_get',{task_id:k.vlad.id},kozlov,'alpha'),{status:404});
+  await assert.rejects(call('myBoard',{},petrova,'beta'),{status:403});
+  assert.ok(!JSON.stringify(await call('myBoard',{},petrova,'alpha')).includes(k.foreign.title));
+  // Без списка аккаунтов имена не засчитываются: только person:<id>.
+  assert.deepEqual((await createPeopleCrmClient({crmUrl:base,apiKey:key})('myBoard',{},petrova,'alpha')).assigned,[]);
+  // Подделанные имена в личности CRM: лишний ключ и слишком длинный список отклоняются.
+  const forged=async extra=>(await request('/internal/people/myBoard?companyCode=alpha','GET',undefined,{v:1,userId:2,userName:'Лена',role:'editor',companyCodes:['alpha'],permissions:['tasks.self.view'],...extra})).status;
+  assert.ok([401,403].includes(await forged({userAliases:['a','b','c','d','e','f','g']})));
+  assert.ok([401,403].includes(await forged({userLogin:'lena'})));
 });
