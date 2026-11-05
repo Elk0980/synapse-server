@@ -1,6 +1,6 @@
 {
   "id": "/board.html",
-  "name": "Synapse Задачи",
+  "name": "Синапс · Задачи",
   "short_name": "Задачи",
   "lang": "ru",
   "start_url": "/cabinet.html?board=1#tasks",
@@ -9,8 +9,9 @@
   "background_color": "#020d24",
   "theme_color": "#020d24",
   "icons": [
-    {"src":"brand/hugh-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"brand/hugh-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+    {"src":"brand/synapse-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"brand/synapse-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"brand/synapse-icon-512-maskable.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
   ],
   "shortcuts": [
     {"name":"План дня","url":"/cabinet.html?board=1#tasks/today"},

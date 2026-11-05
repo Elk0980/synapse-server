@@ -21,7 +21,7 @@ async function fixture(t) {
   let chat;const rebuild=()=>{const answers=createTeamChatAnswers({db,tasks,call,env,now:()=>clock});chat=createTeamChat({db,tasks,call,answers});};
   rebuild();let sequence=0;
   return {db,context,requests,rebuild,get chat(){return chat;},setDraft(v,ok=true){draft=v;approve=ok;},setHook(fn){hook=fn;},revoke(){allowed=false;},
-    demote(){owner=false;},setStatus(status){httpStatus=status;},advance(){clock+=30000;},send:(text='Что у меня в работе?')=>chat.send(2,'alvi',{text,clientMessageId:`synthetic-question-${++sequence}`}),
+    demote(){owner=false;},setStatus(status){httpStatus=status;},advance(){clock+=30000;},send:(text='Что у меня в работе?')=>chat.send(2,'alvi',{text:`Хью, ${text}`,clientMessageId:`synthetic-question-${++sequence}`}),
     audit:()=>db.prepare('SELECT * FROM team_chat_answers ORDER BY message_id DESC LIMIT 1').get(),get contextReads(){return contextReads;}};
 }
 test('3 вопроса → 3 проверенных ответа, реальный HTTP /reply, модель/журнал, repeat/restart',async t=>{
@@ -29,13 +29,13 @@ test('3 вопроса → 3 проверенных ответа, реальны
   for(const question of ['Что у меня в работе?','Какие темы снимаем сегодня?','Как снять ролик?'])await f.send(question);
   const messages=f.chat.list(2,'alvi').messages;assert.equal(messages.filter(m=>m.user_id===0).length,3);assert.equal(f.requests.length,6);
   assert.ok(messages.filter(m=>m.user_id===0).every(m=>m.answerAudit.model==='gpt-5.5'&&m.answerAudit.review_model==='gpt-5.5'&&m.answerAudit.status==='approved'&&m.answerAudit.checked_at));
-  const body={text:'Как снять ролик?',clientMessageId:'synthetic-question-3'};f.rebuild();await Promise.all([f.chat.send(2,'alvi',body),f.chat.send(2,'alvi',body)]);assert.equal(f.requests.length,6);
+  const body={text:'Хью, Как снять ролик?',clientMessageId:'synthetic-question-3'};f.rebuild();await Promise.all([f.chat.send(2,'alvi',body),f.chat.send(2,'alvi',body)]);assert.equal(f.requests.length,6);
   assert.equal(f.db.prepare('SELECT count(*) n FROM team_chat_messages').get().n,6);
   assert.ok(f.requests.every(r=>!JSON.stringify(r).includes('synthetic-runtime')));
 });
 test('недоступность и поздний ответ не показывают черновик; повтор не вызывает runtime снова',async t=>{
   const f=await fixture(t);f.setStatus(503);await f.send();assert.equal(f.audit().status,'review_required');
-  f.rebuild();await f.chat.send(2,'alvi',{text:'Что у меня в работе?',clientMessageId:'synthetic-question-1'});assert.equal(f.requests.length,1);
+  f.rebuild();await f.chat.send(2,'alvi',{text:'Хью, Что у меня в работе?',clientMessageId:'synthetic-question-1'});assert.equal(f.requests.length,1);
   f.setStatus(200);f.setHook(p=>{if(p.jobId.startsWith('team-review:'))f.advance();});await f.send();assert.equal(f.audit().status,'review_required');
   assert.equal(f.chat.list(2,'alvi').messages.filter(m=>m.user_id===0).length,1);
   assert.equal(f.chat.list(1,'alvi').reviewQueue.length,2);assert.equal(f.chat.list(2,'alvi').reviewQueue,undefined);
@@ -63,7 +63,7 @@ test('ответы доступны спрашивающему и владель
   await f.send();assert.equal(f.chat.list(3,'alvi').messages.length,100);assert.equal(f.chat.list(3,'alvi').hasMore,true);
   f.setStatus(503);await f.send('Нужна помощь');assert.equal(f.chat.list(3,'alvi').reviewQueue,undefined);
   assert.equal(f.chat.list(1,'alvi').reviewQueue.length,1);
-  await f.chat.send(1,'alvi',{text:'Что в работе?',clientMessageId:'owner-question-1'});
+  await f.chat.send(1,'alvi',{text:'Хью, что в работе?',clientMessageId:'owner-question-1'});
   const ownerAnswer=f.audit().reply_id;assert.ok(!f.chat.list(2,'alvi').messages.some(m=>m.id===ownerAnswer));
   f.demote();assert.equal(f.chat.list(1,'alvi').reviewQueue,undefined);
   assert.equal(f.chat.list(1,'alvi').messages.filter(m=>m.user_id===0).length,1);
@@ -82,9 +82,9 @@ test('отзыв и переназначение во время inference не 
 });
 test('сохранённый контекст перепроверяется до повторного обращения к рантайму',async t=>{
   const f=await fixture(t);await f.send();const saved=JSON.parse(f.audit().payload),calls=f.requests.length;
-  const id=Number(f.db.prepare('INSERT INTO team_chat_messages(company_code,user_id,author_name,text,client_id,created_at) VALUES(?,2,?,?,?,?)').run('alvi','Тест','Уточни план','resume-test',new Date().toISOString()).lastInsertRowid);
+  const id=Number(f.db.prepare('INSERT INTO team_chat_messages(company_code,user_id,author_name,text,client_id,created_at) VALUES(?,2,?,?,?,?)').run('alvi','Тест','Хью, уточни план','resume-test',new Date().toISOString()).lastInsertRowid);
   saved.jobId=`team-answer:${id}`;
   f.db.prepare("INSERT INTO team_chat_answers(message_id,status,payload) VALUES(?,'pending',?)").run(id,JSON.stringify(saved));
-  f.context.plan=[];f.rebuild();await f.chat.send(2,'alvi',{text:'Уточни план',clientMessageId:'resume-test'});
+  f.context.plan=[];f.rebuild();await f.chat.send(2,'alvi',{text:'Хью, уточни план',clientMessageId:'resume-test'});
   assert.equal(f.requests.length,calls);assert.equal(f.audit().status,'review_required');
 });

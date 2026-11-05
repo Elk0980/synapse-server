@@ -34,8 +34,8 @@
       });
       return `/content/${path}?${query}`;
     };
-    const write = (method) => (path, body, params) => shell.apiJson(url(path, params), {
-      method, signal, headers: { 'X-CSRF-Token': currentUser()?.csrfToken || '' },
+    const write = (method) => (path, body, params, options = {}) => shell.apiJson(url(path, params), {
+      method, signal, headers: { 'X-CSRF-Token': Object.hasOwn(options, 'csrfToken') ? options.csrfToken : currentUser()?.csrfToken || '' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     // Сырые байты (загрузка частями): Response как есть, CSRF добавляется для записи, cookie same-origin.

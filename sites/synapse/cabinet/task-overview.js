@@ -7,6 +7,18 @@
   const waitingField = value => waitPrefix.test(normalized(value));
   const stripWaitingPrefix = value => String(value || '').replace(/^\s*(?:жд[её]т\s+влада|вопрос\s*→\s*влад)(?![\p{L}\p{N}_])(?:[^\S\r\n]*[:—–-])?[^\S\r\n]*/iu,'');
   const isWaiting = task => waitingField(task.coordination?.blocker) || waitingField(task.coordination?.nextAction) || normalized(task.assignee_name) === 'влад';
+  const ownerText = (value,max=200,products=[]) => {
+    if (typeof value !== 'string' || /[\x00-\x1f\x7f\u2028\u2029/\\]|\b[0-9a-f]{12,}\b|\b\d{7,}\b/iu.test(value)) return '';
+    const clean=value.trim(); if (!clean || Array.from(clean).length>max) return '';
+    let words=clean;
+    for (const name of products.filter(name=>typeof name==='string'&&name.trim())) words=words.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'giu'),'');
+    return /\p{L}/u.test(words.replace(/\p{Script=Cyrillic}/gu,'')) || !/[а-яё]{2}/iu.test(words) ? '' : clean;
+  };
+  const decision = (task,products=[]) => {
+    const c=task.coordination || {}, names=[...products,task.product_name];
+    const question=ownerText(c.owner_question,120,names),yes=ownerText(c.if_yes,200,names),no=ownerText(c.if_no,200,names);
+    return question&&yes&&no&&Number.isInteger(c.owner_minutes)&&c.owner_minutes>=0&&c.owner_minutes<=120 ? {question,yes,no,minutes:c.owner_minutes} : null;
+  };
   const waitingNeed = task => {
     const coord = task.coordination || {};
     const value = waitingField(coord.blocker) ? coord.blocker : waitingField(coord.nextAction) ? coord.nextAction : coord.nextAction || title(task);
@@ -27,7 +39,7 @@
   const title = task => String(task.title || '').replace(/^\s*(?:Цель|Модуль|Направление)\s*·\s*/i,'').trim();
   const mean = members => members.length ? Math.round(members.reduce((sum,task) => sum+progress(task),0)/members.length) : 0;
   const taskOrder = (a,b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || a.id-b.id;
-  function build(records) {
+  function build(records,products=[]) {
     // Скрытые записи остаются в графе: активный потомок отменённого родителя
     // сохраняет принадлежность модулю, но сам родитель не входит в проценты.
     const rawTasks = records.filter(task => Number.isSafeInteger(task.id) && task.id > 0 && !task.product_placeholder && !task.is_deleted);
@@ -77,7 +89,8 @@
       const membership = modules.filter(module => module.allMembers.some(member => member.id === task.id));
       return {task,modules:membership,directions:membership,progress:progress(task),stage:stageText(task)};
     });
-    return {goals:goalModels,modules,directions:modules,structuralIds:[...structural],now,waiting:tasks.filter(isWaiting).sort((a,b) => String(a.waiting_since || '9999').localeCompare(String(b.waiting_since || '9999')) || a.id-b.id)};
+    const requests=tasks.filter(isWaiting);
+    return {goals:goalModels,modules,directions:modules,structuralIds:[...structural],now,unprepared:requests.filter(task=>!decision(task,products)),waiting:requests.filter(task=>decision(task,products)).sort((a,b) => String(a.waiting_since || '9999').localeCompare(String(b.waiting_since || '9999')) || a.id-b.id)};
   }
-  window.SbTaskOverview = Object.freeze({build,isWaiting,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
+  window.SbTaskOverview = Object.freeze({build,isWaiting,decision,ownerText,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
 })();

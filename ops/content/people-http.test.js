@@ -74,7 +74,7 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   const rule={enabled:false,userId:user.id,timezone:'Asia/Irkutsk',metric:'pendingIdeas',weekStart:'2026-11-09',morningHour:9,eveningHour:18};
   assert.equal((await request(scoped('/friday-rule'),owner,'PUT',rule)).status,200);
   const preview=await request(scoped('/friday-preview'),owner,'POST');assert.equal(preview.status,200);assert.equal((await preview.json()).summary.count,0);
-  const chatBody={text:'Внутреннее обсуждение',clientMessageId:'http-chat-36'};
+  const chatBody={text:'Хью, внутреннее обсуждение',clientMessageId:'http-chat-36'};
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody,false)).status,403);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
@@ -87,6 +87,15 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   assert.equal((await request(`/content/people/members/${peerId}`,owner,'PUT',{companyCode:'synapse-business',staffRole:'human_executor'})).status,200);
   const peer=await login('peer'),peerHistory=await(await request(scoped('/team-chat'),peer)).json();
   assert.equal(peerHistory.messages.length,1);assert.equal(peerHistory.reviewQueue,undefined);
+  // №98 Д: без обращения Хью молчит; личный чат двух сотрудников и лог Хью закрыты для третьих лиц.
+  assert.equal((await request(scoped('/team-chat'),peer,'POST',{text:'Коллеги, без Хью',clientMessageId:'http-chat-quiet'})).status,200);
+  assert.equal((await(await request(scoped('/team-chat'),peer)).json()).messages.length,2);
+  const rooms=await(await request(scoped('/team-chat/rooms'),human)).json();const dm=rooms.people.find(p=>p.name==='Коллега').room;
+  assert.equal(rooms.hugh,`hugh:${user.id}`);
+  assert.equal((await request(scoped('/team-chat')+`&room=${dm}`,human,'POST',{text:'Лично',clientMessageId:'http-chat-dm',room:dm})).status,200);
+  assert.equal((await(await request(scoped('/team-chat')+`&room=${dm}`,peer)).json()).messages[0].text,'Лично');
+  assert.equal((await request(scoped('/team-chat')+`&room=${encodeURIComponent(rooms.hugh)}`,peer)).status,403);
+  assert.equal((await request(scoped('/team-chat')+`&room=dm:${user.id+50}-${user.id+51}`,human)).status,403);
   assert.equal((await request('/content/people/team-chat?companyCode=alvi',human)).status,403);
   const beforeRevoke=calls;
   assert.equal((await request(`/content/admin/accounts/${user.id}/access`,owner,'PUT',{companies:['synapse-business'],permissions:[]})).status,200);
