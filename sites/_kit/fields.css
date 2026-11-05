@@ -1,0 +1,31 @@
+/* Site kit: поля ввода, textarea, флажки в стиле сайта. Источник — sites/_kit/fields.css.
+   Копии в sites/<сайт>/assets/kit/ создаёт tools/site-kit/sync.js: правьте только источник.
+   Все правила в :where() — нулевая специфичность: собственные правила сайта важнее,
+   kit лишь закрывает то, что сайт не оформил (системные флажки, фокус, ошибки). */
+
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]), textarea) {
+  box-sizing: border-box;
+  border: var(--kit-border-width, 1px) solid var(--kit-border, currentColor);
+  border-radius: var(--kit-radius, 8px);
+  background-color: var(--kit-bg, #fff);
+  color: var(--kit-fg, inherit);
+  font-family: var(--kit-font, inherit);
+  font-size: inherit;
+}
+:where(input, textarea)::placeholder { color: var(--kit-muted, #6b6b6b); opacity: 1; }
+:where(textarea) { min-height: 6em; resize: vertical; }
+:where(input:not([type="checkbox"], [type="radio"]), textarea):hover { border-color: var(--kit-accent, currentColor); }
+:where(input, textarea, button):focus-visible {
+  outline: 2px solid var(--kit-accent, currentColor);
+  outline-offset: 2px;
+}
+:where(input, textarea, select):user-invalid { border-color: var(--kit-danger, #b3261e); }
+:where(input, textarea, select):disabled { opacity: .6; cursor: not-allowed; }
+
+/* Флажки и переключатели — системные (доступны и понятны), но в цвете сайта. */
+:where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--kit-accent, auto);
+  width: 1.15em;
+  height: 1.15em;
+  cursor: pointer;
+}
