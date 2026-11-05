@@ -1757,3 +1757,20 @@ test('итог правки виден у сообщения: применена
   assert.ok(harness.d.querySelector('[data-pc-message-edit="failed"]'), 'после ошибки можно поставить новую правку');
   harness.w.close();
 });
+
+test('ссылки в сообщениях: только http(s), видео своей компании — плеер, чужие — только ссылка', async () => {
+  const own = 'https://synapse.synapsebusiness.ru/content/publishing-assets/palitra-love/reel1.mp4';
+  const other = 'https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/reel2.mp4';
+  const text_ = `Смотри ${own}, ещё ${other} и https://evil.example/a.mp4 javascript:alert(1) <img src=x onerror=alert(1)> http://x.ru/"onmouseover="y`;
+  const h = boot({ routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [message({ text: text_ })] }) }) } });
+  await mount(h);
+  const links = [...h.d.querySelectorAll('.pc-message-text a')];
+  assert.deepEqual(links.map((a) => a.getAttribute('href')), [own, other, 'https://evil.example/a.mp4', 'http://x.ru/']);
+  assert.ok(links.every((a) => a.target === '_blank' && a.rel === 'noopener noreferrer'));
+  const videos = [...h.d.querySelectorAll('video.pc-video')];
+  assert.deepEqual(videos.map((v) => v.getAttribute('src')), [own]);
+  assert.ok(videos[0].controls && videos[0].hasAttribute('playsinline') && videos[0].getAttribute('preload') === 'metadata');
+  assert.equal(h.d.querySelector('.pc-message-text img'), null);
+  assert.match(h.d.querySelector('.pc-message-text').textContent, /<img src=x onerror=alert\(1\)>/);
+  h.dom.window.close();
+});

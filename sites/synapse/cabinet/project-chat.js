@@ -278,11 +278,31 @@
     if (edit.status === "sent") return `<small>${escape(editStates.sent)}${message.editedAt ? ` ${escape(date(message.editedAt))}` : ""}</small>`;
     return `<small>${escape(editStates[edit.status])}</small>`;
   };
+  // Ссылки в тексте: только http(s), target=_blank, rel=noopener noreferrer; остальное экранируется.
+  // Видео из хранилища ЭТОЙ компании (…/content/publishing-assets/<код>/<имя>.mp4|.webm) показывается плеером под текстом.
+  const ASSET_ORIGIN = "https://synapse.synapsebusiness.ru";
+  const ownVideo = (url, company) => {
+    const m = company && url.origin === ASSET_ORIGIN && /^\/content\/publishing-assets\/([^/]+)\/[^/]+\.(?:mp4|webm)$/i.exec(url.pathname);
+    try { return Boolean(m) && decodeURIComponent(m[1]) === company; } catch { return false; }
+  };
+  const richText = (value, company) => {
+    const text = String(value ?? ""), re = /https?:\/\/[^\s<>"']+/giu, seen = new Set(); let html = "", last = 0, match;
+    while ((match = re.exec(text))) {
+      let raw = match[0];
+      while (/[.,;:!?)»\]]$/u.test(raw) && !(raw.endsWith(")") && raw.includes("("))) raw = raw.slice(0, -1);
+      let url; try { url = new URL(raw); } catch { continue; }
+      if (!/^https?:$/.test(url.protocol)) continue;
+      html += escape(text.slice(last, match.index)) + `<a class="pc-link" href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(raw)}</a>`;
+      last = match.index + raw.length; re.lastIndex = last;
+      if (ownVideo(url, company)) seen.add(url.href);
+    }
+    return { html: html + escape(text.slice(last)), videos: [...seen].map(href => `<video class="pc-video" controls playsinline preload="metadata" src="${escape(href)}"></video>`).join("") };
+  };
   const messagesHTML = state => {
     const ai = aiInfo(state), reply = canReply(state);
     return timeline(state).map(message => `<li class="pc-message${message.authorType === "assistant" ? " pc-message-ai" : ""}" data-message-id="${escape(message.id)}">
     <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${AI_BADGE}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
-    ${message.text ? `<p class="pc-message-text">${escape(message.text)}</p>` : ""}
+    ${message.text ? (rich => `<p class="pc-message-text">${rich.html}</p>${rich.videos}`)(richText(message.text, state.company)) : ""}
     ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachment => attachmentHTML(attachment, state)).join("")}</div>` : ""}
     <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${message.reviewedByOwner ? '<small>Проверено владельцем</small>' : ''}${editNoteHTML(message)}${receiptLinks(message)}${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}${canEditMessage(state, message) ? `<button type="button" data-pc-message-edit="${escape(message.id)}">Изменить в Telegram</button>` : ""}</div>
     ${aiNoteHTML(message, ai)}

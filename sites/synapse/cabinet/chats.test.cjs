@@ -226,3 +226,15 @@ test('подтверждённый другой viewer не получает н�
   assert.doesNotMatch(f.dock.textContent,/Скрыть от Bob|№11/);assert.equal(bar.querySelector('span').textContent,'');
   assert.equal(bar.hidden,true);assert.equal(bar.style.display,'none');assert.equal(sends(f).length,0);
 });
+test('«Чаты»: ссылки http(s) кликабельны, видео своей компании — плеер, чужое — только ссылка, без HTML',async t=>{
+  const f=load();t.after(()=>f.w.close());
+  const own='https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/a.webm',other='https://synapse.synapsebusiness.ru/content/publishing-assets/avokado/b.mp4';
+  f.state.messages[0].text=`Смотри ${own}, ${other} и https://example.com/a?b=1. javascript:alert(1) <b>x</b> (http://site.ru/x)`;
+  f.mount(f.host,'chats');await flush();
+  const links=[...f.host.querySelectorAll('.sbc-msg__text a')];
+  assert.deepEqual(links.map(l=>l.getAttribute('href')),[own,other,'https://example.com/a?b=1','http://site.ru/x']);
+  assert.ok(links.every(l=>l.target==='_blank'&&l.rel==='noopener noreferrer'));
+  const videos=[...f.host.querySelectorAll('video')];assert.deepEqual(videos.map(v=>v.getAttribute('src')),[own]);
+  assert.ok(videos[0].controls&&videos[0].hasAttribute('playsinline')&&videos[0].preload==='metadata');
+  assert.equal(f.host.querySelector('.sbc-msg__text b'),null);assert.match(f.host.querySelector('.sbc-msg__text').textContent,/<b>x<\/b>/);
+});
