@@ -258,13 +258,15 @@
     try {
       const context=await api('/content/people/context');
       if(identityEpoch!==state.identityEpoch)return;
-      const previousCompany=state.company;
+      const link=new URLSearchParams(location.search);
+      const previousCompany=state.company||link.get('company');
       state.context=context;state.mustChangePassword=false;$('password-panel').hidden=true;$('login-panel').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;
       $('person-name').textContent=context.user.displayName || context.user.login || '';
       $('tab-owner').hidden=!context.isOwner;$('tab-plan').hidden=!canApprove();$('company').replaceChildren();
       for(const company of context.companies || []){const option=node('option',company.name || company.id);option.value=company.id;$('company').append(option);}
       if([...$('company').options].some(option=>option.value===previousCompany))$('company').value=previousCompany;
       state.company=$('company').value;setTab('tasks');await loadCompany();
+      if(link.get('company')===state.company && /^[1-9][0-9]{0,9}$/.test(link.get('task')||''))await openTask(Number(link.get('task')));
     }catch(error){if(identityEpoch!==state.identityEpoch)return;if(error.status===401)showLogin();else message('global-message',error.message,true);}
   }
   function pushAvailable(){return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;}

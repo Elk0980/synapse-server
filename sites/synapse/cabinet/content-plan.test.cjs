@@ -13,27 +13,28 @@ const idea = (n, extra = {}) => ({ ideaId: `s-${n}`, date: `2026-11-1${n}`, plat
   topic: `SAMPLE тема ${n}`, hook: 'SAMPLE хук', script: 'Мастер: Здравствуйте!\nКлиент: <b>Привет</b>\nПауза, смех',
   broll: 'SAMPLE руки', style: 'SAMPLE тёплый свет', props: 'SAMPLE халат', filmingBy: 'SAMPLE оператор', variants: { vk: { text: 'SAMPLE подпись', contentRevision: 1 } }, ...extra });
 
-function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '' } = {}) {
+function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://cabinet.test/', runScripts: 'outside-only' });
   const { window } = dom, calls = [], opened = [];
   const db = {
-    mentor: { companyCode: 'alpha', brief: { revision: 2, fields: { goal: '', audience: 'есть', platforms: ['vk'] } }, vocabulary: VOCAB,
+    mentor: { companyCode: 'alpha', brief: { revision: 2, fields: { goal: '', audience: 'есть', platforms: briefPlatforms } }, vocabulary: VOCAB,
       plan: plan.length ? { revision: 4, briefRevision: 2, days: plan } : null,
       variants: plan.map((p, i) => ({ ideaId: p.ideaId, platform: 'vk', status: i ? 'pending' : 'approved', approvable: true })) },
     questionnaire: { companyCode: 'alpha', revision: 3, filled: 1, total: 8, updatedAt: null, updatedBy: '', rules: ['Цены — только подтверждённые.'],
-      fields: { goals: 'SAMPLE цель', audience: '', tone: '', rubrics: '', frequency: '', onCamera: '', constraints: '', platforms: ['vk'] } },
+      fields: { goals: 'SAMPLE цель', audience: '', tone: '', rubrics: '', frequency: '', onCamera: '', constraints: '', platforms: qPlatforms } },
     signoffs: { companyCode: 'alpha', approversSource: 'stub', planRevision: plan.length ? 4 : 0, briefRevision: 2, stage: plan.length ? stage : 'none',
       approvers: [{ slot: 'owner', label: 'Владелец', checked: false, actorName: '', canCheck: role === 'owner' }], ideas: 2, approvedIdeas: 1, emptyIdeas: [] },
   };
   const reply = (method, p, body) => {
     calls.push({ path: p, method, body: plain(body) });
     if (p === 'crm/media-mentor') return db.mentor;
-    if (p === 'crm/media-mentor/questionnaire') return method === 'PUT' ? { ...db.questionnaire, revision: db.questionnaire.revision + 1, filled: 2 } : db.questionnaire;
+    if (p === 'crm/media-mentor/questionnaire') return method === 'PUT' ? { ...db.questionnaire, revision: db.questionnaire.revision + 1, filled: 2, fields: { ...db.questionnaire.fields, ...body.fields } } : db.questionnaire;
     if (p === 'crm/media-mentor/plan/signoffs') return method === 'POST' ? { ...db.signoffs, stage: 'smm' } : db.signoffs;
     if (p === 'crm/media-mentor/brief') return { ...db.mentor, brief: { revision: 3, fields: { ...db.mentor.brief.fields, ...body.brief } } };
     if (p === 'crm/media-mentor/plan') return db.mentor;
     if (p === 'crm/media-mentor/plan/import-preview') return { companyCode: 'alpha', rows: [['Дата', 'Площадка', 'Тема', 'Формат', 'Хук', 'Вставки', 'Стиль', 'Реквизит'],
       ['05.12.2026', 'вк', 'Импорт SAMPLE', 'рилс', 'Импорт хук', 'Импорт вставки', 'Импорт стиль', 'Импорт реквизит']] };
+    if (p === 'media-mentor-suggest' && suggest) return suggest;
     if (p === 'media-mentor-suggest') return { status: 'ok', notice: 'Предложение модели', items: [{ date: '2026-11-20', platform: 'vk', format: 'reel', role: 'reach', topic: 'Новая', hook: 'Хук нов' },
       { date: '2026-11-09', platform: 'vk', format: 'reel', role: 'reach', topic: 'Ранняя', hook: '' }] };
     throw Error('unexpected ' + p);
@@ -191,4 +192,35 @@ test('403 from the server is shown as no access, unmount drops late answers', as
   assert.match(a.root.textContent, /Нет доступа к контент-плану/);
   const b = api(); const pending = b.mount(); b.def().unmount(b.root, b.ctx); await pending;
   assert.equal(b.root.querySelector('.cp'), null);
+});
+
+test('№128: header counter «заполнено N из 8» follows the save without reloading the module', async () => {
+  const a = api(); await a.mount();
+  const head = a.root.querySelector('.cp-q summary');
+  assert.match(head.textContent, /Анкета проекта · заполнено 1 из 8/);
+  const box = a.root.querySelector('[data-q-platform="telegram"]');
+  box.checked = true; box.dispatchEvent(new a.window.Event('change'));
+  await tick(800); await tick();
+  assert.match(a.root.querySelector('[data-cp-saved]').textContent, /Сохранено · заполнено 2 из 8/);
+  assert.match(a.root.querySelector('.cp-q summary').textContent, /Анкета проекта · заполнено 2 из 8/);
+});
+
+test('№128: no platforms — hint points to the questionnaire and focuses «Площадки», the model is not called', async () => {
+  const a = api({ qPlatforms: [], briefPlatforms: [] }); await a.mount();
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick();
+  const hint = a.root.querySelector('[data-cp-suggest]').textContent;
+  assert.match(hint, /Отметьте площадки в анкете выше/); assert.doesNotMatch(hint, /бриф/i);
+  assert.equal(a.calls.some((c) => c.path === 'media-mentor-suggest'), false);
+  assert.equal(a.window.document.activeElement, a.root.querySelector('[data-cp-platforms] input'));
+  assert.equal(a.root.querySelector('.cp-q').open, true);
+});
+
+test('№128: server answer brief_incomplete is shown with the questionnaire wording, not «в брифе»', async () => {
+  const a = api({ suggest: { status: 'brief_incomplete', items: [], dropped: [], notice: 'Сначала укажите площадки компании в брифе.' } }); await a.mount();
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick();
+  const hint = a.root.querySelector('[data-cp-suggest]').textContent;
+  assert.match(hint, /Отметьте площадки в анкете выше/); assert.doesNotMatch(hint, /бриф/i);
+  assert.equal(a.root.querySelector('[data-cp="accept"]'), null);
 });
