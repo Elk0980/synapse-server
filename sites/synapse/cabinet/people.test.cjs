@@ -210,3 +210,14 @@ test('manifest устанавливает точку входа людей, work
   const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'people.webmanifest'),'utf8'));
   assert.equal(manifest.start_url,'/cabinet/people.html');assert.equal(manifest.scope,'/cabinet/');assert.equal(sw.includes("addEventListener('fetch'"),false);
 });
+test('права участника выводятся по фактическим правам аккаунта, а не по роли',async t=>{
+  const f=fixture(t,{owner:true,handler:async route=>route.startsWith('/content/people/members')?response({members:[
+    {id:7,displayName:'Исполнитель',login:'one',staffRole:'human_executor',permissions:['tasks.self.view']},
+    {id:8,displayName:'Администратор',login:'two',staffRole:'administrator',permissions:['crm.view','crm.edit']},
+    {id:9,displayName:'Без прав',login:'three',staffRole:'human_executor',permissions:[]}]}):undefined});
+  await flush();const rows=[...f.byId('member-list').querySelectorAll('.member-row')];
+  const codes=row=>[...row.querySelectorAll('.permission-code')].map(node=>node.textContent).filter(code=>code!=='content-plan.approve');
+  assert.deepEqual(codes(rows[0]),['tasks.self.view'],'исполнитель без права менять статус не показывает tasks.self.edit');
+  assert.deepEqual(codes(rows[1]),['crm.view','crm.edit'],'администратор показывает свои права');
+  assert.deepEqual(codes(rows[2]),[]);assert.match(rows[2].textContent,/Права не назначены/);
+});

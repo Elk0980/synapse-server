@@ -104,7 +104,12 @@
     if(!members.length)list.append(node('p','В этом проекте пока нет подключённых людей.','muted'));
     for(const member of members){
       const row=node('div',undefined,'member-row');row.append(node('strong',member.displayName),node('span',`${member.login} · №${member.id}`,'muted'));
-      if(member.staffRole==='human_executor'){const rights=node('div');rights.innerHTML=window.SynapsePermissionHelp.markup(['tasks.self.view','tasks.self.edit']);row.append(rights);}
+      // Фактические права аккаунта с сервера, а не набор по роли.
+      if(Array.isArray(member.permissions)){
+        const codes=member.permissions.filter(code=>typeof code==='string');
+        if(codes.length){const rights=node('div');rights.innerHTML=window.SynapsePermissionHelp.markup(codes);row.append(rights);}
+        else row.append(node('span','Права не назначены','muted'));
+      }
       if(member.executorKey)row.append(node('span',`Для назначения задач: ${member.executorKey}`,'muted'));list.append(row);
       if(state.context?.isOwner){
         if(member.staffRole==='human_executor'){

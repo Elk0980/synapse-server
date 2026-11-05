@@ -4,7 +4,7 @@
 
 - `analytics.view` — Открывает аналитику, статистику площадок и сводные показатели назначенных компаний. Общий аналитический доступ Onlypult настраивает владелец. Источник: ops/content/server.js: analyticsReadPath, social-stats.
 - `crm.view` — Чтение заявок, сделок и доступных данных CRM своих компаний. Воронки и отдельные служебные сведения ограничены владельцем. Источник: ops/content/server.js: proxyCrm; ops/crm/server.js: documentContext.
-- `crm.edit` — Изменение заявок, сделок и доступных данных CRM своих компаний. Не открывает операции, зарезервированные за владельцем. Источник: ops/content/server.js: proxyCrm; ops/crm/server.js: documentContext.
+- `crm.edit` — Изменение заявок, сделок и доступных данных CRM своих компаний, а также запись расходов, ведение отзывов и площадок отзывов, запуск сбора статистики площадок. Настройки аккаунтов статистики, ручной импорт и другие операции, зарезервированные за владельцем, не открывает. Источник: ops/content/server.js: proxyCrm (/expenses); ops/crm/server.js: documentContext; ops/crm/reviews-http.js; ops/crm/social-stats-http.js; ops/crm/platform-demand-http.js.
 - `sites.view` — Просмотр списка сайтов назначенных компаний. Редактирование сайта и прайса проверяется отдельными правами. Источник: ops/content/server.js: /content/sites; ops/content/site-store.js: capabilities.
 - `sites.create` — Создание черновиков сайтов в доступных компаниях. Также требуются права просмотра сайтов и редактора. Источник: ops/content/server.js: /content/sites; ops/content/auth-store.js: DEPENDENCIES.
 - `sites.delete` — Удаление управляемых сайтов в статусе черновика. Публикуемые и внешние сайты этим правом не удаляются. Источник: ops/content/site-store.js: capabilities.delete, remove.
@@ -37,3 +37,8 @@ Spec-lite: только клиентское отображение имеющи
 Дополнительно: проверка версии ресурсов в существующем routing-тесте проверяет формат версии и загрузку, а не жёстко старую дату релиза. Итоговый прогон35/35PASS (включая маршруты/обновление ресурсов).
 
 CI обнаружил известный baseline400!=201 в people HTTP peer fixture после main493. Адаптирован только synthetic existing-account fixture;1/1HTTPPASS. Проверка PR Spec-lite отклоняла CRLF; корректная LF-строка локально принята check_pr, описания обновлены.
+
+## Ревью 575/576 (Claude — код, 05.11.2026)
+1) `crm.edit`: пояснение дополнено по реальным маршрутам — расходы (`/expenses` через proxyCrm, не-GET → crm.edit), отзывы и площадки отзывов (`ops/crm/reviews-http.js`), запуск сбора статистики (`ops/crm/social-stats-http.js`; настройки аккаунтов, импорт и замер — только владелец).
+2) «Моя работа» → команда: права участника выводятся по фактическим правам аккаунта. `GET /content/people/members` дополнительно возвращает `permissions` каждого участника (только чтение; маршрут по-прежнему для владельца или `team.manage` своей компании). Права и проверки не меняются. Пустой список — «Права не назначены»; без поля (старый сервер) блок прав не показывается.
+Проверки: jsdom people/permission-help/account-access/task-board-routing 36/36; HTTP people-http 1/1 (members.permissions у участника с выданным content-plan.approve, без crm.view). Версии ресурсов people.html/cabinet.html → `-r2`.
