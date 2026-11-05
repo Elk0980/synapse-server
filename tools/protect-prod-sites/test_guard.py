@@ -361,6 +361,26 @@ class ReviewApprovalTests(unittest.TestCase):
                 self.red([comment(OK, cid=1), comment(body, at='2026-11-05T09:10:00Z', cid=2)])
                 self.red([comment(body, at='2026-11-05T09:10:00Z', cid=2), comment(OK, cid=1)])
 
+    def test_bypass_d_rejection_anywhere_after_normalization(self):
+        # Обходы ревью 934: отказ не в первой строке, невидимые символы, двойники, разметка.
+        for body in ('Ревью PR 161\nНЕ ПРИНЯТ: guard.py:58', '\nНЕ ПРИНЯТ', '\n\n> **не** принят',
+                     'Ревью PR 161: НЕ ПРИНЯТ, см. guard.py:58', 'НЕ ПРИ\u00adНЯТ', 'НЕ ПРИ\u200bНЯТ',
+                     'НЕ\u200d ПРИНЯТ', 'Н\u2060Е ПРИНЯТ', '\ufeffНЕ ПРИНЯТ', 'HE ПPИHЯT', 'he пpинят',
+                     'Итог:\n## НЕ_ПРИНЯТ', 'НЕ~~ПРИНЯТ~~',
+                     'не - принят', 'НЕ\u00a0ПРИНЯТ', 'ＨＥ ПРИНЯТ',  # fullwidth -> NFKC -> двойники
+                     'Итог\r\nНе принято', 'НЕ\u2028ПРИНЯТ', 'Ревью\n\n— **НЕ**\u00adПРИНЯТ —'):
+            with self.subTest(body=body):
+                self.red([comment(OK, cid=1), comment(body, at='2026-11-05T09:10:00Z', cid=2)])
+        # Одобрение и отказ в любой строке одного комментария — отказ.
+        for tail in ('\nНЕ ПРИНЯТ', '\n\nПодробности ниже.\n> не\u00adпринят', '\nHE ПРИНЯТ'):
+            with self.subTest(tail=tail):
+                self.red([comment(OK + tail)])
+        # Точное одобрение без признаков отказа проходит; обычные слова с «не» не мешают.
+        self.check([comment(OK + '\r\nЗамечаний нет. Принято без правок, не нашёл проблем.')])
+        # Unicode-цифры в номере PR не принимаются.
+        self.red([comment('ПРИНЯТ PR ١٦١ @' + HEAD)])
+        self.red([comment('ПРИНЯТ PR １６１ @' + HEAD)])
+
     def test_rejection_fails(self):
         self.red([comment('НЕ ПРИНЯТ PR 161 @' + HEAD)])
 

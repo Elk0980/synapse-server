@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import unicodedata
 from datetime import datetime
 import urllib.parse
 import urllib.request
@@ -52,13 +53,17 @@ PUBLIC_TOKENS = {
 }
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 # Независимое ревью вместо метки Влада (поручение 05.11 15:37, задача №163, ревью 923):
-# первая строка комментария участника репозитория целиком «ПРИНЯТ PR <номер> @<полный sha>»
-# на текущий head. Полный 40-символьный sha нельзя подобрать и нельзя знать до push, поэтому
-# дата коммита (её задаёт клиент) не нужна. Любой более поздний комментарий участника, у которого
-# первая строка — «НЕ ПРИНЯТ…» или иной неоднозначный вердикт со словом «принят», закрывает
-# проверку независимо от sha. Новый коммит меняет sha — нужен новый «ПРИНЯТ».
-APPROVAL = re.compile(r'ПРИНЯТ PR (\d+) `?@?`?([0-9a-f]{40})`?')
-VERDICT_WORD = re.compile(r'(?:^|\s)(?:не\s*)?принят(?:\s|$)')
+# «отказ ищется везде, одобрение — строго» (ревью 923, 934). Одобрение: первая строка исходного
+# текста комментария участника репозитория целиком «ПРИНЯТ PR <номер> @<полный sha>» на текущий
+# head и ни одного признака отказа в комментарии. Полный 40-символьный sha нельзя подобрать и
+# нельзя знать до push, поэтому дата коммита (её задаёт клиент) не нужна. Отказ: «не принят» /
+# «непринят» где угодно в нормализованном тексте (NFKC, без невидимых символов и разметки,
+# латинские двойники -> кириллица) или иной неоднозначный вердикт со словом «принят» в первой
+# строке. Более поздний отказ закрывает проверку независимо от sha; новый коммит — новый «ПРИНЯТ».
+APPROVAL = re.compile(r'ПРИНЯТ PR ([0-9]+) `?@?`?([0-9a-f]{40})`?')
+REJECTION = re.compile(r'(?:^| )не ?принят')
+VERDICT_WORD = re.compile(r'(?:^| )принят(?: |$)')
+LOOKALIKES = str.maketrans('HEPATOMKCXaeopcx', 'НЕРАТОМКСХаеорсх')
 TRUSTED_ASSOCIATIONS = {'OWNER', 'MEMBER', 'COLLABORATOR'}
 MAX_COMMENT_PAGES = 30
 
@@ -159,31 +164,31 @@ def parse_time(value):
     return datetime.fromisoformat(value.replace('Z', '+00:00'))
 
 
+def normalized(text):
+    """Text for verdict search: invisible chars, markup, lookalikes, case and punctuation removed."""
+    text = unicodedata.normalize('NFKC', text)
+    # Невидимые символы (soft hyphen U+00AD, zero-width U+200B–U+200F, U+2060, BOM — категория Cf)
+    # и разметка удаляются, а не заменяются пробелом: «ПРИ\u00adНЯТ», «**НЕ**ПРИНЯТ».
+    text = ''.join(ch for ch in text if unicodedata.category(ch) != 'Cf' and ch not in '*_~`#')
+    text = text.translate(LOOKALIKES).lower().replace('ё', 'е')
+    return re.sub(r'[^0-9a-zа-я]+', ' ', text).strip()
+
+
 def comment_verdict(body, number, head_sha):
-    """'approve' for the exact template on the first line, 'reject' for any other verdict, else None."""
+    """'reject' for any rejection or ambiguous verdict, 'approve' for the exact template, else None."""
     if not isinstance(body, str):
         return None
-    lines = body.split('\n')
-    first = lines[0].rstrip('\r \t')
+    if REJECTION.search(normalized(body)):
+        return 'reject'  # отказ ищется во всём комментарии, в том числе рядом с одобрением
+    first = body.split('\n', 1)[0].rstrip('\r \t')
     match = APPROVAL.fullmatch(first)
     if match:
         if int(match.group(1)) != int(number) or match.group(2) != head_sha:
             return None  # точное одобрение другого PR/head — не вердикт этому head
-        # Одобрение и строка «НЕ ПРИНЯТ» в одном комментарии — неоднозначно, отказ.
-        return 'reject' if any(is_rejection(line) for line in lines[1:]) else 'approve'
-    if is_rejection(first) or VERDICT_WORD.search(normalized(first)):
-        return 'reject'  # отказ или неоднозначный вердикт — закрытый отказ
+        return 'approve'
+    if VERDICT_WORD.search(normalized(first)):
+        return 'reject'  # неоднозначный вердикт первой строкой — закрытый отказ
     return None
-
-
-def normalized(line):
-    # Разметка, цитаты, пунктуация и регистр не важны: «**НЕ** ПРИНЯТ», «НЕ: ПРИНЯТ», «> не принят».
-    return re.sub(r'[^0-9a-zа-я]+', ' ', line.lower().replace('ё', 'е')).strip()
-
-
-def is_rejection(line):
-    words = normalized(line)
-    return words.startswith('не принят') or words.startswith('непринят')
 
 
 def review_approval(number, head_sha, comments):
