@@ -1,0 +1,26 @@
+--- a/sites/synapse/cabinet.html
++++ b/sites/synapse/cabinet.html
+@@ -8,6 +8,7 @@
+ <title>Кабинет — Synapse Business</title>
+ <link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
+ <link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
++<script src="cabinet/view-as.js?v=20261105-1"></script>
+ <script>document.documentElement.classList.replace("no-js", "js");</script>
+ <style>
+ :root {
+@@ -685,6 +686,7 @@
+     <div class="sidebar-footer">
+       <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
+         <div><strong id="account-name"></strong><span id="account-role"></span></div></div>
++      <button class="logout" id="view-as-start" type="button" hidden>Посмотреть как…</button>
+       <button class="logout" id="logout" type="button">Выйти</button>
+     </div>
+   </aside>
+@@ -1896,6 +1898,7 @@
+         return;
+       }
+       identity = profile;
++      window.SynapseViewAs?.render(profile);
+       identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
+       allowedProjects = allowedProjectsFor(identity);
+       selectedProjectId = readSelectedProject();

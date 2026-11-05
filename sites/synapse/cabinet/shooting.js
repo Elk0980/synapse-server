@@ -92,9 +92,10 @@
         const late = plan.deadline && plan.deadline < today() && reel.status === 'approved';
         return h('li', {class: `shoot-row${late ? ' shoot-row--late' : ''}`},
           h('button', {type: 'button', class: 'shoot-row__open', onclick: () => this.open(reel.idea.ideaId)},
-            h('span', {class: 'shoot-row__num', text: `№${reel.number}`}),
+            h('span', {class: 'shoot-row__num', title: 'Номер строки в контент-плане', text: `№${reel.number}`}),
             h('span', {class: 'shoot-row__main'},
               h('strong', {text: reel.idea.topic || 'Без темы'}),
+              h('span', {class: 'shoot-row__kind', text: reel.kind || 'Рилс'}),
               h('span', {class: 'shoot-row__meta', text: [`Выход ${date(plan.publishDate)}`,
                 plan.shootDate ? `съёмка ${date(plan.shootDate)}` : 'день съёмки не задан',
                 plan.deadline ? `дедлайн ${date(plan.deadline)}` : ''].filter(Boolean).join(' · ')}),
@@ -103,7 +104,7 @@
       });
       this.root.replaceChildren(h('div', {class: 'shoot'},
         h('header', {class: 'shoot-head'}, h('h1', {text: 'Съёмка'}),
-          h('p', {class: 'muted', text: 'Согласованные рилсы контент-плана по порядку. Откройте рилс: что снять, суфлёр и загрузка материала.'})),
+          h('p', {class: 'muted', text: 'Согласованные рилсы и другие видео контент-плана по порядку, номера — как в плане. Откройте строку: что снять, суфлёр и загрузка материала.'})),
         configured ? null : h('p', {class: 'shoot-warning'}, 'День съёмки и дедлайн не заданы. ',
           h('a', {href: '#settings/content', onclick: (event) => { event.preventDefault(); this.ctx.navigate('settings/content'); }, text: 'Настройки → Контент'})),
         this.storageNote(),
@@ -134,13 +135,13 @@
       this.root.replaceChildren(h('div', {class: 'shoot shoot-card'},
         h('button', {type: 'button', class: 'link-button shoot-back', onclick: () => this.open(''), text: '← Все рилсы'}),
         h('header', {class: 'shoot-head'},
-          h('h1', {text: `Рилс №${reel.number} · ${idea.topic || 'Без темы'}`}),
+          h('h1', {text: `${reel.kind || 'Рилс'} №${reel.number} · ${idea.topic || 'Без темы'}`}),
           h('p', {class: 'shoot-row__meta', text: [`Выход ${date(plan.publishDate)}`, plan.shootDate ? `съёмка ${date(plan.shootDate)}` : 'день съёмки не задан',
             plan.deadline ? `дедлайн ${date(plan.deadline)}` : '', idea.filmingBy ? `снимает: ${idea.filmingBy}` : ''].filter(Boolean).join(' · ')}),
           h('div', {class: 'shoot-head__actions'}, statusSelect,
             S.prompter ? h('button', {type: 'button', class: 'plain-button', 'data-prompter-open': '', text: 'Суфлёр',
-              onclick: () => { this.prompter = S.prompter.open({parsed, title: `Рилс №${reel.number} · ${idea.topic || ''}`}); }}) : null,
-            S.prompter?.shareControls ? S.prompter.shareControls({parsed, title: `Рилс №${reel.number} · ${idea.topic || ''}`}) : null)),
+              onclick: () => { this.prompter = S.prompter.open({parsed, title: `${reel.kind || 'Рилс'} №${reel.number} · ${idea.topic || ''}`}); }}) : null,
+            S.prompter?.shareControls ? S.prompter.shareControls({parsed, title: `${reel.kind || 'Рилс'} №${reel.number} · ${idea.topic || ''}`}) : null)),
         idea.hook ? h('p', {class: 'shoot-hook'}, h('strong', {text: 'Хук 1–2 с: '}), idea.hook) : null,
         parsed.source === 'hook' ? h('p', {class: 'muted', text: 'Сценария по ролям ещё нет — показаны хук и тема. Сценарий заполняется в полном виде контент-плана.'}) : null,
         tabBar, body));
@@ -151,7 +152,8 @@
       tabBar.querySelectorAll('[role=tab]').forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.tab === key)));
       if (key === 'board' && S.board) { body.replaceChildren(S.board.render({view: this, ...this.card, h})); return; }
       const {parsed} = this.card;
-      body.replaceChildren(
+      // Родной replaceChildren превращает null в текстовый узел «null» (№120): пустые части отбрасываются.
+      body.replaceChildren(...[
         parsed.props.length ? h('p', {class: 'shoot-props'}, h('strong', {text: 'Реквизит: '}), parsed.props.join(', ')) : null,
         h('ol', {class: 'shoot-frames'}, parsed.frames.map((frame) => h('li', {class: `shoot-frame shoot-frame--${frame.type}`, 'data-frame': frame.n},
           h('div', {class: 'shoot-frame__text'},
@@ -161,7 +163,7 @@
           this.uploadSlot(frame.n)))),
         h('section', {class: 'shoot-other', 'data-frame': 'other'}, h('h2', {text: 'Другое / дополнительно'}),
           h('p', {class: 'muted', text: 'Можно загрузить больше нужного и в любом порядке.'}), this.uploadSlot(null)),
-        h('section', {class: 'shoot-drafts'}, h('h2', {text: 'Черновик монтажа'}), h('div', {'data-drafts': ''})));
+        h('section', {class: 'shoot-drafts'}, h('h2', {text: 'Черновик монтажа'}), h('div', {'data-drafts': ''}))].filter(Boolean));
       this.renderUploads();
     }
 

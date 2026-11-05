@@ -56,7 +56,7 @@ for (const hash of ['#content-factory/sources', '#telegram-sources']) test('вк
     assert.equal(f.panel().hidden, false); assert.equal(f.tab().hidden, false);
     assert.equal(f.tab().textContent, 'Исходники');
     assert.equal(f.tab().getAttribute('aria-current'), 'page');
-    assert.match(f.d.title, /^Контент завод — Первый/);
+    assert.match(f.d.title, /^Постинг — Первый/);
     assert.equal(f.d.querySelector('#content-factory-link').getAttribute('aria-current'), 'page');
     assert.match(f.panel().textContent, /Автоприём из Telegram выключен/); // CF17: состояние Telegram не выдаётся за состояние всей загрузки
     assert.deepEqual(f.sourceCalls().map(r => r.url), ['/content/telegram-sources/one']);

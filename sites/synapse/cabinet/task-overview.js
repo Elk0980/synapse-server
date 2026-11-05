@@ -7,6 +7,12 @@
   const waitingField = value => waitPrefix.test(normalized(value));
   const stripWaitingPrefix = value => String(value || '').replace(/^\s*(?:жд[её]т\s+влада|вопрос\s*→\s*влад)(?![\p{L}\p{N}_])(?:[^\S\r\n]*[:—–-])?[^\S\r\n]*/iu,'');
   const isWaiting = task => waitingField(task.coordination?.blocker) || waitingField(task.coordination?.nextAction) || normalized(task.assignee_name) === 'влад';
+  const actionableWaiting = (task,at=Date.now()) => {
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(at));
+    return !['done','cancelled'].includes(task.status) && (!task.due_date || task.due_date<=today) &&
+      (waitingField(task.coordination?.blocker) || normalized(task.assignee_name)==='влад');
+  };
+
   const ownerText = (value,max=200,products=[]) => {
     if (typeof value !== 'string' || /[\x00-\x1f\x7f\u2028\u2029/\\]|\b[0-9a-f]{12,}\b|\b\d{7,}\b/iu.test(value)) return '';
     const clean=value.trim(); if (!clean || Array.from(clean).length>max) return '';
@@ -89,8 +95,10 @@
       const membership = modules.filter(module => module.allMembers.some(member => member.id === task.id));
       return {task,modules:membership,directions:membership,progress:progress(task),stage:stageText(task)};
     });
-    const requests=tasks.filter(isWaiting);
+    // №108 (решение Влада): «Ждут Влада» — только активные задачи без будущего срока, ожидание по blocker
+    // или исполнителю «Влад». Внутри — разделение main: с оформленным вопросом и «подготовить вопрос».
+    const requests=tasks.filter(task=>actionableWaiting(task));
     return {goals:goalModels,modules,directions:modules,structuralIds:[...structural],now,unprepared:requests.filter(task=>!decision(task,products)),waiting:requests.filter(task=>decision(task,products)).sort((a,b) => String(a.waiting_since || '9999').localeCompare(String(b.waiting_since || '9999')) || a.id-b.id)};
   }
-  window.SbTaskOverview = Object.freeze({build,isWaiting,decision,ownerText,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
+  window.SbTaskOverview = Object.freeze({build,isWaiting,actionableWaiting,decision,ownerText,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
 })();
