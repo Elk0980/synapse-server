@@ -691,11 +691,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
     <div class="workspace-scope" id="workspace-scope"><strong></strong><button type="button" id="workspace-change-company">Сменить компанию</button></div>
     <div id="content-factory-header" hidden>
-      <div class="content-header"><h1>Контент завод</h1></div>
-      <nav class="factory-tabs" aria-label="Контент завод">
-        <a class="plain-button" href="#content-factory/plan" data-factory-view="autoposting" data-factory-also="media-mentor">Контент-план</a>
+      <!-- №122: «Постинг» — готовые публикации; «Контент-план» и «Статистика» — отдельные пункты меню «Контент». -->
+      <div class="content-header"><h1>Постинг</h1></div>
+      <nav class="factory-tabs" aria-label="Постинг">
+        <a class="plain-button" href="#content-factory/plan" data-factory-view="autoposting">Публикации</a>
         <a class="plain-button" href="#content-factory/sources" data-factory-view="telegram-sources">Исходники</a>
-        <a class="plain-button" href="#content-factory/stats" data-factory-view="content-factory-stats" data-factory-also="media-mentor-rollout">Статистика</a>
         <a class="plain-button" href="#content-factory/settings" data-factory-view="content-factory-settings">Настройки модуля</a>
       </nav>
       <div class="factory-plan-bar" id="content-factory-plan-bar" hidden>
@@ -1209,7 +1209,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     competitors: "Конкуренты",
     calltracking: "Колтрекинг",
     sites: "Сайты",
-    autoposting: "Контент-план",
+    autoposting: "Постинг",
     "media-mentor": "Предложения плана",
     "content-factory-settings": "Настройки модуля",
     "content-factory-stats": "Статистика контента",
@@ -1220,7 +1220,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "company-information": "Актуальность",
     "vk-community": "ВКонтакте",
     "reviews": "Отзывы",
-    "content-factory": "Контент завод",
+    "content-factory": "Постинг",
     settings: "Настройки компании",
     "site-orders": "Заявки с сайта",
     "system-settings": "Настройки системы",
@@ -1294,7 +1294,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       : 'Компания: '+projectContext();
     el.querySelector('strong').textContent=caption;
     el.querySelector('button').hidden=ownerBoard||SYSTEM_VIEWS.has(currentView)||currentView==='account';
-    document.title=(factoryViews.includes(currentView)?'Контент завод':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
+    document.title=(postingView(currentView)?'Постинг':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
     if (ownerBoard) document.title = 'Synapse Задачи';
   };
   const renderProjectContexts = () => {
@@ -1622,6 +1622,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "telegram-sources": "content-factory/sources", "content-factory-stats": "content-factory/stats",
     "media-mentor-rollout": "content-factory/progress", "content-factory-settings": "content-factory/settings"};
   const factoryViews = ["content-factory", ...Object.keys(factoryRoutes)];
+  /* №122: виды, которые меню «Контент» показывает как «Контент-план» или «Статистика» (data-view-also),
+     открываются без шапки «Постинга» — второго «Контент-плана» и второй «Статистики» нет. */
+  const contentClaimed = (view) => [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(view));
+  const postingView = (view) => factoryViews.includes(view) && !contentClaimed(view);
   const factoryParts = {plan: "autoposting", materials: "autoposting", "plan/proposals": "media-mentor", sources: "telegram-sources",
     stats: "content-factory-stats", progress: "media-mentor-rollout", settings: "content-factory-settings"};
   const viewFromHash = () => {
@@ -1731,32 +1735,38 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     document.body.classList.toggle('owner-task-board', ownerBoard);
     document.body.classList.toggle('owner-task-navigation', identity?.role === 'owner');
     document.querySelector('link[rel="manifest"]').href = ownerBoard ? 'board.webmanifest' : 'manifest.webmanifest';
-    const factory = factoryViews.includes(currentView);
-    byId("content-factory-header").hidden = !factory;
+    const factory = factoryViews.includes(currentView), posting = postingView(currentView);
+    const factoryHeader = byId("content-factory-header");
+    factoryHeader.querySelector(".content-header").hidden = !posting;
+    factoryHeader.querySelector(".factory-tabs").hidden = !posting;
     byId("content-factory-header").querySelectorAll("[data-factory-view]").forEach(link => {
       link.hidden = !permittedView(link.dataset.factoryView);
       const views = [link.dataset.factoryView, ...(link.dataset.factoryAlso || "").split(" ").filter(Boolean)];
       if (views.includes(currentView)) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
-    // Строка действий только на вкладке «Контент-план»; вводные живут в «Настройках модуля», не над доской.
+    /* №122: «Составить план» — только у предложений плана (часть «Контент-плана»); «Создать публикацию» —
+       в «Постинге», пока нет модуля «Материалы». Пустая строка действий не показывается. */
     const planBar = byId("content-factory-plan-bar");
-    planBar.hidden = !["autoposting", "media-mentor"].includes(currentView) || !permittedView(currentView);
+    const contentMaterials = !!window.SynapseModules?.has("content-materials");
+    const composeAction = currentView === "media-mentor", createAction = currentView === "autoposting" && !contentMaterials;
+    planBar.querySelector('[data-factory-action="compose"]').hidden = !composeAction;
+    planBar.querySelector('[data-factory-action="create"]').hidden = !createAction;
+    planBar.hidden = !(composeAction || createAction) || !permittedView(currentView);
+    factoryHeader.hidden = !factory || (!posting && planBar.hidden);
     if (planBar.hidden) byId("content-factory-compose").hidden = true;
     else SbCabinet.contentFactory?.bindPlanBar?.(planBar, cabinetContext());
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
     document.body.dataset.cabinetView = currentView;
-    const claimed = [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(currentView));
+    const claimed = contentClaimed(currentView);
     const settingsView = ["settings", "settings-content"].includes(currentView);
     byId("settings-tabs").hidden = !settingsView;
     byId("settings-tabs").querySelectorAll("[data-settings-tab]").forEach(tab => {
       tab.hidden = !permittedView(tab.dataset.settingsTab);
       if (tab.dataset.settingsTab === currentView) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
     });
-    const contentMaterials = !!window.SynapseModules?.has("content-materials");
-    byId("content-factory-plan-bar").querySelector('[data-factory-action="create"]').hidden = contentMaterials;
     document.querySelectorAll("[data-view-link]").forEach((link) => {
       const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
       const also = (link.dataset.viewAlso || "").split(" ").includes(currentView) || link.dataset.viewLink === routeView;
@@ -1773,7 +1783,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       target.insertAdjacentElement("afterend", byId("client-tabs"));
     }
     setCategoryForView(currentView);
-    const title = factory ? "Контент завод" : VIEW_TITLES[currentView];
+    const title = posting ? "Постинг" : VIEW_TITLES[currentView];
     byId("mobile-title").textContent = title;
     renderScopeBanner();
     const active = document.querySelector(`[data-view="${currentView}"]`);
