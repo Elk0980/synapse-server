@@ -70,3 +70,41 @@ test('чат по задаче: уточнение становится комм
   assert.equal(f.calls.filter(c=>c.action==='taskChatComment').length,1);
   await assert.rejects(f.chat.send(2,'alvi',{...body,taskId:78}),{status:409});
 });
+test('№127: личные чаты со всеми аккаунтами, которым открыта компания; без доступа к задачам — без Хью и задач',async t=>{
+  const f=fixture(t);
+  f.db.exec(`CREATE TABLE auth_users(id INTEGER PRIMARY KEY,display_name TEXT,role TEXT,must_change_password INTEGER DEFAULT 0);
+    CREATE TABLE auth_user_companies(user_id INTEGER,company_code TEXT);CREATE TABLE auth_user_permissions(user_id INTEGER,permission TEXT);CREATE TABLE company_team_members(user_id INTEGER PRIMARY KEY,company_code TEXT,staff_role TEXT)`);
+  // 1 владелец; 2,3 — исполнители alvi; 4 — исполнитель avokado; 5 — СММ с доступом к alvi без задач; 6 — к avokado;
+  // 7 — ещё не сменила пароль; 8 — компания открыта, но все права отозваны.
+  for(const [id,name,role,codes,member,must,perms=['autoposting.view']] of [[1,'Влад','owner',[]],[2,'Лена','editor',['alvi'],'alvi'],[3,'Таня','editor',['alvi'],'alvi'],[4,'Петя','editor',['avokado'],'avokado'],
+    [5,'Татьяна','editor',['alvi']],[6,'Ира','editor',['avokado']],[7,'Оля','editor',['alvi'],null,1],[8,'Гость','editor',['alvi'],null,0,[]]]) {
+    f.db.prepare('INSERT INTO auth_users VALUES(?,?,?,?)').run(id,name,role,must||0);
+    for(const permission of perms)f.db.prepare('INSERT INTO auth_user_permissions VALUES(?,?)').run(id,permission);
+    for(const code of codes)f.db.prepare('INSERT INTO auth_user_companies VALUES(?,?)').run(id,code);
+    if(member)f.db.prepare("INSERT INTO company_team_members VALUES(?,?,'human_executor')").run(id,member);
+  }
+  const names=(id,code)=>f.chat.members(id,code).people.map(p=>p.name).sort();
+  assert.deepEqual(names(1,'alvi'),['Лена','Таня','Татьяна'],'владельцу — все с доступом к компании');
+  assert.deepEqual(names(1,'avokado'),['Ира','Петя']);
+  assert.deepEqual(names(2,'alvi'),['Влад','Таня','Татьяна']);
+  const tanya=f.chat.members(5,'alvi');
+  assert.equal(tanya.hugh,null,'без доступа к задачам нет лога Хью');
+  assert.deepEqual(tanya.people.map(p=>p.name).sort(),['Влад','Лена','Таня']);
+  assert.throws(()=>f.chat.members(5,'avokado'),{status:403},'другая компания закрыта');
+  assert.throws(()=>f.chat.members(7,'alvi'),{status:403},'до смены пароля чат закрыт');
+  assert.throws(()=>f.chat.members(8,'alvi'),{status:403},'без прав чат закрыт');
+  await f.send(5,'alvi','Коллеги, макет готов');
+  assert.ok(f.chat.list(2,'alvi').messages.some(m=>m.text==='Коллеги, макет готов'));
+  await f.send(1,'alvi','Татьяна, посмотри прайс',{room:'dm:1-5'});
+  await f.send(5,'alvi','Смотрю',{room:'dm:1-5'});
+  assert.deepEqual(f.chat.list(1,'alvi',null,'dm:1-5').messages.map(m=>m.text),['Татьяна, посмотри прайс','Смотрю']);
+  assert.throws(()=>f.chat.list(2,'alvi',null,'dm:1-5'),{status:403},'чужой личный чат закрыт');
+  const before=f.calls.length,answered=f.answered.length;
+  const sent=await f.send(5,'alvi','Хью, сделай пост про акцию');
+  assert.equal(sent.message.kind,'message');assert.equal(f.calls.length,before,'задача не ставится');assert.equal(f.answered.length,answered,'Хью не отвечает');
+  assert.throws(()=>f.chat.list(5,'alvi',null,'hugh:5'),{status:403});
+  await assert.rejects(f.send(5,'alvi','x',{room:'hugh:5'}),{status:403});
+  await assert.rejects(f.send(5,'alvi','x',{room:'common',taskId:9}),{status:400});
+  await assert.rejects(f.send(5,'alvi','x',{room:'dm:5-6'}),{status:403},'собеседник из другой компании');
+  await assert.rejects(f.send(6,'alvi','x'),{status:403});
+});

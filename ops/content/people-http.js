@@ -6,11 +6,13 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
     const session=requireSession(request),path=url.pathname.slice('/content/people'.length),method=request.method;
     const reply=(status,body)=>{fresh(null);sendJson(response,status,body,{'cache-control':'private, no-store'});return true;};
     const company=()=>{const values=url.searchParams.getAll('companyCode');if(values.length!==1||!session.user.companyCodes.includes(values[0]))fail(403,'Выберите доступную компанию');return values[0];};
+    // «Чаты» (№127): участник — исполнитель или аккаунт с доступом к компании; проверка в chat.access.
+    const chatRoute=path==='/team-chat'||path==='/team-chat/rooms';
     const fresh=(code,owner=false)=>{
       const current=requireSession(request);
       if(current.user.id!==session.user.id||current.user.sessionVersion!==session.user.sessionVersion)fail(401,'Сессия изменилась. Войдите заново');
       if(owner){if(current.user.role!=='owner'||!current.user.companyCodes.includes(code))fail(403,'Доступно владельцу');}
-      else if(code)tasks.access(current.user.id,code);
+      else if(code)(chatRoute&&chat?.access?chat.access:tasks.access)(current.user.id,code);
       return current;
     };
     const read=async(code,owner=false)=>{requireCsrf(request,session);const body=await readJson(request);const current=fresh(code,owner);requireCsrf(request,current);return body;};
