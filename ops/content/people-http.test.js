@@ -81,10 +81,13 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Ответ пока недоступен. Вопрос сохранён для проверки.');
   assert.equal(chatHistory.reviewQueue,undefined);
   const ownerHistory=await(await request(scoped('/team-chat'),owner)).json();assert.equal(ownerHistory.reviewQueue.length,1);
-  // Existing-account fixture: temporary-password first login has its own HTTP suite.
-  assert.equal((await request('/content/admin/team',owner,'POST',{login:'peer',displayName:'Коллега',password,companyCode:'synapse-business',staffRole:'administrator'})).status,201);
-  const peerAccounts=await(await request('/content/admin/accounts',owner)).json(),peerId=peerAccounts.accounts.find(x=>x.login==='peer').id;
-  assert.equal((await request(`/content/people/members/${peerId}`,owner,'PUT',{companyCode:'synapse-business',staffRole:'human_executor'})).status,200);
+  const peerCreated=await request('/content/people/members',owner,'POST',{login:'peer',displayName:'Коллега',companyCode:'synapse-business',staffRole:'human_executor'});
+  assert.equal(peerCreated.status,201);const {temporaryPassword}=await peerCreated.json();assert.ok(temporaryPassword);
+  const peerLogin=await request('/content/login',null,'POST',{login:'peer',password:temporaryPassword});assert.equal(peerLogin.status,200);
+  const peerCookie=peerLogin.headers.get('set-cookie').split(';')[0],peerWho=await request('/content/whoami',{cookie:peerCookie});
+  assert.equal(peerWho.status,403);const peerLimited=await peerWho.json();assert.equal(peerLimited.details.mustChangePassword,true);
+  const peerTemporary={cookie:peerCookie,csrf:peerLimited.csrfToken||peerLimited.details.csrfToken};
+  assert.equal((await request('/content/password',peerTemporary,'POST',{password})).status,200);
   const peer=await login('peer'),peerHistory=await(await request(scoped('/team-chat'),peer)).json();
   assert.equal(peerHistory.messages.length,1);assert.equal(peerHistory.reviewQueue,undefined);
   // №98 Д: без обращения Хью молчит; личный чат двух сотрудников и лог Хью закрыты для третьих лиц.
