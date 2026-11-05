@@ -309,3 +309,19 @@ test('№141: «Начало» and «Дней» are an even grid — caption spa
   assert.match(css, /\.cp-gen input\[type="date"\], \.cp-gen select \{[^}]*min-width:0; height:44px;/);
   assert.match(css, /\.cp-gen input\[type="date"\] \{ -webkit-appearance:none; appearance:none;/);
 });
+
+test('№143: on 390 the row is four lines — «№ дата» / тема / площадки / статус; platforms never share the auto column with №', async () => {
+  const a = api(); await a.mount();
+  const line = a.root.querySelector('.cp-line');
+  assert.deepEqual([...line.children].map((el) => el.className), ['cp-n', 'cp-date', 'cp-pl', 'cp-topic', 'cp-st']);
+  const css = fs.readFileSync(path.join(__dirname, 'content-plan.css'), 'utf8');
+  const mobile = css.slice(css.indexOf('@media (max-width: 640px)'));
+  const rule = mobile.match(/\.cp-line \{([^}]*)\}/)[1];
+  // Колонка «auto» растягивалась под площадки и отнимала ширину у даты; теперь первая колонка — только под номер.
+  assert.match(rule, /grid-template-columns:max-content minmax\(0,1fr\)/);
+  assert.match(rule, /grid-template-areas:"n date" "topic topic" "pl pl" "st st"/);
+  assert.match(mobile, /\.cp-date \{ grid-area:date; white-space:nowrap; \}/);
+  assert.match(mobile, /\.cp-st \{ grid-area:st; justify-self:start; max-width:100%; white-space:normal; \}/);
+  // Широкая раскладка 641+ не тронута: пять колонок в одну строку.
+  assert.match(css, /\.cp-line \{ width:100%; display:grid; grid-template-columns:52px 96px minmax\(90px,160px\) 1fr auto;/);
+});
