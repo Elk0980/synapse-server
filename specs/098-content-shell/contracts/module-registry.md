@@ -106,3 +106,6 @@ window.SynapseModules.register('content-shooting', {
 
 Хранение (не менять без записи здесь): таблица `content_settings(company_code PRIMARY KEY, body TEXT JSON
 с пятью полями settings, version INTEGER, updated_at TEXT ISO, updated_by INTEGER — id пользователя)`; на неё опирается модуль «Контент-план» (агент Б).
+
+## Посмотреть как (№107)
+ctx.user и permissions содержат эффективного сотрудника; ctx.viewAs = null либо {active:true, readOnly:true, userId, name}. Все запросы /content получают session-bound X-View-As; любые не-GET запрещены сервером (403 VIEW_AS_READONLY). Выход удаляет токен вкладки и перезагружает оболочку.

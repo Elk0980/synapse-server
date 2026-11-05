@@ -39,3 +39,12 @@ test('на ПК конец экрана не уходит под кнопку: �
   const fab = /\.sb-chat-fab\s*\{[^}]*bottom:\s*(\d+)px[^}]*height:\s*(\d+)px/s.exec(css);
   assert.ok(Number(pad[1]) >= Number(fab[1]) + Number(fab[2]), `${pad[1]} ≥ ${fab[1]}+${fab[2]}`);
 });
+
+test('на телефоне нижний отступ .main не меньше нижней границы кнопки + её высоты (без перекрытия контента)', () => {
+  const block = /@media\s*\(max-width:\s*760px\)\s*\{([\s\S]*?)\n\}/.exec(css);
+  assert.ok(block, 'есть правило для телефона');
+  const fab = /\.sb-chat-fab\s*\{[^}]*bottom:\s*calc\((\d+)px[^}]*height:\s*(\d+)px/.exec(block[1]);
+  const pad = /\.main\s*\{[^}]*padding-bottom:\s*calc\((\d+)px/.exec(block[1]);
+  assert.ok(fab && pad, 'кнопка и отступ на телефоне');
+  assert.ok(Number(pad[1]) >= Number(fab[1]) + Number(fab[2]), `${pad[1]} ≥ ${fab[1]}+${fab[2]}`);
+});
