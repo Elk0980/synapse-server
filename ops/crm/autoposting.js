@@ -64,15 +64,13 @@ const OPTION_INT=(min,max)=>Object.freeze({type:'int',min,max});
 const OPTION_LINES=Object.freeze({type:'lines',min:2,max:10,each:100});
 const DELETE_RULES=Object.freeze({delete_after_value:OPTION_INT(1,999),delete_after_unit:DELETE_UNITS});
 const POLL_RULES=Object.freeze({poll_question:OPTION_TEXT(300),poll_options:OPTION_LINES,poll_multiple:'boolean',poll_anonymous:'boolean'});
-/* Снимок №84 (решение оркестратора): закрытая схема публикуемых опций — как в main.
-   Боевое расширение (Telegram/VK/YouTube, автоудаление, опросы, первый комментарий, пробный Reels,
-   TikTok MUTUAL_FOLLOW_FRIENDS/FOLLOWER_OF_CREATOR) в git не переносится: оно расширяет то, что
-   уходит на площадки, без проверенного контракта. Правила ниже оставлены для будущего решения. */
-void POLL_RULES; void DELETE_RULES;
 const PLATFORM_OPTION_SCHEMA=Object.freeze({
-  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean'}),
-  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
-  max:Object.freeze({pin_message:'boolean'}),
+  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean',graduation_strategy:['MANUAL','SS_PERFORMANCE'],first_comment:OPTION_TEXT(2200),...DELETE_RULES}),
+  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean',...DELETE_RULES}),
+  youtube_shorts:Object.freeze({privacy:['public','unlisted','private'],...DELETE_RULES}),
+  telegram:Object.freeze({pin_message:'boolean',show_caption_above_media:'boolean',...POLL_RULES,...DELETE_RULES}),
+  vk:Object.freeze({disable_comment:'boolean',attachments_mode:['carousel','grid'],...POLL_RULES,...DELETE_RULES}),
+  max:Object.freeze({pin_message:'boolean',...DELETE_RULES}),
 });
 function optionValue(platform,key,rule,item){
   if(rule==='boolean'){if(typeof item!=='boolean')fail(400,`Опция «${key}» — true или false`);return item;}
