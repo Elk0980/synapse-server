@@ -92,10 +92,10 @@
         <div class="cp-actions">
           ${edit ? '<button type="button" class="plain-button" data-cp="questionnaire">Написать контент-план</button>' : ''}
           <button type="button" class="plain-button" data-cp="chat">Чат с Хью</button></div></header>
-      <details class="cp-card cp-q" ${q.filled < q.total && !days.length ? 'open' : ''}><summary>Анкета проекта · заполнено ${q.filled} из ${q.total}</summary>
+      <details class="cp-card cp-q" ${q.filled < q.total && !days.length ? 'open' : ''}><summary>Анкета проекта · <span data-cp-q-count>заполнено ${q.filled} из ${q.total}</span></summary>
         <p class="cp-note">Можно заполнять частями и дополнять потом: каждое поле сохраняется само. ${esc((q.rules || []).join(' '))}</p>
         <form class="cp-q-form" data-cp-form>${Q.map(([key, label, hint]) => `<label>${label}<textarea data-q="${key}" rows="2" maxlength="2000" placeholder="${esc(hint)}" ${edit ? '' : 'readonly'}>${esc(q.fields[key])}</textarea></label>`).join('')}
-          <fieldset><legend>Площадки</legend>${vocab.platforms.map((p) => `<label class="cp-check"><input type="checkbox" data-q-platform="${esc(p.id)}" ${q.fields.platforms.includes(p.id) ? 'checked' : ''} ${edit ? '' : 'disabled'}> ${esc(p.label)}</label>`).join('')}</fieldset>
+          <fieldset data-cp-platforms tabindex="-1"><legend>Площадки</legend>${vocab.platforms.map((p) => `<label class="cp-check"><input type="checkbox" data-q-platform="${esc(p.id)}" ${q.fields.platforms.includes(p.id) ? 'checked' : ''} ${edit ? '' : 'disabled'}> ${esc(p.label)}</label>`).join('')}</fieldset>
         </form><p class="cp-note" data-cp-saved role="status">${q.updatedAt ? `Сохранено${q.updatedBy ? ' · ' + esc(q.updatedBy) : ''}` : 'Ещё не сохранялась'}</p>
         ${edit ? `<div class="cp-gen"><label>Начало<input type="date" data-cp-start value="${isoIn(1)}"></label>
           <label>Дней<select data-cp-days><option>7</option><option>14</option></select></label>
@@ -162,7 +162,11 @@
     mine.saving = (async () => {
       try {
         mine.questionnaire = await mine.api.put('/questionnaire', {revision: mine.questionnaire.revision, fields});
-        if (saved) saved.textContent = `Сохранено · заполнено ${mine.questionnaire.filled} из ${mine.questionnaire.total}`;
+        const count = `заполнено ${mine.questionnaire.filled} из ${mine.questionnaire.total}`;
+        if (saved) saved.textContent = `Сохранено · ${count}`;
+        // №128: счётчик в заголовке анкеты обновляется вместе со статусом, без перезагрузки модуля.
+        const head = mine.container.querySelector('[data-cp-q-count]');
+        if (head) head.textContent = count;
       } catch (err) {
         if (saved) saved.textContent = err.status === 409 ? 'Анкету изменил другой человек — обновите страницу.' : `Не сохранено: ${err.message}`;
         if (err.status !== 409) mine.pending = {...fields, ...mine.pending};
@@ -187,14 +191,27 @@
     state.mentor = await api.put('/brief', {revision: mentor.brief.revision, brief: patch, reason: 'Пустые поля брифа дополнены из анкеты контент-плана'});
   }
 
+  /* №128: площадки выбираются чекбоксами в анкете — подсказка ведёт туда, а не в «бриф», которого на экране нет. */
+  const NO_PLATFORMS = 'Отметьте площадки в анкете выше.';
+  function askPlatforms(node) {
+    node.innerHTML = `<p class="cp-warn" role="alert">${NO_PLATFORMS}</p>`;
+    const box = state.container.querySelector('[data-cp-platforms]');
+    if (!box) return;
+    box.closest('details').open = true;
+    (box.querySelector('input:not([disabled])') || box).focus();
+  }
+
   async function generate(button) {
     const mine = state, node = mine.container.querySelector('[data-cp-suggest]');
     button.disabled = true; node.innerHTML = '<p class="cp-note" role="status">Хью составляет план… это может занять до минуты.</p>';
     try {
       clearTimeout(mine.timer); await flush(); await mine.saving; await briefFromQuestionnaire();
+      if (state !== mine) return;
+      if (!(mine.questionnaire.fields?.platforms || []).length && !(mine.mentor.brief.fields?.platforms || []).length) { askPlatforms(node); return; }
       const answer = await mine.api.suggest({startDate: mine.container.querySelector('[data-cp-start]').value,
         days: Number(mine.container.querySelector('[data-cp-days]').value)});
       if (state !== mine) return;
+      if (answer.status === 'brief_incomplete') { askPlatforms(node); return; }
       mine.suggestion = answer.status === 'ok' ? answer.items : [];
       node.innerHTML = mine.suggestion.length ? `<p class="cp-note">${esc(answer.notice || '')}</p><ol class="cp-suggest">${mine.suggestion.map((i) =>
         `<li><b>${esc(day(i.date))}</b> · ${esc(i.platform)} · ${esc(i.topic)}${i.hook ? `<br><span class="cp-note">Хук: ${esc(i.hook)}</span>` : ''}</li>`).join('')}</ol>

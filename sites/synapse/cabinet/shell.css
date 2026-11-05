@@ -20,6 +20,10 @@
 .sb-chat-fab:hover { filter: brightness(1.1); }
 .sb-chat-fab:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .sb-chat-fab[aria-expanded="true"] { filter: brightness(0.85); }
+/* №126: на «Чатах» и в чате проекта есть свой чат с Хью и своё поле ввода —
+   плавающая кнопка не должна лежать поверх «Отправить» ни на ПК, ни на телефоне. */
+body[data-cabinet-view="hugh"] .sb-chat-fab,
+body[data-cabinet-view="chats"] .sb-chat-fab { display: none; }
 .sb-chat-panel {
   position: fixed; right: 24px; bottom: 96px; z-index: 41;
   display: flex; flex-direction: column; width: min(400px, calc(100vw - 48px)); height: min(600px, calc(100vh - 130px));
@@ -44,11 +48,13 @@
   .sb-chat-panel { inset: 0; width: auto; height: auto; border-radius: 0; border: 0; padding-top: env(safe-area-inset-top); }
   body.sb-chat-open { overflow: hidden; }
   body.drawer-open .sb-chat-fab,
-  body.sb-chat-open .sb-chat-fab,
-  body[data-cabinet-view="hugh"] .sb-chat-fab,
-  body[data-cabinet-view="chats"] .sb-chat-fab { display: none; }
+  body.sb-chat-open .sb-chat-fab { display: none; }
   .mobile-shortcuts a, .mobile-shortcuts button { font-size: 11px; padding-inline: 2px; }
   .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
+/* На ПК конец любого экрана (поле ввода, кнопки формы) не уходит под плавающую кнопку: 24 + 58 + запас. */
+@media (min-width: 761px) {
+  .main { padding-bottom: 104px; }
 }
 @media (min-width: 761px) and (max-width: 1100px) {
   .sb-chat-panel { height: min(560px, calc(100vh - 120px)); }
