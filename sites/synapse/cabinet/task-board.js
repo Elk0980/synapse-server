@@ -249,7 +249,7 @@
       return {overlay, body:overlay.querySelector('[data-sheet-body]'), close};
     }
     const taskLinks = task => task.coordination?.links || task.links || [];
-    const waitingInstructions = task => `<details class="tb-waiting-instructions" data-waiting-instructions><summary>Полный текст ожидания</summary><p class="tb-waiting-text">${esc(task.coordination?.blocker || window.SbTaskOverview.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}</details>`;
+    const waitingInstructions = task => `<details class="tb-waiting-instructions" data-waiting-instructions open><summary>Полный текст ожидания</summary><p class="tb-waiting-text">${esc(task.coordination?.blocker || window.SbTaskOverview.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}</details>`;
     const linksMarkup = task => `<div class="tb-waiting-links">${taskLinks(task).map(link=>{const href=safeUrl(link.url);return href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(link.label||href)} ↗</a>`:'';}).join('')}</div>`;
 
     const chatUrl = task => safeUrl(task.chat_url) || safeUrl(taskLinks(task).find(link => /^чат/i.test(link.label || ''))?.url) || safeUrl(agents.find(agent => agent.name === task.assignee_name)?.chat_url || agents.find(agent => agent.name === task.assignee_name)?.chat);
