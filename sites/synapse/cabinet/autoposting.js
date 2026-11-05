@@ -240,7 +240,7 @@ function create(container, context) {
   let pendingLink=null,handledLink='',linkEpoch=0,trashPosts=[],deleteArmed="";
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
-  container.innerHTML=`<h2 class="autoposting-sr-only">Контент-план</h2>
+  container.innerHTML=`<h2 class="autoposting-sr-only">Постинг</h2>
     <p id="autoposting-status" role="status" aria-live="polite"></p>
     <section class="card autoposting-calendar-section ap-board-section" aria-label="Доска публикаций">
     <div class="ap-board-nav"><button class="plain-button" id="autoposting-prev-week" type="button" aria-label="Предыдущая неделя">←</button><strong id="autoposting-week-label" class="ap-week-label" aria-live="polite"></strong><button class="plain-button" id="autoposting-next-week" type="button" aria-label="Следующая неделя">→</button>
@@ -1160,7 +1160,7 @@ function create(container, context) {
     get('autoposting-day-strip').innerHTML=days.map(date=>{const total=dayItems(date).length;return `<button type="button" class="plain-button" data-strip-date="${date}" aria-pressed="${selectedDate===date}" aria-label="${dayLabel(date)}: публикаций ${total}"><span>${WEEKDAYS[weekdayOf(date)]}</span><b>${Number(date.slice(8))}</b>${total?`<em>${total}</em>`:''}</button>`;}).join('');
     const weekTotal=days.reduce((sum,date)=>sum+dayItems(date).length,0),weekAll=all.filter(item=>days.includes(item.effectiveDate)).length;
     const undated=items.filter(item=>!item.effectiveDate).sort(byTime);
-    const invite=!all.length&&!calendarPending?`<div class="ap-empty-board"><p><strong>На доске пока пусто.</strong> Заполните вводные в «Настройках модуля», затем нажмите «Составить план» — или «Создать публикацию» вручную.</p><p><a href="#content-factory/settings">Перейти в «Настройки модуля»</a></p></div>`:'';
+    const invite=!all.length&&!calendarPending?`<div class="ap-empty-board"><p><strong>На доске пока пусто.</strong> Здесь появятся готовые рилсы с предпросмотром по площадкам. План составляется в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся из <a href="#content/materials">«Материалов»</a>.</p><p><a href="#content-factory/settings">Перейти в «Настройки модуля»</a></p></div>`:'';
     const filtered=!weekTotal&&weekAll?`<p class="ap-filter-empty">По выбранным фильтрам на этой неделе публикаций нет. <button type="button" class="plain-button" data-filter-reset>Сбросить фильтры</button></p>`:'';
     const board=`<div class="ap-board" style="--ap-days:${days.length}" aria-label="Неделя: ${esc(weekLabel(days))}">${days.map(date=>{const list=dayItems(date);
       return `<section class="ap-day${date===today()?' is-today':''}${selectedDate===date?' is-selected':''}" data-board-day="${date}" aria-labelledby="ap-day-${date}"><h3 class="ap-day-head" id="ap-day-${date}">${esc(dayLabel(date))}${date===today()?' <span class="ap-today">Сегодня</span>':''}<span class="ap-day-count" aria-label="публикаций ${list.length}">${list.length||''}</span></h3>
@@ -1652,6 +1652,6 @@ function create(container, context) {
   const code=companies.find(item=>item.code===ctx.selectedProjectId)?.code||companies[0]?.code||"";
   return {ready:load(code),leave(){closeEditor(true);},update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);return (async()=>{await openLinkedPost();consumeOpen();})();}};
 }
-cabinet.registerView("autoposting",{title:"Контент-план",onLeave(){controller?.leave?.();},render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
+cabinet.registerView("autoposting",{title:"Постинг",onLeave(){controller?.leave?.();},render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
   onProjectChange(context){if(permitted(context,"view"))return controller?.change(context);}});
 })();

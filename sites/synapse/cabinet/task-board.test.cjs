@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const {JSDOM} = require('jsdom');
 const source = fs.readFileSync(__dirname + '/task-board.js','utf8');
 const settle = async () => { for (let i=0;i<12;i++) await new Promise(resolve => setImmediate(resolve)); };
-function fixture(role='owner', initial={view:'board'}) {
+function fixture(role='owner', initial={view:'board'},setup) {
   const dom = new JSDOM('<main id="board"></main>',{url:'https://example.test/cabinet.html#tasks',runScripts:'outside-only'});
   const w=dom.window,d=w.document,calls=[],interceptors={};
   const milestones = {code:{state:'confirmed',evidence:'https://example.test/review',checkedAt:'2026-01-01T00:00:00Z'},connected:{state:'pending'},verified:{state:'pending'},accepted:{state:'pending'}};
@@ -24,6 +24,7 @@ function fixture(role='owner', initial={view:'board'}) {
     if(name==='task_create')return replay?{created:false,task}:duplicates&&!args.force?{created:false,possible_duplicates:[task],possible_product_duplicates:[]}:{created:true,task};
     throw Error('Unexpected '+name);
   }};
+  setup?.(w);w.eval(fs.readFileSync(__dirname+'/task-text.js','utf8'));
   w.eval(fs.readFileSync(__dirname+'/task-overview.js','utf8'));
   w.eval(source);
   const controller=w.SbTaskBoard.mount(d.getElementById('board'),ctx,initial);
@@ -180,7 +181,7 @@ test('owner overview orders waiting, guide, goal, active directions, future and 
 });
 test('waiting block hides when empty and never substitutes last update for an unknown start date',async()=>{
   const task=overviewTask(201,{coordination:{revision:1,blocker:'Пока без вопроса',nextAction:'',updatedAt:'2026-01-01T00:00:00Z',milestones:{}}});
-  const f=await overviewFixture([task]);try{assert.equal(f.d.querySelector('[data-waiting]'),null);task.assignee_name='Влад';await f.controller.render();assert.ok(f.d.querySelector('[data-waiting]'));assert.equal(f.d.querySelector('[data-waiting] time'),null);assert.match(f.d.querySelector('[data-waiting]').textContent,/Время ожидания не указано/);}finally{f.close();}
+  const f=await overviewFixture([task]);try{assert.equal(f.d.querySelector('[data-waiting]'),null);task.assignee_name='Влад';await f.controller.render();assert.ok(f.d.querySelector('[data-waiting]'));assert.equal(f.d.querySelector('[data-waiting] time'),null);assert.match(f.d.querySelector('[data-waiting]').textContent,/Ждёт решения · начало не зафиксировано/);}finally{f.close();}
 });
 test('waiting Yes and No add only explicit comments; unrelated blocker and next step are preserved',async()=>{
   const task=overviewTask(201,{assignee_name:'Влад',coordination:{revision:2,blocker:'Нужны данные клиента',nextAction:'ВОПРОС → Влад: выбрать вариант',milestones:{}}});
@@ -268,6 +269,57 @@ test('goal shows equal module weights, completed work gives 100%, and future mod
   try{assert.match(f.d.querySelector('[data-goal]').textContent,/50%/);assert.match(f.d.querySelector('[data-board-guide]').textContent,/среднее процентов её модулей с равным весом/);assert.match(f.d.querySelector('[data-board-guide]').textContent,/Завершённая задача даёт 100%/);assert.match(f.d.querySelector('[data-module-id="1100"] [data-module-task="201"]').textContent,/100%/);assert.match(f.d.querySelector('[data-module-id="1100"] [data-module-task="201"]').textContent,/готово/);assert.equal(f.d.querySelector('[data-module-id="1200"]'),null);const row=f.d.querySelector('.tb-upcoming [data-task-open="1200"]');assert.ok(row);assert.equal(f.d.querySelectorAll('.tb-upcoming [data-task-open="1200"]').length,1);row.click();await settle();assert.equal(f.d.querySelectorAll('[data-module-composition] [data-module-task]').length,3);assert.ok(f.d.querySelector('[data-module-composition] [data-module-task="204"]'));assert.match(f.d.querySelector('[data-module-composition]').textContent,/0%/);assert.equal(JSON.stringify(records),before);}finally{f.close();}
 });
 
+test('waiting instructions expose full blocker, next step and link buttons directly; text URLs are safe in all fields',async()=>{
+ const blocker='ждёт Влада: Первая строка\nВторая строка: github.com/Elk0980/synapse-server/pull/523\nТретья строка — '+ 'Длинный текст '.repeat(60);
+ const next='Открыть synapse.synapsebusiness.ru/cabinet/people.html\nЗатем принять решение';
+ const task=overviewTask(201,{description:'Описание https://example.test/description <img src=x onerror=alert(1)>',coordination:{revision:2,blocker,nextAction:next,milestones:{},links:[{url:'https://example.test/button',label:'Открыть инструкцию'},{url:'javascript:alert(1)',label:'Запрещено'}]}});
+ task.comments=[{id:1,author:'Claude',text:'Комментарий github.com/Elk0980/synapse-server',created_at:'2026-01-01'}];
+ const f=await overviewFixture([task]);try{
+ const row=f.d.querySelector('.tb-waiting-row');assert.equal(row.querySelector('[data-waiting-instructions]').open,true,'вариант C (№108): виден сразу в строке');assert.equal(row.querySelector('.tb-waiting-text').textContent,blocker);assert.match(row.textContent,/Следующий шаг/);assert.ok(row.querySelector('a[href="https://example.test/button"]'));assert.equal(row.querySelector('button a'),null);
+ assert.ok(row.querySelector('a[href="https://github.com/Elk0980/synapse-server/pull/523"]'));
+ await f.controller.openTask(201);await settle();const panel=f.d.querySelector('[data-waiting-actions]');
+ const full=panel.nextElementSibling;assert.ok(full.matches('[data-waiting-instructions]'),'full text sits right after the simple decision panel');assert.equal(full.open,true,'вариант C (№108): виден сразу в карточке');
+ assert.equal(full.querySelector('.tb-waiting-text').textContent,blocker);assert.match(full.textContent,/Затем принять решение/);assert.equal(panel.querySelector('.tb-waiting-text'),null,'decision panel stays simple (№88)');assert.ok(panel.querySelector('a[href="https://example.test/button"]'));
+ assert.ok(f.d.querySelector('.tb-description a[href="https://example.test/description"]'));assert.ok(f.d.querySelector('[data-comments] a[href="https://github.com/Elk0980/synapse-server"]'));
+ assert.equal(f.d.querySelector('img'),null);assert.equal(f.d.querySelector('a[href^="javascript:"]'),null);
+ assert.equal(f.d.querySelector('[data-plan-form]').elements.blocker.value,blocker);
+ for(const a of panel.querySelectorAll('a')){assert.equal(a.target,'_blank');assert.equal(a.rel,'noopener noreferrer');}
+ }finally{f.close();}
+});
+
+test('45s refresh, focus and pull update waiting while preserving open drafts; destroy clears timer',async()=>{
+ let tick,cleared=false;const f=fixture('owner',{view:'board'},w=>{
+ Object.defineProperty(w.document,'visibilityState',{configurable:true,value:'visible'});
+ w.setInterval=(callback,ms)=>{assert.equal(ms,45000);tick=callback;return 123;};w.clearInterval=id=>{if(id===123)cleared=true;};
+ });try{await settle();const before=f.refreshCount();tick();await settle();assert.equal(f.refreshCount(),before+1);
+ await f.controller.openTask(1);const draft=f.d.querySelector('[data-comment-form] textarea');f.input(draft,'Не потерять');tick();await settle();assert.equal(draft.value,'Не потерять');assert.ok(draft.isConnected);
+ f.d.querySelector('[data-sheet-close]').click();const count=f.refreshCount();f.w.dispatchEvent(new f.w.Event('focus'));await settle();assert.equal(f.refreshCount(),count+1);
+ const container=f.d.querySelector('#board'),event=(type,touches)=>{const e=new f.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:touches});container.dispatchEvent(e);};
+ const pulls=f.refreshCount();event('touchstart',[{clientX:20,clientY:10}]);event('touchmove',[{clientX:20,clientY:100}]);event('touchend',[]);await settle();assert.equal(f.refreshCount(),pulls+1);
+ f.controller.destroy();assert.equal(cleared,true);
+ }finally{f.close();}
+});
+test('auto refresh does not redraw while search or quick task has focus; applies after blur; pull still forces',async()=>{
+ let tick;const f=fixture('owner',{view:'board',project:'synapse-business'},w=>{
+ Object.defineProperty(w.document,'visibilityState',{configurable:true,value:'visible'});
+ w.setInterval=(callback,ms)=>{tick=callback;return 123;};w.clearInterval=()=>{};
+ });try{await settle();const wait=()=>new Promise(r=>setTimeout(r,5));
+ for(const selector of ['[data-board-search]','[data-quick-task] input']){
+  const field=f.d.querySelector(selector);field.focus();field.value='набираю';assert.equal(f.d.activeElement,field);
+  const before=f.refreshCount();tick();f.w.dispatchEvent(new f.w.Event('focus'));await settle();
+  assert.equal(f.refreshCount(),before,'no reload while typing in '+selector);assert.ok(field.isConnected);assert.equal(f.d.activeElement,field);assert.equal(field.value,'набираю');
+  field.blur();await wait();await settle();assert.equal(f.refreshCount(),before+1,'postponed refresh applied after blur');assert.equal(field.isConnected,false);
+ }
+ // Load already in flight when the person starts typing: data is kept, DOM is not replaced.
+ let release;f.intercept('tasks_list',()=>new Promise(resolve=>{release=()=>resolve({tasks:[f.task],pagination:{total:1}});}));
+ tick();await settle();const search=f.d.querySelector('[data-board-search]');search.focus();release();await settle();
+ assert.ok(search.isConnected);assert.equal(f.d.activeElement,search);
+ f.intercept('tasks_list',undefined);
+ // Explicit pull-to-refresh is not postponed.
+ const container=f.d.querySelector('#board'),event=(type,touches)=>{const e=new f.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:touches});container.querySelector('.tb-columns').dispatchEvent(e);};
+ const pulls=f.refreshCount();event('touchstart',[{clientX:20,clientY:10}]);event('touchmove',[{clientX:20,clientY:100}]);event('touchend',[]);await settle();assert.equal(f.refreshCount(),pulls+1);
+ }finally{f.close();}
+});
 test('only complete plain questions reach the owner; legacy requests stay in the orchestrator queue',async()=>{
   const task=overviewTask(900,{title:'PR 123 head abcdef1234567890 /opt/private',description:'CI log',status:'in_progress',due_date:'2026-01-01',assignee_name:'Влад',coordination:{owner_question:''}}),f=await overviewFixture([task]);
   try{assert.equal(f.d.querySelector('[data-waiting]'),null);for(const view of ['board','plan','today','projects']){await f.controller.render({view});assert.match(f.d.body.textContent,/PR 123 head abcdef1234567890 \/opt\/private/);}await f.controller.render({view:'agents'});assert.match(f.d.querySelector('[data-question-queue]').textContent,/Вопрос не оформлен/);await f.controller.openTask(900);assert.equal(f.d.querySelector('[data-waiting-actions]'),null);assert.match(f.d.querySelector('[data-task-simple]').textContent,/Вопрос пока не оформлен/);assert.equal(f.d.querySelector('[data-task-technical]').open,false);assert.match(f.d.querySelector('[data-task-technical]').textContent,/abcdef1234567890/);}finally{f.close();}

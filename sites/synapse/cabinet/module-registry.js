@@ -69,6 +69,7 @@
       moduleId, companyCode, companyName: company?.name || '',
       user: Object.freeze({ id: user?.userId ?? null, login: user?.login || '', name: user?.displayName || user?.login || '', role: user?.role || '' }),
       permissions: Object.freeze([...(user?.permissions || [])]),
+      viewAs: user?.viewAs || null,
       can, signal,
       get csrfToken() { return currentUser()?.csrfToken || ''; },
       route: Object.freeze({ path: route?.path || '', params: new URLSearchParams(route?.query || '') }),
