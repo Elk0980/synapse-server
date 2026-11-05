@@ -151,7 +151,8 @@
       tabBar.querySelectorAll('[role=tab]').forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.tab === key)));
       if (key === 'board' && S.board) { body.replaceChildren(S.board.render({view: this, ...this.card, h})); return; }
       const {parsed} = this.card;
-      body.replaceChildren(
+      // Родной replaceChildren превращает null в текстовый узел «null» (№120): пустые части отбрасываются.
+      body.replaceChildren(...[
         parsed.props.length ? h('p', {class: 'shoot-props'}, h('strong', {text: 'Реквизит: '}), parsed.props.join(', ')) : null,
         h('ol', {class: 'shoot-frames'}, parsed.frames.map((frame) => h('li', {class: `shoot-frame shoot-frame--${frame.type}`, 'data-frame': frame.n},
           h('div', {class: 'shoot-frame__text'},
@@ -161,7 +162,7 @@
           this.uploadSlot(frame.n)))),
         h('section', {class: 'shoot-other', 'data-frame': 'other'}, h('h2', {text: 'Другое / дополнительно'}),
           h('p', {class: 'muted', text: 'Можно загрузить больше нужного и в любом порядке.'}), this.uploadSlot(null)),
-        h('section', {class: 'shoot-drafts'}, h('h2', {text: 'Черновик монтажа'}), h('div', {'data-drafts': ''})));
+        h('section', {class: 'shoot-drafts'}, h('h2', {text: 'Черновик монтажа'}), h('div', {'data-drafts': ''}))].filter(Boolean));
       this.renderUploads();
     }
 
