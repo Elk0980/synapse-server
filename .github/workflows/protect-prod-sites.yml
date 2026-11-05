@@ -2,27 +2,44 @@ name: Protect production sites
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled, edited, ready_for_review]
+  # Ревью-комментарий «ПРИНЯТ PR <номер> @<sha8>» перезапускает проверку (задача №163).
+  # issue_comment всегда исполняет workflow и guard из ветки по умолчанию, не из PR.
+  issue_comment:
+    types: [created, edited, deleted]
 permissions:
   contents: read
   pull-requests: read
+  issues: read
   statuses: write
+# Обычные комментарии без «ПРИНЯТ» получают свою группу и не отменяют идущую проверку.
 concurrency:
-  group: protect-prod-sites-${{ github.event.pull_request.number }}
+  group: >-
+    protect-prod-sites-${{ github.event.pull_request.number || github.event.issue.number }}-${{
+    (github.event_name == 'pull_request_target' ||
+    (github.event.issue.pull_request &&
+    (contains(github.event.comment.body, 'ПРИНЯТ') ||
+    contains(github.event.changes.body.from, 'ПРИНЯТ')))) && 'check' || github.run_id }}
   cancel-in-progress: true
 jobs:
   site-path-approval:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+      (contains(github.event.comment.body, 'ПРИНЯТ') ||
+      contains(github.event.changes.body.from, 'ПРИНЯТ')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       # Trusted base only. Only write: exact-head commit status. Never execute PR code.
+      # pull_request_target: base sha PR; issue_comment: github.sha = ветка по умолчанию.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Проверить текущие метки и все пути PR
+      - name: Проверить метки или принятое ревью точного head и все пути PR
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}

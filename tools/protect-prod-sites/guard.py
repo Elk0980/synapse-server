@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+from datetime import datetime
 import urllib.parse
 import urllib.request
 from pathlib import PurePosixPath, Path
@@ -50,6 +51,14 @@ PUBLIC_TOKENS = {
     'ops/crm/server.js': re.compile(r"'/leads'|'/events'|\bpublicPost\b|\bcheckPublicOrigin\b|\bcompanyDomains\b"),
 }
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+# Независимое ревью вместо метки Влада (поручение 05.11 15:37, задача №163):
+# комментарий PR «ПРИНЯТ PR <номер> @<первые 8+ символов head sha>» на точный текущий head,
+# оставленный после даты head-коммита участником репозитория. «НЕ ПРИНЯТ» на тот же head,
+# оставленный позже, снова закрывает проверку. Новый коммит меняет sha — нужен новый «ПРИНЯТ».
+VERDICT = re.compile(r'(?<!\w)(НЕ[\s\-\u2010-\u2015_]*)?ПРИНЯТ\s+PR\s*#?(\d+)\s+`?@([0-9a-fA-F]{8,40})(?![0-9a-zA-Z])',
+                     re.IGNORECASE)
+TRUSTED_ASSOCIATIONS = {'OWNER', 'MEMBER', 'COLLABORATOR'}
+MAX_COMMENT_PAGES = 30
 
 
 def protected_blocks(path, source):
@@ -142,7 +151,46 @@ def required_labels(paths):
     return required
 
 
-def evaluate(pr, files, expected_sha, base_sources=None):
+def parse_time(value):
+    if not isinstance(value, str) or not value:
+        raise ValueError('Нет времени комментария или коммита; закрытый отказ')
+    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+
+def review_approval(number, head_sha, comments, head_date):
+    """Approval comment for the exact head after the last push, or ValueError."""
+    if not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha):
+        raise ValueError('Неизвестен head sha для ревью')
+    pushed = parse_time(head_date)
+    verdicts = []
+    for comment in comments:
+        if comment.get('author_association') not in TRUSTED_ASSOCIATIONS:
+            continue  # публичный репозиторий: посторонний не принимает и не блокирует
+        body = comment.get('body')
+        if not isinstance(body, str):
+            continue
+        kinds = set()
+        for negative, pr_number, sha in VERDICT.findall(body):
+            if int(pr_number) == int(number) and head_sha.startswith(sha.lower()):
+                kinds.add('reject' if negative else 'approve')
+        if not kinds:
+            continue
+        created = parse_time(comment.get('created_at'))
+        kind = 'reject' if 'reject' in kinds else 'approve'
+        if kind == 'approve' and created <= pushed:
+            continue  # «ПРИНЯТ» раньше последнего push не действует
+        verdicts.append((created, comment.get('id') or 0, kind, comment))
+    if not verdicts:
+        raise ValueError('Нет метки и нет комментария «ПРИНЯТ PR %s @%s» после последнего push'
+                         % (number, head_sha[:8]))
+    created, _, kind, comment = max(verdicts, key=lambda item: (item[0], item[1]))
+    if kind != 'approve':
+        raise ValueError('Последний вердикт ревью на head %s — «НЕ ПРИНЯТ»' % head_sha[:8])
+    return {'by': (comment.get('user') or {}).get('login', ''), 'at': comment.get('created_at'),
+            'comment': comment.get('html_url', '')}
+
+
+def evaluate(pr, files, expected_sha, base_sources=None, load_review=None):
     if pr.get('state') != 'open' or pr.get('head', {}).get('sha') != expected_sha:
         raise ValueError('PR закрыт или событие относится к прежнему SHA')
     count = pr.get('changed_files')
@@ -170,9 +218,18 @@ def evaluate(pr, files, expected_sha, base_sources=None):
         required.add(INFRA)
     actual = {label['name'] for label in pr.get('labels', [])}
     missing = required - actual
+    result = {'head': expected_sha, 'requiredLabels': sorted(required), 'files': count,
+              'admission': 'labels'}
     if missing:
-        raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)))
-    return {'head': expected_sha, 'requiredLabels': sorted(required), 'files': count}
+        if load_review is None:
+            raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)))
+        comments, head_date = load_review()
+        try:
+            result['review'] = review_approval(pr.get('number'), expected_sha, comments, head_date)
+        except ValueError as error:
+            raise ValueError('Отсутствуют метки: ' + ', '.join(sorted(missing)) + '; ' + str(error))
+        result['admission'] = 'review'
+    return result
 
 
 def fetch_json(repo, endpoint):
@@ -214,6 +271,24 @@ def merge_base_sources(repo, pr, files):
     return sources
 
 
+def fetch_review(repo, number, head_sha):
+    """All PR conversation comments and the head commit date (read-only API)."""
+    comments = []
+    for page in range(1, MAX_COMMENT_PAGES + 1):
+        chunk = fetch_json(repo, '/issues/' + str(number) + '/comments?per_page=100&page=' + str(page))
+        if not isinstance(chunk, list):
+            raise ValueError('Некорректный ответ API комментариев')
+        comments.extend(chunk)
+        if len(chunk) < 100:
+            break
+    else:
+        raise ValueError('Слишком много комментариев PR; закрытый отказ')
+    commit = fetch_json(repo, '/commits/' + head_sha)
+    if commit.get('sha') != head_sha:
+        raise ValueError('Коммит head не совпадает; закрытый отказ')
+    return comments, (commit.get('commit') or {}).get('committer', {}).get('date')
+
+
 def check_remote(repo, number, expected_sha):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or not str(number).isdigit():
         raise ValueError('Некорректный репозиторий/PR')
@@ -234,7 +309,8 @@ def check_remote(repo, number, expected_sha):
                 sorted(label['name'] for label in value.get('labels', [])))
     if admission_state(latest) != admission_state(pr):
         raise ValueError('PR изменился во время проверки; повторите CI')
-    return evaluate(latest, files, expected_sha, sources)
+    return evaluate(latest, files, expected_sha, sources,
+                    load_review=lambda: fetch_review(repo, number, expected_sha))
 
 
 def publish_status(repo, sha, state):
@@ -259,12 +335,24 @@ def main():
     parser.add_argument('--publish-status', action='store_true')
     args = parser.parse_args()
     event = json.loads(Path(args.event).read_text(encoding='utf-8'))
-    pr = event['pull_request']
-    sha = pr['head']['sha']
+    if 'pull_request' in event:
+        number = event['pull_request']['number']
+        sha = event['pull_request']['head']['sha']
+    else:
+        # issue_comment: ревью-комментарий перезапускает проверку; статус — на текущий head.
+        issue = event.get('issue') or {}
+        if not issue.get('pull_request') or not str(issue.get('number', '')).isdigit():
+            raise ValueError('Событие не относится к PR')
+        number = issue['number']
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repo):
+            raise ValueError('Некорректный репозиторий/PR')
+        sha = fetch_json(args.repo, '/pulls/' + str(number)).get('head', {}).get('sha')
+        if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+            raise ValueError('Неизвестен head sha PR')
     if args.publish_status:
         publish_status(args.repo, sha, 'pending')
     try:
-        result = check_remote(args.repo, pr['number'], sha)
+        result = check_remote(args.repo, number, sha)
     except Exception:
         if args.publish_status:
             publish_status(args.repo, sha, 'failure')

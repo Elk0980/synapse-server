@@ -278,5 +278,142 @@ class AdmissionTests(unittest.TestCase):
             guard.publish_status('owner/repo', '../main', 'success')
 
 
+HEAD = 'abcdef12' + '3' * 32
+OLD_HEAD = '0123abcd' + '4' * 32
+PUSHED = '2026-11-05T08:00:00Z'
+
+
+def comment(body, at='2026-11-05T09:00:00Z', association='COLLABORATOR', cid=1):
+    return {'id': cid, 'body': body, 'created_at': at, 'author_association': association,
+            'user': {'login': 'reviewer'}, 'html_url': 'https://example.invalid/c/' + str(cid)}
+
+
+class ReviewApprovalTests(unittest.TestCase):
+    """Задача №163: независимое ревью точного head вместо метки Влада."""
+
+    def check(self, comments, paths=('.github/workflows/ci.yml',), labels=(), head_date=PUSHED):
+        files = [{'filename': path, 'status': 'modified'} for path in paths]
+        pr = {'number': 161, 'state': 'open', 'head': {'sha': HEAD}, 'changed_files': len(files),
+              'labels': [{'name': label} for label in labels]}
+        return guard.evaluate(pr, files, HEAD, SOURCES, load_review=lambda: (comments, head_date))
+
+    def test_label_passes_without_review(self):
+        result = self.check([], labels=[guard.INFRA])
+        self.assertEqual(result['admission'], 'labels')
+        result = self.check([], paths=['sites/alvi/index.html'], labels=['сайт alvi'])
+        self.assertEqual(result['admission'], 'labels')
+
+    def test_approval_of_current_head_passes(self):
+        for body in ('ПРИНЯТ PR 161 @abcdef12', 'КОД ПРИНЯТ PR #161 `@abcdef12`',
+                     'Ревью: принят pr 161 @' + HEAD, 'ПРИНЯТ PR 161 @ABCDEF12 — замечаний нет'):
+            with self.subTest(body=body):
+                result = self.check([comment(body)])
+                self.assertEqual(result['admission'], 'review')
+                self.assertEqual(result['review']['by'], 'reviewer')
+        # Клиентский сайт тоже принимается ревью, не только инфраструктура.
+        self.check([comment('ПРИНЯТ PR 161 @abcdef12')], paths=['sites/alvi/index.html'])
+
+    def test_approval_of_old_head_fails(self):
+        for body in ('ПРИНЯТ PR 161 @0123abcd', 'ПРИНЯТ PR 161 @abcdef1', 'ПРИНЯТ PR 161 @abcdef13',
+                     'ПРИНЯТ PR 160 @abcdef12', 'ПРИНЯТ PR 161', 'ПРИНЯТ'):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.check([comment(body)])
+
+    def test_approval_before_push_fails(self):
+        for at in ('2026-11-05T07:59:59Z', PUSHED):
+            with self.subTest(at=at), self.assertRaises(ValueError):
+                self.check([comment('ПРИНЯТ PR 161 @abcdef12', at=at)])
+        with self.assertRaises(ValueError):
+            self.check([comment('ПРИНЯТ PR 161 @abcdef12')], head_date=None)
+
+    def test_rejection_fails(self):
+        for body in ('НЕ ПРИНЯТ PR 161 @abcdef12', 'КОД НЕ ПРИНЯТ PR 161 @abcdef12',
+                     'не принят pr 161 @abcdef12', 'НЕ-ПРИНЯТ PR 161 @abcdef12',
+                     'НЕПРИНЯТ PR 161 @abcdef12'):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.check([comment(body)])
+
+    def test_later_rejection_over_approval_fails(self):
+        approve = comment('ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T09:00:00Z', cid=1)
+        reject = comment('НЕ ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T09:30:00Z', cid=2)
+        with self.assertRaises(ValueError):
+            self.check([approve, reject])
+        with self.assertRaises(ValueError):
+            self.check([reject, approve])  # порядок ответа API не важен, важно время
+        # Повторное ревью после «НЕ ПРИНЯТ» на тот же head снова принимает.
+        again = comment('ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T10:00:00Z', cid=3)
+        self.assertEqual(self.check([approve, reject, again])['admission'], 'review')
+        # Один комментарий с обоими вердиктами — закрытый отказ.
+        with self.assertRaises(ValueError):
+            self.check([comment('ПРИНЯТ PR 161 @abcdef12, но НЕ ПРИНЯТ PR 161 @abcdef12')])
+
+    def test_rejection_of_other_head_does_not_block(self):
+        self.check([comment('ПРИНЯТ PR 161 @abcdef12', cid=1),
+                    comment('НЕ ПРИНЯТ PR 161 @0123abcd', at='2026-11-05T09:30:00Z', cid=2)])
+
+    def test_outsider_cannot_approve_or_block(self):
+        for association in ('NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', None):
+            with self.subTest(association=association), self.assertRaises(ValueError):
+                self.check([comment('ПРИНЯТ PR 161 @abcdef12', association=association)])
+        self.check([comment('ПРИНЯТ PR 161 @abcdef12', association='OWNER', cid=1),
+                    comment('НЕ ПРИНЯТ PR 161 @abcdef12', at='2026-11-05T09:30:00Z',
+                            association='NONE', cid=2)])
+
+    def test_regular_paths_pass_without_review_or_api(self):
+        def no_api():
+            raise AssertionError('обычные пути не читают комментарии')
+        files = [{'filename': 'ops/tasks-mcp/server.js', 'status': 'modified'}]
+        pr = {'number': 161, 'state': 'open', 'head': {'sha': HEAD}, 'changed_files': 1, 'labels': []}
+        self.assertEqual(guard.evaluate(pr, files, HEAD, SOURCES, load_review=no_api)['admission'], 'labels')
+
+    def test_remote_reads_comments_and_head_commit(self):
+        pr = {'number': 161, 'state': 'open', 'head': {'sha': HEAD}, 'base': {'sha': 'b' * 40},
+              'changed_files': 1, 'labels': []}
+        files = [{'filename': '.github/workflows/ci.yml', 'status': 'modified'}]
+        page1 = [comment('просто текст', cid=i) for i in range(100)]
+        page2 = [comment('ПРИНЯТ PR 161 @abcdef12', cid=200)]
+        calls = []
+        def fake_json(repo, endpoint):
+            calls.append(endpoint)
+            if endpoint.endswith('/files?per_page=100&page=1'):
+                return files
+            if '/comments' in endpoint:
+                return page1 if endpoint.endswith('page=1') else page2
+            if endpoint == '/commits/' + HEAD:
+                return {'sha': HEAD, 'commit': {'committer': {'date': PUSHED}}}
+            return pr
+        with patch.object(guard, 'fetch_json', side_effect=fake_json):
+            result = guard.check_remote('owner/repo', 161, HEAD)
+        self.assertEqual(result['admission'], 'review')
+        self.assertIn('/issues/161/comments?per_page=100&page=2', calls)
+        self.assertIn('/commits/' + HEAD, calls)
+
+    def test_issue_comment_event_publishes_on_current_head(self):
+        event = {'issue': {'number': 161, 'pull_request': {'url': 'x'}}, 'comment': {'body': 'ПРИНЯТ'}}
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'event.json'
+            path.write_text(json.dumps(event), encoding='utf-8')
+            argv = ['guard', '--event', str(path), '--repo', 'owner/repo', '--publish-status']
+            with patch('sys.argv', argv), patch.object(guard, 'publish_status') as status, \
+                    patch.object(guard, 'fetch_json', return_value={'head': {'sha': HEAD}}), \
+                    patch.object(guard, 'check_remote', return_value={'files': 1}) as remote:
+                guard.main()
+            remote.assert_called_once_with('owner/repo', 161, HEAD)
+            self.assertEqual([c.args for c in status.call_args_list], [
+                ('owner/repo', HEAD, 'pending'), ('owner/repo', HEAD, 'success')])
+            path.write_text(json.dumps({'issue': {'number': 5}}), encoding='utf-8')
+            with patch('sys.argv', argv), patch.object(guard, 'publish_status') as status:
+                with self.assertRaises(ValueError):
+                    guard.main()
+                status.assert_not_called()
+
+    def test_trusted_workflow_reruns_on_review_comments(self):
+        workflow = (ROOT / '.github/workflows/protect-prod-sites.yml').read_text(encoding='utf-8')
+        self.assertRegex(workflow, r'issue_comment:\s+types: \[created, edited, deleted\]')
+        self.assertIn('issues: read', workflow)
+        self.assertIn('ref: ${{ github.event.pull_request.base.sha || github.sha }}', workflow)
+        self.assertNotIn('head.sha', workflow)
+
+
 if __name__ == '__main__':
     unittest.main()
