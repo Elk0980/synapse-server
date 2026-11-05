@@ -6,7 +6,7 @@
    Чат ничего не публикует: публикацию ставят в план в «Постинге». Ссылки — только https из ответа CRM. */
 (() => {
   const node = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined && text !== null) n.textContent = text; return n; };
-  const safe = value => { if (typeof value !== 'string' || !value.trim()) return ''; try { const url = new URL(value, location.href); return url.protocol === 'https:' && !url.username && !url.password ? url.href : ''; } catch { return ''; } };
+  const safe = value => { if (typeof value !== 'string' || !value.trim()) return ''; try { const url = new URL(value, location.href); return (url.protocol === 'https:' || url.origin === location.origin) && /^https?:$/.test(url.protocol) && !url.username && !url.password ? url.href : ''; } catch { return ''; } };
   const time = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); };
   const parse = value => { try { const data = JSON.parse(value || 'null'); return data && typeof data === 'object' ? data : null; } catch { return null; } };
   const can = (ctx, permission) => typeof ctx.can === 'function' ? ctx.can(permission) : ctx.user?.role === 'owner' || (ctx.permissions || []).includes(permission);
@@ -83,8 +83,8 @@
       overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', 'Нужны правки');
       const text = node('textarea'); text.required = true; text.maxLength = 1800; text.rows = 4; text.placeholder = 'Что поправить? Например: убрать первые 2 секунды, ярче титр';
       const label = node('label', 'rc-field'); label.append(node('span', '', 'Что нужно поправить'), text);
-      const frame = button('Взять кадр из плеера', 'rc-btn'), file = node('input'), fileLabel = node('label', 'rc-btn rc-file');
-      file.type = 'file'; file.accept = 'image/jpeg,image/png,image/webp'; fileLabel.append(document.createTextNode('Приложить скриншот'), file);
+      const frame = button('Кадр из плеера', 'rc-btn'), file = node('input'), fileLabel = node('label', 'rc-btn rc-file');
+      file.type = 'file'; file.accept = 'image/jpeg,image/png,image/webp'; fileLabel.append(document.createTextNode('Свой скриншот'), file);
       const preview = node('div', 'rc-shot'), hint = node('p', 'rc-muted'), status = node('p', 'rc-note'), row = node('div', 'rc-actions');
       status.setAttribute('role', 'status');
       const send = node('button', 'rc-btn rc-btn--warn', 'Отправить правки'), cancel = button('Отмена', 'rc-btn'); send.type = 'submit';
