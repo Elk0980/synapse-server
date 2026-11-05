@@ -8,7 +8,7 @@
 <title>Кабинет — Synapse Business</title>
 <link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
 <link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
-<script src="cabinet/view-as.js?v=20261105-1"></script>
+<script src="cabinet/view-as.js?v=20261105-2"></script>
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -1259,10 +1259,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
 
   const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
+  // №137: «Посмотреть как» хранит выбор компании отдельно и не трогает сохранённый выбор владельца.
+  const viewAsProjects = () => window.SynapseViewAs?.projectStore?.(identity) || null;
   const readSelectedProject = () => {
     let saved = null;
     try {
-      saved = localStorage.getItem(projectStorageKey());
+      const viewAs = viewAsProjects();
+      saved = viewAs ? viewAs.get() : localStorage.getItem(projectStorageKey());
     } catch (error) {
       saved = null;
     }
@@ -1271,7 +1274,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const saveSelectedProject = () => {
     if (!selectedProjectId) return;
     try {
-      localStorage.setItem(projectStorageKey(), selectedProjectId);
+      const viewAs = viewAsProjects();
+      if (viewAs) viewAs.set(selectedProjectId); else localStorage.setItem(projectStorageKey(), selectedProjectId);
     } catch (error) {
       // The selected project remains available in memory for this session.
     }
