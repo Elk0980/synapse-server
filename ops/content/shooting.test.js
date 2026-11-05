@@ -2,7 +2,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), http = require('node:http'), crypto = require('node:crypto');
 const {DatabaseSync} = require('node:sqlite');
-const {createShooting} = require('./shooting');
+const {createShooting, readShootingConfig, DEFAULTS} = require('./shooting');
 const {createLocalStorage} = require('./shooting-storage');
 
 const GiB = 1024 ** 3;
@@ -100,6 +100,38 @@ test('отказ по месту до приёма байтов: резерв д
   const over = await quota.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'b.mov', size: 6000}});
   assert.equal(over.status, 507); assert.match(over.body.error, /Место для съёмки компании закончилось/);
   assert.equal((await quota.call('GET', '/reels')).body.storage.usedBytes, 6000, 'незавершённая сессия резервирует квоту');
+});
+
+test('№119: резерв по умолчанию — фиксированный запас 2 ГБ плюс размер файла, а не 15 % диска', async (t) => {
+  // Боевой 05.11: диск ~77 ГБ, свободно 9,2 ГБ — прежний резерв 11,5 ГБ запрещал даже файл в 1 КБ.
+  const live = await setup(t, {disk: {free: 9.2 * GiB, total: 76.7 * GiB}, config: {...DEFAULTS}});
+  const info = (await live.call('GET', '/reels', {user: 1})).body.storage;
+  assert.equal(info.canUpload, true); assert.equal(info.refusal, ''); assert.equal(info.reserveBytes, 2 * GiB);
+  assert.equal((await live.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'tiny.mov', size: 1024}})).status, 201);
+  assert.equal((await live.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'take.mov', size: 1.8 * GiB | 0}})).status, 201, '4K-дубль 1,8 ГБ помещается');
+  // Проверка не отключена: после файла должно остаться не меньше запаса.
+  const tight = await setup(t, {disk: {free: 3.5 * GiB, total: 76.7 * GiB}, config: {...DEFAULTS}});
+  const refused = await tight.call('POST', '/uploads', {user: 1, body: {ideaId: 'reel-a', name: 'big.mov', size: 1.8 * GiB | 0}});
+  assert.equal(refused.status, 507); assert.equal(refused.body.details.code, 'STORAGE_FULL'); assert.match(refused.body.error, /не меньше 2,0 ГБ/);
+  assert.equal((await tight.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'small.mov', size: 1 * GiB}})).status, 201);
+  // Нулевой запас из настройки не выключает проверку: минимум 512 МБ.
+  const zero = await setup(t, {disk: {free: 0.6 * GiB, total: 76.7 * GiB}, config: {...DEFAULTS, minFreeBytes: 0}});
+  assert.equal((await zero.call('POST', '/uploads', {body: {ideaId: 'reel-a', name: 'x.mov', size: 200 * 1024 ** 2}})).status, 507);
+});
+
+test('№119: запас задаётся env SHOOTING_MIN_FREE_MB поверх файла; мусор игнорируется', () => {
+  const missing = path.join(os.tmpdir(), 'no-such-shooting-config.json');
+  assert.equal(readShootingConfig(missing, {}).minFreeBytes, 2 * GiB);
+  assert.equal(readShootingConfig(missing, {}).minFreePercent, 0);
+  assert.equal(readShootingConfig(missing, {SHOOTING_MIN_FREE_MB: '3072'}).minFreeBytes, 3 * GiB);
+  assert.equal(readShootingConfig(missing, {SHOOTING_MIN_FREE_MB: 'много'}).minFreeBytes, 2 * GiB);
+  assert.equal(readShootingConfig(missing, {SHOOTING_MIN_FREE_MB: '-5'}).minFreeBytes, 2 * GiB);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shooting-cfg-')), file = path.join(dir, 'shooting.json');
+  fs.writeFileSync(file, JSON.stringify({minFreeBytes: 4 * GiB}));
+  try {
+    assert.equal(readShootingConfig(file, {}).minFreeBytes, 4 * GiB);
+    assert.equal(readShootingConfig(file, {SHOOTING_MIN_FREE_MB: '1024'}).minFreeBytes, 1 * GiB, 'env важнее файла');
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 });
 
 test('подмена содержимого отклоняется; раскадровка сохраняется с проверкой версии', async (t) => {

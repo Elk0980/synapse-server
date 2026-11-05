@@ -18,7 +18,12 @@ const BY_EXT = Object.freeze({'.mov': 'video/quicktime', '.qt': 'video/quicktime
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png'});
 const STATUSES = ['approved', 'shot', 'editing', 'draft'];
 const BOARD_FIELDS = ['shot', 'angle', 'transition', 'notes'];
-const DEFAULTS = Object.freeze({companyQuotaBytes: 40 * GiB, minFreeBytes: 5 * GiB, minFreePercent: 15, sketchDailyLimit: 20,
+/* Резерв диска (№119): фиксированный небольшой запас, который должен остаться ПОСЛЕ загрузки файла,
+   т. е. нужно свободно ≥ запас + размер файла. Прежний резерв «15 % диска, не меньше 5 ГБ» на диске
+   ~77 ГБ требовал 11,5 ГБ и блокировал даже файл в 1 КБ. Запас задаётся env SHOOTING_MIN_FREE_MB
+   (или minFreeBytes в shooting.json), но не меньше MIN_RESERVE: проверку выключить нельзя. */
+const MIN_RESERVE = 512 * MiB;
+const DEFAULTS = Object.freeze({companyQuotaBytes: 40 * GiB, minFreeBytes: 2 * GiB, minFreePercent: 0, sketchDailyLimit: 20,
   uploadTtlHours: 24, maxOpenUploads: 12});
 const SWEEP_MS = 10 * 60 * 1000;
 
@@ -28,17 +33,22 @@ const gb = (bytes) => (Math.max(0, bytes) / GiB).toFixed(1).replace('.', ',') + 
 const company = (code) => { if (!Object.hasOwn(COMPANIES, code || '')) fail(404, 'Компания не найдена'); return code; };
 const ideaId = (value) => { if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(String(value ?? ''))) fail(400, 'Некорректный рилс'); return String(value); };
 
-function readShootingConfig(file) {
+function readShootingConfig(file, env = process.env) {
+  let config;
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     const number = (key, min = 0) => Number.isSafeInteger(raw[key]) && raw[key] >= min ? raw[key] : DEFAULTS[key];
-    return {companyQuotaBytes: number('companyQuotaBytes'), minFreeBytes: number('minFreeBytes'),
+    config = {companyQuotaBytes: number('companyQuotaBytes'), minFreeBytes: number('minFreeBytes'),
       minFreePercent: Math.min(90, number('minFreePercent')), sketchDailyLimit: number('sketchDailyLimit'),
       uploadTtlHours: Math.min(168, number('uploadTtlHours', 1)), maxOpenUploads: Math.min(100, number('maxOpenUploads', 1))};
   } catch {
     // Нет файла или он повреждён: лимиты по умолчанию. Ключей в файле нет.
-    return {...DEFAULTS};
+    config = {...DEFAULTS};
   }
+  // Переменная окружения важнее файла: запас в МБ, целое число. Пусто или мусор — значение файла/по умолчанию.
+  const mb = String(env?.SHOOTING_MIN_FREE_MB ?? '').trim();
+  if (/^\d{1,7}$/.test(mb)) config.minFreeBytes = Number(mb) * MiB;
+  return config;
 }
 
 function signatureOk(mime, head) {
@@ -111,8 +121,9 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
   /* Место проверяется ДО приёма байтов и перед каждым куском. Квота компании резервирует заявленный
      размер своих незавершённых сессий; общий резерв диска считает фактические байты (их уже нет в
      disk.free) плюс недокачанный остаток только СВОЕЙ компании — чужие брошенные сессии не мешают.
-     Сервер заполнен примерно на 81 %, поэтому резерв строгий. Цифры диска видит только владелец. */
-  const reserveOf = (disk) => Math.max(limits.minFreeBytes, Math.ceil(disk.total * limits.minFreePercent / 100));
+     Резерв — фиксированный запас (по умолчанию 2 ГБ, не меньше 512 МБ), который остаётся после файла;
+     процент от диска только по явной настройке. Цифры диска видит только владелец. */
+  const reserveOf = (disk) => Math.max(MIN_RESERVE, limits.minFreeBytes, Math.ceil(disk.total * (limits.minFreePercent || 0) / 100));
   function storageInfo(code, extra = 0, actor = {owner: false}) {
     const used = db.prepare("SELECT COALESCE(SUM(size),0) n FROM shooting_uploads WHERE company_code=? AND status IN ('stored','uploading')").get(code).n;
     const open = db.prepare("SELECT disk_key, size FROM shooting_uploads WHERE company_code=? AND status='uploading'").all(code);
@@ -305,4 +316,4 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
   return {handle, storageInfo, sweep};
 }
 
-module.exports = {createShooting, readShootingConfig, signatureOk, MAX_FILE, CHUNK, MAX_CHUNK};
+module.exports = {createShooting, readShootingConfig, signatureOk, MAX_FILE, CHUNK, MAX_CHUNK, DEFAULTS, MIN_RESERVE};
