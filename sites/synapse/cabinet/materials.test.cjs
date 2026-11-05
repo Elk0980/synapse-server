@@ -13,7 +13,7 @@ const reels = () => [
 const full = () => ({...reels()[0], versions: [{version: 1, mediaUrl: asset('a')}, {version: 2, mediaUrl: asset('b'), editId: 9}],
   edits: [{id: 9, kind: 'request', baseVersion: 1, status: 'done', resultVersion: 2, comment: 'Хью, убери паузу'}], log: []});
 
-function fixture({permissions = ['autoposting.view', 'autoposting.edit'], respond} = {}) {
+function fixture({permissions = ['autoposting.view', 'autoposting.edit'], respond, raw} = {}) {
   const dom = new JSDOM('<main id="view"></main>', {url: 'https://cabinet.test/#content/materials', runScripts: 'outside-only'});
   const w = dom.window, el = w.document.getElementById('view'), calls = [], navigations = [];
   w.SynapseModulesQueue = [];
@@ -26,10 +26,13 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], respon
     if (path === 'crm/autoposting/reels' && method === 'GET') return {companyCode: 'avokado', reels: reels()};
     if (path === 'crm/autoposting/reels/4') return full();
     if (path.endsWith('/publication')) return {post: {id: 77}, reel: {...full(), postId: 77}};
+    if (path === 'crm/autoposting/reels' && method === 'POST' && body?.mediaUrl) return {id: 9, key: 'reel:9', source: 'materials', companyCode: 'avokado', title: body.title,
+      releaseDate: body.releaseDate, platforms: body.platforms, postId: null, currentVersion: {version: 1, mediaUrl: body.mediaUrl, sha256: body.sha256}, versionCount: 1, openEdits: 0};
     throw Object.assign(new Error('unexpected ' + path), {status: 500});
   };
   const ctx = {moduleId: id, companyCode: 'avokado', can: (p) => permissions.includes(p), signal: new w.AbortController().signal, route: {path: ''},
-    api: {get: (path, params) => answer('GET', path, undefined, params), post: (path, body) => answer('POST', path, body)},
+    api: {get: (path, params) => answer('GET', path, undefined, params), post: (path, body) => answer('POST', path, body),
+      ...(raw ? {raw: (method, path, body, options) => {calls.push({method, path, body, raw: true, headers: options?.headers});return raw({method, path, body, options});}} : {})},
     navigate: (route) => navigations.push(route)};
   return {w, el, id, definition, ctx, calls, navigations, mount: () => definition.mount(el, ctx)};
 }
@@ -101,4 +104,108 @@ test('Маски шести площадок: шапка, подпись, без
     assert.ok(box.querySelector('.mt-mask__top') && box.querySelector('.mt-mask__bottom') && box.querySelector('.mt-mask__safe'));
     assert.equal(!!box.querySelector('.mt-mask__rail'), !['telegram', 'max'].includes(p.id));
   }
+});
+
+/* Загрузка готового ролика (№145): кнопка только с правом, порядок запросов, ошибки словами. Сервер не меняется. */
+const okResponse = (data, status = 201) => ({ok: status < 300, status, json: async () => data});
+function fillUpload(f, {name = 'reel_avokado02_v2.mp4', type = 'video/mp4', size = 18 * 1024 * 1024, title, platforms = ['instagram', 'vk']} = {}) {
+  f.el.querySelector('[data-upload-open]').click();
+  const form = f.el.querySelector('[data-upload]'), file = new f.w.File([new Uint8Array(4)], name, {type});
+  Object.defineProperty(file, 'size', {value: size});
+  Object.defineProperty(form.elements.file, 'files', {value: [file], configurable: true});
+  form.elements.file.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+  if (title !== undefined) form.elements.title.value = title;
+  form.elements.releaseDate.value = '2026-11-08';
+  for (const input of form.querySelectorAll('[name=platforms]')) input.checked = platforms.includes(input.value);
+  return {form, file, submit: async () => {form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); for (let i = 0; i < 6; i++) await tick();}};
+}
+
+test('Загрузка: кнопка «Загрузить ролик» только с autoposting.edit', async () => {
+  const viewer = fixture({permissions: ['autoposting.view'], raw: async () => okResponse({})});
+  await viewer.mount();
+  assert.equal(viewer.el.querySelector('[data-upload-open]'), null); assert.equal(viewer.el.querySelector('[data-upload]'), null);
+  const editor = fixture({raw: async () => okResponse({})});
+  await editor.mount();
+  assert.ok(editor.el.querySelector('[data-upload-open]'));
+  assert.equal(editor.el.querySelector('[data-upload]').hidden, true, 'форма скрыта до нажатия');
+  editor.el.querySelector('[data-upload-open]').click();
+  assert.equal(editor.el.querySelector('[data-upload]').hidden, false);
+  editor.el.querySelector('[data-upload-cancel]').click();
+  assert.equal(editor.el.querySelector('[data-upload]').hidden, true);
+});
+
+test('Загрузка: файл → POST publishing-assets (сырой, Content-Type видео) → POST crm/autoposting/reels → ролик v1 в сетке', async () => {
+  const f = fixture({raw: async () => okResponse({url: asset('d'), sha256: 'e'.repeat(64), size: 4, type: 'video/mp4'})});
+  await f.mount();
+  const {submit, file} = fillUpload(f, {title: '№2 «Первый визит» v2'});
+  assert.equal(f.el.querySelector('[data-upload] [name=title]').value, '№2 «Первый визит» v2');
+  await submit();
+  const order = f.calls.filter((c) => c.method === 'POST').map((c) => c.path);
+  assert.deepEqual(order, ['publishing-assets', 'crm/autoposting/reels'], 'сначала файл, потом карточка');
+  const rawCall = f.calls.find((c) => c.raw);
+  assert.equal(rawCall.body, file); assert.equal(rawCall.headers['Content-Type'], 'video/mp4');
+  const create = f.calls.find((c) => c.path === 'crm/autoposting/reels' && c.method === 'POST');
+  assert.deepEqual(JSON.parse(JSON.stringify(create.body)), {title: '№2 «Первый визит» v2', releaseDate: '2026-11-08', platforms: ['instagram', 'vk'], mediaUrl: asset('d'), sha256: 'e'.repeat(64)});
+  const cards = f.el.querySelectorAll('.mt-card');
+  assert.equal(cards.length, 3); assert.match(cards[0].textContent, /Первый визит/); assert.match(cards[0].textContent, /v1/); assert.match(cards[0].textContent, /08\.11\.2026/);
+  assert.equal(f.el.querySelector('[data-upload]').hidden, true);
+  assert.match(f.el.querySelector('[data-status]').textContent, /загружен как v1/);
+  f.el.querySelector('[data-open="reel:9"]').click(); await tick(); await tick();
+  assert.match(f.el.querySelector('[data-download]').getAttribute('href'), /d{32}\.mp4$/);
+  assert.ok(f.el.querySelector('[data-player]'), 'предпросмотр нового ролика');
+});
+
+test('Загрузка: название подставляется из имени файла; без файла, названия или площадки запрос не уходит', async () => {
+  const f = fixture({raw: async () => okResponse({url: asset('d'), sha256: ''})});
+  await f.mount();
+  const {form, submit} = fillUpload(f, {platforms: []});
+  assert.equal(form.elements.title.value, 'reel_avokado02_v2');
+  await submit();
+  assert.match(f.el.querySelector('[data-upload-status]').textContent, /хотя бы одну площадку/);
+  form.elements.title.value = '';
+  await submit();
+  assert.match(f.el.querySelector('[data-upload-status]').textContent, /Введите название/);
+  assert.equal(f.calls.filter((c) => c.method === 'POST').length, 0);
+});
+
+test('Загрузка: ошибки словами — больше 60 МБ, не видео, отказ сервера, ошибка сети', async () => {
+  const big = fixture({raw: async () => okResponse({})});
+  await big.mount();
+  const {submit} = fillUpload(big, {size: 61 * 1024 * 1024, title: 'Большой'});
+  assert.match(big.el.querySelector('[data-upload-status]').textContent, /больше лимита 60 МБ/, 'сразу после выбора файла');
+  await submit();
+  assert.equal(big.calls.filter((c) => c.method === 'POST').length, 0, 'большой файл не отправляется');
+
+  const photo = fixture({raw: async () => okResponse({})});
+  await photo.mount();
+  fillUpload(photo, {name: 'kadr.jpg', type: 'image/jpeg', title: 'Фото'});
+  assert.match(photo.el.querySelector('[data-upload-status]').textContent, /не видео/);
+
+  const refused = fixture({raw: async () => okResponse({error: 'Файл не соответствует выбранному формату видео'}, 415)});
+  await refused.mount();
+  await fillUpload(refused, {title: 'Битый'}).submit();
+  assert.match(refused.el.querySelector('[data-upload-status]').textContent, /не соответствует выбранному формату видео/);
+  assert.equal(refused.calls.filter((c) => c.path === 'crm/autoposting/reels' && c.method === 'POST').length, 0, 'карточка без файла не создаётся');
+  assert.equal(refused.el.querySelector('[data-upload]').hidden, false, 'форма остаётся, можно исправить');
+
+  const offline = fixture({raw: async () => { throw new TypeError('Failed to fetch'); }});
+  await offline.mount();
+  await fillUpload(offline, {title: 'Сеть'}).submit();
+  assert.match(offline.el.querySelector('[data-upload-status]').textContent, /Ошибка сети/);
+  assert.equal(offline.el.querySelector('[data-upload-submit]').disabled, false, 'кнопка снова доступна');
+
+  const legacy = fixture();
+  await legacy.mount();
+  await fillUpload(legacy, {title: 'Старый кабинет'}).submit();
+  assert.match(legacy.el.querySelector('[data-upload-status]').textContent, /обновите кабинет/);
+});
+
+test('Загрузка: при открытой карточке ролика кнопка и форма скрыты, после «← Все материалы» кнопка снова видна', async () => {
+  const f = fixture({raw: async () => okResponse({})});
+  await f.mount();
+  f.el.querySelector('[data-upload-open]').click();
+  f.el.querySelector('[data-open="reel:4"]').click(); await tick(); await tick();
+  assert.equal(f.el.querySelector('[data-upload]').hidden, true); assert.equal(f.el.querySelector('[data-upload-open]').hidden, true);
+  f.el.querySelector('[data-back]').click();
+  assert.equal(f.el.querySelector('[data-upload-open]').hidden, false);
 });
