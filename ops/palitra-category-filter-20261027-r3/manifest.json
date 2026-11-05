@@ -1,0 +1,21 @@
+{
+  "packageId": "palitra-category-filter-20261027-r3",
+  "helperSha256": "fcb7cdc85dba823b79d2936e94195325e90195f7a217787a4badb4ca383f4fff",
+  "targets": [
+    {
+      "target": "sites/synapse/price-editor-palitra.html",
+      "beforeSha256": "fe1cf2a3289188503d69640132c2a06aba34baf05f5851030b1e2b7a689fd54b",
+      "afterSha256": "c3e8c84780c69ed73a7ee45a62fad7f816222f23b99c53148a1bf20229dea44d"
+    },
+    {
+      "target": "sites/synapse/palitra-editor.js",
+      "beforeSha256": "64ec8d8eb1a2345a536221eafd924aac66fbfe1b16ad0f0f78b2edade26f8d66",
+      "afterSha256": "cd6e0fd74cf10f52c457c04bf83e73d9220a5944c7ce689782a2a8807180b91a"
+    },
+    {
+      "target": "sites/synapse/palitra-editor.css",
+      "beforeSha256": "6c8473ae21251e986f3a953ad9b4815d386783b9e5e0f65b4f8bb3bf7a7e5356",
+      "afterSha256": "6c8473ae21251e986f3a953ad9b4815d386783b9e5e0f65b4f8bb3bf7a7e5356"
+    }
+  ]
+}
