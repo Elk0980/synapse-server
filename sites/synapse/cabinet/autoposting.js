@@ -421,6 +421,9 @@ function create(container, context) {
       else if(!channelText&&!storyOnly)result.push(`${channel.name||id}: нет ни общего текста, ни подписи площадки.`);
       if(channelText.length>maxText)result.push(`${channel.name||id}: текст до ${maxText} символов${data.mediaUrls.length&&channel.platform==="telegram"?" с изображениями":""}.`);
       if(data.mediaUrls.length>maxMedia)result.push(`${channel.name||id}: материалов не больше ${maxMedia}.`);
+      // «Фото или одно видео» (Telegram через Onlypult): рилс — ровно один видеофайл без фото в довесок.
+      if(channel.caps?.mediaMode==="photos_or_video"&&data.mediaUrls.some(isVideo)&&data.mediaUrls.length!==1)
+        result.push(`${channel.name||id}: видео публикуется одно, без фото и других файлов.`);
     }
     return result;
   };
