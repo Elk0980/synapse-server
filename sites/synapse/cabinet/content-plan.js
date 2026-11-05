@@ -87,35 +87,38 @@
     const platforms = (idea) => Object.keys(idea.variants || {[idea.platform]: 1}).map(platformLabel).join(', ');
     const status = (idea) => { const st = statusOf(idea);
       return `<span class="cp-st" data-status="${esc(st)}">${esc(VSTATUS[st] || st)}${idea.productionStatus ? ' · ' + esc(PROD[idea.productionStatus] || '') : ''}</span>`; };
-    container.innerHTML = `<section class="cp">
-      <header class="cp-head"><div><h2>Контент-план</h2><p class="cp-stage" data-stage="${esc(s.stage)}">${esc(STAGE[s.stage] || s.stage)}</p></div>
+    /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
+       Плана нет — порядок прежний: анкета сверху и открыта, пока не заполнена. */
+    const head = `<header class="cp-head"><div><h2>Контент-план</h2><p class="cp-stage" data-stage="${esc(s.stage)}">${esc(STAGE[s.stage] || s.stage)}</p></div>
         <div class="cp-actions">
           ${edit ? '<button type="button" class="plain-button" data-cp="questionnaire">Написать контент-план</button>' : ''}
-          <button type="button" class="plain-button" data-cp="chat">Чат с Хью</button></div></header>
-      <details class="cp-card cp-q" ${q.filled < q.total && !days.length ? 'open' : ''}><summary>Анкета проекта · <span data-cp-q-count>заполнено ${q.filled} из ${q.total}</span></summary>
+          <button type="button" class="plain-button" data-cp="chat">Чат с Хью</button></div></header>`;
+    const questionnaire = `<details class="cp-card cp-q" ${q.filled < q.total && !days.length ? 'open' : ''}><summary>Анкета проекта · <span data-cp-q-count>заполнено ${q.filled} из ${q.total}</span></summary>
         <p class="cp-note">Можно заполнять частями и дополнять потом: каждое поле сохраняется само. ${esc((q.rules || []).join(' '))}</p>
         <form class="cp-q-form" data-cp-form>${Q.map(([key, label, hint]) => `<label>${label}<textarea data-q="${key}" rows="2" maxlength="2000" placeholder="${esc(hint)}" ${edit ? '' : 'readonly'}>${esc(q.fields[key])}</textarea></label>`).join('')}
           <fieldset data-cp-platforms tabindex="-1"><legend>Площадки</legend>${vocab.platforms.map((p) => `<label class="cp-check"><input type="checkbox" data-q-platform="${esc(p.id)}" ${q.fields.platforms.includes(p.id) ? 'checked' : ''} ${edit ? '' : 'disabled'}> ${esc(p.label)}</label>`).join('')}</fieldset>
         </form><p class="cp-note" data-cp-saved role="status">${q.updatedAt ? `Сохранено${q.updatedBy ? ' · ' + esc(q.updatedBy) : ''}` : 'Ещё не сохранялась'}</p>
-        ${edit ? `<div class="cp-gen"><label>Начало<input type="date" data-cp-start value="${isoIn(1)}"></label>
-          <label>Дней<select data-cp-days><option>7</option><option>14</option></select></label>
+        ${edit ? `<div class="cp-gen"><label><span>Начало</span><input type="date" data-cp-start value="${isoIn(1)}"></label>
+          <label><span>Дней</span><select data-cp-days><option>7</option><option>14</option></select></label>
           <button type="button" class="plain-button" data-cp="generate">Сформировать план через Хью</button></div>
-          <div data-cp-suggest></div><div data-cp-import></div>` : ''}</details>
-      <section class="cp-card cp-approve"><h3>Согласование</h3>
+          <div data-cp-suggest></div><div data-cp-import></div>` : ''}</details>`;
+    const approve = `<section class="cp-card cp-approve"><h3>Согласование</h3>
         ${s.planRevision ? `<ul class="cp-approvers">${s.approvers.map((a) => `<li><label class="cp-check"><input type="checkbox" data-signoff="${esc(a.slot)}" ${a.checked ? 'checked' : ''} ${a.canCheck ? '' : 'disabled'}> ${esc(a.label)}${a.userId && a.userId === ctx.user?.id ? ' (вы)' : ''}</label>
           <span class="cp-note">${a.checked ? `✓ ${esc(a.actorName)}` : 'ждёт отметки'}</span></li>`).join('')}</ul>
           ${s.emptyIdeas.length ? `<p class="cp-warn">Без подписи — не войдут в согласование: ${s.emptyIdeas.length}. Откройте строку и заполните подпись.</p>` : ''}`
           : '<p class="cp-note">Согласовывать пока нечего: сначала сформируйте или импортируйте план.</p>'}
-        ${approversNote()}<p class="cp-note">Согласовано материалов: ${s.approvedIdeas} из ${s.ideas}. Когда отметят все — план уходит к СММ и в «Съёмку».</p></section>
-      ${days.length ? `<div class="cp-views" role="group" aria-label="Вид плана">
+        ${approversNote()}<p class="cp-note">Согласовано материалов: ${s.approvedIdeas} из ${s.ideas}. Когда отметят все — план уходит к СММ и в «Съёмку».</p></section>`;
+    const plan = days.length ? `<section class="cp-plan" aria-label="План"><div class="cp-views" role="group" aria-label="Вид плана">
         <button type="button" class="plain-button" data-cp-view="short" aria-pressed="${state.view === 'short'}">Кратко</button>
-        <button type="button" class="plain-button" data-cp-view="full" aria-pressed="${state.view === 'full'}">Полный план (таблица)</button></div>` : ''}
-      ${state.view === 'full' && days.length ? sheet(days, platforms, status) : `<ol class="cp-list">${days.map((idea, index) => {
+        <button type="button" class="plain-button" data-cp-view="full" aria-pressed="${state.view === 'full'}">Полный план (таблица)</button></div>
+      ${state.view === 'full' ? sheet(days, platforms, status) : `<ol class="cp-list">${days.map((idea, index) => {
         const open = state.open.has(idea.ideaId);
         return `<li class="cp-row" data-idea="${esc(idea.ideaId)}"><button type="button" class="cp-line" data-toggle aria-expanded="${open}">
           <span class="cp-n">№${index + 1}</span><span class="cp-date">${esc(day(idea.date))}</span>
           <span class="cp-pl">${esc(platforms(idea))}</span><span class="cp-topic">${esc(idea.topic)}</span>${status(idea)}</button>
-          ${open ? full(idea, edit) : ''}</li>`; }).join('')}</ol>`}
+          ${open ? full(idea, edit) : ''}</li>`; }).join('')}</ol>`}</section>` : '';
+    container.innerHTML = `<section class="cp" data-cp-layout="${days.length ? 'plan' : 'questionnaire'}">${head}
+      ${days.length ? plan + approve + questionnaire : questionnaire + approve}
       <p class="cp-error" data-cp-error role="alert" hidden></p></section>`;
     wire();
     if (edit) installImport();
