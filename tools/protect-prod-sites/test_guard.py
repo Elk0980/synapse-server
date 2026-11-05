@@ -25,21 +25,64 @@ class AdmissionTests(unittest.TestCase):
                 self.check([path])
             self.check([path], [guard.INFRA])
 
-    def test_all_content_and_crm_paths_require_infrastructure_label(self):
-        for service in ('content', 'crm'):
-            for name in ('server.js', 'Dockerfile', 'package-lock.json', 'new-module.js'):
-                path = 'ops/' + service + '/' + name
-                with self.subTest(path=path), self.assertRaises(ValueError):
-                    self.check([path])
-                self.check([path], [guard.INFRA])
+    def test_workshop_code_needs_no_label(self):
+        # Решение Влада по №114: код мастерской проходит без метки.
+        for path in ('ops/crm/server.js', 'ops/crm/autoposting.js', 'ops/crm/package.json',
+                     'ops/crm/README (Мини-CRM — сервис заявок).md', 'ops/content/server.js',
+                     'ops/content/auth-store.js', 'ops/content/new-module.js',
+                     'ops/content/package-lock.json', 'sites/synapse/permission-help.js',
+                     'sites/synapse/cabinet.html', 'specs/100-people-first-password/spec.md',
+                     'docs/production-sites/PLAN.md', 'tools/spec-kit/gate.py',
+                     'ops/tasks-mcp/server.js', 'ops/content/compose-contract.test.js'):
+            with self.subTest(path=path):
+                self.assertEqual(guard.required_labels([path]), set())
 
-    def test_rename_out_of_protected_infrastructure(self):
-        pr = {'state': 'open', 'head': {'sha': 'a'}, 'changed_files': 1, 'labels': []}
-        for previous in ('.github/workflows/other.yml', 'ops/content/server.js', 'ops/crm/server.js'):
-            files = [{'filename': 'ops/tasks-mcp/new.js', 'status': 'renamed',
-                      'previous_filename': previous}]
-            with self.subTest(previous=previous), self.assertRaises(ValueError):
-                guard.evaluate(pr, files, 'a')
+    def test_pr_only_with_crm_succeeds_without_label(self):
+        result = self.check(['ops/crm/server.js', 'ops/crm/crm-permissions.test.js',
+                             'ops/content/people.test.js'])
+        self.assertEqual(result['requiredLabels'], [])
+
+    def test_client_site_sources_in_workshop_require_label(self):
+        for path in ('ops/content/seed/alvi-price.json', 'ops/content/seed/palitra-price.json',
+                     'ops/content/seed/new-client-site.json', 'ops/content/site-store.js',
+                     'ops/content/site-orders.js', 'ops/content/company-links-reader.js',
+                     'ops/content/tag_site.py', 'ops/content/tag_avokado.py',
+                     'ops/crm/company-links.js'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.check([path])
+            self.check([path], [guard.INFRA])
+
+    def test_deploy_infrastructure_requires_label(self):
+        for path in ('ops/autosync/sync.sh', 'ops/autosync/README.md', 'ops/release/release.py',
+                     'ops/crm/Dockerfile', 'ops/content/Dockerfile', 'ops/tasks-mcp/Dockerfile',
+                     'Dockerfile', 'ops/chat/Dockerfile.dev', 'ops/web.dockerfile',
+                     'Caddyfile', 'caddy/Caddyfile', 'caddy/sites/alvi.caddy',
+                     'ops/crm/compose-fragment.yml', 'ops/eva-tasks/compose.eva.yml',
+                     'docker-compose.override.yml', 'ops/synapse-sync.README.md'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.check([path])
+            self.check([path], [guard.INFRA])
+
+    def test_keys_and_access_require_label(self):
+        for path in ('.env', '.env.example', 'ops/content/.env.local', 'ops/content/session-secret.js',
+                     'ops/content/passwords.js', 'ops/content/make-password.js',
+                     'ops/content/reset-password.js', 'ops/crm/social-analytics-credentials.js'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.check([path])
+            self.check([path], [guard.INFRA])
+
+    def test_specs_about_passwords_need_no_label(self):
+        self.assertEqual(guard.required_labels(['specs/100-people-first-password/spec.md']), set())
+
+    def test_required_scenarios_from_task_114(self):
+        self.check(['ops/crm/server.js'])
+        for path, label in (('sites/alvi/index.html', 'сайт alvi'),
+                            ('.github/workflows/ci.yml', guard.INFRA),
+                            ('ops/autosync/deploy.sh', guard.INFRA)):
+            with self.subTest(path=path):
+                with self.assertRaises(ValueError):
+                    self.check(['ops/crm/server.js', path])
+                self.check(['ops/crm/server.js', path], [label])
 
     def test_bootstrap_workflow_rechecks_label_events(self):
         workflow = (Path(__file__).resolve().parents[2] /

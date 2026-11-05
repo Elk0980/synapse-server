@@ -16,12 +16,19 @@
 Обрабатываются удаление и ОБА пути переименования, все страницы API (до3000 файлов;
 больше/неполный ответ/смена SHA или меток при чтении — закрытый отказ).
 
-Общие Caddy/Compose, legacy sync, shared track.js/company-links.js, корневые файлы
-sites/, ВСЕ `.github/**` (включая любые новые workflows/actions), сама защита и ВСЕ
-`ops/content/**` и `ops/crm/**` требуют `сайты: инфраструктура`.
-Каталоги мастерской sites/{synapse,chat,board,vhod} не требуют клиентской метки,
-кроме перечисленных shared JS. Backend content/CRM защищён целиком, поскольку
-новый модуль, Dockerfile или зависимости также могут изменить цены/API.
+Метку `сайты: инфраструктура` требуют (решение Влада 05.11, №114): ВСЕ `.github/**`
+(включая любые новые workflows/actions), Caddy (`caddy/**`, любой `Caddyfile*`), любые
+`Dockerfile*` и `compose*.yml`/`docker-compose*.yml` в любом каталоге, `ops/release/**`,
+`ops/autosync/**`, legacy `ops/synapse-sync*`, `.env*`, файлы `ops/**` с `secret`,
+`password` или `credential` в имени, shared track.js/company-links.js, корневые файлы
+sites/ и сама защита `tools/protect-prod-sites/**`.
+Код мастерской `ops/crm/**`, `ops/content/**`, sites/{synapse,chat,board,vhod},
+`specs/**`, `docs/**` и остальной `tools/**` метки не требует. Исключение — модули
+мастерской, которые отдают клиентским сайтам цены, тексты, ссылки и заказы:
+`ops/content/seed/**`, `ops/content/site-store.js`, `ops/content/site-orders.js`,
+`ops/content/company-links-reader.js`, `ops/content/tag_site.py`,
+`ops/content/tag_avokado.py`, `ops/crm/company-links.js`. Остаточный риск: обработчики
+`/api/price`, `/api/site`, `/leads` находятся в общих `server.js` и метку не требуют.
 CI-метка не обещает совместимость API; runtime admission описан ниже. Chat требует
 отдельной проверки совместимости по текущему runtime-контракту.
 CODEOWNERS с вымышленным GitHub аккаунтом Claude не создаётся.

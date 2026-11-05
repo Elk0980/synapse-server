@@ -8,8 +8,34 @@ from pathlib import PurePosixPath, Path
 
 INFRA = 'сайты: инфраструктура'
 WORKSHOP = {'synapse', 'chat', 'board', 'vhod'}
+# Файлы кабинета, которые загружают сами клиентские сайты.
 SHARED_JS = {'sites/synapse/track.js', 'sites/synapse/company-links.js'}
+# Код мастерской (ops/crm, ops/content) метку не требует, кроме модулей, которые отдают
+# клиентским сайтам цены, тексты, ссылки и заказы (ревью 224 п.3, решение Влада по №114).
+# Обработчики /api/price, /api/site, /leads внутри server.js этим списком не покрыты.
+CLIENT_SITE_SOURCES = {
+    'ops/content/site-store.js', 'ops/content/site-orders.js',
+    'ops/content/company-links-reader.js', 'ops/content/tag_site.py',
+    'ops/content/tag_avokado.py', 'ops/crm/company-links.js',
+}
+CLIENT_SITE_PREFIXES = ('ops/content/seed/',)
+# Выкладка на боевой сервер и создание ключей.
+INFRA_PREFIXES = ('.github/', 'caddy/', 'ops/release/', 'ops/autosync/', 'ops/synapse-sync',
+                  'tools/protect-prod-sites/')
+SECRET_NAME = re.compile(r'secret|password|credential', re.IGNORECASE)
 STATUS_CONTEXT = 'production-sites/path-approval'
+
+
+def is_infrastructure(path, parts):
+    name = parts[-1]
+    lower = name.lower()
+    return (path in SHARED_JS or path in CLIENT_SITE_SOURCES
+            or path.startswith(CLIENT_SITE_PREFIXES) or path.startswith(INFRA_PREFIXES)
+            or parts[0] in {'.github', 'caddy'}
+            or lower.startswith(('caddyfile', 'dockerfile')) or lower.endswith('.dockerfile')
+            or re.fullmatch(r'(docker-)?compose[^/]*\.ya?ml', lower) is not None
+            or name.startswith('.env')
+            or (parts[0] == 'ops' and SECRET_NAME.search(name) is not None))
 
 
 def required_labels(paths):
@@ -19,12 +45,7 @@ def required_labels(paths):
         if not path or p.is_absolute() or '..' in p.parts or '\\' in path:
             raise ValueError('Некорректный путь')
         parts = p.parts
-        if (path in SHARED_JS or parts[0] == 'caddy'
-                or re.fullmatch(r'(docker-)?compose[^/]*\.ya?ml', path)
-                or path.startswith('ops/synapse-sync')
-                or path.startswith('tools/protect-prod-sites/')
-                or parts[0] == '.github'
-                or (len(parts) > 1 and parts[0] == 'ops' and parts[1] in {'content', 'crm'})):
+        if is_infrastructure(path, parts):
             required.add(INFRA)
         elif parts[0] == 'sites':
             if len(parts) < 3:
