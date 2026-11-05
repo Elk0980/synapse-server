@@ -6,6 +6,10 @@
 .mt-filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:0 0 12px; }
 .mt-filters label, .mt-side label { display:grid; gap:4px; min-width:0; font-size:14px; }
 .mt-filters label { flex:1 1 150px; max-width:240px; }
+/* №144: колонка label по умолчанию auto = min-content поля даты; на телефоне поле даты шире колонки,
+   и «по» уезжало за правый край (скриншот Влада, 390). Колонка может ужиматься, поле не шире её. */
+.mt-filters label { grid-template-columns:minmax(0,1fr); }
+.mt-filters input[type=date], .mt-filters select { max-width:100%; }
 .mt-view :is(input[type=date],select,textarea) { min-height:44px; width:100%; min-width:0; padding:9px 10px; font:inherit; font-size:16px;
   border:1px solid var(--line,#34404d); border-radius:10px; color:var(--text,#f4f0eb); background:var(--surface-soft,#181513); }
 .mt-status:empty { display:none; }

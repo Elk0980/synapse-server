@@ -58,6 +58,14 @@
       banner.style.cssText='position:sticky;top:0;z-index:10000;background:#fff0b5;color:#222;padding:10px;overflow-wrap:anywhere';
       banner.append(document.createTextNode(`Вы смотрите как ${profile.viewAs?.name||'сотрудник'} — только просмотр · `));
       const button=document.createElement('button');button.textContent='Выйти';button.onclick=exit;banner.append(button);document.body.prepend(banner);
+      /* №144: на телефоне шапка .mobile-bar зафиксирована сверху (z 35), плашка с z 10000 накрывала
+         ☰ и название компании. Плашка прилипает под шапкой; на десктопе шапки нет — top остаётся 0. */
+      const place=()=>{
+        const bar=document.querySelector('.mobile-bar');
+        const fixed=bar&&getComputedStyle(bar).position==='fixed'&&bar.offsetHeight>0;
+        banner.style.top=fixed?Math.ceil(bar.getBoundingClientRect().bottom)+'px':'0px';
+      };
+      place();window.addEventListener('resize',place);
     }
   }};
   // Expired/revoked token must remain recoverable before whoami succeeds.
