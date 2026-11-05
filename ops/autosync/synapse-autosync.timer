@@ -1,9 +1,9 @@
 [Unit]
-Description=Synapse: автовыпуск статики кабинета раз в 2 минуты
+Description=Synapse: автовыпуск статики кабинета раз в минуту
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=2min
+OnUnitActiveSec=1min
 AccuracySec=10s
 
 [Install]
