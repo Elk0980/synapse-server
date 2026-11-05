@@ -1,4 +1,11 @@
 .mentor-notice { margin:0 0 12px; border-left:3px solid var(--accent,#7fd); }
+.mentor-import { margin:12px 0; padding:12px; border:1px solid var(--line,#333); border-radius:10px; min-width:0; }
+.mentor-import [data-import-mapping] { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); gap:10px; }
+.mentor-import label { display:grid; gap:6px; min-width:0; }
+.mentor-import input,.mentor-import select { min-width:0; max-width:100%; width:100%; box-sizing:border-box; }
+.mentor-import pre,.mentor-reel-script { white-space:pre-wrap; overflow-wrap:anywhere; max-width:100%; font:inherit; }
+.mentor-import button { min-height:44px; max-width:100%; white-space:normal; }
+.mentor-import [data-import-state] { white-space:pre-line; }
 .mentor-journey { margin:0 0 16px; container:mentorJourney / inline-size; }
 .mentor-journey h2 { margin:0 0 8px; }
 .mentor-journey > p { margin:8px 0; }

@@ -70,8 +70,9 @@ function createTeamChatAnswers({db,tasks,call,env=process.env,fetchImpl=fetch,no
         AND m.id>COALESCE((SELECT MAX(s.id) FROM team_chat_answers done JOIN team_chat_messages s ON s.id=done.message_id
           WHERE s.company_code=m.company_code AND s.user_id=m.user_id AND done.status='approved'),0)
         LIMIT 1`).get(message.company_code,message.user_id);
-      const id=earlier?null:Number(db.prepare(`INSERT INTO team_chat_messages(company_code,user_id,author_name,text,client_id,created_at)
-        VALUES(?,0,'Хью · ИИ',?,?,?)`).run(message.company_code,text,`hugh-answer:${message.id}`,stamp()).lastInsertRowid);
+      // Ответ остаётся в той же комнате, где задан вопрос (общий, личный или лог с Хью).
+      const id=earlier?null:Number(db.prepare(`INSERT INTO team_chat_messages(company_code,user_id,author_name,text,client_id,created_at,room)
+        VALUES(?,0,'Хью · ИИ',?,?,?,?)`).run(message.company_code,text,`hugh-answer:${message.id}`,stamp(),message.room||'common').lastInsertRowid);
       db.prepare('UPDATE team_chat_answers SET status=?,checked_at=?,reason=?,reply_id=? WHERE message_id=?').run(status,stamp(),reason,id,message.id);
       db.exec('COMMIT');
     }catch(error){db.exec('ROLLBACK');throw error;}

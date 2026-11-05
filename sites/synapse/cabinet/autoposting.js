@@ -146,6 +146,10 @@ const isVideo = url => /\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(url);
 const mediaPreview = urls => (urls||[]).map(url=>{const safe=safeUrl(url);if(!safe)return "<li>Некорректная ссылка на материал</li>";
   const player=isVideo(safe)?`<video class="autoposting-video" controls preload="metadata" playsinline src="${esc(safe)}"></video>`:cabinet.companyAssets?.imageUrl?.(url)||/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(safe)?`<img class="autoposting-thumbnail" src="${esc(safe)}" alt="Материал публикации" loading="lazy">`:"";
   return `<li>${player}<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></li>`;}).join("");
+/* «Постинг»: готовый рилс в маске каждой выбранной площадки (маски — модуль «Материалы», cabinet.reelMask). */
+const maskPreviews = post => {const video=(post.mediaUrls||[]).map(safeUrl).find(url=>url&&isVideo(url)),mask=cabinet.reelMask;
+  const ids=(post.platformIds||[]).filter(id=>mask?.PLATFORMS.some(item=>item.id===id));if(!video||!ids.length)return "";
+  return `<div class="ap-mask-previews" data-mask-previews>${ids.map(id=>`<figure><div class="mt-screen"><video muted playsinline preload="metadata" src="${esc(video)}#t=0.5"></video>${mask.html(id)}</div><figcaption>${esc(mask.label(id))}</figcaption></figure>`).join("")}</div>`;};
 const isQueueCard = item => Boolean(item?.dayKey||Object.keys(item?.captions||{}).length);
 // Сторис с материалом и без подписи — законный формат (текст на кадре, стикеры ставятся нативно):
 // сторис по плану (формат) или по публикуемому режиму Instagram. Формат плана сам ничего не отправляет.
@@ -1332,8 +1336,8 @@ function create(container, context) {
     // Кабинет уже выбрал компанию запроса, а вкладка ещё не перешла на неё — ждём её загрузки.
     if(!same&&lower(ctx.selectedProjectId)===lower(req.companyCode))return;
     pendingOpen=null;const slot=cabinet.pendingMaterialOpen;if(slot&&slot.companyCode===req.companyCode&&Number(slot.postId)===Number(req.postId))cabinet.pendingMaterialOpen=null;
-    const id=Number(req.postId),source=req.source==='stats'||req.source==='sources'?req.source:'proposal';
-    const FROM={stats:'из статистики',sources:'из «Исходников»'};
+    const id=Number(req.postId),source=['stats','sources','materials'].includes(req.source)?req.source:'proposal';
+    const FROM={stats:'из статистики',sources:'из «Исходников»',materials:'из «Материалов»'};
     if(!same||!Number.isSafeInteger(id)||id<1){if(FROM[source])message(`Материал ${FROM[source]} не открыт: выбрана другая компания.`);return;}
     const version=epoch;busy=true;controls();
     void (async()=>{try{const item=await request('/autoposting/posts/'+id);if(version!==epoch)return;
@@ -1422,7 +1426,7 @@ function create(container, context) {
     if(busy||!post||dirty())return;const issues=problems();reviewed=post.revision;
     get("autoposting-preview-content").innerHTML=`<h4>${esc(post.title)}</h4>${(post.platformIds||[]).includes("youtube_shorts")?`<p class="autoposting-note" data-youtube-title>Публичный заголовок YouTube Shorts: «${esc(post.title)}» · ${esc(String(post.title||"").length)} / 100 · публичный доступ</p>`:""}<pre>${esc(post.text)}</pre><p>${post.scheduledAt?esc(time.toLocal(post.scheduledAt,post.timezone).replace("T"," ")+" · "+post.timezone):"Дата не задана"}</p>
       <p>Площадки: ${post.platformIds.map(id=>esc(channels().find(item=>item.id===id)?.name||platformLabel(id))).join(", ")||"не выбраны"}</p>
-      ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`:post.readiness?.textOnly?"<p>Текстовая публикация в Telegram / ВКонтакте: изображение не требуется.</p>":"<p>Материал не прикреплён.</p>"}
+      ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`+maskPreviews(post):post.readiness?.textOnly?"<p>Текстовая публикация в Telegram / ВКонтакте: изображение не требуется.</p>":"<p>Материал не прикреплён.</p>"}
       ${Object.keys(post?.platformOptions||{}).length?`<div class="autoposting-platform-options-preview"><h4>Как это выйдет на площадках</h4>${Object.entries(post.platformOptions).map(([platform,options])=>`<p><strong>${esc(CAPTIONS.find(item=>item[0]===platform)?.[1]||platform)}</strong>: ${esc(optionWords(platform,options).join("; ")||"без особых настроек")}</p>`).join("")}<p class="autoposting-note">Эти настройки утверждаются вместе с текстом: их правка снимает согласование.</p></div>`:""}${isQueueCard(post)?`<p>Версия ${esc(post.revision)}${post.dayKey?" · день "+esc(post.dayKey):""}${post.origin?" · "+esc(post.origin):""}</p><div class="autoposting-platform-previews">${CAPTIONS.map(([id,label,limit,,source])=>{const caption=post.captions?.[id]||post.text||"";
         /* То же пояснение, что у поля подписи и у счётчика: у 2ГИС 2000 — внутренний предел
            нашего поля, а не подтверждённый лимит площадки. Иначе предпросмотр обещает знание
