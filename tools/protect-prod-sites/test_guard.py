@@ -5,14 +5,98 @@ from pathlib import Path
 from unittest.mock import patch
 import guard
 
+ROOT = Path(__file__).resolve().parents[2]
+SOURCES = {path: (ROOT / path).read_text(encoding='utf-8') for path in guard.PUBLIC_ROUTES}
+
+
+def line_of(path, needle, nth=0):
+    found = [i + 1 for i, line in enumerate(SOURCES[path].split('\n')) if needle in line]
+    return found[nth]
+
+
+def modify(path, number, new_text):
+    old_text = SOURCES[path].split('\n')[number - 1]
+    return '@@ -%d,1 +%d,1 @@\n-%s\n+%s' % (number, number, old_text, new_text)
+
+
+def insert_after(path, number, new_text):
+    return '@@ -%d,0 +%d,1 @@\n+%s' % (number, number + 1, new_text)
+
+
+# A harmless change far from public routes in each shared server file.
+SAFE_PATCH = {
+    'ops/content/server.js': modify('ops/content/server.js', 1, SOURCES['ops/content/server.js'].split('\n')[0] + ' '),
+    'ops/crm/server.js': modify('ops/crm/server.js', line_of('ops/crm/server.js', 'Испытания моделей живут'),
+                                '  // Испытания моделей — тот же owner-only раздел.'),
+}
+
 
 class AdmissionTests(unittest.TestCase):
-    def check(self, paths, labels=(), **kwargs):
-        files = [{'filename': path, 'status': 'modified'} for path in paths]
+    def check(self, paths, labels=(), patches=None, **kwargs):
+        patches = patches or {}
+        files = [{'filename': path, 'status': 'modified',
+                  **({'patch': patches.get(path, SAFE_PATCH.get(path))} if path in guard.PUBLIC_ROUTES else {})}
+                 for path in paths]
         pr = {'state': 'open', 'head': {'sha': 'a' * 40}, 'changed_files': len(files),
               'labels': [{'name': label} for label in labels]}
         pr.update(kwargs)
-        return guard.evaluate(pr, files, 'a' * 40)
+        return guard.evaluate(pr, files, 'a' * 40, SOURCES)
+
+    def test_public_routes_inside_shared_servers_require_label(self):
+        content, crm = 'ops/content/server.js', 'ops/crm/server.js'
+        cases = [
+            (content, modify(content, line_of(content, "parts[0] === 'public-content'") + 3,
+                             "      const row = latestStmt.get(parts[1]);")),
+            (content, modify(content, line_of(content, "parts[0] === 'public-orders'") + 1, '      // changed')),
+            (content, insert_after(content, line_of(content, "parts[0] === 'public-company-links'"), '      noop();')),
+            (content, insert_after(content, 1, "if (parts[0] === 'public-new') {}")),
+            (crm, modify(crm, line_of(crm, "url.pathname === '/leads'") + 2, '    const contact = body.contact;')),
+            (crm, insert_after(crm, line_of(crm, "url.pathname === '/events'"), '    noop();')),
+            (crm, modify(crm, line_of(crm, 'const publicPost'), "  const publicPost = true;")),
+            (crm, modify(crm, line_of(crm, 'function checkPublicOrigin') + 1, '  return;')),
+            (crm, None),  # API omitted the patch (too large): fail closed
+        ]
+        for path, patch in cases:
+            files = [{'filename': path, 'status': 'modified', 'patch': patch}]
+            pr = {'state': 'open', 'head': {'sha': 'a'}, 'changed_files': 1, 'labels': []}
+            with self.subTest(path=path, patch=patch), self.assertRaises(ValueError):
+                guard.evaluate(pr, files, 'a', SOURCES)
+            pr['labels'] = [{'name': guard.INFRA}]
+            guard.evaluate(pr, files, 'a', SOURCES)
+
+    def test_shared_server_changes_outside_public_routes_need_no_label(self):
+        content, crm = 'ops/content/server.js', 'ops/crm/server.js'
+        for path, patch in ((content, SAFE_PATCH[content]), (crm, SAFE_PATCH[crm]),
+                            (crm, insert_after(crm, line_of(crm, 'function checkPublicOrigin') - 1, '// note'))):
+            with self.subTest(path=path, patch=patch):
+                self.check([path], patches={path: patch})
+
+    def test_shared_server_without_base_source_or_renamed_fails_closed(self):
+        pr = {'state': 'open', 'head': {'sha': 'a'}, 'changed_files': 1, 'labels': []}
+        files = [{'filename': 'ops/crm/server.js', 'status': 'modified', 'patch': SAFE_PATCH['ops/crm/server.js']}]
+        with self.assertRaises(ValueError):
+            guard.evaluate(pr, files, 'a', {})
+        files = [{'filename': 'ops/crm/server2.js', 'status': 'renamed', 'previous_filename': 'ops/crm/server.js'}]
+        with self.assertRaises(ValueError):
+            guard.evaluate(pr, files, 'a', SOURCES)
+
+    def test_remote_reads_server_source_at_merge_base(self):
+        sha = lambda c: c * 40
+        pr = {'state': 'open', 'head': {'sha': sha('a')}, 'base': {'sha': sha('b')}, 'changed_files': 1, 'labels': []}
+        files = [{'filename': 'ops/crm/server.js', 'status': 'modified', 'patch': SAFE_PATCH['ops/crm/server.js']}]
+        calls = []
+        def fake_json(repo, endpoint):
+            calls.append(endpoint)
+            if endpoint.startswith('/compare/'):
+                return {'merge_base_commit': {'sha': sha('c')}}
+            return files if '/files' in endpoint else pr
+        def fake_text(repo, endpoint):
+            calls.append(endpoint)
+            return SOURCES['ops/crm/server.js']
+        with patch.object(guard, 'fetch_json', side_effect=fake_json), patch.object(guard, 'fetch_text', side_effect=fake_text):
+            guard.check_remote('owner/repo', 1, sha('a'))
+        self.assertIn('/compare/' + sha('b') + '...' + sha('a'), calls)
+        self.assertIn('/contents/ops/crm/server.js?ref=' + sha('c'), calls)
 
     def test_workshop(self):
         self.check(['ops/tasks-mcp/server.js', 'sites/synapse/cabinet.html'])
