@@ -6,6 +6,7 @@ const { createHash, randomUUID, timingSafeEqual } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
+const companyExpenses = require('./company-expenses');
 const { createEmailOutbox } = require('./email-outbox');
 const { emailNotificationReady } = require('./email-notifications');
 const { createEmailSendLimit } = require('./email-send-limit');
@@ -561,6 +562,12 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=10').get()) {
 }
 migrate(12, () => require('./task-owner-question').migrateOwnerQuestions(db));
 
+// Расходы по компании (spec 111): добавочная колонка, проверенный бэкап до транзакции.
+if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(companyExpenses.MIGRATION_VERSION)) {
+  if (!companyExpenses.hasCompanyColumn(db)) companyExpenses.backupBeforeExpensesScope(db, DATABASE_PATH);
+  migrate(companyExpenses.MIGRATION_VERSION, () => companyExpenses.migrateExpensesCompany(db));
+}
+
 // Owner-approved company display name. IDs, links and legal entities stay intact.
 db.prepare(`UPDATE companies SET name='Palitra', updated_at=?
   WHERE code IN ('palitra-love', 'palitra')
@@ -727,7 +734,7 @@ const updateSale = db.prepare(
   "UPDATE leads SET stage = 'продажа', sale_amount = ?, sold_at = ? WHERE id = ?"
 );
 const insertExpense = db.prepare(
-  'INSERT INTO expenses (created_at, spent_at, source, amount, comment) VALUES (?, ?, ?, ?, ?)'
+  'INSERT INTO expenses (created_at, spent_at, source, amount, comment, company_code) VALUES (?, ?, ?, ?, ?, ?)'
 );
 // Первое касание посетителя для сшивки заявки с визитом (spec 112).
 const FIRST_TOUCH_DAYS = 30;
@@ -1220,6 +1227,7 @@ function serializeExpense(row) {
     source: row.source,
     amount: row.amount,
     comment: row.comment,
+    companyCode: row.company_code || null,
   };
 }
 
@@ -1246,23 +1254,15 @@ function cabinetPeriod(period) {
   return from.toISOString();
 }
 
-function totalExpense(from, to, source) {
-  const clauses = ['spent_at >= ?'];
-  const params = [from];
-  if (to) {
-    clauses.push('spent_at <= ?');
-    params.push(to);
-  }
-  if (source) {
-    clauses.push('source = ?');
-    params.push(source);
-  }
-  const where = clauses.join(' AND ');
-  return db.prepare(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE ${where}`).get(...params).total;
+// ROMI считается только при известном положительном расходе: null и 0 не дают процента.
+function romi(revenue, expense) {
+  return typeof expense === 'number' && expense > 0 ? ((revenue - expense) / expense) * 100 : null;
 }
 
-function romi(revenue, expense) {
-  return expense === 0 ? null : ((revenue - expense) / expense) * 100;
+// Расходы и ROMI по источникам. Для компании учитываются только её строки расходов (spec 111).
+function applyExpenses(analytics, rows) {
+  for (const row of rows) analytics.groupFor(row.source).expenses = row.expenses;
+  for (const group of analytics.groups.values()) group.romi = romi(group.revenue, group.expenses);
 }
 
 function activeCompanyCode(value) {
@@ -1409,12 +1409,13 @@ function analyticsData(from, to, companyCode, selectedSource, leadRows = []) {
 
 function analyticsSources(companyCode) {
   const companyFilter = companyCode ? ' WHERE company_code = ? COLLATE NOCASE' : '';
-  const params = companyCode ? [companyCode, companyCode, companyCode] : [];
+  const params = companyCode ? [companyCode, companyCode, companyCode, companyCode] : [];
   return db.prepare(`
     SELECT DISTINCT source FROM (
       SELECT source FROM leads${companyFilter}
       UNION ALL SELECT source FROM events${companyFilter}
       UNION ALL SELECT source FROM external_stats${companyFilter}
+      UNION ALL SELECT source FROM expenses${companyFilter}
     ) WHERE source IS NOT NULL AND source != '' ORDER BY source
   `).all(...params).map((row) => row.source);
 }
@@ -3155,26 +3156,8 @@ async function route(request, response) {
       `SELECT * FROM leads WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC, id DESC`
     ).all(...params);
     const analytics = analyticsData(from, to, companyCode, source, rows);
-    if (!companyCode) {
-      const expenseFilters = ['spent_at >= ?'];
-      const expenseParams = [from];
-      if (to) {
-        expenseFilters.push('spent_at <= ?');
-        expenseParams.push(to);
-      }
-      if (source) {
-        expenseFilters.push('source = ?');
-        expenseParams.push(source);
-      }
-      const expenseRows = db.prepare(`
-        SELECT source, SUM(amount) expenses FROM expenses
-        WHERE ${expenseFilters.join(' AND ')} GROUP BY source
-      `).all(...expenseParams);
-      for (const row of expenseRows) analytics.groupFor(row.source).expenses = row.expenses;
-      for (const group of analytics.groups.values()) {
-        group.romi = romi(group.revenue, group.expenses);
-      }
-    }
+    const expenseRows = companyExpenses.expenseRows(db, { from, to, companyCode, source });
+    applyExpenses(analytics, expenseRows);
     const sourceStats = [...analytics.groups.values()]
       .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
     const sources = analyticsSources(companyCode);
@@ -3183,7 +3166,7 @@ async function route(request, response) {
       return [id, { count, conversion: rows.length ? Math.round((count / rows.length) * 100) : 0 }];
     }));
     const revenue = rows.reduce((total, row) => total + (row.sale_amount || 0), 0);
-    const expenses = companyCode ? null : totalExpense(from, to, source);
+    const expenses = companyExpenses.expenseTotal(expenseRows, companyCode);
     return send(response, 200, {
       sample: false,
       companyCode: companyCode || null,
@@ -3199,7 +3182,7 @@ async function route(request, response) {
         sales: rows.filter((row) => row.stage === 'продажа').length,
         revenue,
         expenses,
-        romi: companyCode ? null : romi(revenue, expenses),
+        romi: romi(revenue, expenses),
         visits: sourceStats.reduce((sum, item) => sum + item.visits, 0),
         clicks: sourceStats.reduce((sum, item) => sum + item.clicks, 0),
       },
@@ -3207,7 +3190,7 @@ async function route(request, response) {
       leads: rows.map(serializeCabinetLead),
       sources,
       sourceStats,
-      ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
+      expensesScope: companyCode ? 'company' : 'all',
     }, cors);
   }
 
@@ -3344,26 +3327,38 @@ async function route(request, response) {
   if (request.method === 'POST' && url.pathname === '/expenses') {
     const body = await readJson(request);
     const now = new Date().toISOString();
+    // Компания расхода: из тела или из области кабинета (?companyCode). Без неё — общий расход, как раньше.
+    const queryCompany = url.searchParams.get('companyCode') || null;
+    const bodyCompany = body.companyCode === undefined || body.companyCode === null || body.companyCode === ''
+      ? null : body.companyCode;
+    if (queryCompany && bodyCompany && String(bodyCompany).toLowerCase() !== queryCompany.toLowerCase()) {
+      fail(400, 'Компания расхода не совпадает с выбранной', { code: 'COMPANY_MISMATCH', field: 'companyCode' });
+    }
+    const expenseCompany = bodyCompany || queryCompany ? activeCompanyCode(bodyCompany || queryCompany) : null;
     const result = insertExpense.run(
       now,
       date(body.spentAt ?? body.date, 'spentAt', now),
-      requiredString(body.source, 'source'),
+      // Код площадки в нижнем регистре: «Yandex-Direct» и «yandex-direct» — одна строка аналитики.
+      requiredString(body.source, 'source').toLowerCase(),
       nonNegativeNumber(body.amount, 'amount'),
-      optionalString(body.comment, 'comment')
+      optionalString(body.comment, 'comment'),
+      expenseCompany
     );
     const row = db.prepare('SELECT * FROM expenses WHERE id = ?').get(Number(result.lastInsertRowid));
     return send(response, 201, serializeExpense(row), cors);
   }
 
   if (request.method === 'GET' && url.pathname === '/expenses') {
-    if (url.searchParams.has('companyCode')) {
-      return send(response, 200, { expenses: [], expensesScope: 'global_unavailable' }, cors);
-    }
+    const companyCode = url.searchParams.get('companyCode') || null;
     const from = url.searchParams.has('from') ? rangeDate(url.searchParams.get('from'), 'from') : null;
     const to = url.searchParams.has('to') ? rangeDate(url.searchParams.get('to'), 'to', true) : null;
     if (from && to && from > to) fail(400, 'Дата «from» не может быть позже «to»');
     const clauses = [];
     const params = [];
+    if (companyCode) {
+      clauses.push('company_code = ? COLLATE NOCASE');
+      params.push(companyCode);
+    }
     if (from) {
       clauses.push('spent_at >= ?');
       params.push(from);
@@ -3374,7 +3369,9 @@ async function route(request, response) {
     }
     const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
     const rows = db.prepare(`SELECT * FROM expenses${where} ORDER BY spent_at DESC, id DESC`).all(...params);
-    return send(response, 200, { expenses: rows.map(serializeExpense) }, cors);
+    return send(response, 200, {
+      expenses: rows.map(serializeExpense), expensesScope: companyCode ? 'company' : 'all',
+    }, cors);
   }
 
   let match = url.pathname.match(/^\/leads\/(\d+)\/messages$/);
@@ -3457,26 +3454,20 @@ async function route(request, response) {
       SELECT source, stage, sale_amount FROM leads
       WHERE created_at >= ? AND created_at <= ?${companyClause}
     `).all(from, to, ...companyParams);
-    const expenseRows = companyCode ? [] : db.prepare(`
-      SELECT source, SUM(amount) AS expenses FROM expenses
-      WHERE spent_at >= ? AND spent_at <= ? GROUP BY source
-    `).all(from, to);
+    const expenseRows = companyExpenses.expenseRows(db, { from, to, companyCode });
     const analytics = analyticsData(from, to, companyCode, null, rows);
-    for (const row of expenseRows) analytics.groupFor(row.source).expenses = row.expenses;
-    if (!companyCode) {
-      for (const group of analytics.groups.values()) group.romi = romi(group.revenue, group.expenses);
-    }
+    applyExpenses(analytics, expenseRows);
     const sourceStats = [...analytics.groups.values()]
       .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
     const revenue = sourceStats.reduce((sum, group) => sum + group.revenue, 0);
-    const expenses = companyCode ? null : sourceStats.reduce((sum, group) => sum + group.expenses, 0);
+    const expenses = companyExpenses.expenseTotal(expenseRows, companyCode);
     return send(response, 200, {
-      from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses),
+      from, to, revenue, expenses, romi: romi(revenue, expenses),
       sources: sourceStats,
       sourceStats,
       visits: sourceStats.reduce((sum, group) => sum + group.visits, 0),
       clicks: sourceStats.reduce((sum, group) => sum + group.clicks, 0),
-      ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
+      expensesScope: companyCode ? 'company' : 'all',
     }, cors);
   }
 
