@@ -31,7 +31,8 @@ test('разбор сценария «Имя: реплика», запасной
   assert.deepEqual([plan.deadline, plan.shootDate, plan.weekday], ['2026-11-09', '2026-11-05', 'четверг']);
   assert.equal(script.schedule('2026-11-12', {}).configured, false);
   const list = script.reels(snapshot, {'r-late': {status: 'shot', takes: 2}});
-  assert.deepEqual(list.map((r) => [r.number, r.idea.ideaId, r.status]), [[1, 'r-first', 'approved'], [2, 'r-late', 'shot']]);
+  // Номер — номер строки в плане (r-first вторая строка), порядок — по дате выхода.
+  assert.deepEqual(list.map((r) => [r.number, r.idea.ideaId, r.status]), [[2, 'r-first', 'approved'], [1, 'r-late', 'shot']]);
   const text = script.shareText(parsed, 'Лена', {title: 'Рилс №1'});
   assert.match(text, /\*\*▶ ЛЕНА: Привет! Это Авокадо.\*\*/); assert.match(text, /^Таня: А что нового\?$/m); assert.match(text, /Реквизит: фартук, поднос/);
 });
@@ -77,7 +78,7 @@ test('экран «Съёмка»: список по порядку с днём 
   assert.equal(typeof p.registered['content-shooting'].mount, 'function');
   await p.registered['content-shooting'].mount(root, p.ctx);
   const rows = [...root.querySelectorAll('.shoot-row')].map((row) => row.textContent);
-  assert.equal(rows.length, 2); assert.match(rows[0], /№1.*Новое меню.*съёмка чт, 05.11.*дедлайн.*согласовано/);
+  assert.equal(rows.length, 2); assert.match(rows[0], /№2.*Новое меню.*Рилс.*съёмка чт, 05.11.*дедлайн.*согласовано/);
   assert.deepEqual(p.calls[0], ['crm', '/media-mentor', 'avokado']);
   root.querySelector('.shoot-row__open').click();
   assert.deepEqual(p.navigations, ['content/shooting/r-first']);
@@ -139,4 +140,35 @@ test('контракт А: без csrfToken байты идут через api.r
   await none.registered['content-shooting'].mount(noneRoot, none.ctx); await settle();
   assert.ok([...noneRoot.querySelectorAll('.shoot-upload')].every((b) => b.disabled));
   assert.match(noneRoot.querySelector('.shoot-slot__reason').textContent, /Загрузка недоступна/);
+});
+
+test('№121: Съёмка показывает все видео-позиции плана с номером строки плана, даже если Хью поставил post/story', async () => {
+  // Как на боевом 05.11: площадка только «Instagram / Reels», Хью проставил форматы post/reel/story/post/story.
+  const live = {approval: {status: 'pending'}, plan: {days: [
+    {ideaId: 'idea-06', date: '2026-11-06', platform: 'instagram', format: 'post', topic: 'Раз', script: 'Влад: Привет'},
+    {ideaId: 'idea-07', date: '2026-11-07', platform: 'instagram', format: 'reel', topic: 'Частый вопрос новичка'},
+    {ideaId: 'idea-08', date: '2026-11-08', platform: 'instagram', format: 'story', topic: 'Три'},
+    {ideaId: 'idea-10', date: '2026-11-10', platform: 'instagram', format: 'post', topic: 'Четыре', filmingBy: 'SAMPLE оператор'},
+    {ideaId: 'idea-12', date: '2026-11-12', platform: 'instagram', format: 'story', topic: 'Пять'},
+    {ideaId: 'idea-13', date: '2026-11-13', platform: 'instagram', format: 'post', topic: 'Фото без съёмки'},
+    {ideaId: 'idea-14', date: '2026-11-14', platform: 'vk', format: 'post', topic: 'Версия-рилс', variants: {vk: {format: 'reel'}}},
+    {ideaId: 'idea-15', date: '2026-11-15', platform: 'tiktok', format: 'post', topic: 'TikTok'}]},
+  variants: ['06', '07', '08', '10', '12', '13', '14', '15'].map((n) => ({ideaId: `idea-${n}`, status: 'approved'}))};
+  const list = script.reels(live);
+  assert.deepEqual(list.map((r) => [r.number, r.idea.ideaId]),
+    [[1, 'idea-06'], [2, 'idea-07'], [3, 'idea-08'], [4, 'idea-10'], [5, 'idea-12'], [7, 'idea-14'], [8, 'idea-15']],
+    'все пять позиций Reels и видео-версии; фото-пост без сценария (№6) не снимается; номера как в плане');
+  assert.equal(list.find((r) => r.idea.ideaId === 'idea-07').number, 2, '«Частый вопрос новичка» — №2, как в плане');
+  assert.deepEqual(list.slice(0, 3).map((r) => r.kind), ['Видео', 'Рилс', 'Сторис']);
+  // Экран: строки по порядку, номер строки плана, подпись вида.
+  const p = page(), root = p.d.getElementById('m');
+  p.ctx.crm = async () => live;
+  await p.registered['content-shooting'].mount(root, p.ctx);
+  const nums = [...root.querySelectorAll('.shoot-row__num')].map((node) => node.textContent);
+  assert.deepEqual(nums, ['№1', '№2', '№3', '№4', '№5', '№7', '№8']);
+  assert.equal(root.querySelectorAll('.shoot-row__kind')[2].textContent, 'Сторис');
+  const card = page({path: 'idea-08'}), cardRoot = card.d.getElementById('m');
+  card.ctx.crm = async () => live;
+  await card.registered['content-shooting'].mount(cardRoot, card.ctx); await settle();
+  assert.equal(cardRoot.querySelector('h1').textContent, 'Сторис №3 · Три');
 });

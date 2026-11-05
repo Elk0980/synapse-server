@@ -71,18 +71,37 @@
       configured: days !== null && weekdays.length > 0};
   }
 
-  /* Согласованные рилсы плана по порядку. Согласование — версия площадки approved или
-     согласованная версия плана целиком; статус производства из PR 496, иначе из загрузок. */
+  /* Что снимается (№121). Видео-позиция плана: формат идеи или любой её версии — Reels или
+     сторис (по стандарту материалов это ролики), площадка только для видео (TikTok, Shorts) либо
+     у строки есть сценарий по ролям или «Кто снимает». Фото-пост без сценария в съёмку не идёт.
+     Хью может поставить строке «Instagram / Reels» формат post/story — рилс от этого не теряется. */
+  const VIDEO_FORMATS = new Set(['reel', 'story']);
+  const VIDEO_PLATFORMS = new Set(['tiktok', 'youtube_shorts', 'youtube']);
+  const FORMAT_LABEL = {reel: 'Рилс', story: 'Сторис', post: 'Пост', carousel: 'Карусель'};
+  const filled = (value) => String(value ?? '').trim() !== '';
+  function isVideo(idea = {}) {
+    const versions = Object.entries(idea.variants && typeof idea.variants === 'object' ? idea.variants : {});
+    const formats = [idea.format, ...versions.map(([, variant]) => variant?.format)].filter(Boolean);
+    const platforms = [idea.platform, ...versions.map(([platform]) => platform)].filter(Boolean);
+    return formats.some((format) => VIDEO_FORMATS.has(format)) || platforms.some((platform) => VIDEO_PLATFORMS.has(platform))
+      || filled(idea.script) || filled(idea.filmingBy);
+  }
+  /* Подпись позиции: «Рилс», «Сторис»; пост/карусель со сценарием — «Видео», чтобы не путать с фото. */
+  const kindLabel = (idea = {}) => VIDEO_FORMATS.has(idea.format) ? FORMAT_LABEL[idea.format] : 'Видео';
+
+  /* Согласованные видео-позиции плана по порядку. Номер — номер строки в Контент-плане (№ в плане),
+     а не порядковый среди отобранных. Согласование — версия площадки approved или согласованная
+     версия плана целиком; статус производства из PR 496, иначе из загрузок. */
   function reels(snapshot, uploads = {}) {
     const days = snapshot?.plan?.days || [];
     const approvedIdeas = new Set((snapshot?.variants || []).filter((v) => v.status === 'approved').map((v) => v.ideaId));
     const wholePlan = snapshot?.approval?.status === 'approved';
-    const order = days.map((idea, index) => ({idea, index})).filter(({idea}) => idea.format === 'reel' && (wholePlan || approvedIdeas.has(idea.ideaId)));
+    const order = days.map((idea, index) => ({idea, index})).filter(({idea}) => isVideo(idea) && (wholePlan || approvedIdeas.has(idea.ideaId)));
     order.sort((a, b) => String(a.idea.date).localeCompare(String(b.idea.date)) || a.index - b.index);
-    return order.map(({idea}, index) => {
+    return order.map(({idea, index}) => {
       const stored = uploads[idea.ideaId] || {};
       const production = {shot: 'shot', editing: 'editing', draft: 'draft'}[idea.productionStatus];
-      return {number: index + 1, idea, status: stored.manualStatus || production || stored.status || 'approved',
+      return {number: index + 1, kind: kindLabel(idea), idea, status: stored.manualStatus || production || stored.status || 'approved',
         takes: stored.takes || 0, drafts: stored.drafts || 0};
     });
   }
@@ -106,5 +125,5 @@
     return out.join('\n');
   }
 
-  return {parse, schedule, reels, shareText, STATUS, WEEKDAYS};
+  return {parse, schedule, reels, isVideo, kindLabel, shareText, STATUS, WEEKDAYS};
 });
