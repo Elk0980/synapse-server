@@ -14,10 +14,11 @@
     const older = node('button', 'plain-button sbc-older', 'Ранние сообщения'); older.type = 'button'; older.hidden = true;
     head.append(node('h2', 'sbc-conv__title', title));
     if (hint) head.append(node('p', 'sbc-conv__hint', hint));
-    let taskBar = null;
+    let taskBar = null, taskLabel = null;
     if (task) {
       taskBar = node('div', 'sbc-taskbar');
-      taskBar.append(node('span', '', `Чат по задаче №${task.id}: ${task.title || ''}`), node('small', '', 'Уточнения попадут в задачу комментарием.'));
+      taskBar.hidden = true; taskBar.style.display = 'none'; taskLabel = node('span');
+      taskBar.append(taskLabel, node('small', '', 'Уточнения попадут в задачу комментарием.'));
       const clear = node('button', 'plain-button', 'Обычный чат'); clear.type = 'button'; clear.onclick = () => onClearTask?.();
       taskBar.append(clear); head.append(taskBar);
     }
@@ -26,10 +27,40 @@
     text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Чтобы позвать Хью: «Хью, …»';
     text.setAttribute('aria-label', 'Сообщение'); send.type = 'submit'; send.setAttribute('aria-label', 'Отправить');
     form.append(text, send); box.append(head, older, list, notice, form); host.replaceChildren(box);
+    const companyCode = ctx.companyCode, taskId = task?.id || null, initialViewer = ctx.user?.id;
     const messages = new Map(); let pending = null, busy = false, viewer = null, stopped = false;
-    const draftKey = `sbc:${ctx.companyCode}:${room}:${task?.id || ''}`;
-    try { const saved = JSON.parse(sessionStorage.getItem(draftKey) || 'null'); if (saved) { text.value = saved.text || ''; pending = saved.pending || null; } } catch {}
-    const save = () => { try { sessionStorage.setItem(draftKey, JSON.stringify({ text: text.value, pending })); } catch {} };
+    let identityEpoch = 0, loadEpoch = 0, prefill = '';
+    const validViewer = id => Number.isSafeInteger(id) && id > 0;
+    const draftKey = id => `sbc:v2:${id}:${companyCode}:${room}:${taskId || ''}`;
+    const persist = (id, value) => { if (validViewer(id)) { try { sessionStorage.setItem(draftKey(id), JSON.stringify(value)); } catch {} } };
+    const save = () => persist(viewer, { text: text.value, pending });
+    const compose = () => {
+      text.readOnly = busy || !validViewer(viewer) || Boolean(pending); send.disabled = busy || !validViewer(viewer);
+      if (taskBar) {
+        const ownTask = validViewer(viewer) && viewer === initialViewer;
+        taskLabel.textContent = ownTask ? `Чат по задаче №${taskId}: ${task.title || ''}` : '';
+        taskBar.hidden = !ownTask; taskBar.style.display = ownTask ? '' : 'none';
+      }
+    };
+    const pendingFits = value => value && typeof value.text === 'string' && typeof value.clientMessageId === 'string'
+      && value.room === room && (value.taskId || null) === taskId;
+    function changeViewer(id) {
+      if (viewer === id) return false;
+      save(); identityEpoch++; viewer = id; messages.clear(); pending = null; text.value = '';
+      if (validViewer(id)) {
+        try { const saved = JSON.parse(sessionStorage.getItem(draftKey(id)) || 'null'); if (saved) { text.value = typeof saved.text === 'string' ? saved.text : ''; pending = saved.pending || null; } } catch {}
+        if (prefill && id === initialViewer && !text.value && !pending) { text.value = prefill; prefill = ''; save(); }
+      }
+      compose(); return true;
+    }
+    function suspend() { changeViewer(null); render(); }
+    function confirmed(id, sent) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(draftKey(id)) || 'null');
+        if (saved?.pending?.clientMessageId === sent.clientMessageId) persist(id, { text: '', pending: null });
+      } catch {}
+    }
+    compose();
     function render() {
       const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
       list.replaceChildren();
@@ -47,33 +78,62 @@
       if (atBottom) list.scrollTop = list.scrollHeight;
     }
     async function load(before) {
-      const data = await ctx.api.get('people/team-chat', { room, before });
-      if (stopped || ctx.signal?.aborted) return;
-      viewer = data.viewerId;
+      const request = ++loadEpoch; let data;
+      try { data = await ctx.api.get('people/team-chat', { room, before }); }
+      catch (error) { if (!stopped && request === loadEpoch && [401, 403].includes(error?.status)) suspend(); throw error; }
+      if (stopped || ctx.signal?.aborted || request !== loadEpoch) return null;
+      if (!validViewer(data.viewerId) || data.room !== undefined && data.room !== room) {
+        suspend(); throw Object.assign(Error('Сессия не подтверждена'), { status: 401 });
+      }
+      const previous = viewer, changed = changeViewer(data.viewerId);
+      if (changed && before) return load();
       for (const m of data.messages) messages.set(m.id, m);
       if (before || messages.size <= data.messages.length) older.hidden = !data.hasMore;
       render();
+      notice.textContent = previous !== null && changed ? 'Аккаунт изменился. Проверьте черновик перед отправкой.'
+        : pending ? 'Есть неподтверждённая отправка. Нажмите ➤, чтобы проверить её результат.' : '';
+      return { viewerId: viewer, changed };
     }
     older.onclick = () => load(Math.min(...messages.keys())).catch(e => { notice.textContent = human(e); });
     form.onsubmit = async event => {
-      event.preventDefault(); if (busy || !text.value.trim()) return;
-      pending ||= { text: text.value.trim(), clientMessageId: uid(), room, ...(task ? { taskId: task.id } : {}) };
-      busy = true; send.disabled = true; text.readOnly = true; save(); notice.textContent = 'Отправляю…';
+      event.preventDefault(); if (busy || !validViewer(viewer) || !text.value.trim()) return;
+      const owner = viewer, epoch = identityEpoch;
+      busy = true; compose(); notice.textContent = 'Отправляю…';
       try {
-        const data = await ctx.api.post('people/team-chat', pending);
-        messages.set(data.message.id, data.message); pending = null; text.value = ''; save(); notice.textContent = '';
-        await load(); list.scrollTop = list.scrollHeight;
-      } catch (error) { if (!ctx.signal?.aborted) notice.textContent = human(error); }
-      finally { busy = false; send.disabled = false; text.readOnly = Boolean(pending); }
+        const snapshot = await ctx.api.get('whoami');
+        if (stopped || ctx.signal?.aborted) return;
+        if (!validViewer(snapshot?.userId) || typeof snapshot.csrfToken !== 'string' || !snapshot.csrfToken.trim()) {
+          suspend(); throw Object.assign(Error('Сессия не подтверждена'), { status: 401 });
+        }
+        if (snapshot.userId !== owner || viewer !== owner || identityEpoch !== epoch) {
+          suspend(); await load(); notice.textContent = 'Аккаунт изменился. Проверьте черновик перед отправкой.'; return;
+        }
+        pending ||= { text: text.value.trim(), clientMessageId: uid(), room, ...(taskId ? { taskId } : {}) };
+        save();
+        if (!pendingFits(pending)) throw Object.assign(Error('Сохранённая отправка относится к другому чату'), { status: 409 });
+        const sent = pending;
+        const data = await ctx.api.post('people/team-chat', sent, undefined, { csrfToken: snapshot.csrfToken });
+        if (data.message?.user_id !== owner) throw Object.assign(Error('Не подтверждён отправитель'), { status: 502 });
+        confirmed(owner, sent);
+        if (stopped || ctx.signal?.aborted || viewer !== owner || identityEpoch !== epoch) return;
+        pending = null; text.value = ''; save(); notice.textContent = '';
+        const loaded = await load();
+        if (loaded?.viewerId === owner) { messages.set(data.message.id, data.message); render(); list.scrollTop = list.scrollHeight; }
+      } catch (error) {
+        if (!stopped && !ctx.signal?.aborted) { if ([401, 403].includes(error?.status)) suspend(); notice.textContent = human(error); }
+      } finally { busy = false; compose(); }
     };
     text.oninput = save;
     text.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) form.requestSubmit(); };
-    if (pending) { text.readOnly = true; notice.textContent = 'Есть неподтверждённая отправка. Нажмите ➤, чтобы проверить её результат.'; }
     const timer = setInterval(() => { if (!document.hidden && !busy) load().catch(() => {}); }, 5000);
     const stop = () => { stopped = true; clearInterval(timer); save(); };
     ctx.signal?.addEventListener('abort', stop, { once: true });
     load().catch(e => { notice.textContent = e?.status === 403 ? 'Нет доступа к этому чату.' : 'Не удалось загрузить чат. Обновите экран.'; render(); });
-    return { stop, focus: () => text.focus(), prefill(value) { if (!text.value) text.value = value; text.focus(); } };
+    return { stop, focus: () => text.focus(), prefill(value) {
+      prefill = value;
+      if (viewer === initialViewer && validViewer(viewer) && !text.value && !pending) { text.value = value; prefill = ''; save(); }
+      text.focus();
+    } };
   }
 
   // Плавающая панель: лог пользователя с Хью. Открывать с контекстом задачи — SynapseHughChat.open({task}).
