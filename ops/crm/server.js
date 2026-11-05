@@ -53,6 +53,7 @@ const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence')
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
+const { createSiteOrderLeads } = require('./site-order-leads');
 const { createTaskCoordination } = require('./task-coordination');
 const { createPeopleHandler } = require('./people-http');
 const { createTaskDispatch } = require('./task-dispatch');
@@ -729,6 +730,8 @@ const insertMessage = db.prepare(
 const insertStageHistory = db.prepare(
   'INSERT INTO stage_history (lead_id, created_at, from_stage, to_stage) VALUES (?, ?, ?, ?)'
 );
+// Заказы сайтов (сервис контента) — тот же реестр leads и тот же INSERT, ключ повтора — номер заказа.
+const siteOrderLeads = createSiteOrderLeads({ db, fail, createLead, getLead, insertStageHistory, normalizeContact });
 const updateStage = db.prepare('UPDATE leads SET stage = ? WHERE id = ?');
 const updateSale = db.prepare(
   "UPDATE leads SET stage = 'продажа', sale_amount = ?, sold_at = ? WHERE id = ?"
@@ -3275,6 +3278,13 @@ async function route(request, response) {
     send(response, 201, leadResponse(row, false), cors);
     void deliverLeadEmails();
     return;
+  }
+
+  // Служебный приём заказа сайта: x-api-key уже проверен выше (маршрут не публичный).
+  if (request.method === 'POST' && url.pathname === '/internal/site-orders/lead') {
+    const result = siteOrderLeads.accept(await readJson(request, 64 * 1024));
+    // Служебный вызов сервер→сервер: заголовки CORS не нужны.
+    return send(response, result.status, result.body, { 'cache-control': 'no-store' });
   }
 
   if (request.method === 'GET' && url.pathname === '/leads') {

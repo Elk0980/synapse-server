@@ -8,6 +8,7 @@
    только хешем, контакты клиента не попадают в журнал. */
 
 const crypto = require('node:crypto');
+const { migrateSiteOrderCrm } = require('./site-order-crm');
 
 const KINDS = new Set(['cart', 'request']);
 const ORDER_STATUSES = ['accepted', 'notified', 'notify_uncertain', 'notify_failed'];
@@ -84,7 +85,7 @@ const originOf = (request) => {
   return '';
 };
 
-function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = Date.now, groupNotificationSites = [], groupReader = () => null }) {
+function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = Date.now, groupNotificationSites = [], groupReader = () => null, onAccepted = () => {} }) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS site_order_recipients (
       site TEXT PRIMARY KEY, company_code TEXT NOT NULL, telegram_chat_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',
@@ -140,6 +141,8 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     if (!columns('site_orders').has(field)) db.exec(`ALTER TABLE site_orders ADD COLUMN ${field} TEXT NOT NULL DEFAULT ''`);
   }
   if (!columns('site_orders').has('group_required')) db.exec('ALTER TABLE site_orders ADD COLUMN group_required INTEGER NOT NULL DEFAULT 0');
+  // Отметка передачи в CRM (site-order-crm.js): новая заявка ставится в очередь в той же транзакции.
+  migrateSiteOrderCrm(db);
   const stamp = (at = now()) => new Date(at).toISOString();
   const siteConfig = (site) => (Object.hasOwn(sites, site) ? sites[site] : null);
   const ipHash = (ip) => sha256(`${ip}|${ipSalt}`);
@@ -318,6 +321,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
           input.comment, JSON.stringify(items), knownTotal, unknownCount, input.page, JSON.stringify(input.utm), hash, stamp(at),
           input.contactChannel, input.contact, input.telegramUsername, input.deliveryAddress, input.deliveryDate, input.deliveryInterval, groupEnabled(site) ? 1 : 0).lastInsertRowid);
         db.prepare('INSERT INTO site_order_rate(ip_hash,created_at) VALUES(?,?)').run(hash, stamp(at));
+        db.prepare("UPDATE site_orders SET crm_status='pending',crm_next_attempt_at=? WHERE id=?").run(stamp(at), id);
         const row = db.prepare('SELECT * FROM site_orders WHERE id=?').get(id);
         // Получатель не настроен — заявка всё равно сохранена; уведомление владелец отправит явно после настройки.
         if (recipient) enqueue(site, config, 'order', row, recipient);
@@ -325,6 +329,8 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
         if (group) enqueue(site, config, 'order', row, group, 'group');
         return row;
       });
+      // Передача в CRM — после фиксации заказа; её сбой не влияет на ответ сайту.
+      try { onAccepted(order); } catch { /* повтор выполнит фоновая передача */ }
       return { status: 201, body: { ok: true, orderId: order.id, requestId: order.request_id, status: 'accepted',
         message: `Заявка №${order.id} принята. Менеджер свяжется с вами, подтвердит состав и стоимость, согласует оплату и доставку.` } };
     } catch (error) {
@@ -471,7 +477,9 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       ? db.prepare('SELECT * FROM site_orders WHERE site=? ORDER BY id DESC LIMIT ?').all(site, size + 1)
       : db.prepare('SELECT * FROM site_orders WHERE site=? AND id<? ORDER BY id DESC LIMIT ?').all(site, cursor, size + 1);
     const page = rows.slice(0, size);
-    return { orders: page.map(orderJSON), nextCursor: rows.length > size ? page[page.length - 1].id : null, recipient: recipientStatus(site) };
+    // Заказы, которые не удалось передать в CRM (повторы исчерпаны или отказ): одна цифра для списка кабинета.
+    const crmErrors = db.prepare("SELECT count(*) n FROM site_orders WHERE site=? AND crm_status='error'").get(site).n;
+    return { orders: page.map(orderJSON), nextCursor: rows.length > size ? page[page.length - 1].id : null, recipient: recipientStatus(site), crmErrors };
   }
   /* Смена получателя сбрасывает подтверждение и меняет версию: старые тесты и задания ей не засчитываются. */
   function setRecipient(site, body) {
