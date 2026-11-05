@@ -665,6 +665,8 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       if(!author||!message)fail(400,'Укажите автора и текст комментария');
       const result=db.prepare('INSERT INTO task_comments(task_id,author,text,created_at) VALUES(?,?,?,?)').run(row.id,author,message,stamp());
       watchdog?.comment(row.id,Number(result.lastInsertRowid),actor);
+      // №135: ответ Влада сразу снимает ожидание — в этой же транзакции.
+      require('./task-owner-answer').applyOwnerAnswer(db,{taskId:row.id,commentId:Number(result.lastInsertRowid),text:message,stamp:stamp(),userId:actor.userId});
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
       return {comment:commentView(db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid)))};
     });
