@@ -5,17 +5,8 @@ const SbCabinet = window.SbCabinet = window.SbCabinet || {};
 let identity, byId, escapeHTML, apiJson;
 let initialized = false;
 const api = {};
-const permissionLabel = value => ({
-  'autoposting.approve': 'Контент — согласование материалов своей компании',
-  'team.manage': 'Моя команда — добавление администраторов и мастеров',
-  'company-information.view': 'Актуальность — просмотр данных компании',
-  'company-information.edit': 'Актуальность — заполнение и проверка данных',
-  'autoposting.view': 'Автопостинг — просмотр материалов и плана',
-  'autoposting.edit': 'Автопостинг — материалы и публикации',
-  'autoposting.channels': '⚠ Автопостинг — каналы публикации и ключи',
-  'actor-onboarding.self': 'Личный опрос — заполнить только свой',
-  'actor-onboarding.manage': 'Личный опрос — сводка участников компании'
-})[value] || value;
+const permissionHelp = window.SynapsePermissionHelp;
+const permissionLabel = value => permissionHelp.describe(value).label;
 const init = (context) => {
   ({ identity, byId, escapeHTML, apiJson } = context);
   if (initialized) return;
@@ -28,7 +19,7 @@ const init = (context) => {
   const selected = (name) => [...createForm.querySelectorAll(`input[name="${name}"]:checked`)].map(input => input.value);
   const presetSelect = byId("account-access-preset");
   const currentPreset = () => accessOptions?.presets.find(preset => preset.id === presetSelect.value);
-  const accessCheckboxes = (name, options, checked, label = permissionLabel) => options.map(value => {
+  const accessCheckboxes = (name, options, checked, label = permissionLabel) => name === "permissions" ? permissionHelp.markup(options, {selectable:true,checked,name}) : options.map(value => {
     const id = typeof value === "string" ? value : value.id;
     return `<label class="account-access-option"><input type="checkbox" name="${name}" value="${escapeHTML(id)}"${checked.includes(id) ? " checked" : ""}> <span>${escapeHTML(label(value))}</span></label>`;
   }).join("");
@@ -51,8 +42,7 @@ const init = (context) => {
     const preset = currentPreset();
     byId("account-create-companies").innerHTML = accessOptions.companies.map(company =>
       `<label class="account-access-option"><input type="checkbox" name="companies" value="${escapeHTML(company.id)}"${companies.includes(company.id) ? " checked" : ""}> <span>${escapeHTML(company.name)}</span></label>`).join("");
-    byId("account-create-permissions").innerHTML = "<p>Права</p>" + accessOptions.permissions.map(permission =>
-      `<label class="account-access-option"><input type="checkbox" name="permissions" value="${escapeHTML(permission)}"${permissions.includes(permission) ? " checked" : ""}${preset ? " disabled" : ""}> <span>${escapeHTML(permissionLabel(permission))}</span></label>`).join("");
+    byId("account-create-permissions").innerHTML = permissionHelp.markup(accessOptions.permissions, {selectable:true,checked:permissions,disabled:!!preset});
     byId("account-access-status").textContent = preset
       ? "Отметьте один или несколько проектов. Набор доступа задаёт только права и не ограничивает выбор проектов."
       : "Отметьте проекты и права. Неотмеченный доступ не назначается. price.edit требует price.view, site_editor.edit требует site_editor.view.";
@@ -115,7 +105,7 @@ const init = (context) => {
         card.innerHTML = `<h2>${escapeHTML(account.displayName)}</h2>
           <p>@${escapeHTML(account.login)} · ${account.role}</p>
           <p>Компании: ${account.companies.map((item) => escapeHTML(item.name)).join(", ") || "не назначены"}</p>
-          <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>
+          <div>Права: ${account.permissions.length ? permissionHelp.markup(account.permissions) : "не назначены"}</div>
           ${identity.role === "owner" ? `<div class="account-card-actions">
             <button class="plain-button" type="button" data-account-edit>Изменить</button>
             <button class="danger" type="button" data-account-delete>Удалить</button></div>` : ""}`;
