@@ -11,3 +11,9 @@ SHA256 runtime:b998d58b9b1c9bdc9dac66917fa2ab5cb86378a904cbe210d0844d7ae13641c8;
 Linux CI ещё не выполнен; workflow подготовлен. Локальные проверки не заменяют независимую приёмку Claude, установленный механизм или фактический smoke merge→HTTP.
 
 Независимый Codex RO review обнаружил P2: .JS обходил регистрочувствительный gate. Исправлено единым is_js с lower() и нормализованным расширением временного файла; новая регрессия .JS + слишком большой .MJS проверяет общий отказ. Это внутреннее ревью, приёмка Claude ещё впереди.
+
+## 05.11.2026, Claude «Автовыпуск» (Бангкок)
+
+Ревью 528 @02691e90 — ПРИНЯТ, слит в ветку 518 (e10a4e92). Linux, Node 18.19.1 из apt Ubuntu 24.04: 14/14 OK; 71/71 JS `sites/synapse/{cabinet,brand}` main проходят `node --check`.
+
+Найдено: фильтр юнита `@system-service − @privileged − @resources` не содержит `pkey_alloc`, который V8 вызывает при старте. Эмуляция фильтра (libseccomp, действие KILL, как у systemd): `node --check` → SIGSYS («Bad system call»), из Python returncode −31, то есть каждый коммит с JS был бы отклонён `js-preflight`; с `@pkey` → 0. Остальные вызовы полного прогона тестов (python, git clone/fetch по https, node) в фильтр укладываются. Исправление: `SystemCallFilter=@pkey`, `sandbox-smoke.sh` для установки и CI-задача `sandbox` (проверка и с `@pkey`, и обязательный отказ без него). Локально 16/16 OK; новый тест однократной записи ошибки на прежнем скрипте падает.

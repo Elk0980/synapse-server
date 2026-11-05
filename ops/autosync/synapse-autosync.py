@@ -394,10 +394,26 @@ def main(argv=None):
         except BlockingIOError:
             return 0
         try:
-            return run_once(ctx, a.init)
+            rc = run_once(ctx, a.init)
         except Exception as error:
-            ctx.log(f'ERROR {type(error).__name__}: {error}')
+            # Одинаковая ошибка (например, symlink на пути) пишется в журнал один раз.
+            message = f'ERROR {type(error).__name__}: {error}'
+            try:
+                state = load_state(ctx)
+                if state.get('error') == message:
+                    return 1
+                state['error'] = message
+                save_state(ctx, state)
+            except Exception:
+                pass
+            ctx.log(message)
             return 1
+        state = load_state(ctx)
+        if 'error' in state:
+            state.pop('error')
+            save_state(ctx, state)
+            ctx.log('RECOVERED')
+        return rc
 
 
 if __name__ == '__main__':

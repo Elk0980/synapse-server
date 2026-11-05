@@ -17,3 +17,30 @@ jobs:
         with:
           node-version: '24'
       - run: python -m unittest discover -s ops/autosync -p 'test_*.py' -v
+  sandbox:
+    # Тот же Node, что ставится на хост (apt Ubuntu 24.04: nodejs 18.19.1), внутри
+    # ограничений systemd из synapse-autosync.service.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node из apt, как на хосте
+        run: |
+          sudo rm -f /usr/local/bin/node
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends nodejs
+          /usr/bin/node --version
+      - name: Каталоги и пользователь, как в README
+        run: |
+          sudo useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin synapse-autosync
+          sudo install -d -o root -g root -m 755 /usr/local/lib/synapse-autosync
+          sudo install -o root -g root -m 644 ops/autosync/synapse-autosync.py /usr/local/lib/synapse-autosync/
+          sudo install -d -m 755 /opt/synapse/sites/synapse/cabinet /opt/synapse/sites/synapse/brand
+          sudo install -d -o synapse-autosync -g synapse-autosync -m 700 /var/backups/synapse-autosync
+      - name: node --check и git внутри песочницы юнита
+        run: sudo sh ops/autosync/sandbox-smoke.sh ops/autosync/synapse-autosync.service
+      - name: Без @pkey песочница обязана падать (проверка самой проверки)
+        run: |
+          grep -v '^SystemCallFilter=@pkey$' ops/autosync/synapse-autosync.service > /tmp/no-pkey.service
+          if sudo sh ops/autosync/sandbox-smoke.sh /tmp/no-pkey.service; then
+            echo 'ожидался отказ без @pkey'; exit 1; fi

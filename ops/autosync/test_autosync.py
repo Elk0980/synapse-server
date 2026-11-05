@@ -262,6 +262,31 @@ class AutosyncTest(unittest.TestCase):
         self.assertEqual(self.run_sync('--no-ci'), 0)
         self.assertFalse(os.path.lexists(self.live / 'sites/synapse/cabinet/link.js'))
 
+    @unittest.skipIf(os.name == 'nt', 'real symlink fixture requires Linux CI')
+    def test_symlink_on_live_path_error_logged_once(self):
+        self.put('sites/synapse/cabinet/sub/x.css', 'x1')
+        self.commit('sub')
+        outside = self.tmp / 'outside'
+        outside.mkdir()
+        os.symlink(outside, self.live / 'sites/synapse/cabinet/sub')
+        self.assertEqual(self.run_sync('--no-ci'), 1)
+        self.assertEqual(self.run_sync('--no-ci'), 1)
+        log = (self.tmp / 'log.txt').read_text()
+        self.assertEqual(log.count('ERROR RuntimeError: symlink на пути'), 1)  # без повторов каждые 2 минуты
+        self.assertFalse((outside / 'x.css').exists())
+        os.unlink(self.live / 'sites/synapse/cabinet/sub')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        log = (self.tmp / 'log.txt').read_text()
+        self.assertIn('RECOVERED', log)
+        self.assertEqual((self.live / 'sites/synapse/cabinet/sub/x.css').read_text(), 'x1')
+        self.assertNotIn('error', json.loads((self.tmp / 'st' / 'state.json').read_text()))
+
+    def test_unit_allows_pkey_for_node(self):
+        unit = (HERE / 'synapse-autosync.service').read_text(encoding='utf-8')
+        self.assertIn('SystemCallFilter=@system-service', unit)
+        self.assertIn('SystemCallFilter=@pkey', unit)  # иначе V8 убивается SIGSYS на pkey_alloc
+        self.assertNotIn('MemoryDenyWriteExecute=yes', unit)  # JIT V8 не работает с W^X
+
     def test_ci_gate_waits_and_fails_closed(self):
         self.put('sites/synapse/cabinet/a.js', 'a2')
         self.commit('next')

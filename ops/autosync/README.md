@@ -55,15 +55,19 @@ bare-клон `/opt/synapse-autosync/repo` и выкладывает на бое
 
 ## Установка (root). Таймер включать только после защиты main (№57)
 
-На хосте обязателен доступный `node` для `node --check`. Если его нет, установку и
-включение таймера не продолжать; зелёный CI не заменяет эту проверку. Установка
-Node.js, добавление внешних репозиториев/ключей этим документом не разрешаются.
+На хосте обязателен `node` для `node --check`. Node ставится только из штатного
+репозитория Ubuntu (`apt-get install nodejs`, 24.04 → 18.19.1; решение Влада 05.11.2026);
+внешние репозитории и ключи не добавлять. Перед включением таймера обязателен
+`sandbox-smoke.sh`: он запускает `node --check` и `git` по https с ограничениями юнита.
+Без него запрет системного вызова (например, `pkey_alloc` у V8 без `@pkey`) проявился бы
+только на первом настоящем PR: каждый коммит с JS отклонялся бы как `js-preflight`.
 
 Пока `main` не защищён (№57: обязательные проверки, без прямых push), любой, кто может
 писать в `main`, сможет выложить статику кабинета. Поэтому до №57 ставится всё, кроме
 `enable --now` таймера.
 
 ```sh
+apt-get install -y --no-install-recommends nodejs
 command -v node >/dev/null && node --version || { echo 'STOP: требуется node для проверки JS'; exit 1; }
 SHA=<принятый merge-коммит>; RAW=https://raw.githubusercontent.com/Elk0980/synapse-server/$SHA/ops/autosync
 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin synapse-autosync
@@ -74,11 +78,13 @@ chown root:root /usr/local/lib/synapse-autosync/synapse-autosync.py && chmod 755
 curl -fsSL $RAW/synapse-autosync.service -o /etc/systemd/system/synapse-autosync.service
 curl -fsSL $RAW/synapse-autosync.timer -o /etc/systemd/system/synapse-autosync.timer
 curl -fsSL $RAW/synapse-autosync.logrotate -o /etc/logrotate.d/synapse-autosync
+curl -fsSL $RAW/sandbox-smoke.sh -o /usr/local/lib/synapse-autosync/sandbox-smoke.sh
 # запись в каталоги статики через группу (ACL на сервере не установлен); файлы остаются root:root 644
 for d in /opt/synapse/sites/synapse/cabinet /opt/synapse/sites/synapse/brand; do
   find "$d" -type d -exec chgrp synapse-autosync {} + -exec chmod 2775 {} +; done
 systemctl daemon-reload
 systemd-analyze security synapse-autosync.service | tail -1     # цель ≤ 3.5
+sh /usr/local/lib/synapse-autosync/sandbox-smoke.sh              # нужна строка SANDBOX OK
 systemctl start synapse-autosync.service                         # первый запуск = база (--init не нужен)
 # ТОЛЬКО после №57:
 systemctl enable --now synapse-autosync.timer
@@ -110,5 +116,8 @@ cat /var/lib/synapse-autosync/state.json                 # что выложен
 `python3 -m unittest ops/autosync/test_autosync.py` — правила трёх сторон, пропуск
 локальной правки, белый список, откат при провале проверки, отсутствие повтора, shell-version.json,
 симлинки, ожидание и отказ CI, STOP только при смене состояния, отказ всего набора
-при ошибке JS и успешная активация валидного набора. Реальный `node --check`
+при ошибке JS и успешная активация валидного набора, однократная запись повторяющейся
+ошибки (symlink на пути) и `RECOVERED` после её устранения. Реальный `node --check`
 обязателен в Linux CI; в локальной среде без node соответствующие тесты пропускаются.
+CI-задача `sandbox` ставит Node из apt (как на хосте) и прогоняет `sandbox-smoke.sh` с юнитом,
+а также проверяет, что без `@pkey` проверка падает.
