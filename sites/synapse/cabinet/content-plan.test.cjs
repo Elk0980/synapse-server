@@ -267,3 +267,45 @@ test('№136: server before the fix rejects the new field — one retry without 
   assert.deepEqual(bodies.map((b) => 'platforms' in b), [true, false]);
   assert.ok(a.root.querySelector('[data-cp="accept"]'));
 });
+
+test('№141: plan exists — short plan is shown first, questionnaire collapsed to «Анкета проекта · заполнено N из 8»', async () => {
+  const a = api(); await a.mount();
+  const order = [...a.root.querySelector('.cp').children].map((n) => n.classList[n.classList.length - 1]);
+  assert.deepEqual(order, ['cp-head', 'cp-plan', 'cp-approve', 'cp-q', 'cp-error']);
+  assert.equal(a.root.querySelector('.cp').dataset.cpLayout, 'plan');
+  assert.equal(a.root.querySelector('.cp-q').open, false, 'questionnaire is collapsed');
+  assert.equal(a.root.querySelector('.cp-q summary').textContent.trim(), 'Анкета проекта · заполнено 1 из 8');
+  assert.equal(a.root.querySelectorAll('.cp-plan .cp-row').length, 2, 'short plan rows are visible right away');
+  assert.equal(a.root.querySelector('[data-cp-view="short"]').getAttribute('aria-pressed'), 'true');
+  // Кнопка «Написать контент-план» раскрывает свёрнутую анкету.
+  a.root.querySelector('[data-cp="questionnaire"]').click();
+  assert.equal(a.root.querySelector('.cp-q').open, true);
+  assert.equal(a.window.document.activeElement, a.root.querySelector('[data-q="goals"]'));
+  // Одной строки уже достаточно: план считается существующим.
+  const b = api({ plan: [idea(1)] }); await b.mount();
+  assert.equal(b.root.querySelector('.cp').firstElementChild.nextElementSibling.className, 'cp-plan');
+  assert.equal(b.root.querySelector('.cp-q').open, false);
+});
+
+test('№141: no plan — questionnaire stays on top and open, no empty plan block', async () => {
+  const a = api({ plan: [] }); await a.mount();
+  const order = [...a.root.querySelector('.cp').children].map((n) => n.classList[n.classList.length - 1]);
+  assert.deepEqual(order, ['cp-head', 'cp-q', 'cp-approve', 'cp-error']);
+  assert.equal(a.root.querySelector('.cp').dataset.cpLayout, 'questionnaire');
+  assert.equal(a.root.querySelector('.cp-q').open, true);
+  assert.equal(a.root.querySelector('.cp-plan'), null);
+  assert.equal(a.root.querySelector('[data-cp-view]'), null);
+});
+
+test('№141: «Начало» and «Дней» are an even grid — caption span + one control each, same height in CSS', async () => {
+  const a = api({ plan: [] }); await a.mount();
+  const labels = [...a.root.querySelectorAll('.cp-gen > label')];
+  assert.deepEqual(labels.map((l) => l.querySelector('span').textContent), ['Начало', 'Дней']);
+  assert.deepEqual(labels.map((l) => l.children.length), [2, 2]);
+  assert.ok(labels[0].querySelector('input[type="date"][data-cp-start]')); assert.ok(labels[1].querySelector('select[data-cp-days]'));
+  const css = fs.readFileSync(path.join(__dirname, 'content-plan.css'), 'utf8');
+  assert.match(css, /\.cp-gen \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.cp-gen label \{ grid-template-rows:auto 44px;/);
+  assert.match(css, /\.cp-gen input\[type="date"\], \.cp-gen select \{[^}]*min-width:0; height:44px;/);
+  assert.match(css, /\.cp-gen input\[type="date"\] \{ -webkit-appearance:none; appearance:none;/);
+});
