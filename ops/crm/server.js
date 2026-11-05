@@ -729,6 +729,17 @@ const updateSale = db.prepare(
 const insertExpense = db.prepare(
   'INSERT INTO expenses (created_at, spent_at, source, amount, comment) VALUES (?, ?, ?, ?, ?)'
 );
+// Первое касание посетителя для сшивки заявки с визитом (spec 112).
+const FIRST_TOUCH_DAYS = 30;
+const FIRST_TOUCH_FIELDS = {
+  utmSource: 'utm_source', utmMedium: 'utm_medium', utmCampaign: 'utm_campaign',
+  utmContent: 'utm_content', utmTerm: 'utm_term', referrer: 'referrer',
+};
+const leadFirstTouch = db.prepare(`
+  SELECT source, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer FROM events
+  WHERE company_code = ? COLLATE NOCASE AND client_id = ? AND type = 'visit' AND created_at >= ?
+  ORDER BY created_at ASC, id ASC LIMIT 1
+`);
 const insertEvent = db.prepare(`
   INSERT INTO events (
     created_at, type, company_code, client_id, page, landing_page, referrer, utm_source,
@@ -3214,11 +3225,31 @@ async function route(request, response) {
       void deliverLeadEmails();
       return;
     }
-    const utmSource = optionalString(body.utmSource, 'utmSource');
-    const referrer = optionalString(body.referrer, 'referrer');
+    const clientId = optionalString(body.clientId, 'clientId');
     const sourceInput = optionalString(body.source, 'source');
+    const tags = {
+      utmSource: optionalString(body.utmSource, 'utmSource'),
+      utmMedium: optionalString(body.utmMedium, 'utmMedium'),
+      utmCampaign: optionalString(body.utmCampaign, 'utmCampaign'),
+      utmContent: optionalString(body.utmContent, 'utmContent'),
+      utmTerm: optionalString(body.utmTerm, 'utmTerm'),
+      referrer: optionalString(body.referrer, 'referrer'),
+    };
+    // Сшивка с визитом (spec 112): без своих utmSource, referrer и source заявка берёт первое касание
+    // того же посетителя этой компании за 30 дней. Поля, заполненные формой, не перезаписываются.
+    const firstTouch = companyCode && clientId && !sourceInput && !tags.utmSource && !tags.referrer
+      ? leadFirstTouch.get(companyCode, clientId, new Date(Date.now() - FIRST_TOUCH_DAYS * 86400000).toISOString())
+      : null;
+    if (firstTouch) {
+      // Данные формы важнее: из визита заполняются только пустые поля.
+      for (const [field, column] of Object.entries(FIRST_TOUCH_FIELDS)) {
+        if (!tags[field]) tags[field] = firstTouch[column] || null;
+      }
+    }
+    const { utmSource, referrer } = tags;
     const derived = deriveSource({ utmSource, referrer });
-    const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
+    const source = sourceInput || (firstTouch && firstTouch.source !== 'direct' ? firstTouch.source : null) ||
+      (utmSource ? derived : (derived === 'direct' ? null : derived));
     const landingPage = optionalString(body.landingPage, 'landingPage');
     let row;
     db.exec('BEGIN IMMEDIATE');
@@ -3235,11 +3266,11 @@ async function route(request, response) {
         optionalString(body.firstQuestion, 'firstQuestion'),
         optionalString(body.comment, 'comment'),
         utmSource,
-        optionalString(body.utmMedium, 'utmMedium'),
-        optionalString(body.utmCampaign, 'utmCampaign'),
-        optionalString(body.utmContent, 'utmContent'),
-        optionalString(body.utmTerm, 'utmTerm'),
-        optionalString(body.clientId, 'clientId'),
+        tags.utmMedium,
+        tags.utmCampaign,
+        tags.utmContent,
+        tags.utmTerm,
+        clientId,
         referrer,
         landingPage,
         companyCode
