@@ -18,6 +18,7 @@ CLIENT_SITE_SOURCES = {
     'ops/content/site-store.js', 'ops/content/site-orders.js',
     'ops/content/company-links-reader.js', 'ops/content/tag_site.py',
     'ops/content/tag_avokado.py', 'ops/crm/company-links.js',
+    'ops/content/client-bot-config.js',  # заказы и боты клиентских сайтов (ревью 660)
 }
 CLIENT_SITE_PREFIXES = ('ops/content/seed/',)
 # Выкладка на боевой сервер и создание ключей.
@@ -25,21 +26,28 @@ INFRA_PREFIXES = ('.github/', 'caddy/', 'ops/release/', 'ops/autosync/', 'ops/sy
                   'tools/protect-prod-sites/')
 SECRET_NAME = re.compile(r'secret|password|credential', re.IGNORECASE)
 STATUS_CONTEXT = 'production-sites/path-approval'
-# Публичные маршруты клиентских сайтов внутри общих server.js (ревью 647): /api/price,
-# /api/site, /api/company-links, /api/orders -> public-*; /leads, /events -> CRM.
+# Публичные маршруты клиентских сайтов внутри общих server.js (ревью 647, 660): /api/price,
+# /api/site, /api/company-links, /api/orders -> public-*, SITES, DOCUMENT_VALIDATORS,
+# ORDER_SITES, validateSite/validatePrice; /leads, /events, checkPublicOrigin, companyDomains -> CRM.
 # Блок маршрута ищется в версии файла на merge-base; правка внутри блока или строка с
 # этими маркерами требует метку. Нет patch, нет исходника, переименование — тоже метка.
 PUBLIC_ROUTES = {
-    'ops/content/server.js': [re.compile(r"parts\[0\]\s*===\s*'public-")],
+    'ops/content/server.js': [
+        re.compile(r"parts\[0\]\s*===\s*'public-"),
+        # Какие сайты и документы (прайс, тексты) отдаются публично и как проверяются (ревью 660).
+        re.compile(r'^const\s+(?:SITES|DOCUMENT_VALIDATORS|ORDER_SITES)\s*='),
+        re.compile(r'^function\s+(?:validateSite|validatePrice)\b'),
+    ],
     'ops/crm/server.js': [
         re.compile(r"request\.method\s*===\s*'POST'\s*&&\s*url\.pathname\s*===\s*'/(?:leads|events)'"),
         re.compile(r'\bconst\s+publicPost\b'),
         re.compile(r'\bfunction\s+checkPublicOrigin\b'),
+        re.compile(r'\bfunction\s+companyDomains\b'),  # домены, с которых принимаются заявки (ревью 660)
     ],
 }
 PUBLIC_TOKENS = {
-    'ops/content/server.js': re.compile(r"'public-|public-content|public-orders|public-company-links"),
-    'ops/crm/server.js': re.compile(r"'/leads'|'/events'|\bpublicPost\b|\bcheckPublicOrigin\b"),
+    'ops/content/server.js': re.compile(r"'public-|public-content|public-orders|public-company-links|\b(?:SITES|DOCUMENT_VALIDATORS|ORDER_SITES)\b"),
+    'ops/crm/server.js': re.compile(r"'/leads'|'/events'|\bpublicPost\b|\bcheckPublicOrigin\b|\bcompanyDomains\b"),
 }
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 

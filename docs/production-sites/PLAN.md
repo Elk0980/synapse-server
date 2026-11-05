@@ -27,10 +27,11 @@ sites/ и сама защита `tools/protect-prod-sites/**`.
 мастерской, которые отдают клиентским сайтам цены, тексты, ссылки и заказы:
 `ops/content/seed/**`, `ops/content/site-store.js`, `ops/content/site-orders.js`,
 `ops/content/company-links-reader.js`, `ops/content/tag_site.py`,
-`ops/content/tag_avokado.py`, `ops/crm/company-links.js`. В общих `ops/content/server.js`
+`ops/content/tag_avokado.py`, `ops/crm/company-links.js`, `ops/content/client-bot-config.js`. В общих `ops/content/server.js`
 и `ops/crm/server.js` метку требует правка публичных обработчиков клиентских сайтов
-(`public-*` в content — /api/price, /api/site, /api/company-links, /api/orders; POST `/leads`,
-`/events`, `publicPost`, `checkPublicOrigin` в CRM): блоки ищутся в файле на merge-base, diff
+(`public-*`, `SITES`, `DOCUMENT_VALIDATORS`, `ORDER_SITES`, `validateSite`, `validatePrice` в content —
+/api/price, /api/site, /api/company-links, /api/orders; POST `/leads`, `/events`, `publicPost`,
+`checkPublicOrigin`, `companyDomains` в CRM): блоки ищутся в файле на merge-base, diff
 сверяется по строкам hunks; строки с этими маркерами, отсутствие patch или исходника и
 переименование файла — тоже метка (закрытый отказ).
 CI-метка не обещает совместимость API; runtime admission описан ниже. Chat требует

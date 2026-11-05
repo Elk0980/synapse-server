@@ -54,6 +54,12 @@ class AdmissionTests(unittest.TestCase):
             (crm, insert_after(crm, line_of(crm, "url.pathname === '/events'"), '    noop();')),
             (crm, modify(crm, line_of(crm, 'const publicPost'), "  const publicPost = true;")),
             (crm, modify(crm, line_of(crm, 'function checkPublicOrigin') + 1, '  return;')),
+            (content, modify(content, line_of(content, 'const SITES = '), "const SITES = new Set(['alvi']);")),
+            (content, modify(content, line_of(content, 'const DOCUMENT_VALIDATORS = '), 'const DOCUMENT_VALIDATORS = {};')),
+            (content, modify(content, line_of(content, 'function validatePrice') + 2, '  // changed')),
+            (content, modify(content, line_of(content, 'function validateSite') + 1, '  // changed')),
+            (content, insert_after(content, 1, 'const ORDER_SITES = {};')),
+            (crm, modify(crm, line_of(crm, 'function companyDomains') + 1, '  return new Set();')),
             (crm, None),  # API omitted the patch (too large): fail closed
         ]
         for path, patch in cases:
@@ -131,7 +137,7 @@ class AdmissionTests(unittest.TestCase):
                      'ops/content/seed/new-client-site.json', 'ops/content/site-store.js',
                      'ops/content/site-orders.js', 'ops/content/company-links-reader.js',
                      'ops/content/tag_site.py', 'ops/content/tag_avokado.py',
-                     'ops/crm/company-links.js'):
+                     'ops/crm/company-links.js', 'ops/content/client-bot-config.js'):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 self.check([path])
             self.check([path], [guard.INFRA])
