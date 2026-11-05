@@ -10,14 +10,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const {create: createSalonCompanyApp} = require('./company-app/runtime.cjs');
 const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRESET } = require('./auth-store');
 const { createSiteStore } = require('./site-store');
+const {createWorkspaceFeature}=require('./site-workspace-feature');
+const {createPalitraPhotoFeature}=require('./palitra-photo-feature');
+const {createSharpDecoder}=require('./palitra-image-decoder');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
 const { createTelegramSources, readSourceConfig } = require('./telegram-sources');
 const {createContentFactorySourceBridge}=require('./content-factory-source-bridge');
 const {createSourceContext}=require('./content-factory-source-context');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
+// SYNAPSE-OWNER-BOARD: existing authenticated owner only; no new credentials.
+const { createOwnerBoard } = require('./owner-board.cjs');
 const { createActorOnboarding } = require('./actor-onboarding');
 const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
@@ -25,12 +31,28 @@ const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./med
 const { clientIp, originOf } = require('./site-orders');
 const { clientCompanyConfig } = require('./client-bot-config');
 const { createClientDialogs } = require('./client-dialogs');
+// PALITRA-WEBCHAT-PHASEB: общий чат сайта (ядро customer-chat.js) на native очереди клиентского бота.
+const { createCustomerChatNative } = require('./customer-chat-native-adapter.cjs');
+const { createWorkflow, createWorkflowHttp, canAccess: palitraCanAccess } = require('./palitra-workflow.cjs');
+const { createManagerAttention } = require('./palitra-manager-attention.cjs');
+const {createMiniappHost}=require('./miniapp-host.cjs');
+const {createMiniappLegacyCore}=require('./miniapp-legacy-core.cjs');
+const PALITRA_MINIAPP_ENABLED=process.env.PALITRA_TELEGRAM_MINIAPP_ENABLED==='true';
+const { createPalitraOrderReadState } = require('./palitra-order-read-state.cjs');
+const { createPalitraOrderReadHttp } = require('./palitra-order-read-http.cjs');
+const { createResponseReport } = require('./palitra-response-report.cjs');
+const { createCustomerChatHttp, CHAT_CSRF_HEADER } = require('./customer-chat-http.cjs');
 const { createClientIntakeProxy } = require('./client-intake-proxy');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
 const { resolveSessionSecret } = require('./session-secret');
 const { normalizeCrmPath } = require('./crm-proxy-path');
+const palitraPrice = require('./palitra-price-validate.js');
+// PALITRA-REVIEW39-WIRING:IMPORT:BEGIN
+const { createPalitraTaskReview } = require('./palitra-task-review.cjs');
+const { createProjectFormsFeature } = require('./project-forms.cjs');
+// PALITRA-REVIEW39-WIRING:IMPORT:END
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -153,7 +175,11 @@ function sessionData(request) {
     const current = authStore.getById(token.uid);
     if (!current || current.sessionVersion !== token.sessionVersion ||
         (current.mustChangePassword && !(Date.parse(current.tempPasswordExpiresAt) > Date.now()))) return null;
-    return { user: current, csrf: token.csrf };
+    // PALITRA-CRM: server-only срок cookie и непрозрачная ссылка на ЭТУ cookie (HMAC); не перечисляются и не сериализуются.
+    return Object.defineProperties({ user: current, csrf: token.csrf }, {
+      exp: { value: token.exp },
+      cookieRef: { value: crypto.createHmac('sha256', SESSION_SECRET).update(`palitra-crm-cookie-ref:${payload}.${sig}`).digest('hex') },
+    });
   } catch { return null; }
 }
 
@@ -165,6 +191,8 @@ if (!API_KEY) {
 }
 
 const db = new DatabaseSync(DATABASE_PATH);
+// Private source snapshots live outside the existing chat/order/account database.
+const salonCompanyApp = createSalonCompanyApp({databasePath:path.join(path.dirname(DATABASE_PATH),'salon-reports.sqlite')});
 db.exec(`
   PRAGMA foreign_keys = ON;
   PRAGMA journal_mode = WAL;
@@ -207,23 +235,36 @@ const actorWorkspace = createActorWorkspace({ db, authStore,
 const hughSettingsStore = createHughSettingsStore(db);
 // Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
 const clientCompanies = clientCompanyConfig(process.env, CONTENT_COMPANIES);
-const ORDER_SITES = clientCompanies.orderSites;
+// PALITRA: при включённом оформлении/CRM — ровно адрес магазина в существующий список Origin Palitra; иначе тот же объект.
+const ORDER_SITES = require('./palitra-host-adapter.cjs').withShopOrigin(clientCompanies.orderSites, process.env);
 const ORDER_BODY_LIMIT = 32 * 1024;
+// PALITRA-APP-WORKPLACE: записи рабочего места Palitra принимаются только со страницы кабинета Synapse (точный Origin).
+const PALITRA_APP_ORIGIN = 'https://synapse.synapsebusiness.ru';
 /* Защищённое хранилище ключей провайдеров Хью: владелец вводит ключ в ЛК, ключ шифруется
    внешним мастер-ключом и наружу не возвращается. Без мастер-ключа хранилище закрыто. */
 const hughProviders = createHughProviders({ db });
+let palitraAttribution = null;
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   fallback: { providerStore: hughProviders },
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
   localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
   // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
-  siteOrders: { sites: ORDER_SITES, groupNotificationSites: ['palitra'], priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
+  siteOrders: { sites: ORDER_SITES, groupNotificationSites: [],
+    onAcceptedOrder: event => palitraAttribution.recordOrder(event), priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
     ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },
   miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
   // Команды Хью в группах: сводка плана берётся из CRM тем же служебным ключом; имя бота — не секрет.
   crmUrl: CRM_URL, crmApiKey: CRM_API_KEY, botUsername: (process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, ''),
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
+// Source tracking shares the same existing business transaction. Schema is installed explicitly.
+const palitraAttributionShop = require('./palitra-host-adapter.cjs').parseShop(process.env);
+const palitraAttributionOrigins = palitraAttributionShop.ok ? [...palitraAttributionShop.shop.origins] : [`https://${require('./palitra-host-adapter.cjs').FIXED.hostname}`];
+palitraAttribution = require('./palitra-attribution.cjs').createPalitraAttribution({
+  db, transaction: projectChat.transaction, getUser: id => authStore.getById(id), canAccess: palitraCanAccess,
+  origins: palitraAttributionOrigins });
+const palitraAttributionHttp = require('./palitra-attribution-http.cjs').createPalitraAttributionHttp({
+  state: palitraAttribution, requireSession, publicOrigins: palitraAttributionOrigins, staffOrigin: PALITRA_APP_ORIGIN, clientIp });
 const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
 const contentPlanRunner = require('./content-plan-runner').createContentPlanRunner({crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback,
   alerts:require('./hugh-owner-alerts').createHughOwnerAlerts({db}),reviewDelayNotifications:true,
@@ -262,9 +303,92 @@ for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.i
    Включается только именем бота (не секрет); токен живёт только в сервисе chat. Пусто — выключен. */
 // Общий предел сохранённых файлов клиентских ботов (МБ); пусто — 1024 МБ. Сверх предела файл не сохраняется, история не удаляется.
 const CLIENT_DIALOGS_MAX_STORAGE_MB = Number.parseInt(process.env.CLIENT_DIALOGS_MAX_STORAGE_MB || '', 10);
+// PALITRA-APP-WORKPLACE: ответ владельца из приложения уходит, только пока автор — действующий владелец той же версии сессии.
+const ownerStillValid = (userId, sessionVersion) => { const user = authStore.getById(userId); return Boolean(user && user.role === 'owner' && user.sessionVersion === sessionVersion); };
+// Existing CRM permissions only, scoped to Palitra Love. No grants are changed.
+function palitraSessionAccess(session, write = false) {
+  if (!palitraCanAccess(session?.user, write ? 'crm.edit' : 'crm.view')) fail(403, 'Нет доступа к заказам Palitra Love');
+  return session;
+}
+const palitraActorValid = (id, version, write) => {
+  const user = authStore.getById(id);
+  return Boolean(user && user.sessionVersion === version && palitraCanAccess(user, write ? 'crm.edit' : 'crm.view'));
+};
+const palitraWriterStillValid = (id, version) => palitraActorValid(id, version, true);
+const palitraReaderStillValid = (id, version) => palitraActorValid(id, version, false);
+let palitraWorkflow = null;
+let palitraPushHost = null;
+let palitraContactFollowup = null;
+const palitraMemoAssets = require('./palitra-order-memo.cjs').createMemoAssets({
+  db, transaction: projectChat.transaction, getUser: id => authStore.getById(id), canAccess: palitraCanAccess
+});
+const palitraMemoHttp = require('./palitra-order-memo.cjs').createMemoHttp({
+  assets: palitraMemoAssets, requireSession, requireCsrf, origin: PALITRA_APP_ORIGIN
+});
+async function palitraReadBody(request, previous) {
+  const body = await readJson(request), fresh = requireSession(request);
+  if (fresh.user.id !== previous.user.id || fresh.user.sessionVersion !== previous.user.sessionVersion) fail(403, 'Доступ изменился');
+  palitraSessionAccess(fresh, true); requireCsrf(request, fresh);
+  return body;
+}
+
+/* PALITRA-WEBCHAT-PHASEB: чат сайта. Одна SQLite, ОДНА транзакция хоста (projectChat.transaction — та же, что у siteOrders и
+   магазина), одна очередь client_bot_outbox и существующий мост. Включается только PALITRA_CUSTOMER_CHAT_ENABLED=true;
+   выключенный — новых копий нет, ожидающие копии чата останавливаются, прежние диалоги и заявки работают как раньше. */
+const palitraShopParse = palitraAttributionShop;
+const customerChatNative = createCustomerChatNative({ db, transaction: projectChat.transaction, siteOrders: projectChat.siteOrders, ownerStillValid: palitraWriterStillValid,
+  attribution: palitraAttribution,
+  ownerCanRead: palitraReaderStillValid, onCustomerMessage: event => palitraWorkflow?.onCustomerMessage(event),
+  onOrderThreadCreated: event => {
+    if (!palitraWorkflow) fail(503, 'Автоответ заявки ещё не подключён');
+    return palitraWorkflow.onOrderThreadCreated(event);
+  },
+  customerQuestions: thread => palitraWorkflow?.customerQuestions(thread) || [],
+  automaticReplyView: message => palitraWorkflow?.orderReplyDisplay(message) || null,
+  workflowOrder: (owner, orderId) => {
+    if (!palitraWorkflow) fail(503, 'Этапы заказа ещё не подключены');
+    return palitraWorkflow.getOrder(owner, orderId);
+  },
+  onMessageStored: event => {
+    // Обычное сообщение сохраняется даже при ошибке необязательной проекции.
+    // Workflow изолирует свою запись SAVEPOINT; уведомление не зависит от её успеха.
+    try { palitraWorkflow?.onMessageStored(event); }
+    catch (_) { console.warn('palitra: этап переписки временно не обновлён'); }
+    return palitraPushHost?.onMessageStored(event);
+  },
+  readCompletionMedia: input => palitraMemoAssets.read(input),
+  onNativeOrderCreated: event => palitraContactFollowup?.register(event),
+  followupNotificationEnabled: () => palitraContactFollowup?.enabled === true,
+  origins: palitraShopParse.ok ? [...palitraShopParse.shop.origins] : [`https://${require('./palitra-host-adapter.cjs').FIXED.hostname}`],
+  enabled: process.env.PALITRA_CUSTOMER_CHAT_ENABLED === 'true' && palitraShopParse.ok,
+  // PALITRA-WEBCHAT-PHASEE: новые загрузки файлов (сайт и приложение) — отдельный выключатель, по умолчанию выключен.
+  // Включает только Root после обновления единственного моста (sendPhoto/sendDocument + upload-source). Чтение уже
+  // сохранённых файлов от него не зависит.
+  uploadsEnabled: process.env.PALITRA_WEB_UPLOADS_ENABLED === 'true' });
 const clientDialogs = createClientDialogs({ db, assetsDir: ASSETS_DIR, siteOrders: projectChat.siteOrders,
+  onAcceptedCustomerMessage: palitraAttribution.recordLegacy,
   ...(CLIENT_DIALOGS_MAX_STORAGE_MB >= 0 ? { maxStorage: CLIENT_DIALOGS_MAX_STORAGE_MB * 1024 * 1024 } : {}),
-  bots: clientCompanies.bots });
+  ownerStillValid: palitraWriterStillValid, ownerCanRead: palitraReaderStillValid, bots: clientCompanies.bots,
+  // PALITRA-WEBCHAT-PHASEB: общая транзакция и единственное подключение адаптера чата к закрытым функциям бота.
+  transact: projectChat.transaction, chatIntegration: customerChatNative.attach,
+  miniappIntegration: PALITRA_MINIAPP_ENABLED ? api=>createMiniappLegacyCore(api,{miniappUrl:'https://palitra-love.ru/love-app/telegram.html'}) : null,
+  onAcceptedCustomerMessage: palitraAttribution.recordLegacy,
+  contactFollowupGuard: job => palitraContactFollowup?.guardTelegram(job) || null });
+palitraPushHost = require('./palitra-push-host.cjs').createPalitraPushHost({
+  db, transaction: projectChat.transaction, getCore: () => customerChatNative.core(),
+  getCustomerContext: (request, origin) => customerChatHttp.orderContext(request, new URL(origin).hostname),
+  getUser: id => authStore.getById(id), requireSession, requireCsrf,
+  canReadPalitra: user => palitraCanAccess(user, 'crm.view'),
+  contactFollowupEnabled: () => palitraContactFollowup?.enabled === true,
+  enabled: process.env.PALITRA_WEB_PUSH_ENABLED === 'true', keyPath: '/run/secrets/palitra-push/vapid.json'
+});
+palitraContactFollowup = require('./native-contact-followup.cjs').createFollowupDispatcher({
+  db, transaction: projectChat.transaction,
+  enabled: customerChatNative.enabled && process.env.PALITRA_CONTACT_FOLLOWUP_ENABLED === 'true',
+  enabledAfterUtc: process.env.PALITRA_CONTACT_FOLLOWUP_ENABLED_AFTER_UTC || '',
+  notify: event => ({ telegramJobId: clientDialogs.enqueueOrderContactFollowup(event),
+    pushJobs: palitraPushHost.onOrderFollowup(event).enqueued })
+});
 /* Личная переписка владельца по проектам: собственные таблицы и собственная область доступа.
    Из общего чата сюда переиспользован только транспорт обращения к модели (askHugh),
    который ничего не читает и не пишет в таблицы чата проекта. */
@@ -313,6 +437,43 @@ const historyStmt = db.prepare(
 const insertStmt = db.prepare(
   'INSERT INTO documents (key, version, created_at, author, body) VALUES (?, ?, ?, ?, ?)'
 );
+palitraWorkflow = createWorkflow({ db, transaction: projectChat.transaction, siteOrders: projectChat.siteOrders, getUser: id => authStore.getById(id),
+  validateCompletionMedia: input => customerChatNative.core().validateCompletionMedia(input),
+  prepareCompletion: input => {
+    const { threadId } = customerChatNative.orderThread('palitra', input.orderId);
+    if (!threadId) fail(409, 'У заказа нет подтверждённого чата для памятки');
+    return customerChatNative.core().prepareOrderCompletion({ ...input, threadId });
+  },
+  appendCompletion: input => {
+    const { threadId } = customerChatNative.orderThread('palitra', input.orderId);
+    if (!threadId) fail(409, 'У заказа нет подтверждённого чата для отзыва и памятки');
+    return customerChatNative.core().appendOrderCompletion({ ...input, threadId });
+  }
+});
+const palitraWorkflowHttp = createWorkflowHttp({ workflow: palitraWorkflow, requireSession, requireCsrf, readJson, origin: PALITRA_APP_ORIGIN });
+const palitraManagerAttention = createManagerAttention({db,canAccess:palitraCanAccess,accountOrigins:palitraShopParse.ok ? palitraShopParse.shop.origins : []});
+// Read schema is installed explicitly; GET/ack never bootstrap tables or business data.
+const palitraOrderReadState = createPalitraOrderReadState({ db, transaction: projectChat.transaction,
+  getUser: id => authStore.getById(id), canAccess: palitraCanAccess });
+const palitraOrderReadHttp = createPalitraOrderReadHttp({ state: palitraOrderReadState,
+  requireSession, requireCsrf, origin: PALITRA_APP_ORIGIN });
+const palitraMiniappHost=createMiniappHost({enabled:PALITRA_MINIAPP_ENABLED,db,transaction:projectChat.transaction,authStore,canAccess:palitraCanAccess,
+  bots:clientCompanies.bots,clientDialogs,getCore:()=>customerChatNative.core(),siteOrders:projectChat.siteOrders,workflow:palitraWorkflow,queue:palitraManagerAttention,
+  orderRead:palitraOrderReadState,attribution:palitraAttribution,refKey:crypto.createHash('sha256').update(`palitra-crm-site-ref:${SESSION_SECRET}`).digest(),
+  publicDir:path.join(__dirname,'palitra-orders-public')});
+// PALITRA_RESPONSE_REPORT: observation starts once; report reads never write.
+function palitraResponseChannelState() {
+  const bot = Object.entries(clientCompanies.bots).find(([, value]) => value?.site === 'palitra');
+  const telegram = !bot || !clientDialogs.enabledFor('palitra') ? 'not_connected'
+    : clientDialogs.bridgeState(bot[0]).ready === true ? 'connected' : 'unobserved';
+  return { site: customerChatNative.enabled && customerChatNative.isAttached() ? 'connected' : 'not_connected',
+    telegram, vk: 'not_connected', instagram: 'not_connected', youtube: 'not_connected', tiktok: 'not_connected' };
+}
+const palitraResponseReport = createResponseReport({db,transaction:projectChat.transaction,
+  getUser:id=>authStore.getById(id),channelState:palitraResponseChannelState});
+palitraResponseReport.initializeObservation();
+// PALITRA_RESPONSE_REPORT_END
+
 
 /* Первичное наполнение: seed/<site>-<doc>.json кладётся как версия 1, если документа ещё нет. */
 function seedDocuments() {
@@ -510,7 +671,71 @@ function saveVersion(key, doc, author) {
 }
 
 const siteStore = createSiteStore(db, authStore, saveVersion);
+const workspaceFeature=createWorkspaceFeature({db,authStore,companies:COMPANIES,siteStore,palitraShop:require('./palitra-host-adapter.cjs').shopConfig(process.env),
+  // Session cabinet uses the EXISTING chat database/capability. Provider is injected only into the fixed Palitra shop.
+  palitraPreliminary:{
+    registerOutcome:({cookie,origin},{userId,outcomeId})=>{
+      if(!customerChatNative.enabled)fail(503,'Продолжение переписки пока недоступно');
+      return customerChatNative.core().completeNewRegistration({site:'palitra',origin,cookie,account:{kind:'user',userId}},{outcomeId});
+    },
+    rename:({cookie,origin},body)=>{
+      if(!customerChatNative.enabled)fail(503,'Кабинет этой сессии пока недоступен');
+      return customerChatNative.core().renamePreliminaryProfile({site:'palitra',origin,cookie,account:{kind:'guest'}},body);
+    },
+    read:({cookie,origin})=>{
+      if(!customerChatNative.enabled)return null;
+      if(!/(?:^|;\s*)__Host-PalitraChat=[A-Za-z0-9_-]{43}(?:;|$)/.test(cookie))return null;
+      try{return customerChatNative.core().readPreliminaryProfile({site:'palitra',origin,cookie,account:{kind:'guest'}},{csrf:false}).preliminary;}
+      catch(error){if(error.status===401)return null;throw error;}
+    },
+    transition:({cookie,origin},work)=>{
+      if(!/(?:^|;\s*)__Host-PalitraChat=[A-Za-z0-9_-]{43}(?:;|$)/.test(cookie))return work();
+      return customerChatNative.core().transitionPreliminaryProfile({site:'palitra',origin,cookie,account:{kind:'guest'}},work);
+    }
+  },
+  requirePermission,requireCsrf,readJson:async request=>{
+    try{return JSON.parse((await readRaw(request,8*1024*1024+65536)).toString('utf8'));}
+    catch(error){if(error.status)throw error;fail(400,'Некорректный JSON');}
+  },databasePath:DATABASE_PATH,assetsDir:ASSETS_DIR});
+// Фото черновика Palitra: только site-44bbe13f1bad5e005b2a/index.html (PALITRA-BOT-EDITOR-35).
+const palitraDecodeImage=createSharpDecoder(require("/data/palitra-photo-deps/node_modules/sharp"));
+const photoFeature=createPalitraPhotoFeature({db,authStore,requireSession,requireCsrf,readJson,readRaw,
+  workspaceStore:workspaceFeature.store,assetsDir:ASSETS_DIR,decodeImage:palitraDecodeImage,expectedPublicUrl:"https://palitra-love-draft-1.synapsebusiness.ru/"});
+/* PALITRA (13.10.2026, Phase 2+3): оформление заказа фиксированного магазина и CRM — в ТОЙ ЖЕ SQLite и вложенной
+   транзакции хоста (projectChat.transaction, как siteOrders). Всё выключено по умолчанию: PALITRA_CHECKOUT_ENABLED=true
+   включает только существующий приём заявок на адресе магазина; CRM — PALITRA_CRM_ENABLED=true и явный PALITRA_CRM_BOT_ID. */
+// PALITRA-WEBCHAT-PHASEB: HTTP чата сайта — AccountService того адреса магазина, на который пришёл запрос; имя бота — не секрет.
+const customerChatHttp = createCustomerChatHttp({ core: customerChatNative.core, site: 'palitra', enabled: customerChatNative.enabled,
+  origins: palitraShopParse.ok ? [...palitraShopParse.shop.origins] : [],
+  widgetSettings: () => palitraWorkflow.getPublicWidgetSettings(),
+  account: (request) => workspaceFeature.draftAccount(request),
+  botUsername: (site) => Object.values(clientCompanies.bots).find((bot) => bot && bot.site === site)?.username || '' });
+const palitraHost=require('./palitra-host-adapter.cjs').createPalitraHostAdapter({env:process.env,db,
+  attributionHttp: palitraAttributionHttp,
+  customerChat:{ http: customerChatHttp, submitWithChat: customerChatNative.submitWithChat },
+  transaction:projectChat.transaction,siteOrders:projectChat.siteOrders,
+  priceRow:()=>latestStmt.get('palitra/price')??null,
+  authStore,sessionData,requireCsrf,clientIp,originOf,
+  refKey:crypto.createHash('sha256').update(`palitra-crm-site-ref:${SESSION_SECRET}`).digest(),
+  // PALITRA-MAIN: AccountService того адреса магазина, на который пришёл запрос (черновик или одобренный основной).
+  draftAccount:request=>workspaceFeature.draftAccount(request),
+  issueOrderLink:input=>clientDialogs.issueOrderLink(input),
+  // PALITRA-MAIN: фото прайса — тот же каталог, что у существующего /content/palitra/assets/:name (пишет редактор прайса).
+  palitraAssetsDir:path.join(ASSETS_DIR,'palitra'),
+  // PALITRA-WEBCHAT-PHASEC: отдельный каталог оболочки /chat (три постоянных файла); publicDir review39 и CRM не трогаются.
+  chatPublicDir:path.join(__dirname,'palitra-review-public'),
+  loadIntegration:()=>require('./palitra-crm/app/lib/host-integration')});
+if(palitraHost.draftHook)workspaceFeature.setDraftHook(palitraHost.draftHook);
+if(!palitraHost.enabled||palitraHost.reason)console.log(`content: Palitra checkout=${palitraHost.checkoutEnabled} crm=${palitraHost.crmEnabled} — ${palitraHost.reason}`);
 
+// PALITRA-REVIEW39-WIRING:INIT:BEGIN
+const palitraTaskReview39 = createPalitraTaskReview({
+  db, requireSession, requireCsrf, readJson, saveVersion,
+  initialTasks: [],
+  publicDir: path.join(__dirname, 'palitra-review-public'),
+});
+// PALITRA-REVIEW39-WIRING:INIT:END
+const projectForms = createProjectFormsFeature({ db, requireSession, requireCsrf, readJson });
 function requireSession(request) {
   const session = sessionData(request);
   if (!session) fail(401, 'Требуется вход в кабинет');
@@ -797,6 +1022,7 @@ async function proxyCrm(request, response, url, cors) {
   let forwardIdentity = identity;
   const completionWrite = (request.method === 'PUT' && crmPath === '/media-mentor/workflow') ||
     (request.method === 'POST' && /^\/autoposting\/posts\/\d+\/variants$/.test(crmPath)) ||
+    (request.method === 'POST' && /^\/autoposting\/posts\/\d+\/day-copy$/.test(crmPath)) ||
     (request.method === 'POST' && /^\/media-mentor\/plan\/variants\/(?:decision|transfer)$/.test(crmPath));
   if (completionWrite) {
     requestBody = await readRequestBody(request);
@@ -866,10 +1092,83 @@ async function proxyChat(request, response, url, cors) {
   request.pipe(upstream);
 }
 
+/* PALITRA-WEBCHAT-PHASEE: файл владельца — чат сайта (customer-threads) и прежний диалог (client-dialogs), одна обработка.
+   status и file — только чтение по свежей сессии того же владельца (без CSRF, как у файлов D); prepare и bytes —
+   точный PALITRA_APP_ORIGIN и CSRF до чтения тела, после него — свежая сессия того же владельца и CSRF ещё раз;
+   тело bytes — не больше заявленного размера. Владелец передаётся дальше только из свежей сессии. */
+async function ownerUploadRoute({ request, response, route, session, reply, headers, ops }) {
+  if (!route.methods.includes(request.method)) fail(405, 'Метод не поддерживается');
+  const ownerOf = (s) => ({ id: s.user.id, sessionVersion: s.user.sessionVersion });
+  const fresh = () => {
+    const current = requireSession(request);
+    if (current.user.id !== session.user.id || current.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+    palitraSessionAccess(current, !['GET', 'HEAD'].includes(request.method));
+    return current;
+  };
+  try {
+    if (route.action === 'status') return reply(200, ops.status(ownerOf(fresh())), headers);
+    if (route.action === 'file') {
+      return require('./customer-chat-media.cjs').serveProtected({ request, response, resolve: () => ops.file(ownerOf(fresh())), open: ops.open });
+    }
+    if (request.headers.origin !== PALITRA_APP_ORIGIN) fail(403, 'Запрос с другого адреса запрещён');
+    requireCsrf(request, session);
+    if (route.action === 'prepare') {
+      if (!/^application\/json(?:\s*;|$)/i.test(String(request.headers['content-type'] || ''))) fail(415, 'Ожидался JSON');
+      const body = await readJson(request);
+      const current = fresh();
+      requireCsrf(request, current);
+      const result = ops.prepare(ownerOf(current), body);
+      return reply(result.duplicate ? 200 : 201, result, headers);
+    }
+    if (String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/octet-stream') fail(415, 'Ожидался файл');
+    const begun = ops.begin(ownerOf(session));
+    let bytes, current;
+    try {
+      const length = request.headers['content-length'];
+      if (length !== undefined && (!/^\d{1,9}$/.test(String(length)) || Number(length) !== begun.declaredSize)) {
+        fail(Number(length) > begun.declaredSize ? 413 : 422, 'Размер файла не совпал с выбранным — выберите тот же файл');
+      }
+      bytes = await readRaw(request, begun.declaredSize);
+      current = fresh();
+      requireCsrf(request, current);
+    } catch (error) { if (begun.claim) ops.release(begun.claim, error.message); throw error; }
+    const result = ops.finish(ownerOf(current), begun.claim || null, bytes);
+    return reply(result.duplicate ? 200 : 201, result, headers);
+  } catch (error) {
+    // Отказы модулей загрузки — с их кодом (страница различает «выберите тот же файл», «срок истёк», «проверьте отправку»).
+    if (error && error.status && typeof error.code === 'string' && !response.headersSent) return reply(error.status, { error: error.message, code: error.code }, headers);
+    throw error;
+  }
+}
+
+const handleActionControls=require('./action-controls-static.cjs').create(path.join(__dirname,'palitra-orders-public'));
+const ownerBoard = createOwnerBoard({
+  dataDir: path.join(path.dirname(DATABASE_PATH), 'owner-board-1'),
+  assetsDir: path.join(__dirname, 'owner-board-ui'),
+  requireSession, requireCsrf, ownerId: 1,
+  publicOrigin: 'https://synapse.synapsebusiness.ru'
+});
+
 const server = http.createServer(async (request, response) => {
   const cors = corsHeaders(request);
   const reply = (status, payload, extra) => send(response, status, payload, { ...cors, ...(extra || {}) });
   try {
+    if(handleActionControls(request,response))return;
+    // SYNAPSE-OWNER-BOARD: every HTML/API/media/export goes through existing identity.
+    if (await ownerBoard(request, response, new URL(request.url, 'http://localhost'))) return;
+    // Private namespace precedes public hosts/generic content/OPTIONS.
+    const projectFormsUrl = new URL(request.url, 'http://localhost');
+    if (await projectForms.handle(request, projectFormsUrl, (status, payload, extra) => send(response, status, payload, extra))) return;
+    // PALITRA-WEB-PUSH: exact same-origin endpoints before Main's catch-all; existing identity only.
+    const pushUrl = new URL(request.url, 'http://localhost');
+    if (palitraPushHost.http.matches(pushUrl.pathname)) {
+      await palitraPushHost.http.handle(request, response, pushUrl, String(request.headers.host || '').toLowerCase());
+      return;
+    }
+    // PALITRA-CRM: /api/crm/* и /palitra-app/* только на точном хосте приложения Synapse; CRM выключена — false.
+    if(await palitraMiniappHost.handle(request,response))return;
+    if(await palitraHost.handleSynapse(request,response))return;
+    if(await workspaceFeature.publicHost(request,response))return;
     if (request.method === 'OPTIONS') {
       response.writeHead(204, cors);
       return response.end();
@@ -889,6 +1188,18 @@ const server = http.createServer(async (request, response) => {
       return reply(200,{ok:true},{'cache-control':'private, no-store',
         'set-cookie':`synapse_session=${makeSession(current)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL}`});
     }
+    // PALITRA-REVIEW39-WIRING:ROUTES:BEGIN
+    if (await palitraTaskReview39.handle(request, reply, url)) return;
+    if (palitraTaskReview39.serve(request, response, url)) return;
+    // PALITRA-REVIEW39-WIRING:ROUTES:END
+    // Caddy asks whether the hostname belongs to an active project draft before obtaining TLS.
+    if(url.pathname==='/internal/site-workspace/tls') {
+      const domain=url.searchParams.get('domain');
+      if(request.method!=='GET'||!workspaceFeature.store.publishedHost(domain))return reply(403,{allowed:false});
+      return reply(200,{allowed:true});
+    }
+    if(await photoFeature.handle(request,reply,url))return;
+    if(await workspaceFeature.routes(request,reply,url))return;
 
     // Локальный обработчик Хью: свой ключ, проверка до чтения тела, только известные маршруты.
     if (url.pathname.startsWith('/content/project-chat-worker/')) {
@@ -961,6 +1272,12 @@ const server = http.createServer(async (request, response) => {
       const supplied = String(request.headers['x-api-key'] || '');
       if (!CHAT_API_KEY || Buffer.byteLength(supplied) !== Buffer.byteLength(CHAT_API_KEY) ||
           !crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(CHAT_API_KEY))) fail(401,'Нет доступа');
+      // Reuse existing authenticated worker poll; no second timer or worker.
+      if (url.pathname === '/content/internal/client-bot/outbox' && request.method === 'GET' && url.searchParams.get('botKey') === 'palitra') {
+        // Existing authenticated 3-second worker poll, no new timer/worker/backfill.
+        try { palitraContactFollowup.tick(); } catch { console.warn('content: CONTACT_FOLLOWUP_DEFERRED'); }
+        palitraPushHost.requestDrain();
+      }
       return await clientDialogs.handleInternal(request, response, url, { readJson, readRaw, send: (res, status, payload) => send(res, status, payload) });
     }
     if (url.pathname.startsWith('/content/project-chat-runtime/')) {
@@ -1063,6 +1380,8 @@ const server = http.createServer(async (request, response) => {
       return reply(200, publicIdentity(identity), { 'set-cookie': `synapse_session=${makeSession(identity)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL}` });
     }
     if (request.method === 'POST' && url.pathname === '/content/logout') {
+      // PALITRA-CRM: до очистки cookie отзывается CRM-доступ ровно этой cookie (другие устройства и права не меняются).
+      { const ending = sessionData(request); if (ending) palitraHost.revokeHostSession(ending.cookieRef); }
       return reply(200, { ok: true }, { 'set-cookie': 'synapse_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0' });
     }
 
@@ -1248,9 +1567,9 @@ const server = http.createServer(async (request, response) => {
       if (request.method === 'GET' && !id) {
         return reply(200, { sites: siteStore.list(session.user, {
           companyCode: url.searchParams.get('companyCode'), state: url.searchParams.get('state'),
-        }) });
+        }).map(site=>workspaceFeature.store.enrich(site,session.user)) });
       }
-      if (request.method === 'GET' && id) return reply(200, siteStore.get(session.user, id));
+      if (request.method === 'GET' && id) return reply(200,workspaceFeature.store.enrich(siteStore.get(session.user,id),session.user));
       if (request.method === 'POST' && !id) {
         const body = await readJson(request);
         if (Object.keys(body).sort().join(',') !== 'companyCode,name') fail(400, 'Переданы лишние поля');
@@ -1315,8 +1634,15 @@ const server = http.createServer(async (request, response) => {
       if (!/^application\/json\b/i.test(String(request.headers['content-type'] || ''))) fail(415, 'Ожидался JSON');
       let body;
       try { body = JSON.parse((await readRaw(request, ORDER_BODY_LIMIT)).toString('utf8')); } catch (error) { if (error.status === 413) throw error; fail(400, 'Некорректный JSON'); }
+      // PALITRA-WEBCHAT-PHASEB: здесь нет проверенного фактического адреса магазина и его cookie — чат сайта не выдаётся.
+      // Запрос нового оформления с чатом отклоняется явно (заявка не создаётся, корзина остаётся), прежний — как раньше.
+      if (request.headers[CHAT_CSRF_HEADER] !== undefined) {
+        return reply(409, { ok: false, code: 'CHAT_CONTEXT_UNSUPPORTED', error: 'Оформление с чатом сайта принимается только на адресе магазина' }, { 'cache-control': 'no-store' });
+      }
       try {
-        const result = projectChat.siteOrders.submit({ site: parts[1], body, origin: originOf(request), ip: clientIp(request) });
+        // Та же функция приёма, что у адреса магазина: native submit ровно один раз, без контекста чата.
+        const { result } = customerChatNative.submitWithChat({ chatRequest: null,
+          submit: () => projectChat.siteOrders.submit({ site: parts[1], body, origin: originOf(request), ip: clientIp(request) }) });
         // Только новая заявка получает одноразовую ссылку в Telegram; сбой ссылки не влияет на принятую заявку.
         if (result.status === 201) {
           try {
@@ -1326,30 +1652,80 @@ const server = http.createServer(async (request, response) => {
         }
         return reply(result.status, result.body, { 'cache-control': 'no-store' });
       } catch (error) {
-        if (![400, 403, 409, 429, 503].includes(error.status)) throw error;
+        if (![400, 403, 409, 429, 503].includes(error.status) && !(error.status === 410 && error.code === 'ORDER_REMOVED')) throw error;
         return reply(error.status, { ok: false, code: error.code || 'VALIDATION', error: error.message, ...(error.itemId ? { itemId: error.itemId } : {}) },
           { 'cache-control': 'no-store', ...(error.status === 429 ? { 'retry-after': '600' } : {}) });
       }
     }
 
     if (parts[0] !== 'content' || parts.length < 3) fail(404, 'Не найдено');
+    if (await salonCompanyApp.handle({request,url,reply,requireSession,requireCsrf,readJson,origin:PALITRA_APP_ORIGIN,orders:projectChat.siteOrders,dialogs:clientDialogs})) return;
     if (!SITES.has(parts[1])) fail(404, 'Неизвестный сайт');
+    if (await palitraOrderReadHttp.handle({ request, url, reply })) return;
+    if (await palitraAttributionHttp.handle({ request, url, reply })) return;
+    // PALITRA_MANAGER_ATTENTION_ROUTE: existing crm.view, no writes or side-effectful workflow reads.
+    if (parts[1] === 'palitra' && parts[2] === 'manager-attention') {
+      const session = requireSession(request); palitraSessionAccess(session, false);
+      if (url.pathname !== '/content/palitra/manager-attention') fail(404, 'Не найдено');
+      if (request.method !== 'GET') fail(405, 'Доступно только чтение списка клиентов');
+      const query = {};
+      for (const key of url.searchParams.keys()) {
+        if (!['filter','limit','cursor','search','view'].includes(key) || url.searchParams.getAll(key).length !== 1) fail(400, 'Некорректные параметры списка клиентов');
+        query[key] = url.searchParams.get(key);
+      }
+      const result = palitraManagerAttention.read(session.user, query);
+      const projectItem = item => {
+        const target = /^(order|thread|legacy):([1-9]\d*)$/.exec(item.key);
+        const result = {...item, source: palitraAttribution.projectSource(target ? {kind:target[1],id:Number(target[2])} : {})};
+        if(item.display)result.display={...item.display,members:item.display.members.map(member=>member.key===item.key?{...member,source:result.source}:projectItem(member))};
+        return result;
+      };
+      result.items = result.items.map(projectItem);
+      const fresh = requireSession(request);
+      if (fresh.user.id !== session.user.id || fresh.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+      palitraSessionAccess(fresh, false);
+      return reply(200, result, {'cache-control':'no-store'});
+    }
+    // PALITRA_MANAGER_ATTENTION_ROUTE_END
+    // PALITRA_RESPONSE_REPORT_ROUTE: same existing crm.view, fresh actor, GET only.
+    if (parts[1] === 'palitra' && parts[2] === 'response-report') {
+      const session = requireSession(request); palitraSessionAccess(session, false);
+      if (url.pathname !== '/content/palitra/response-report') fail(404, 'Не найдено');
+      if (request.method !== 'GET') fail(405, 'Доступно только чтение отчёта');
+      const query = {};
+      for (const key of url.searchParams.keys()) {
+        if (!['from','until'].includes(key) || url.searchParams.getAll(key).length !== 1) fail(400, 'Некорректный период отчёта');
+        query[key] = url.searchParams.get(key);
+      }
+      const result = palitraResponseReport.read(session.user,query.from,query.until);
+      const fresh = requireSession(request);
+      if (fresh.user.id !== session.user.id || fresh.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+      palitraSessionAccess(fresh, false);
+      return reply(200, result, {'cache-control':'no-store'});
+    }
+    // PALITRA_RESPONSE_REPORT_ROUTE_END
+    if (await palitraMemoHttp(request, url, reply)) return;
+    if (await palitraWorkflowHttp(request, url, reply)) return;
 
     // --- заявки в ЛК: только владелец, только настроенные компании; мутации с CSRF.
     if (parts[2] === 'orders' || parts[2] === 'order-recipient') {
       const session = requireSession(request);
-      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (parts[1] === 'palitra' && parts[2] === 'orders') palitraSessionAccess(session, !['GET', 'HEAD'].includes(request.method));
+      else if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (parts[1] === 'palitra' && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== PALITRA_APP_ORIGIN) fail(403, 'Запрос с другого адреса запрещён');
       if (request.method !== 'GET') requireCsrf(request, session);
       const orders = projectChat.siteOrders, site = parts[1];
       const headers = { 'cache-control': 'no-store' };
       if (parts[2] === 'orders' && parts.length === 3 && request.method === 'GET') {
-        return reply(200, orders.listOrders(site, { limit: url.searchParams.get('limit'), beforeId: url.searchParams.get('beforeId') }), headers);
+        const result = orders.listOrders(site, { limit: url.searchParams.get('limit'), beforeId: url.searchParams.get('beforeId') });
+        if (site === 'palitra') result.orders = result.orders.map((row) => ({ ...row, nativeContactFollowup: customerChatNative.contactFollowup(site, row.id, { id: session.user.id, sessionVersion: session.user.sessionVersion }) }));
+        return reply(200, result, headers);
       }
       if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3]), headers);
       if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify-group' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3], 'group'), headers);
       if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'checklist') {
         if (request.method === 'GET') return reply(200, orders.checklistOrder(site, parts[3]), headers);
-        if (request.method === 'PUT') return reply(200, orders.setChecklist(site, parts[3], await readJson(request),
+        if (request.method === 'PUT') return reply(200, orders.setChecklist(site, parts[3], site === 'palitra' ? await palitraReadBody(request, session) : await readJson(request),
           { type: 'owner', id: session.user.id, label: session.user.displayName || session.user.login }), headers);
       }
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'GET') return reply(200, orders.recipientStatus(site), headers);
@@ -1358,18 +1734,127 @@ const server = http.createServer(async (request, response) => {
       if (parts[2] === 'order-recipient' && parts.length === 4 && parts[3] === 'transport' && request.method === 'PUT') {
         return reply(200, orders.setTransport(site, await readJson(request), { clientBotReady: clientDialogs.transportReady }), headers);
       }
+      // PALITRA-APP-WORKPLACE: статус обработки заявки из приложения (только Palitra). Owner, точный Origin и CSRF —
+      // до чтения тела и снова по свежей сессии после него; автор — из свежей сессии, не из тела.
+      if (site === 'palitra' && parts[2] === 'orders' && parts.length === 5 && parts[4] === 'work' && request.method === 'PUT') {
+        if (request.headers.origin !== PALITRA_APP_ORIGIN) fail(403, 'Запрос с другого адреса запрещён');
+        const body = await readJson(request);
+        if (!Object.hasOwn(body, 'status') || Object.keys(body).some((key) => !['status', 'expected'].includes(key))) fail(400, 'Нужны только status и expected');
+        const fresh = requireSession(request);
+        if (fresh.user.id !== session.user.id || fresh.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+        palitraSessionAccess(fresh, true);
+        requireCsrf(request, fresh);
+        const actor = `${fresh.user.role === 'owner' ? 'Владелец' : 'Менеджер'}: ${fresh.user.displayName || fresh.user.login || fresh.user.id}`;
+        return reply(200, orders.setWorkStatus(site, parts[3], body.status, actor, body.expected === undefined ? {} : { expected: body.expected }), headers);
+      }
+      // PALITRA-APP-WORKPLACE: карточка заявки → единственный связанный диалог клиентского бота или null.
+      if (site === 'palitra' && parts[2] === 'orders' && parts.length === 5 && parts[4] === 'dialog' && request.method === 'GET') {
+        // PALITRA-WEBCHAT-PHASEB: дополнительно — чат сайта этой заявки. Ссылки типизированы: legacy:N и thread:N не смешиваются.
+        const legacy = clientDialogs.orderDialog(site, parts[3]);
+        const thread = customerChatNative.orderThread(site, parts[3]);
+        return reply(200, { ...legacy, dialogRef: legacy.dialogId ? `legacy:${legacy.dialogId}` : null, ...thread }, headers);
+      }
+      fail(404, 'Не найдено');
+    }
+    /* PALITRA-WEBCHAT-PHASEB: чаты сайта в приложении владельца. Обычная native-сессия владельца; ответ — точный
+       PALITRA_APP_ORIGIN и CSRF до чтения тела, после — свежая сессия того же владельца, его sessionVersion и CSRF ещё раз.
+       Проверка владельца в ядре (ownerStillValid) закрыта при отсутствии и повторяется внутри транзакции. */
+    if (parts[1] === 'palitra' && parts[2] === 'customer-threads') {
+      const session = requireSession(request);
+      palitraSessionAccess(session, !['GET', 'HEAD'].includes(request.method));
+      const headers = { 'cache-control': 'no-store' };
+      const ownerOf = (s) => ({ id: s.user.id, sessionVersion: s.user.sessionVersion });
+      if (parts.length === 3 && request.method === 'GET') {
+        return reply(200, customerChatNative.owner.list({ owner: ownerOf(session), before: url.searchParams.get('before'), limit: url.searchParams.get('limit') }), headers);
+      }
+      if (parts.length === 4 && request.method === 'GET') {
+        const allowed = new Set(['before', 'limit', 'view', 'adviceAfter']);
+        for (const key of url.searchParams.keys()) {
+          if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1) fail(400, 'Некорректные параметры переписки');
+        }
+        const view = url.searchParams.has('view') ? url.searchParams.get('view') : undefined;
+        if (view !== undefined && view !== 'conversation-v1') fail(400, 'Неизвестный вид переписки');
+        return reply(200, customerChatNative.owner.read({ owner: ownerOf(session), threadId: parts[3], before: url.searchParams.get('before'), limit: url.searchParams.get('limit'), ...(view === undefined ? {} : { view }), ...(url.searchParams.has('adviceAfter') ? { adviceAfter: url.searchParams.get('adviceAfter') } : {}) }), headers);
+      }
+      if (parts.length === 5 && parts[4] === 'reply' && request.method === 'POST') {
+        if (request.headers.origin !== PALITRA_APP_ORIGIN) fail(403, 'Запрос с другого адреса запрещён');
+        requireCsrf(request, session);
+        const body = await readJson(request);
+        if (Object.keys(body).sort().join(',') !== 'requestId,text') fail(400, 'Нужны только requestId и text');
+        const fresh = requireSession(request);
+        if (fresh.user.id !== session.user.id || fresh.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+        palitraSessionAccess(fresh, !['GET', 'HEAD'].includes(request.method));
+        requireCsrf(request, fresh);
+        const result = customerChatNative.owner.reply({ owner: ownerOf(fresh), threadId: parts[3], requestId: body.requestId, text: body.text });
+        return reply(result.duplicate ? 200 : 202, result, headers);
+      }
+      // PALITRA-WEBCHAT-PHASEE: файл владельца в чат сайта — ровно uploads, uploads/upload:<UUID>, …/bytes, attachments/upload:<UUID>.
+      const threadUpload = require('./customer-chat-upload.cjs').parseUploadPath(url.pathname, 'thread');
+      if (threadUpload && !url.search) {
+        const target = { threadId: threadUpload.targetId, uuid: threadUpload.uuid };
+        return await ownerUploadRoute({ request, response, route: threadUpload, session, reply, headers, ops: {
+          prepare: (owner, body) => customerChatNative.owner.prepareUpload({ owner, threadId: threadUpload.targetId, body }),
+          status: (owner) => customerChatNative.owner.uploadStatus({ owner, ...target }),
+          begin: (owner) => customerChatNative.owner.beginUpload({ owner, ...target }),
+          finish: (owner, claim, bytes) => customerChatNative.owner.finishUpload({ owner, ...target, claim, bytes }),
+          release: (claim, reason) => customerChatNative.owner.releaseUpload(threadUpload.uuid, claim, reason),
+          file: (owner) => customerChatNative.owner.uploadFile({ owner, ...target }),
+          open: (meta) => customerChatNative.owner.openUpload(meta) } });
+      }
+      /* PALITRA-WEBCHAT-PHASED1: файл чата сайта владельцу — ровно /content/palitra/customer-threads/<id>/attachments/thread:<id>,
+         GET/HEAD. Доступ проверяется по свежей сессии (тот же владелец, роль, версия) до открытия файла и ещё раз перед байтами. */
+      const binary = require('./customer-chat-media.cjs');
+      const file = binary.parseOwnerBinaryPath(url.pathname);
+      if (file && !url.search) {
+        if (!['GET', 'HEAD'].includes(request.method)) fail(405, 'Метод не поддерживается');
+        const resolve = () => {
+          const fresh = requireSession(request);
+          if (fresh.user.id !== session.user.id || fresh.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+        palitraSessionAccess(fresh, !['GET', 'HEAD'].includes(request.method));
+          return customerChatNative.owner.attachment({ owner: ownerOf(fresh), threadId: file.threadId, attachmentId: file.attachmentId });
+        };
+        return binary.serveProtected({ request, response, resolve, open: (meta) => customerChatNative.owner.openAttachment(meta) });
+      }
       fail(404, 'Не найдено');
     }
     // --- клиентский бот и диалоги в ЛК: только владелец, только сайт с настроенным ботом; мутации с CSRF.
     if (parts[2] === 'client-bot' || parts[2] === 'client-dialogs') {
       const session = requireSession(request);
-      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (parts[1] === 'palitra' && parts[2] === 'client-dialogs') palitraSessionAccess(session, !['GET', 'HEAD'].includes(request.method));
+      else if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (parts[1] === 'palitra' && !['GET', 'HEAD'].includes(request.method) && request.headers.origin !== PALITRA_APP_ORIGIN) fail(403, 'Запрос с другого адреса запрещён');
       if(parts[2]==='client-dialogs'&&parts.length===5&&parts[4]==='crm'&&request.method==='POST'){
         requireCsrf(request,session);
         const source=clientDialogs.crmIntake(parts[1],parts[3]);
         const result=await openClientIntake(source,session.user);
-        const fresh=requireSession(request);if(fresh.user.role!=='owner'||fresh.user.id!==session.user.id)fail(403,'Доступ изменился');
+        const fresh=requireSession(request);if(fresh.user.id!==session.user.id||fresh.user.sessionVersion!==session.user.sessionVersion)fail(403,'Доступ изменился');palitraSessionAccess(fresh,true);
         return reply(200,result,{'cache-control':'no-store'});
+      }
+      // PALITRA-APP-WORKPLACE: ответ владельца клиенту из приложения. Точный Origin и CSRF — до чтения тела; после —
+      // свежая сессия того же владельца и CSRF; затем синхронная транзакция в client-dialogs. Автор — только из сессии.
+      if (parts[1] === 'palitra' && parts[2] === 'client-dialogs' && parts.length === 5 && parts[4] === 'reply' && request.method === 'POST') {
+        if (request.headers.origin !== PALITRA_APP_ORIGIN) fail(403, 'Запрос с другого адреса запрещён');
+        requireCsrf(request, session);
+        const body = await readJson(request);
+        const fresh = requireSession(request);
+        if (fresh.user.id !== session.user.id || fresh.user.sessionVersion !== session.user.sessionVersion) fail(403, 'Доступ изменился');
+        palitraSessionAccess(fresh, true);
+        requireCsrf(request, fresh);
+        const result = clientDialogs.sendOwnerReply('palitra', parts[3], body, { id: fresh.user.id, sessionVersion: fresh.user.sessionVersion });
+        return reply(result.duplicate ? 200 : 202, result, { 'cache-control': 'no-store' });
+      }
+      // PALITRA-WEBCHAT-PHASEE: файл владельца в прежний диалог — точные адреса этого диалога; гостевого доступа нет.
+      const legacyUpload = parts[1] === 'palitra' && parts[2] === 'client-dialogs' ? require('./customer-chat-upload.cjs').parseUploadPath(url.pathname, 'legacy') : null;
+      if (legacyUpload && !url.search) {
+        const dialogId = legacyUpload.targetId, uuid = legacyUpload.uuid;
+        return await ownerUploadRoute({ request, response, route: legacyUpload, session, reply, headers: { 'cache-control': 'no-store' }, ops: {
+          prepare: (owner, body) => clientDialogs.prepareOwnerUpload('palitra', dialogId, body, owner),
+          status: (owner) => clientDialogs.ownerUploadStatus('palitra', dialogId, uuid, owner),
+          begin: (owner) => clientDialogs.beginOwnerUpload('palitra', dialogId, uuid, owner),
+          finish: (owner, claim, bytes) => clientDialogs.finishOwnerUpload('palitra', dialogId, uuid, claim, bytes, owner),
+          release: (claim, reason) => clientDialogs.releaseOwnerUpload(uuid, claim, reason),
+          file: () => clientDialogs.ownerUploadFile('palitra', dialogId, uuid),
+          open: (meta) => clientDialogs.openOwnerUpload(meta) } });
       }
       return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(extra || {}) }) });
     }
@@ -1409,6 +1894,7 @@ const server = http.createServer(async (request, response) => {
       fail(404, 'Не найдено');
     }
 
+    if (parts[1] === 'palitra-push-private') fail(404, 'Не найдено');
     const key = `${parts[1]}/${parts[2]}`;
     const tail = parts.slice(3);
 
@@ -1417,6 +1903,8 @@ const server = http.createServer(async (request, response) => {
       requireContentAccess(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view', parts[1]);
       const row = latestStmt.get(key);
       if (!row) fail(404, `Документ ${key} не найден`);
+      // Только palitra/price: заголовок обещает проверку If-Match в PUT ниже (пакет 12–18, ставится вместе с ним).
+      if (palitraPrice.isPalitraPrice(parts)) return reply(200, row.body, { etag: `"${row.version}"`, [palitraPrice.CAS_HEADER]: palitraPrice.CAS_HEADER_VALUE });
       return reply(200, row.body, { etag: `"${row.version}"` });
     }
 
@@ -1439,6 +1927,15 @@ const server = http.createServer(async (request, response) => {
       const author = requireContentAccess(request,
         parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', parts[1], true).author;
       const doc = await readJson(request);
+      // Только palitra/price: форма документа → 422, версия If-Match проверяется внутри BEGIN IMMEDIATE (409), strict выключен.
+      if (palitraPrice.isPalitraPrice(parts)) {
+        // Права перепроверяются синхронно после чтения тела, непосредственно перед записью.
+        const current = requireContentAccess(request, 'price.edit', parts[1], true).author;
+        const problems = palitraPrice.validatePriceProblems(doc);
+        if (problems.length) fail(422, 'Документ не прошёл проверку', problems.slice(0, 50));
+        const saved = palitraPrice.saveWithCas(db, key, doc, current, request.headers['if-match'], { strict: false });
+        return reply(200, { ok: true, key, ...saved });
+      }
       const validator = DOCUMENT_VALIDATORS[parts[2]];
       if (!validator) fail(404, 'Неизвестный тип документа');
       validator(doc);
@@ -1487,6 +1984,7 @@ function shutdownContent() {
   server.close(async () => {
     await contentPlanStopped;
     await peopleStopped;
+    salonCompanyApp.close();
     db.close();
     process.exit(0);
   });

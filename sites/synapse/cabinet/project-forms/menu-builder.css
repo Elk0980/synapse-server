@@ -1,0 +1,21 @@
+.mb-editor { min-width: 0; }
+.mb-editor > .ins-sub { margin: 0 0 12px; }
+.mb-editor .ins-field { margin: 12px 0; }
+.mb-items-title { margin: 22px 0 12px; font-size: 14px; }
+.mb-item { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid #dedbd0; border-radius: 12px; background: #fff; }
+.mb-item.is-hidden { background: #f4f2ec; border-style: dashed; }
+.mb-item__head { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; margin-bottom: 10px; }
+.mb-item__head h5 { min-width: 0; margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.mb-item__badge { flex: 0 0 auto; border-radius: 999px; background: #e8e5db; padding: 2px 7px; color: #686457; font-size: 11px; }
+.mb-item__tools { display: flex; flex-wrap: wrap; gap: 5px; }
+.mb-item__tools .btn { min-height: 30px; padding: 5px 8px; }
+.mb-editor .btn:disabled { opacity: .5; cursor: default; }
+.mb-styles { margin: 12px 0; padding: 10px 12px; border: 1px solid #e1dfd5; border-radius: 10px; }
+.mb-styles summary { cursor: pointer; font-size: 13px; font-weight: 650; }
+.mb-style-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.mb-style-tool { min-width: 38px; min-height: 36px; padding: 6px 10px; border: 1px solid #d9d4c8; border-radius: 8px; background: #fff; color: #393e2b; font: inherit; cursor: pointer; }
+.mb-style-tool.is-active { color: #fff; background: #69723e; border-color: #69723e; }
+.mb-editor input[type="color"].mb-color { width: 54px; min-height: 38px; padding: 3px; cursor: pointer; }
+.mb-route-error { color: #a9412b; font-size: 12px; margin: 7px 0; }
+.mb-add-item { width: 100%; margin-top: 14px; }
+.mb-editor button:focus-visible, .mb-editor input:focus-visible, .mb-editor select:focus-visible, .mb-editor summary:focus-visible { outline: 2px solid #69723e; outline-offset: 2px; }

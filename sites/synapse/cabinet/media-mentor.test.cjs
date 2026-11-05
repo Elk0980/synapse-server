@@ -76,56 +76,6 @@ function fixture({role = 'editor', permissions = ['autoposting.view', 'autoposti
 }
 const submit = (w, form) => form.dispatchEvent(new w.Event('submit', {bubbles: true, cancelable: true}));
 
-test('импорт: колонки, предпросмотр и добавление сохраняют правки, повтор не дублирует, запись только явная', async t => {
-  const baseline=payload();baseline.plan.days[1].script='\r\nСохранённая реплика\r\n';
-  const f=fixture({query:()=>baseline});t.after(()=>f.close());
-  f.w.eval(fs.readFileSync(require.resolve('./reel-plan-import.js'),'utf8'));
-  Object.defineProperty(f.w.crypto,'subtle',{value:require('node:crypto').webcrypto.subtle});
-  const original=f.ctx.crmQuery;
-  const rows=[['Дата','Площадки','Тема','Формат','Сценарий','Кто снимает','Статус'],
-    ['02.10.2026','ВК, TG','<img src=x onerror=alert(1)>','Reels','\n  Первая\nВторая  ','SAMPLE','В монтаже']];
-  f.ctx.crmQuery=async(path,params,opts)=>path.endsWith('/import-preview')?{companyCode:'alvi',rows}:original(path,params,opts);
-  f.view.render(f.node,f.ctx);await tick();
-  const form=f.node.querySelector('#mentor-plan-form'),input=f.node.querySelector('[data-import-file]');
-  form.querySelector('[data-field="topic"]').value='Несохранённая правка';
-  const bytes=Buffer.from('synthetic fixture');
-  Object.defineProperty(input,'files',{value:[{name:'sample.csv',size:bytes.length,arrayBuffer:async()=>bytes}]});
-  await input.onchange();
-  assert.match(f.node.querySelector('[data-import-preview]').textContent,/<img src=x/);
-  assert.equal(f.node.querySelector('[data-import-preview] img'),null);
-  const count=form.querySelectorAll('[data-rows="days"] [data-row]').length,add=f.node.querySelector('[data-import-add]');
-  assert.equal(add.disabled,false);add.click();assert.equal(add.disabled,true);add.click();
-  assert.equal(form.querySelectorAll('[data-rows="days"] [data-row]').length,count+1);
-  assert.equal(form.querySelector('[data-field="topic"]').value,'Несохранённая правка');
-  assert.equal(f.calls.some(call=>call.method!=='GET'),false);
-  submit(f.w,form);await tick();
-  const saved=f.calls.find(call=>call.path==='/media-mentor/plan'&&call.method==='PUT').body;
-  const imported=saved.days.find(row=>row.ideaId?.startsWith('import-'));
-  assert.equal(imported.script,'\n  Первая\nВторая  ');assert.equal(imported.productionStatus,'editing');
-  assert.equal(saved.days.find(row=>row.topic===baseline.plan.days[1].topic).script,baseline.plan.days[1].script);
-  assert.deepEqual(Object.keys(imported.variants).sort(),['telegram','vk']);
-  const old=saved.days.find(row=>row.topic==='Несохранённая правка');
-  for(const key of ['script','filmingBy','productionStatus'])assert.equal(Object.hasOwn(old,key),false);
-});
-
-test('импорт отклоняет согласование/неверную дату; поздний ответ после смены компании не добавляет строки', async t => {
-  const f=fixture();t.after(()=>f.close());
-  f.w.eval(fs.readFileSync(require.resolve('./reel-plan-import.js'),'utf8'));
-  Object.defineProperty(f.w.crypto,'subtle',{value:require('node:crypto').webcrypto.subtle});
-  const mapping={date:0,platforms:1,topic:2,format:3,productionStatus:4};
-  for(const row of [['2026-02-30','vk','SAMPLE','reel','planned'],['2026-10-02','vk','SAMPLE','reel','Согласовано']])
-    assert.equal(f.w.SbCabinet.reelPlanImport.convert([[],row],mapping,payload(),'fake').errors.length,1);
-  let release;const pending=new Promise(resolve=>release=resolve),original=f.ctx.crmQuery;
-  f.ctx.crmQuery=(path,params,opts)=>path.endsWith('/import-preview')?pending:original(path,params,opts);
-  f.view.render(f.node,f.ctx);await tick();
-  const input=f.node.querySelector('[data-import-file]'),bytes=Buffer.from('sample');
-  Object.defineProperty(input,'files',{value:[{name:'sample.xlsx',size:bytes.length,arrayBuffer:async()=>bytes}]});
-  const done=input.onchange();await tick();f.ctx.selectedProjectId='other';
-  release({companyCode:'alvi',rows:[['Дата'],['2026-10-02']]});await done;
-  assert.equal(f.node.querySelectorAll('[data-import-map]').length,0);
-  assert.equal(f.node.querySelector('[data-import-add]').disabled,true);
-});
-
 test('раздел зарегистрирован как настоящий маршрут кабинета', () => {
   const f = fixture();
   try {

@@ -1,0 +1,252 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile", "--watch"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - ./sites:/srv/sites:ro
+      - ./panel:/srv/panel:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  crm:
+    build:
+      context: ./ops/crm
+    restart: always
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/crm.sqlite
+      API_KEY: ${CRM_API_KEY}
+      # Адрес сервиса счётчика подписчиков Telegram. Только адрес: ключ здесь уже есть
+      # (API_KEY), новых секретов и новых разрешений эта строка не добавляет.
+      CHAT_STATS_URL: http://chat:8080
+      ALLOWED_ORIGINS: ${CRM_ALLOWED_ORIGINS:-}
+      RATE_LIMIT_WINDOW_MS: ${CRM_RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${CRM_RATE_LIMIT_MAX:-120}
+      LEADS_SMTP_HOST: ${LEADS_SMTP_HOST:-smtp.yandex.ru}
+      LEADS_SMTP_PORT: ${LEADS_SMTP_PORT:-465}
+      LEADS_SMTP_USER: ${LEADS_SMTP_USER:-}
+      LEADS_SMTP_PASSWORD: ${LEADS_SMTP_PASSWORD:-}
+      LEADS_MAIL_FROM: ${LEADS_MAIL_FROM:-}
+      LEADS_NOTIFY_EMAIL: ${LEADS_NOTIFY_EMAIL:-}
+      LEADS_NOTIFY_EMAIL_ALVI: ${LEADS_NOTIFY_EMAIL_ALVI:-}
+      LEADS_NOTIFY_EMAIL_AVOKADO: ${LEADS_NOTIFY_EMAIL_AVOKADO:-Avocado38@bk.ru}
+    expose:
+      - "8080"
+    volumes:
+      - crm_data:/data
+
+  chat:
+    build:
+      context: ./ops/chat
+    restart: always
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/chat.sqlite
+      API_KEY: ${CHAT_API_KEY}
+      CHAT_ADMIN_KEY: ${CHAT_ADMIN_KEY}
+      ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
+      TELEGRAM_POLLING: ${TELEGRAM_POLLING:-}
+      CLIENT_BOARD_SECRET: ${CLIENT_BOARD_SECRET:-}
+      CLIENT_BOARD_BASE_URL: ${CLIENT_BOARD_BASE_URL:-https://{company}.synapsebusiness.ru/zadachi.html}
+      CRM_URL: http://crm:8080/leads
+      CRM_TASKS_URL: ${CRM_TASKS_URL:-}
+      CRM_API_KEY: ${CRM_API_KEY}
+      MODEL_API_URL: ${MODEL_API_URL:-}
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      PROJECT_CONTENT_URL: http://content:8080
+      # Клиентский бот Palitra (отдельный от бота Synapse). Пусто — бот выключен целиком.
+      # Токен и секрет webhook — только в .env сервера; опрос (1) не требует публичного webhook.
+      PALITRA_CLIENT_BOT_TOKEN: ${PALITRA_CLIENT_BOT_TOKEN:-}
+      PALITRA_CLIENT_BOT_WEBHOOK_SECRET: ${PALITRA_CLIENT_BOT_WEBHOOK_SECRET:-}
+      PALITRA_CLIENT_BOT_POLLING: ${PALITRA_CLIENT_BOT_POLLING:-}
+      # Имя бота без @ (не секрет): мост сверяет его с getMe до опроса и отправок. Без имени бот не запускается.
+      PALITRA_CLIENT_BOT_USERNAME: ${PALITRA_CLIENT_BOT_USERNAME:-}
+      # Необязательные лимиты входящих событий; пусто — 20 в минуту и 300 в сутки на чат, 1000 в час на бота.
+      PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE: ${PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE:-}
+      PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY: ${PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY:-}
+      PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR: ${PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR:-}
+      # ALVI: отдельное подключение, пустые значения ничего не запускают.
+      ALVI_CLIENT_BOT_TOKEN: ${ALVI_CLIENT_BOT_TOKEN:-}
+      ALVI_CLIENT_BOT_WEBHOOK_SECRET: ${ALVI_CLIENT_BOT_WEBHOOK_SECRET:-}
+      ALVI_CLIENT_BOT_POLLING: ${ALVI_CLIENT_BOT_POLLING:-}
+      ALVI_CLIENT_BOT_USERNAME: ${ALVI_CLIENT_BOT_USERNAME:-}
+      ALVI_CLIENT_BOT_LIMIT_CHAT_MINUTE: ${ALVI_CLIENT_BOT_LIMIT_CHAT_MINUTE:-}
+      ALVI_CLIENT_BOT_LIMIT_CHAT_DAY: ${ALVI_CLIENT_BOT_LIMIT_CHAT_DAY:-}
+      ALVI_CLIENT_BOT_LIMIT_BOT_HOUR: ${ALVI_CLIENT_BOT_LIMIT_BOT_HOUR:-}
+      # Операционные флаги Node для этого сервиса, а не учётные данные. По умолчанию пусто —
+      # поведение прежнее. Чем это заполняют на проде, описано в ops/chat/README.md.
+      NODE_OPTIONS: ${CHAT_NODE_OPTIONS:-}
+    expose:
+      - "8080"
+    # Две сети: прежняя общая (по ней chat ходит к crm и content, а Caddy — к chat) и
+    # отдельная исходящая. priority задаёт только порядок подключения сетей, маршрут по
+    # умолчанию им не выбирается. Связь с crm и content идёт напрямую по общей сети, а
+    # исходящий IPv4 остаётся через NAT — обе сети это обеспечивают одинаково.
+    networks:
+      default:
+        priority: 100
+      telegram_egress:
+        priority: 10
+    volumes:
+      - chat_data:/data
+
+  content:
+    build:
+      context: ./ops/content
+    restart: always
+    environment:
+      CONTENT_PLAN_WORKER_ENABLED: ${CONTENT_PLAN_WORKER_ENABLED:-0}
+      PORT: "8080"
+      DATABASE_PATH: /data/content.sqlite
+      API_KEY: ${CONTENT_API_KEY}
+      EDITOR_KEY: ${CONTENT_EDITOR_KEY:-}
+      CONTENT_KEY_PALITRA: ${CONTENT_KEY_PALITRA:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      AUTH_USERS: ${AUTH_USERS:-}
+      CRM_URL: http://crm:8080
+      CRM_API_KEY: ${CRM_API_KEY}
+      CHAT_URL: http://chat:8080
+      CHAT_API_KEY: ${CHAT_API_KEY}
+      HUGH_RUNTIME_URL: http://hugh-runtime:8080
+      # Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, которые он обслуживает.
+      HUGH_LOCAL_WORKER_KEY_SHA256: ${HUGH_LOCAL_WORKER_KEY_SHA256:-}
+      HUGH_LOCAL_WORKER_COMPANIES: ${HUGH_LOCAL_WORKER_COMPANIES:-}
+      # Числовой ID бота (не секрет) для входа в чат проекта из Telegram Mini App. Токен бота сюда не передаётся.
+      TELEGRAM_BOT_ID: ${TELEGRAM_BOT_ID:-}
+      # Резерв ответов Хью: явный проброс разрешённых переменных (без env_file всей .env). Пусто = резерв выключен.
+      HUGH_FALLBACK_PROVIDERS: ${HUGH_FALLBACK_PROVIDERS:-}
+      HUGH_FALLBACK_OPENROUTER_URL: ${HUGH_FALLBACK_OPENROUTER_URL:-}
+      HUGH_FALLBACK_OPENROUTER_KEY: ${HUGH_FALLBACK_OPENROUTER_KEY:-}
+      HUGH_FALLBACK_OPENROUTER_MODEL: ${HUGH_FALLBACK_OPENROUTER_MODEL:-}
+      HUGH_FALLBACK_OPENROUTER_TIMEOUT_MS: ${HUGH_FALLBACK_OPENROUTER_TIMEOUT_MS:-}
+      HUGH_FALLBACK_DEEPSEEK_URL: ${HUGH_FALLBACK_DEEPSEEK_URL:-}
+      HUGH_FALLBACK_DEEPSEEK_KEY: ${HUGH_FALLBACK_DEEPSEEK_KEY:-}
+      HUGH_FALLBACK_DEEPSEEK_MODEL: ${HUGH_FALLBACK_DEEPSEEK_MODEL:-}
+      HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS: ${HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS:-}
+      HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES: ${HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES:-0}
+      HUGH_ACK_WHEN_UNAVAILABLE: ${HUGH_ACK_WHEN_UNAVAILABLE:-0}
+      # Объявленные владельцем цены резервных провайдеров: без них денежная граница по провайдеру не работает.
+      HUGH_FALLBACK_OPENROUTER_USD_PER_1K_PROMPT: ${HUGH_FALLBACK_OPENROUTER_USD_PER_1K_PROMPT:-}
+      HUGH_FALLBACK_OPENROUTER_USD_PER_1K_COMPLETION: ${HUGH_FALLBACK_OPENROUTER_USD_PER_1K_COMPLETION:-}
+      HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT: ${HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT:-}
+      HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION: ${HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION:-}
+      # Бюджетный стоп: пусто = граница не задана. Окно и потолок ответа пусты — действуют значения кода (30 дней, 1200 токенов).
+      HUGH_FALLBACK_BUDGET_USD: ${HUGH_FALLBACK_BUDGET_USD:-}
+      HUGH_FALLBACK_BUDGET_MAX_REQUESTS: ${HUGH_FALLBACK_BUDGET_MAX_REQUESTS:-}
+      HUGH_FALLBACK_BUDGET_WINDOW_DAYS: ${HUGH_FALLBACK_BUDGET_WINDOW_DAYS:-}
+      HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS: ${HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS:-}
+      # Мастер-ключ хранилища ключей провайдеров, которые владелец вводит в ЛК. Значение только в .env сервера.
+      # Пусто = хранилище закрыто (fail-closed): ключи нельзя ни сохранить, ни прочитать, в рантайм ничего не уходит.
+      HUGH_PROVIDER_MASTER_KEY: ${HUGH_PROVIDER_MASTER_KEY:-}
+      # Дополнительные разрешённые хосты API (через запятую); пусто = только официальные из каталога.
+      HUGH_PROVIDER_ALLOWED_HOSTS: ${HUGH_PROVIDER_ALLOWED_HOSTS:-}
+      # Навыки Agent Skills из доверенного каталога образа. Пусто = навыки подключены;
+      # HUGH_SKILLS=off выключает их целиком. Исполнения скриптов и сетевых загрузок нет.
+      HUGH_SKILLS: ${HUGH_SKILLS:-}
+      HUGH_SKILLS_MAX_BYTES: ${HUGH_SKILLS_MAX_BYTES:-}
+      # Лимит видео для очереди контента (байты); пусто = 60 МБ по умолчанию сервиса.
+      MAX_PUBLISHING_VIDEO_BYTES: ${MAX_PUBLISHING_VIDEO_BYTES:-}
+      # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      CABINET_PUBLIC_URL: ${CABINET_PUBLIC_URL:-}
+      PALITRA_REVIEW_REMINDERS_ENABLED: ${PALITRA_REVIEW_REMINDERS_ENABLED:-false}
+      PALITRA_REVIEW_REMINDER_EVENING: ${PALITRA_REVIEW_REMINDER_EVENING:-}
+      PALITRA_REVIEW_REMINDER_MORNING: ${PALITRA_REVIEW_REMINDER_MORNING:-}
+      # Имя клиентского бота Palitra без @ (не секрет): включает диалоги и ссылку «Продолжить в Telegram».
+      # Пусто — выключено. Токен бота сюда не передаётся: он только у сервиса chat.
+      PALITRA_CLIENT_BOT_USERNAME: ${PALITRA_CLIENT_BOT_USERNAME:-}
+      # Необязательно: ссылка на политику в приветствии бота; пусто — https://palitra-love.ru/privacy.
+      PALITRA_CLIENT_BOT_POLICY_URL: ${PALITRA_CLIENT_BOT_POLICY_URL:-}
+      ALVI_CLIENT_BOT_USERNAME: ${ALVI_CLIENT_BOT_USERNAME:-}
+      ALVI_CLIENT_BOT_POLICY_URL: ${ALVI_CLIENT_BOT_POLICY_URL:-}
+      ALVI_CLIENT_BOT_HOURS: ${ALVI_CLIENT_BOT_HOURS:-}
+      # Общий предел сохранённых файлов клиентских ботов в МБ; пусто — 1024. Сверх предела файл не сохраняется.
+      CLIENT_DIALOGS_MAX_STORAGE_MB: ${CLIENT_DIALOGS_MAX_STORAGE_MB:-}
+      ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
+    expose:
+      - "8080"
+    volumes:
+      - /opt/synapse/sites/palitra-love:/site-sources/palitra-love:ro
+      - /opt/synapse/sites/alvi:/site-sources/alvi:ro
+      - /opt/synapse/sites/avokado:/site-sources/avokado:ro
+      - /opt/synapse/sites/avokado2:/site-sources/avokado2:ro
+      - /opt/synapse/sites/avokado3:/site-sources/avokado3:ro
+      - /opt/synapse/sites/taisabai:/site-sources/taisabai:ro
+      - /opt/synapse/sites/vhod:/site-sources/vhod:ro
+      - /opt/palitra-draft/releases/7e372481bdb3166c2c3710989330e9f8066397185c2a90fa7af6749e82f3fb67/site:/site-sources/palitra-draft:ro
+      - content_data:/data
+
+  # Приватный рантайм Hugh на подписке ChatGPT. Порта на хосте нет, репозиторий не смонтирован,
+  # корневая файловая система только для чтения, /data — единственный записываемый том.
+  # CHAT_API_KEY нужен только родительскому процессу Node: дочерний Codex окружение не наследует.
+  hugh-runtime:
+    build:
+      context: ./ops/hugh-runtime
+    restart: always
+    environment:
+      PORT: "8080"
+      CHAT_API_KEY: ${CHAT_API_KEY}
+      DATABASE_PATH: /data/state/hugh-runtime.sqlite
+      CODEX_HOME: /data/codex
+      HUGH_WORKSPACE: /workspace
+      HUGH_CODEX_BINARY: /usr/local/bin/codex
+      # Каталог моделей и доказательство изоляции создаются при сборке образа
+      # и лежат в неизменяемом /app/build — переопределять их не нужно.
+      HUGH_MODEL: ${HUGH_MODEL:-}
+      HUGH_JOB_TIMEOUT_MS: ${HUGH_JOB_TIMEOUT_MS:-120000}
+      HUGH_JOB_RETENTION_HOURS: ${HUGH_JOB_RETENTION_HOURS:-72}
+      HUGH_INTERRUPT_GRACE_MS: ${HUGH_INTERRUPT_GRACE_MS:-15000}
+      HOME: /tmp
+    expose:
+      - "8080"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    volumes:
+      - hugh_runtime_data:/data
+      - hugh_runtime_workspace:/workspace:ro
+
+# Сети проекта. Общая сеть объявлена явно и без параметров: её состав и поведение
+# остаются прежними для всех сервисов, включая caddy, crm, content и hugh-runtime.
+#
+# telegram_egress — отдельная исходящая сеть, подключённая только к chat. Она нужна там,
+# где api.telegram.org недоступен по IPv4 с хоста, но отвечает по IPv6: двойной стек
+# в этой сети даёт контейнеру маршрут IPv6 наружу, не трогая остальные сервисы.
+# Выключатель по умолчанию false, то есть сеть создаётся обычной IPv4-сетью и текущее
+# поведение сохраняется. Значение задаётся ровно как true или false.
+# При true Docker сам выдаёт префикс ULA (docs.docker.com/engine/daemon/ipv6/), а режим
+# шлюза nat выпускает эти адреса наружу через NAT — публичный префикс на хосте не нужен.
+# Параметр режима шлюза бездействует, пока IPv6 в сети выключен.
+networks:
+  default:
+  telegram_egress:
+    enable_ipv6: ${CHAT_IPV6_ENABLED:-false}
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv6: nat
+
+volumes:
+  caddy_data:
+  caddy_config:
+  crm_data:
+  chat_data:
+  content_data:
+  hugh_runtime_data:
+  hugh_runtime_workspace:

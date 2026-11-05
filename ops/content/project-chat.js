@@ -18,6 +18,7 @@ const personas = require('./hugh-personas');
 const { createLocalWorker } = require('./project-chat-local-worker');
 const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
+const { createWorkQueue } = require('./project-chat-work-queue');
 const { createAgentSkills } = require('./agent-skills');
 const { createAttachmentText } = require('./attachment-text');
 
@@ -383,6 +384,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
      Членство проверяется теми же assigned/isMember, что и в кабинете. */
   const miniApp = createProjectChatMiniApp({ db, authStore, ...miniConfig, tx, sendJson,
     assigned: (user, code) => assigned(user, code), isMember: (user, code) => isMember(user, code) });
+  const workQueue = createWorkQueue({db,clock:now,verifyActor:(code,id)=>{
+    const person=authStore.getById(id);return assigned(person,code)&&isMember(person,code)?person:null;
+  },onResult:job=>insertMessage({code:job.companyCode,authorId:'codex-work:'+job.id,authorName:'Codex',authorType:'assistant',
+    text:'Поручение #'+job.id+'\n'+job.result.summary+'\n\nРезультат подготовлен. Требуется проверка.',skipAi:true,appOnly:true}).id});
   function validCompany(code) {
     if (!Object.hasOwn(COMPANIES, code)) fail(404, 'Проект не найден');
     return code;
@@ -469,7 +474,14 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       edits.set(e.message_id, e);
       if (e.status === 'sent' && e.text_synced === 1) editedAt.set(e.message_id, e.finished_at);
     }
-    return rows.map(m => ({ id: m.id, authorName: m.author_name, authorType: m.author_type, text: m.text,
+    // The job records the actual answering provider. Never infer Codex from an assistant's display name.
+    const provenance = new Map(db.prepare(`SELECT j.reply_message_id,j.provider,j.model
+      FROM project_chat_ai_jobs j JOIN project_chat_messages m ON m.id=j.reply_message_id
+      WHERE m.id IN (${marks}) AND j.company_code=m.company_code AND j.status='done'`).all(...ids)
+      .map(j => [j.reply_message_id, {kind:'model',provider:j.provider||'',model:j.model||''}]));
+    const workJobs=workQueue.messageJobs(ids);
+    return rows.map(m => ({ ...(workJobs.has(m.id)?{workTask:workJobs.get(m.id)}:{}),id: m.id, authorName: m.author_name, authorType: m.author_type, text: m.text,
+      ...(m.author_type==='assistant'?{assistantProvenance:reviewed.has(m.id)?{kind:'owner-reviewed'}:provenance.get(m.id)||{kind:'unknown'}}:{}),
       createdAt: m.created_at, attachments: files.get(m.id) || [],
       deliveryStatus: delivery.get(m.id)?.status || 'local',
       telegramLinks: receiptLinks(delivery.get(m.id)), reviewedByOwner: reviewed.has(m.id),
@@ -572,7 +584,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     // Прежние исполнители перечисляются отдельно: список участников остаётся списком участников.
     const formerMembers = [...new Set(tasks.filter(t => t.assigneeId && !current.has(t.assigneeId)).map(t => t.assigneeId))]
       .map(id => ({ userId: id, displayName: cache.get(id)?.displayName || 'Участник удалён', active: false }));
-    return { room: roomJSON(room), members: roomMembers, formerMembers,
+    return { room: roomJSON(room), members: roomMembers, formerMembers,codexWork:{...workQueue.status(code,user.id),tasks:workQueue.list(code,user.id).slice(0,20)},
       ...page,
       tasks,
       ...(user.role === 'owner' ? { ownerAlerts:ownerAlerts.list(code) } : {}),
@@ -625,12 +637,12 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     localWorker.noteMessage(code, messageId, type, aiJob);
   }
   function insertMessage({ code, authorId, authorName, authorType, text, ids = [], clientId = null,
-    chatId = null, externalId = null, incoming = false, addressed = false, skipAi = false }) {
+    chatId = null, externalId = null, incoming = false, addressed = false, skipAi = false, appOnly = false }) {
     const id = Number(db.prepare(`INSERT INTO project_chat_messages
       (company_code,author_id,author_name,author_type,text,created_at,client_message_id,external_chat_id,external_message_id)
       VALUES(?,?,?,?,?,?,?,?,?)`).run(code, authorId, authorName, authorType, text, stamp(), clientId, chatId, externalId).lastInsertRowid);
     for (const attachmentId of ids) db.prepare('UPDATE project_chat_attachments SET message_id=? WHERE id=? AND company_code=?').run(id, attachmentId, code);
-    enqueue(code, id, text, authorType, incoming, addressed, skipAi);
+    enqueue(code, id, text, authorType, incoming || appOnly, addressed, skipAi);
     return db.prepare('SELECT * FROM project_chat_messages WHERE id=?').get(id);
   }
 
@@ -1374,9 +1386,28 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     const match = url.pathname.match(/^(?:\/content)?\/project-chat\/([a-z0-9_-]+)(.*)$/);
     if (!match) return false;
     const code = match[1], suffix = match[2], method = request.method;
+    const workerAction=suffix.match(/^\/codex-work\/worker\/(heartbeat|claim|renew|report)$/);
+    if(workerAction){
+      validCompany(code);if(method!=='POST')fail(405,'Нужен POST');
+      const token=String(request.headers.authorization||'').match(/^Bearer ([A-Za-z0-9_-]{32,128})$/)?.[1]||'';
+      workQueue.authorizeWorker(code,token);
+      const body=await readBody(request);
+      if(!body||typeof body!=='object'||Object.keys(body).some(k=>!['activationId','bootId','jobId','leaseToken','body'].includes(k)))fail(400,'Неизвестное поле исполнителя');
+      const result=workQueue[workerAction[1]]({...body,company:code,token});
+      sendJson(response,200,{result},{'cache-control':'no-store'});return true;
+    }
     const write = !['GET', 'HEAD'].includes(method);
     const user = access(request, code, write, /^\/(?:members|candidates|settings|retry-ai|telegram-links(?:\/\d{1,20})?)$/.test(suffix));
     const reply = (status, data) => { sendJson(response, status, data, { 'cache-control': 'no-store' }); return true; };
+    if(suffix==='/codex-work'&&method==='GET')return reply(200,{...workQueue.status(code,user.id),tasks:workQueue.list(code,user.id)});
+    const workAdmin=suffix.match(/^\/codex-work\/(activate|disable|accept|resolve-unknown)$/);
+    if(workAdmin&&method==='POST'){
+      const owner=access(request,code,true,true),body=await readBody(request);
+      const allowed={activate:['keySha256','workspaceSha256','productSha256','allowedActorIds'],disable:[],accept:['jobId','resultSha256','note'],'resolve-unknown':['jobId','note']}[workAdmin[1]];
+      if(!body||Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'Неизвестное поле подключения');
+      ensureRoom(code);const action=workAdmin[1]==='resolve-unknown'?'resolveUnknown':workAdmin[1];
+      return reply(200,workQueue[action]({...body,company:code,ownerId:owner.id}));
+    }
     const page = { before: url.searchParams.get('before'), limit: url.searchParams.get('limit') };
     // Пустая комната второго сайта открывает существующую общую переписку.
     // Доступ проверяется к обеим комнатам; история и Telegram-привязки не переносятся.
@@ -1563,8 +1594,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         }
         const ids = checkAttachments(code, body.attachmentIds || []);
         if (!text && !ids.length) fail(400, 'Добавьте текст или вложение');
-        return { message: messageJSON(insertMessage({ code, authorId: String(freshUser.id), authorName: freshUser.displayName,
-          authorType: 'human', text, ids, clientId })), duplicate: false };
+        const toCodex=!freshUser.roomSession&&workQueue.routeMessage(code,freshUser.id,text);
+        const message=insertMessage({ code, authorId: String(freshUser.id), authorName: freshUser.displayName,authorType:'human',text,ids,clientId,skipAi:toCodex });
+        if(toCodex)workQueue.enqueueMessage(message);
+        return {message:messageJSON(message),duplicate:false};
       });
       return reply(result.duplicate ? 200 : 201, result);
     }
@@ -2116,7 +2149,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
   return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, askHugh,
-    processScheduledMessages, processAssistantAttention, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills, contentReviewReminders };
+    processScheduledMessages, processAssistantAttention, scheduledList, startWorker, stopWorker, localWorker, workQueue, siteOrders, miniApp, fallback, skills, contentReviewReminders,
+    /* PALITRA-CRM: та же вложенная транзакция хоста (BEGIN IMMEDIATE + inTx), что у siteOrders; новой БД и BEGIN нет. */
+    transaction: tx };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE, TELEGRAM_PART_LIMIT, HUGH_SIGNATURE, EDIT_TEXT_LIMIT };

@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synapse — обновление доски</title><link rel="stylesheet" href="style.css?v=board-mobile-1"><script src="operator.js?v=board-mobile-1" defer></script></head><body>
+<header><a href="./">← Личный кабинет</a><h1>Обновление доски</h1><p>Передача проверенного отчёта. Ваши приоритеты, паузы и вложения сохраняются.</p></header>
+<main><section class="panel"><h2>Состояние</h2><p id="operator-state" role="status">Проверяю вход…</p><p id="operator-revision"></p><button id="operator-refresh" type="button">Обновить данные</button></section>
+<section class="panel"><h2>Передать отчёт</h2><p>Выберите подготовленный файл отчёта. При конфликте ничего не будет перезаписано.</p><button id="operator-choose" type="button" disabled>Выбрать файл отчёта</button><input id="operator-file" type="file" accept="application/json,.json" hidden><p id="operator-result" role="status"></p></section>
+<section class="panel"><h2>Управление для исполнителя</h2><p>Снимок текущих задач, приоритетов и пауз из личного кабинета.</p><a href="api/export" download="synapse-owner-board.json" id="operator-export">Скачать текущее состояние</a></section></main>
+</body></html>

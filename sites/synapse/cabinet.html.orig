@@ -1,0 +1,2136 @@
+<!doctype html>
+<html lang="ru" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0908">
+<meta name="color-scheme" content="dark">
+<title>Кабинет — Synapse Business</title>
+<link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
+<link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
+<script>document.documentElement.classList.replace("no-js", "js");</script>
+<style>
+:root {
+  --bg: #0b0908;
+  --surface: #12100f;
+  --surface-soft: #181513;
+  --text: #f4f0eb;
+  --muted: #b9afa7;
+  --accent: #9fd4ff;
+  --blue: #2e6bd6;
+  --green: #79dcb6;
+  --red: #ff9c9c;
+  --line: rgba(244, 240, 235, 0.12);
+  --sidebar: 280px;
+}
+* { box-sizing: border-box; }
+html { min-width: 0; background: var(--bg); }
+body {
+  min-width: 0;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  color: var(--text);
+  background: radial-gradient(circle at 85% 0, rgba(46, 107, 214, 0.15), transparent 35rem), var(--bg);
+  font-family: "Segoe UI", Arial, sans-serif;
+  line-height: 1.5;
+}
+body.drawer-open { overflow: hidden; }
+button, input, select { font: inherit; }
+button { color: inherit; }
+[hidden] { display: none !important; }
+.skip-link {
+  position: fixed;
+  z-index: 1000;
+  top: 8px;
+  left: 8px;
+  padding: 10px 16px;
+  transform: translateY(-150%);
+  border-radius: 10px;
+  color: #06101d;
+  background: var(--accent);
+}
+.skip-link:focus { transform: none; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.auth {
+  position: fixed;
+  z-index: 900;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.auth-card {
+  width: min(100%, 420px);
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+}
+.auth-head { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; }
+.core-logo, .project-mark, .account-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--surface-soft);
+  font-weight: 700;
+}
+.auth-head strong, .auth-head span { display: block; }
+.auth-head span, .auth-note, .muted { color: var(--muted); }
+.auth-field { display: block; margin-bottom: 14px; }
+.auth-field span { display: block; margin-bottom: 6px; color: var(--muted); }
+.auth-field input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--bg);
+}
+.auth-submit, .logout, .plain-button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid rgba(159, 212, 255, 0.4);
+  border-radius: 12px;
+  background: rgba(46, 107, 214, 0.2);
+  cursor: pointer;
+}
+.auth-submit { width: 100%; }
+.plain-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-error, .startup-error { color: var(--red); }
+.shell { display: grid; min-height: 100vh; grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+.sidebar {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar);
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 22px 16px max(18px, env(safe-area-inset-bottom));
+  border-right: 1px solid var(--line);
+  background: rgba(18, 16, 15, 0.98);
+}
+.sidebar-brand { display: flex; gap: 12px; align-items: center; margin: 0 8px 24px; }
+.sidebar-brand strong, .sidebar-brand span { display: block; }
+.sidebar-brand span { color: var(--muted); font-size: 0.8rem; }
+.project-picker { position: relative; margin-bottom: 20px; }
+.project-label { margin: 0 8px 7px; color: var(--muted); font-size: 0.78rem; }
+.project-trigger {
+  display: grid;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--surface-soft);
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: 40px minmax(0, 1fr) 24px;
+  gap: 9px;
+  align-items: center;
+}
+.project-name { overflow-wrap: anywhere; }
+.project-chevron { text-align: center; transition: transform 0.2s; }
+.project-trigger[aria-expanded="true"] .project-chevron { transform: rotate(180deg); }
+.project-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  max-height: min(430px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #201c19;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.project-option {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+}
+.project-option:hover, .project-option[aria-checked="true"] { background: rgba(159, 212, 255, 0.12); }
+.project-option .project-mark { width: 36px; height: 36px; }
+.nav { display: grid; gap: 4px; }
+.nav-link, .nav-category {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.nav-link:hover, .nav-category:hover { background: rgba(255, 255, 255, 0.05); }
+.nav-link[aria-current="page"] { color: var(--accent); background: rgba(46, 107, 214, 0.2); }
+.nav-link[aria-disabled="true"] { color: var(--muted); opacity: 0.65; cursor: default; }
+.nav-link[aria-disabled="true"]:hover { background: transparent; }
+.nav-badge {
+  min-width: 22px;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #171311;
+  background: var(--accent);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.nav-category { justify-content: space-between; font-weight: 600; }
+.nav-category::after { content: "⌄"; transition: transform 0.2s; }
+.nav-category[aria-expanded="true"]::after { transform: rotate(180deg); }
+.subnav { display: grid; gap: 3px; padding: 2px 0 5px 14px; }
+.sidebar-footer { display: grid; gap: 8px; margin-top: auto; padding-top: 22px; }
+.account-summary { display: flex; gap: 10px; align-items: center; padding: 8px; }
+.account-summary strong, .account-summary span { display: block; overflow-wrap: anywhere; }
+.account-summary span { color: var(--muted); font-size: 0.8rem; }
+.mobile-bar { display: none; }
+.main { min-width: 0; padding: clamp(24px, 4vw, 56px); }
+.content-header { margin-bottom: 26px; }
+.content-header p { margin: 5px 0 0; color: var(--muted); }
+.view-panel { width: 100%; min-width: 0; }
+h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 400; }
+.card {
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(18, 16, 15, 0.9);
+}
+.development { margin: 0; color: var(--muted); font-size: 1.05rem; }
+.notice {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(159, 212, 255, 0.07);
+}
+.crm-toolbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+.crm-periods, .crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-period, .crm-filter {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+}
+.crm-period { cursor: pointer; }
+.crm-period[aria-pressed="true"] { border-color: var(--accent); }
+.crm-summary { display: grid; margin: 16px 0; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.crm-stat { padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.crm-stat span, .crm-stat strong { display: block; }
+.crm-stat span { color: var(--muted); font-size: 0.85rem; }
+.crm-stat strong { margin-top: 5px; font-size: 1.35rem; }
+.crm-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
+.crm-table { width: 100%; border-collapse: collapse; }
+.crm-table th, .crm-table td {
+  padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap;
+}
+.crm-table .crm-grow { width: 100%; }
+.crm-table td.crm-grow { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crm-table .crm-compact { white-space: nowrap; }
+.crm-relations .crm-table th:first-child, .crm-relations .crm-table td:first-child { width: 40%; max-width: 0; }
+.crm-relations .crm-table th:nth-child(4), .crm-relations .crm-table td:nth-child(4) { width: 60%; max-width: 0; }
+.crm-relations .crm-table td:first-child, .crm-relations .crm-table td:nth-child(4) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crm-table .crm-muted { color: var(--muted); }
+.crm-table .crm-action-cell { width: 94px; text-align: right; }
+.crm-table .crm-action-cell button { width: 84px; padding: 7px 9px; }
+#crm-companies-content > .crm-table-wrap > .crm-entity-table th:nth-child(2),
+#crm-companies-content > .crm-table-wrap > .crm-entity-table td:nth-child(2) {
+  width: auto;
+  min-width: 180px;
+  max-width: none;
+}
+#crm-companies-content > .crm-table-wrap > .crm-entity-table th:nth-child(3),
+#crm-companies-content > .crm-table-wrap > .crm-entity-table td:nth-child(3) {
+  min-width: 260px;
+  white-space: normal;
+}
+#crm-companies-content > .crm-table-wrap > .crm-entity-table th:nth-child(4),
+#crm-companies-content > .crm-table-wrap > .crm-entity-table td:nth-child(4) {
+  width: 180px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#crm-contacts-content > .crm-table-wrap > .crm-entity-table th:nth-child(n+3),
+#crm-contacts-content > .crm-table-wrap > .crm-entity-table td:nth-child(n+3) { width: 1%; }
+.crm-row.is-deleted { opacity: 0.55; }
+.crm-deleted-mark { color: var(--muted); font-size: 0.8rem; }
+.crm-empty, .crm-error { padding: 20px; border: 1px solid var(--line); border-radius: 12px; }
+.crm-error { color: var(--red); }
+.expense-form { margin-top: 18px; }
+.expense-form label { flex: 1 1 150px; }
+.expense-form button { min-height: 44px; }
+.crm-lead-button { padding: 0; border: 0; color: var(--accent); background: none; cursor: pointer; }
+.lead-details { margin-top: 18px; }
+.lead-details dl { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 8px 14px; }
+.lead-details dt { color: var(--muted); }
+.lead-details dd { margin: 0; overflow-wrap: anywhere; }
+.tool-frame {
+  display: block; width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface);
+}
+.account-details { display: grid; gap: 14px; margin: 0 0 24px; }
+.account-details div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
+.account-details dt { color: var(--muted); }
+.account-details dd { margin: 0; overflow-wrap: anywhere; }
+.backdrop { display: none; }
+.no-projects { margin-bottom: 18px; padding: 12px; color: var(--red); }
+.site-toolbar, .site-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.site-grid, .account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.site-card h2, .account-card h2 { margin-top: 0; }
+.account-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-edit-form { display: grid; gap: 12px; margin-top: 16px; }
+.account-edit-form fieldset { min-width: 0; }
+.account-delete-confirm p { overflow-wrap: anywhere; }
+.account-delete-confirm menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; }
+.field-stack { display: grid; gap: 8px; }
+.field-stack input, .field-stack select { min-height: 44px; padding: 9px; }
+.account-access-list {
+  display: grid;
+  max-height: 240px;
+  gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.account-access-option {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 4px;
+  cursor: pointer;
+}
+.account-access-option input {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 20px;
+  accent-color: var(--accent);
+}
+.account-access-option span { min-width: 0; overflow-wrap: anywhere; }
+.danger { background: #8f2934; color: white; }
+.permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 24px; }
+@media (max-width: 430px) {
+  .account-grid { grid-template-columns: minmax(0, 1fr); }
+  .account-card { padding: 16px; }
+  .account-card-actions > button { flex: 1 1 120px; }
+  .account-delete-confirm { width: calc(100vw - 24px); padding: 18px; }
+}
+.home-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; }
+.widget-settings { display: grid; align-content: start; gap: 10px; }
+.widget-settings h2 { display: flex; gap: 8px; align-items: center; margin-top: 0; }
+.widget-settings h2 span {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: help;
+  font-size: 0.8rem;
+}
+.widget-option { display: flex; gap: 9px; align-items: center; padding: 7px 0; }
+.widget-option input { width: 18px; height: 18px; accent-color: var(--accent); }
+.placeholder-head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+.development-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.kanban-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; overflow-x: auto; }
+.kanban-grid .card { min-height: 180px; padding: 18px; }
+.kanban-grid h2 { margin-top: 0; font-size: 1rem; }
+.kanban-grid-three { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+.client-tabs { margin-bottom: 18px; }
+.client-tabs a { color: var(--text); text-decoration: none; }
+.client-tabs a[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) {
+  .shell { display: block; padding-top: calc(60px + env(safe-area-inset-top)); }
+  .mobile-bar {
+    position: fixed;
+    z-index: 35;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: grid;
+    min-height: calc(60px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+    border-bottom: 1px solid var(--line);
+    background: rgba(18, 16, 15, 0.98);
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+  }
+  .menu-button {
+    width: 44px; height: 44px; border: 0; border-radius: 10px; background: var(--surface-soft);
+    cursor: pointer;
+  }
+  .mobile-context { min-width: 0; }
+  .mobile-context strong, .mobile-context span { display: block; overflow-wrap: anywhere; }
+  .mobile-context strong { font-size: 0.9rem; }
+  .mobile-context span { color: var(--muted); font-size: 0.75rem; }
+  .sidebar {
+    position: fixed;
+    z-index: 45;
+    inset: 0 auto 0 0;
+    width: min(88vw, 300px);
+    height: 100vh;
+    height: 100dvh;
+    padding-top: max(18px, env(safe-area-inset-top));
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+  }
+  .sidebar.is-open { transform: none; }
+  .backdrop { position: fixed; z-index: 40; inset: 0; display: block; border: 0; background: rgba(0, 0, 0, 0.68); }
+  .main { padding: 24px 16px 40px; }
+  .content-header { margin-bottom: 20px; }
+  h1 { font-size: 2.15rem; }
+  .tool-frame { min-height: 72vh; }
+  .account-details div { grid-template-columns: 1fr; gap: 2px; }
+  .funnel-shape-label {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 4px);
+    color: var(--text);
+    font-size: 0.72rem;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+  .crm-stat { min-width: 0; }
+  .home-grid { grid-template-columns: 1fr; }
+  .kanban-grid { margin-right: -16px; padding-right: 16px; }
+}
+
+.crm-entity-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
+.crm-entity-toolbar input, .crm-entity-toolbar select, .crm-form input, .crm-form select,
+.crm-form textarea {
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+}
+.crm-entity-toolbar input, .crm-entity-toolbar select, .crm-entity-toolbar button { height: 40px; min-height: 40px; }
+.crm-entity-toolbar input { min-width: 0; flex: 1 1 220px; }
+.crm-filter-check {
+  display: inline-flex;
+  height: 40px;
+  min-height: 40px;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+.crm-filter-check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+.crm-entity-toolbar [data-entity-add] { margin-left: auto; }
+.tasks-status-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tasks-status-tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.tasks-title { display: grid; gap: 3px; min-width: 180px; white-space: normal; }
+.tasks-title small, .tasks-assignee small { color: var(--muted); }
+.tasks-priority { padding: 3px 7px; border-radius: 7px; background: var(--surface-soft); }
+.tasks-priority[data-priority="urgent"], .tasks-overdue { color: var(--red); }
+.tasks-actions { display: flex; gap: 6px; align-items: center; }
+.tasks-actions button, .tasks-actions select { min-height: 34px; padding: 5px 7px; }
+#tasks-content .crm-table { font-size: 0.9rem; }
+#tasks-content .crm-table th:not(.crm-grow), #tasks-content .crm-table td:not(.crm-grow) { width: 1%; }
+#tasks-content .crm-row td { white-space: nowrap; }
+.tasks-source { margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.tasks-source h3 { margin-top: 0; }
+.crm-row { cursor: pointer; }
+.crm-row:hover { background: rgba(159, 212, 255, 0.07); }
+.crm-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.crm-card-back { display: inline-block; margin-bottom: 16px; color: var(--accent); text-decoration: none; }
+.crm-card-header { display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
+.crm-card-header h2 { margin: 0; }
+.crm-card-subtitle { margin: 5px 0 0; color: var(--muted); }
+.crm-card-header .crm-actions { margin: 0; flex-shrink: 0; }
+.crm-card-status { min-height: 1.5em; color: var(--muted); }
+.crm-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.crm-details div { min-width: 0; }
+.crm-details dt { color: var(--muted); }
+.crm-details dd { margin: 0; overflow-wrap: anywhere; }
+.crm-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.crm-form label { display: grid; gap: 5px; color: var(--muted); }
+.crm-form textarea { min-height: 100px; resize: vertical; }
+.crm-form .wide, .crm-relations { grid-column: 1 / -1; }
+.crm-repeat-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; margin-bottom: 8px; }
+.crm-relations { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.crm-relation-group { margin-top: 22px; }
+.crm-relation-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.crm-relation-head h4 { margin: 0; }
+.crm-relation-more { display: inline-block; margin-top: 10px; color: var(--accent); }
+@media (max-width: 999px) {
+  .crm-details { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .crm-entity-toolbar { flex-direction: column; align-items: stretch; }
+  .crm-entity-toolbar input, .crm-entity-toolbar select, .crm-entity-toolbar button { width: 100%; }
+  .crm-entity-toolbar input[type="search"] { flex: none; width: 100%; }
+  .crm-entity-toolbar [data-entity-add] { margin-left: 0; }
+  .crm-filter-check { height: auto; min-height: 0; padding: 0; }
+  .crm-filter-check input {
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+  }
+  .crm-table td.crm-grow { min-width: 160px; }
+  #tasks-content .crm-table { min-width: 980px; }
+  .crm-card-header { flex-direction: column; }
+  .crm-card-header .crm-actions { width: 100%; }
+  .crm-form { grid-template-columns: 1fr; }
+  .crm-repeat-row { grid-template-columns: 1fr; }
+}
+/* Телефон 360–430px: карточки вместо тесной таблицы, кнопки не меньше 44px, без горизонтального скролла страницы. */
+@media (max-width: 430px) {
+  html, body { overflow-x: hidden; }
+  .main { padding: 16px 12px 40px; }
+  h1 { font-size: 1.6rem; }
+  .content-header { gap: 10px; }
+  .main button, .main .plain-button, .main select, .main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) { min-height: 44px; }
+  .tasks-actions { flex-wrap: wrap; }
+  .tasks-actions button, .tasks-actions select { min-height: 44px; flex: 1 1 120px; }
+  .crm-table-wrap { overflow-x: visible; }
+  .crm-entity-table, #tasks-content .crm-table { display: block; min-width: 0; }
+  .crm-entity-table thead, #tasks-content .crm-table thead { display: none; }
+  .crm-entity-table tbody, .crm-entity-table tr, .crm-entity-table td,
+  #tasks-content .crm-table tbody, #tasks-content .crm-table tr, #tasks-content .crm-table td { display: block; width: auto !important; white-space: normal !important; }
+  .crm-entity-table tr, #tasks-content .crm-table tr { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+  .crm-entity-table td, #tasks-content .crm-table td { padding: 4px 0; border: 0; }
+  .crm-entity-table td[data-label]::before, #tasks-content .crm-table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 0.8rem; }
+  .crm-entity-table td:empty { display: none; }
+  .kanban-grid { grid-template-columns: 1fr; margin: 0; padding: 0; overflow: visible; }
+  .kanban-grid-three { grid-template-columns: 1fr; }
+  .main pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .main img, .main video, .main iframe { max-width: 100%; }
+  .tool-frame { min-height: 60vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+  .factory-tabs {display:flex; flex-wrap:wrap; gap:8px; margin:0 0 20px;}
+  .factory-tabs a {text-decoration:none; white-space:normal;}
+  .factory-tabs a[aria-current="page"] {background:var(--surface-hover, #233a53); color:var(--text, #fff); border-color:var(--accent, #a6c8ef);}
+</style>
+
+<link rel="stylesheet" href="brand/living-logo.css?v=20260911-projects-1">
+<script defer src="brand/living-logo.js?v=20260911-1"></script>
+<link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Synapse Business">
+<link rel="stylesheet" href="./cabinet/sites-projects.css?v=20261007-2">
+</head>
+<body>
+<div class="auth" id="auth">
+  <div class="auth-card">
+    <div class="auth-head">
+      <div><a class="sb-brand " href="./" aria-label="Synapse Business — главная"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><span class="sb-wordmark" aria-hidden="true"></span></a><p class="sb-brand-caption">Вход в личный кабинет</p></div>
+    </div>
+    <form id="auth-form" autocomplete="off">
+      <label class="auth-field"><span>Логин</span>
+        <input id="auth-login" name="login" autocomplete="username" required></label>
+      <label class="auth-field"><span>Пароль</span>
+        <input id="auth-pass" type="password" name="pass" autocomplete="current-password" required></label>
+      <button class="auth-submit" type="submit">Войти</button>
+      <p class="auth-error" id="auth-error" role="alert" hidden>Неверный логин или пароль</p>
+    </form>
+  </div>
+</div>
+<a class="skip-link" href="#main-content">Перейти к содержимому</a>
+<div class="shell" id="app" hidden>
+  <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
+    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы контента">Контент</button><a href="#crm" data-view-link="crm">Заявки</a>
+    <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
+  </nav>
+  <div class="mobile-bar">
+    <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
+      aria-label="Открыть меню">☰</button>
+    <div class="mobile-context"><strong id="mobile-title">Сквозная аналитика</strong>
+      <span id="mobile-project"></span></div>
+    <a class="sb-brand sb-mobile-logo" href="#home" aria-label="Synapse Business — главная кабинета"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span></a>
+  </div>
+  <aside class="sidebar" id="sidebar" aria-label="Меню кабинета">
+    <div class="sidebar-brand sb-sidebar-brand"><a class="sb-brand sb-brand--compact" href="./" aria-label="Synapse Business — главная"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><span class="sb-wordmark" aria-hidden="true"></span></a><p class="sb-brand-caption">Личный кабинет</p></div>
+    <div class="project-picker">
+      <p class="project-label">Проект</p>
+      <button class="project-trigger" id="project-trigger" type="button" aria-haspopup="menu"
+        aria-expanded="false" aria-controls="project-menu">
+        <span class="project-mark" id="project-mark" aria-hidden="true"></span>
+        <span class="project-name" id="project-name"></span>
+        <span class="project-chevron" aria-hidden="true">⌄</span>
+      </button>
+      <div class="project-menu" id="project-menu" role="menu" aria-label="Выбор проекта" hidden></div>
+    </div>
+    <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
+    <nav class="nav" aria-label="Разделы кабинета">
+      <a class="nav-link" href="#home" data-view-link="home">Главная</a>
+      <a class="nav-link" id="hugh-link" href="#hugh" data-view-link="hugh">Хью</a>
+      <a class="nav-link" id="project-forms-link" href="#project-forms" data-view-link="project-forms" hidden>Формы проектов</a>
+      <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
+        Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
+      </a>
+      <!-- №98: меню «Контент» и «Настройки»; оболочка ставит «Контент» после «Главной», а «Хью» превращает в «Чаты». -->
+      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент</button>
+      <div class="subnav" id="content-menu" hidden>
+        <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
+        <a class="nav-link" href="#content/shooting" data-view-link="content-shooting">Съёмка</a>
+        <a class="nav-link" href="#content/materials" data-view-link="content-materials">Материалы</a>
+        <a class="nav-link" id="content-factory-link" href="#content-factory" data-view-link="content-factory" hidden>Постинг</a>
+        <a class="nav-link" href="#content/connections" data-view-link="content-connections">Подключения</a>
+        <a class="nav-link" href="#content/stats" data-view-link="content-stats" data-view-also="content-factory-stats media-mentor-rollout">Статистика</a>
+      </div>
+      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings" data-view-also="settings-content">Настройки</a>
+      <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
+        aria-controls="crm-menu">CRM</button>
+      <div class="subnav" id="crm-menu" hidden>
+        <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">Заявки</a>
+        <a class="nav-link" href="#deals" data-view-link="deals">Сделки</a>
+        <a class="nav-link" id="clients-link" href="#clients" data-view-link="clients">База клиентов</a>
+        <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
+      </div>
+      <button class="nav-category" id="analytics-category" type="button" aria-expanded="false"
+        aria-controls="analytics-menu">Аналитика</button>
+      <div class="subnav" id="analytics-menu" hidden>
+        <a class="nav-link" id="analytics-link" href="#analytics-through"
+          data-view-link="analytics-through">Сквозная аналитика</a>
+        <a class="nav-link" href="#ad-platforms" data-view-link="ad-platforms">Рекламные площадки</a>
+        <a class="nav-link" id="platform-demand-link" href="#platform-demand" data-view-link="platform-demand">Потенциал 2ГИС</a>
+        <a class="nav-link" id="social-stats-link" href="#social-stats" data-view-link="social-stats">Соцсети</a>
+        <a class="nav-link" href="#hypotheses" data-view-link="hypotheses">Доска гипотез</a>
+        <a class="nav-link" href="#competitors" data-view-link="competitors">Конкуренты</a>
+        <a class="nav-link" href="#calltracking" data-view-link="calltracking">Колтрекинг</a>
+      </div>
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="site-menu">Сайт</button>
+      <div class="subnav" id="site-menu" hidden>
+        <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
+        <a class="nav-link" id="site-editor-link" href="#site-editor" data-editor-link="site">Редактировать сайт</a>
+        <a class="nav-link" id="price-editor-link" href="#price" data-editor-link="price">Прайс</a>
+        <p class="project-label" id="editor-link-notice" role="status" hidden></p>
+      </div>
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="marketing-menu">Продвижение</button>
+      <div class="subnav" id="marketing-menu" hidden>
+      <a class="nav-link" id="actor-onboarding-link" href="#actor-onboarding"
+        data-view-link="actor-onboarding" hidden>Моя анкета</a>
+      <a class="nav-link" id="actor-workspace-link" href="#actor-workspace"
+        data-view-link="actor-workspace" hidden>Моё рабочее место</a>
+      <a class="nav-link" id="company-information-link" href="#company-information" data-view-link="company-information" hidden>Актуальность</a>
+      <a class="nav-link" id="vk-community-link" href="#vk-community" data-view-link="vk-community" hidden>ВКонтакте</a>
+      <a class="nav-link" id="reviews-link" href="#reviews" data-view-link="reviews" hidden>Отзывы</a>
+      <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
+      </div>
+      <button class="nav-category" id="finance-category" type="button" aria-expanded="false" aria-controls="finance-menu" hidden>Финансы</button>
+      <div class="subnav" id="finance-menu" hidden><a class="nav-link" href="#finance" data-view-link="finance">Доходы и расходы</a><a class="nav-link" href="#catalog" data-view-link="catalog">Модули и пакеты</a></div>
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
+      <div class="subnav" id="management-menu" hidden>
+      <a class="nav-link" id="site-orders-link" href="#site-orders" data-view-link="site-orders" hidden>Заявки с сайта</a>
+      <a class="nav-link" id="system-settings-link" href="#system-settings" data-view-link="system-settings" hidden>Настройки системы</a>
+      <a class="nav-link" id="company-team-link" href="#company-team" data-view-link="company-team" hidden>Моя команда</a>
+      <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
+      <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
+      <a class="nav-link" id="trademarks-link" href="#trademarks" data-view-link="trademarks" hidden>Помощь в регистрации знаков</a>
+          </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
+        <div><strong id="account-name"></strong><span id="account-role"></span></div></div>
+      <button class="logout" id="logout" type="button">Выйти</button>
+    </div>
+  </aside>
+  <button class="backdrop" id="backdrop" type="button" aria-label="Закрыть меню" hidden></button>
+  <main class="main" id="main-content" tabindex="-1">
+    <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
+    <div class="workspace-scope" id="workspace-scope"><strong></strong><button type="button" id="workspace-change-company">Сменить компанию</button></div>
+    <div id="content-factory-header" hidden>
+      <div class="content-header"><h1>Контент завод</h1></div>
+      <nav class="factory-tabs" aria-label="Контент завод">
+        <a class="plain-button" href="#content-factory/plan" data-factory-view="autoposting" data-factory-also="media-mentor">Контент-план</a>
+        <a class="plain-button" href="#content-factory/sources" data-factory-view="telegram-sources">Исходники</a>
+        <a class="plain-button" href="#content-factory/stats" data-factory-view="content-factory-stats" data-factory-also="media-mentor-rollout">Статистика</a>
+        <a class="plain-button" href="#content-factory/settings" data-factory-view="content-factory-settings">Настройки модуля</a>
+      </nav>
+      <div class="factory-plan-bar" id="content-factory-plan-bar" hidden>
+        <button class="plain-button" type="button" data-factory-action="compose">Составить план</button>
+        <button class="plain-button" type="button" data-factory-action="create">Создать публикацию</button>
+        <span class="factory-bar-status" data-factory-bar-status role="status"></span>
+        <section class="card factory-compose" id="content-factory-compose" aria-live="polite" hidden></section>
+      </div>
+    </div>
+    <nav class="sb-settings-tabs" id="settings-tabs" aria-label="Разделы настроек" hidden>
+      <a class="plain-button" href="#settings" data-settings-tab="settings">Компания</a>
+      <a class="plain-button" href="#settings/content" data-settings-tab="settings-content">Контент</a>
+    </nav>
+    <section class="view-panel" id="home-view" data-view="home" hidden>
+      <div class="content-header home-header"><h1>Главная</h1>
+        <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
+          aria-label="Период виджетов">
+          <button class="period-button" type="button" data-home-period="today">Сегодня</button>
+          <button class="period-button" type="button" data-home-period="7d">7 дней</button>
+          <button class="period-button" type="button" data-home-period="30d">30 дней</button>
+        </div><button class="home-settings-trigger" id="home-settings-trigger" type="button"
+          aria-label="Настройки виджетов" aria-controls="home-widget-settings" aria-expanded="false">⚙</button></div>
+      </div>
+      <div class="home-settings-layout"><aside class="card widget-settings" id="home-widget-settings" hidden>
+        <h2>Настройки виджетов</h2><div id="home-widget-options"></div>
+      </aside><div class="home-grid" id="home-widgets"></div></div>
+    </section>
+    <section class="view-panel" id="deals-view" data-view="deals" hidden>
+      <div id="order-workspace"></div><div id="deals-legacy" hidden>
+      <div class="content-header"><h1>Сделки</h1><p>Воронки компаний Synapse Business</p></div>
+      <div id="deals-pipelines" class="deals-pipelines" role="tablist" aria-label="Воронки компаний"></div>
+      <div class="crm-actions">
+        <button class="plain-button" type="button" id="deals-configure" disabled>Настроить воронку</button>
+        <button class="plain-button" type="button" id="deals-refresh">Обновить</button>
+      </div>
+      <div id="deals-enroll-fields" class="deals-enroll" hidden>
+        <label>Добавить компанию<select id="deals-enroll-company" aria-label="Компания для воронки"></select></label>
+        <button class="plain-button" type="button" id="deals-enroll" disabled>Добавить в воронку</button>
+      </div>
+      <p id="deals-count" class="muted" role="status"></p>
+      <p id="deals-error" class="crm-error" role="alert" hidden></p>
+      <div id="deals-board" class="deals-board" aria-label="Воронка компаний" aria-busy="false"></div>
+      <dialog id="deals-settings" class="deals-dialog deals-settings" aria-labelledby="deals-settings-title">
+        <form id="deals-settings-form" class="crm-form">
+          <fieldset id="deals-settings-fields">
+            <div class="deals-dialog-heading"><h2 id="deals-settings-title">Настроить воронку</h2>
+              <button class="plain-button" type="button" data-deals-close aria-label="Закрыть настройки">✕</button>
+            </div>
+            <div class="deals-pipeline-settings">
+              <label>Воронка<select id="deals-settings-pipeline"></select></label>
+              <label>Название воронки<input id="deals-pipeline-label" maxlength="40"></label>
+              <div class="crm-actions">
+                <button class="plain-button" type="button" id="deals-pipeline-rename">Сохранить название</button>
+                <button class="plain-button" type="button" id="deals-pipeline-up" aria-label="Воронка левее">←</button>
+                <button class="plain-button" type="button" id="deals-pipeline-down"
+                  aria-label="Воронка правее">→</button>
+              </div>
+              <label>Новая воронка<input id="deals-new-pipeline-label" maxlength="40"></label>
+              <button class="plain-button" type="button" id="deals-pipeline-add">Добавить воронку</button>
+            </div>
+            <h3>Этапы</h3>
+            <p class="muted">От 1 до 12 этапов. Для удаления дополнительного этапа перенесите его компании.</p>
+            <div id="deals-stage-rows"></div>
+            <button class="plain-button" type="button" id="deals-stage-add" data-stage-add>Добавить этап</button>
+            <h3>Правила переходов</h3>
+            <div class="deals-rules">
+              <label>Без касания, дней<input type="number" name="silentDays"
+                min="1" max="3650" step="1" value="14" required>
+              </label><label>До окончания оплаты, дней<input type="number" name="renewalDays"
+                min="1" max="3650" step="1" value="10" required></label>
+              <label>Возврат после отказа, месяцев<input type="number" name="rejectedReturnMonths"
+                min="1" max="120" step="1" value="3" required></label>
+              <label>Возврат ушедшего, месяцев<input type="number" name="churnedReturnMonths"
+                min="1" max="120" step="1" value="6" required></label>
+            </div>
+            <div class="deals-settings-footer"><button class="plain-button" type="submit">Сохранить</button></div>
+          </fieldset>
+          <p id="deals-settings-error" class="crm-error" role="alert"></p>
+        </form>
+      </dialog>
+      <dialog id="deals-reason" class="deals-dialog deals-reason" aria-labelledby="deals-reason-title">
+        <form id="deals-reason-form" class="crm-form">
+          <div class="deals-dialog-heading"><h2 id="deals-reason-title">Причина перехода</h2>
+            <button class="plain-button" type="button" data-deals-close aria-label="Закрыть причину">✕</button>
+          </div>
+          <label>Причина<textarea id="deals-reason-text" name="reason" required maxlength="2000"></textarea></label>
+          <div class="crm-actions">
+            <button class="plain-button" type="button" data-deals-close>Отмена</button>
+            <button class="plain-button" type="submit">Переместить</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="deals-drawer" class="deals-dialog deals-drawer" aria-labelledby="deals-drawer-title">
+        <div class="deals-dialog-heading"><h2 id="deals-drawer-title">Компания</h2>
+          <button class="plain-button" type="button" data-deals-close aria-label="Закрыть компанию">✕</button>
+        </div>
+        <div id="deals-drawer-tabs" class="deals-drawer-tabs" role="tablist" aria-label="Работа с компанией"></div>
+        <div id="deals-drawer-content" role="tabpanel" tabindex="0" aria-live="polite"></div>
+      </dialog>
+      </div>
+    </section>
+    <section class="view-panel" id="clients-view" data-view="clients" hidden>
+      <div class="content-header"><h1>База клиентов</h1></div>
+      <div class="crm-periods client-tabs" id="client-tabs" aria-label="Раздел базы клиентов">
+        <a class="crm-period" href="#crm-contacts" data-client-view="crm-contacts">Клиенты и контакты</a>
+        <a class="crm-period" href="#crm-companies" data-client-view="crm-companies">Компании</a>
+        <a class="crm-period" href="#crm-legal" data-client-view="crm-legal">Реквизиты</a>
+      </div>
+      <div class="card"><p>Выберите раздел базы клиентов.</p></div>
+    </section>
+    <section class="view-panel" id="analytics-through-view" data-view="analytics-through">
+      <div class="content-header"><h1>Сквозная аналитика</h1></div>
+      <p class="notice" id="analytics-project-context"></p>
+      <div class="analytics-grid">
+        <div class="card">
+          <div class="crm-toolbar">
+            <div class="platform-filter" id="platform-filter">
+              <button class="plain-button platform-trigger" id="platform-trigger" type="button"
+                aria-expanded="false" aria-controls="platform-panel">Все площадки</button>
+              <div class="platform-panel" id="platform-panel" hidden></div>
+            </div>
+            <div class="crm-periods" id="analytics-periods" aria-label="Период аналитики">
+              <button class="crm-period" type="button" data-analytics-period="today"
+                aria-pressed="true">Сегодня</button>
+              <button class="crm-period" type="button" data-analytics-period="7d"
+                aria-pressed="false">7 дней</button>
+              <button class="crm-period" type="button" data-analytics-period="30d"
+                aria-pressed="false">30 дней</button>
+            </div>
+            <form class="analytics-dates" id="analytics-dates">
+              <label>С<input name="from" type="date" required></label>
+              <label>По<input name="to" type="date" required></label>
+              <button class="plain-button" type="submit">Показать</button>
+            </form>
+          </div>
+          <p class="platform-footnote">* Instagram и Facebook принадлежат Meta Platforms Inc., признанной
+            экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
+          <div id="analytics-content" aria-live="polite"></div>
+          <details class="analytics-details">
+            <summary>Подробно: заявки и расходы</summary>
+            <div id="analytics-legacy"></div>
+            <section class="analytics-section" id="expenses-section">
+              <h2>Расходы</h2>
+              <div id="expenses-content" aria-live="polite"></div>
+              <form class="expense-form" id="expense-form" hidden>
+                <label>Дата<input name="date" type="date" required></label>
+                <label>Источник<input name="source" required maxlength="120"></label>
+                <label>Сумма<input name="amount" type="number" min="0" step="0.01" required></label>
+                <label>Комментарий<input name="comment" maxlength="500"></label>
+                <button class="plain-button" type="submit">Добавить</button>
+              </form>
+              <p id="expense-result" role="status"></p>
+            </section>
+          </details>
+          <p class="platform-footnote analytics-legal">* Instagram и Facebook принадлежат Meta Platforms Inc.,
+            признанной экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
+        </div>
+      </div>
+    </section>
+    <section class="view-panel" id="ad-platforms-view" data-view="ad-platforms" hidden>
+      <div class="content-header"><h1>Рекламные площадки</h1></div>
+      <div class="card" id="ad-platforms-content" aria-live="polite"></div>
+      <p class="platform-footnote">* Instagram и Facebook принадлежат Meta Platforms Inc., признанной
+        экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
+    </section>
+    <section class="view-panel" id="platform-demand-view" data-view="platform-demand" hidden></section>
+    <section class="view-panel" id="social-stats-view" data-view="social-stats" hidden></section>
+    <section class="view-panel" id="hypotheses-view" data-view="hypotheses" hidden>
+      <div class="content-header"><h1>Доска гипотез</h1></div>
+      <div class="placeholder-head"><span class="development-badge">в разработке</span>
+        <button class="plain-button" type="button" disabled title="в разработке">Добавить гипотезу</button>
+      </div>
+      <div class="kanban-grid kanban-grid-three">
+        <div class="card"><h2>Идея</h2></div><div class="card"><h2>Проверяем</h2></div>
+        <div class="card"><h2>Итог</h2></div>
+      </div>
+    </section>
+    <section class="view-panel" id="competitors-view" data-view="competitors" hidden>
+      <div class="content-header"><h1>Конкуренты</h1></div>
+      <div class="placeholder-head"><span class="development-badge">в разработке</span>
+        <button class="plain-button" type="button" disabled title="в разработке">Добавить</button>
+      </div>
+      <div class="card crm-table-wrap"><table class="crm-table"><thead><tr><th>Конкурент</th>
+        <th>Площадки</th><th>Рекламируется</th><th>Заметки</th></tr></thead><tbody></tbody></table></div>
+    </section>
+    <section class="view-panel" id="calltracking-view" data-view="calltracking" hidden>
+      <div class="content-header"><h1>Колтрекинг</h1></div>
+      <span class="development-badge">в разработке</span>
+      <p class="notice">Подмена номеров и учёт звонков по источникам — в разработке</p>
+      <div class="card crm-table-wrap"><table class="crm-table"><thead><tr><th>Площадка</th>
+        <th>Номер</th><th>Звонков за период</th></tr></thead><tbody></tbody></table></div>
+    </section>
+    <section class="view-panel" id="crm-view" data-view="crm" hidden>
+      <div class="content-header"><h1>Заявки</h1></div>
+      <p class="notice" id="crm-project-context"></p>
+      <div class="card">
+        <div class="crm-toolbar">
+          <div class="crm-periods" id="crm-periods" aria-label="Период">
+            <button class="crm-period" type="button" data-crm-period="today" aria-pressed="true">Сегодня</button>
+            <button class="crm-period" type="button" data-crm-period="7d" aria-pressed="false">Неделя</button>
+            <button class="crm-period" type="button" data-crm-period="30d" aria-pressed="false">Месяц</button>
+          </div>
+          <div class="crm-filters">
+            <select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select>
+            <select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select>
+          </div>
+        </div>
+        <div id="crm-content" aria-live="polite"></div>
+      </div>
+    </section>
+    <section class="view-panel" id="crm-contacts-view" data-view="crm-contacts" hidden>
+      <div class="content-header"><h1>Клиенты и контакты</h1></div>
+      <div class="card"><div id="crm-contacts-content" aria-live="polite"></div></div>
+    </section>
+    <section class="view-panel" id="crm-companies-view" data-view="crm-companies" hidden>
+      <div class="content-header"><h1>Компании</h1></div>
+      <div class="card"><div id="crm-companies-content" aria-live="polite"></div></div>
+    </section>
+    <section class="view-panel" id="crm-legal-view" data-view="crm-legal" hidden>
+      <div class="content-header"><h1>Юрлица</h1></div>
+      <div class="card"><div id="crm-legal-content" aria-live="polite"></div></div>
+    </section>
+    <section class="view-panel" id="tasks-view" data-view="tasks" hidden>
+      <div class="content-header"><h1>Задачи</h1></div>
+      <p class="notice" id="tasks-project-context"></p>
+      <div class="card"><div id="tasks-content" aria-live="polite"></div></div>
+    </section>
+    <section class="view-panel" id="sites-view" data-view="sites" hidden>
+      <div class="content-header"><h1>Сайты</h1></div>
+      <div class="site-toolbar">
+        <select id="sites-company" aria-label="Компания"><option value="">Все компании</option></select>
+        <select id="sites-state" aria-label="Состояние"><option value="">Все</option>
+          <option value="active">Активен</option><option value="draft">Черновик</option>
+          <option value="published">Опубликован</option></select>
+        <button id="refresh-sites" type="button">Обновить список</button>
+        <button id="create-site" type="button">Клонировать сайт</button>
+      </div>
+      <p id="sites-refresh-status" class="site-refresh-status" role="status"></p>
+      <div id="sites-content" aria-live="polite">Загрузка…</div>
+    </section>
+    <section class="view-panel" id="chat-view" data-view="chat" hidden>
+      <div class="content-header"><h1>Чат</h1></div>
+      <p class="notice">Связь чата с выбранным проектом — в разработке. В текущем inbox используйте встроенный
+        фильтр компаний.</p>
+      <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
+    </section>
+    <section class="view-panel" id="hugh-view" data-view="hugh" hidden></section>
+    <section class="view-panel" id="project-forms-view" data-view="project-forms" hidden></section>
+    <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden></section>
+    <section class="view-panel" id="media-mentor-view" data-view="media-mentor" hidden></section>
+    <section class="view-panel" id="actor-onboarding-view" data-view="actor-onboarding" hidden></section>
+    <section class="view-panel" id="actor-workspace-view" data-view="actor-workspace" hidden></section>
+    <section class="view-panel" id="media-mentor-rollout-view" data-view="media-mentor-rollout" hidden></section>
+    <section class="view-panel" id="telegram-sources-view" data-view="telegram-sources" hidden></section>
+    <section class="view-panel" id="content-factory-stats-view" data-view="content-factory-stats" hidden></section>
+    <section class="view-panel" id="content-factory-settings-view" data-view="content-factory-settings" hidden></section>
+    <section class="view-panel" id="company-information-view" data-view="company-information" hidden></section>
+    <section class="view-panel" id="vk-community-view" data-view="vk-community" hidden></section>
+    <section class="view-panel" id="reviews-view" data-view="reviews" hidden></section>
+    <section class="view-panel" id="content-factory-view" data-view="content-factory" hidden>
+      <div class="card"><p>Для работы с материалами и этапами обратитесь к владельцу кабинета за доступом.</p></div>
+    </section>
+    <section class="view-panel" id="campaigns-view" data-view="campaigns" hidden></section>
+    <section class="view-panel" id="catalog-view" data-view="catalog" hidden></section>
+    <section class="view-panel" id="finance-view" data-view="finance" hidden></section>
+    <section class="view-panel" id="settings-view" data-view="settings" hidden></section>
+    <section class="view-panel" id="site-orders-view" data-view="site-orders" hidden></section>
+    <section class="view-panel" id="system-settings-view" data-view="system-settings" hidden>
+      <div class="content-header"><h1>Настройки системы</h1></div>
+      <div class="card hugh-providers" id="hugh-providers" hidden></div>
+      <div class="card settings-email" id="settings-email" hidden>
+        <div class="settings-email-header">
+          <div><h2>Общий отправитель уведомлений</h2><p>Эта проверка не отправляет письма.</p></div>
+          <button class="plain-button" id="email-status-refresh" type="button">Проверить настройки</button>
+        </div>
+        <form id="email-settings-form" class="email-settings-form" autocomplete="off">
+          <p class="email-settings-intro">Этот отправитель обслуживает компании Synapse. Получатель и очередь заявок настраиваются отдельно в каждой компании → Настройки компании.</p>
+          <label><span>Почтовый сервис отправителя</span><select id="email-provider" name="provider" required>
+            <option value="yandex">Яндекс Почта</option><option value="mailru">Mail — mail.ru, bk.ru, list.ru, inbox.ru</option><option value="gmail">Google Workspace / Gmail</option>
+          </select></label>
+          <label><span>Адрес отправителя</span><input id="email-user" name="user" type="email" maxlength="254" required autocomplete="off" placeholder="name@example.ru"></label>
+          <label class="email-settings-wide"><span>Пароль приложения для отправки почты</span><input id="email-password" name="password" type="password" maxlength="512" autocomplete="new-password" aria-describedby="email-password-help">
+            <small id="email-password-help">Введите отдельный пароль приложения из настроек почты. Оставьте поле пустым, чтобы сохранить уже подключённый пароль. При смене отправителя введите новый.</small>
+            <small>Для Google включите двухэтапную аутентификацию и создайте пароль приложения. Введите его без пробелов; обычный пароль Google не подходит.</small>
+            <small>Инструкции: <a href="https://help.mail.ru/mail/faq/password/external/" target="_blank" rel="noopener noreferrer">Mail</a> · <a href="https://www.yandex.ru/support/yandex-360/customers/mail/ru/mail-clients/others" target="_blank" rel="noopener noreferrer">Яндекс Почта</a> · <a href="https://support.google.com/accounts/answer/185833?hl=ru" target="_blank" rel="noopener noreferrer">Google Workspace / Gmail</a>.</small>
+          </label>
+          <p class="email-settings-wide email-status-note">Изменение отправителя применяется ко всем компаниям, использующим общую отправку. Получатели компаний при этом не меняются.</p>
+          <div class="settings-actions email-settings-wide">
+            <button class="plain-button" id="email-settings-save" type="submit">Сохранить настройки почты</button>
+            <button class="plain-button" id="email-settings-check" type="button">Проверить подключение</button>
+          </div>
+          <p class="email-settings-wide email-status-note">Проверка подключения использует сохранённые настройки и не отправляет письма.</p>
+          <p id="email-settings-status" class="email-settings-wide" role="status" aria-live="polite"></p>
+        </form>
+        <div id="email-status-result" role="status" aria-live="polite"></div>
+      </div>
+      <div class="card settings-hugh" id="settings-hugh" hidden>
+        <div><h2>Хью</h2><p>Выберите источник для каждой роли. Настройки хранятся на сервере.</p></div>
+        <form id="hugh-settings-form">
+          <label><span>Владелец</span><select name="owner"></select></label>
+          <label><span>Клиент</span><select name="client"></select></label>
+          <label><span>Посетитель сайта</span><select name="visitor"></select></label>
+          <div class="settings-actions"><button class="plain-button" type="submit">Сохранить</button>
+            <p id="hugh-settings-status" role="status"></p></div>
+        </form>
+      </div>
+    </section>
+    <section class="view-panel" id="account-view" data-view="account" hidden>
+      <div class="content-header"><h1>Аккаунт</h1></div><div class="card">
+        <dl class="account-details"><div><dt>Имя</dt><dd id="account-detail-name"></dd></div>
+          <div><dt>Роль</dt><dd id="account-detail-role"></dd></div></dl>
+        <p class="development">В разработке</p>
+        <p><button class="logout" id="account-logout" type="button">Выйти</button></p>
+      </div>
+    </section>
+    <section class="view-panel" id="company-team-view" data-view="company-team" hidden></section>
+    <section class="view-panel" id="accounts-view" data-view="accounts" hidden>
+      <div class="content-header"><h1>Настройка аккаунтов</h1></div>
+      <div class="card"><h2>Создать учётную запись</h2><form id="account-create" class="field-stack">
+        <input name="login" placeholder="login" required pattern="[a-z0-9_-]{1,64}">
+        <input name="displayName" placeholder="Имя" required maxlength="120">
+        <input name="password" type="password" autocomplete="new-password" placeholder="Пароль" required minlength="12">
+        <input name="confirm" type="password" autocomplete="new-password" placeholder="Повторите пароль" required>
+        <label>Набор доступа <select id="account-access-preset"><option value="custom">Выбрать вручную</option></select></label>
+        <fieldset id="account-access-fields" disabled>
+          <legend>Доступ к проектам</legend>
+          <div id="account-create-companies" class="account-access-list">Загрузка проектов…</div>
+          <p>Выбранные права действуют только в отмеченных проектах.</p>
+          <div id="account-create-permissions" class="account-access-list"></div>
+        </fieldset>
+        <p id="account-access-status" role="status">Список доступа загружается…</p>
+        <button id="account-access-retry" type="button" hidden>Повторить загрузку доступа</button>
+        <button id="account-create-submit" type="submit" disabled>Создать</button><p id="account-create-result" role="status"></p>
+      </form></div><div id="accounts-content" class="account-grid" aria-live="polite"></div>
+    </section>
+    <section class="view-panel" id="access-denied-view" data-view="access-denied" hidden>
+      <div class="content-header"><h1>Доступ ограничен</h1></div>
+      <p class="notice" role="alert">У вас нет доступа к этому разделу</p>
+    </section>
+    <section class="view-panel" id="trademarks-view" data-view="trademarks" hidden>
+      <div class="content-header">
+        <div class="trademarks-heading"><h1>Помощь в регистрации знаков</h1>
+          <span class="trademarks-badge">В разработке</span></div>
+      </div>
+      <div class="card">
+        <div data-trademarks-preview>
+          <div class="trademarks-toolbar"><button class="plain-button" type="button"
+            data-trademarks-edit>Редактировать</button></div>
+          <article class="trademarks-document" data-trademarks-document aria-live="polite">Загрузка…</article>
+        </div>
+        <form class="trademarks-form" data-trademarks-form hidden>
+          <label for="trademarks-markdown" class="muted">Текст в формате Markdown</label>
+          <textarea id="trademarks-markdown" data-trademarks-textarea spellcheck="true"></textarea>
+          <div class="trademarks-actions">
+            <button class="plain-button" type="submit">Сохранить</button>
+            <button type="button" data-trademarks-cancel>Отмена</button>
+            <p class="trademarks-status" data-trademarks-status role="status"></p>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+<dialog id="site-create-dialog"><form id="site-create-form" class="field-stack">
+  <h2>Клонировать сайт</h2>
+  <label>Исходный сайт<select name="sourceSiteId" required></select></label>
+  <label>Название копии<input name="name" required maxlength="120" placeholder="Название черновика"></label>
+  <label>Проект<select name="companyCode" required disabled></select></label>
+  <p class="site-clone-note">Копия получит адрес Synapse и появится в черновиках этого проекта.</p>
+  <div class="site-actions"><button type="button" data-close-dialog>Отмена</button>
+  <button type="submit">Клонировать</button></div><p role="alert"></p></form></dialog>
+<dialog id="task-create-dialog">
+  <form id="task-create-form" class="crm-form">
+    <h2 class="wide">Добавить задачу</h2>
+    <label class="wide">Название *<input name="title" required maxlength="300"></label>
+    <label class="wide">Описание<textarea name="description"></textarea></label>
+    <label>Проект<select name="companyCode" data-task-company></select></label>
+    <label>Исполнитель<select name="assigneeRole" data-task-role></select></label>
+    <label>Имя исполнителя<input name="assigneeName" maxlength="200"></label>
+    <label>Приоритет<select name="priority" data-task-priority></select></label>
+    <label>Срок<input name="dueDate" type="date"></label>
+    <label>Статус<select name="status" data-task-status></select></label>
+    <div class="crm-actions wide">
+      <button type="button" data-task-create-close>Отмена</button>
+      <button class="plain-button" type="submit">Создать</button>
+    </div>
+    <p class="crm-error wide" role="alert" hidden></p>
+  </form>
+</dialog>
+<script>
+  window.SB_CABINET_ASSET_VERSION = "20261104-waiting-vlad-43-r2";
+  window.SbCabinet = window.SbCabinet || {};
+  window.SbCabinet.views = window.SbCabinet.views || {};
+  window.SbCabinet.registerView ||= (name, definition) => {
+    window.SbCabinet.views[name] = definition;
+  };
+  // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
+  // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
+  // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
+  const cabinetAssets = ["platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "project-forms", "analytics",
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
+  document.write(cabinetStyles.map((asset) =>
+    `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
+  ).join(""));
+  document.write(cabinetAssets.map((asset) =>
+    `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
+  ).join(""));
+  // №98, контракт А (specs/098-content-shell): реестр модулей и экраны раздела «Контент».
+  // Новые модули добавляются только в эти два списка; module-registry всегда первым.
+  const shellAssets = ["module-registry", "content-settings"];
+  const shellStyles = ["shell", "content-settings"];
+  document.write(shellStyles.map((asset) =>
+    `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
+  ).join("") + shellAssets.map((asset) =>
+    `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
+  ).join(""));
+</script>
+<script>
+(() => {
+  "use strict";
+  const SbCabinet = window.SbCabinet = window.SbCabinet || {};
+  const registeredViews = SbCabinet.views = SbCabinet.views || {};
+  const REQUEST_TIMEOUT_MS = 15000;
+  const LONG_REQUEST_TIMEOUT_MS = 240000;
+  const LONG_REQUEST_PATHS = Object.freeze([
+    "/content/media-mentor-suggest",
+    "/content/media-mentor-analyze",
+    "/content/media-mentor-review",
+    "/content/actor-workspace/messages",
+    "/content/actor-workspace/retry"
+  ]);
+  const isAbortLikeError = (error) => error?.name === "AbortError" || error?.name === "TimeoutError";
+  const requestTimeoutMs = (url, options = {}) => {
+    if (String(options.method || "GET").toUpperCase() !== "POST") return REQUEST_TIMEOUT_MS;
+    let parsed;
+    try {
+      parsed = new URL(url, window.location.href);
+    } catch {
+      return REQUEST_TIMEOUT_MS;
+    }
+    if (parsed.origin !== window.location.origin) return REQUEST_TIMEOUT_MS;
+    return LONG_REQUEST_PATHS.includes(parsed.pathname) ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  };
+  const requestDeadline = (url, options = {}) => {
+    const timeoutMs = requestTimeoutMs(url, options);
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const external = options.signal;
+    const signal = external ? AbortSignal.any([external, timeout]) : timeout;
+    const rethrow = (error) => {
+      if (external?.aborted && signal.reason === external.reason) throw external.reason;
+      if (timeout.aborted || error?.name === "TimeoutError") {
+        throw new Error(`Время ожидания истекло (${Math.round(timeoutMs / 1000)} секунд)`);
+      }
+      throw error;
+    };
+    const json = async (response) => {
+      try {
+        return await response.json();
+      } catch (error) {
+        if (isAbortLikeError(error) || timeout.aborted || external?.aborted) rethrow(error);
+        return {};
+      }
+    };
+    return { signal, rethrow, json };
+  };
+  const responseError = (response, body) => {
+    const error = new Error(response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
+    error.status = response.status;
+    // CRM кладёт код отказа в details.code; верхний code (сервис контента) имеет приоритет.
+    const validCode = (value) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value);
+    if (validCode(body?.code)) error.code = body.code;
+    else if (validCode(body?.details?.code)) error.code = body.details.code;
+    return error;
+  };
+  const apiJson = async (url, options = {}) => {
+    const deadline = requestDeadline(url, options);
+    let response;
+    try {
+      response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
+      signal: deadline.signal,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+    } catch (error) {
+      deadline.rethrow(error);
+    }
+    const body = await deadline.json(response);
+    if (!response.ok) throw responseError(response, body);
+    return body;
+  };
+
+  const VIEW_TITLES = Object.freeze({
+    home: "Главная",
+    hugh: "Хью",
+    "project-forms": "Формы проектов",
+    tasks: "Задачи",
+    crm: "Заявки",
+    deals: "Сделки",
+    catalog: "Модули и пакеты",
+    finance: "Финансы",
+    clients: "База клиентов",
+    "crm-contacts": "Клиенты и контакты",
+    "crm-companies": "Компании",
+    "crm-legal": "Юрлица",
+    chat: "Чат",
+    "analytics-through": "Сквозная аналитика",
+    "ad-platforms": "Рекламные площадки",
+    "platform-demand": "Потенциал 2ГИС",
+    "social-stats": "Соцсети",
+    hypotheses: "Доска гипотез",
+    competitors: "Конкуренты",
+    calltracking: "Колтрекинг",
+    sites: "Сайты",
+    autoposting: "Контент-план",
+    "media-mentor": "Предложения плана",
+    "content-factory-settings": "Настройки модуля",
+    "content-factory-stats": "Статистика контента",
+    "actor-onboarding": "Моя анкета",
+    "actor-workspace": "Моё рабочее место",
+    "media-mentor-rollout": "Медиа-наставник",
+    "telegram-sources": "Исходники",
+    "company-information": "Актуальность",
+    "vk-community": "ВКонтакте",
+    "reviews": "Отзывы",
+    "content-factory": "Контент завод",
+    settings: "Настройки компании",
+    "site-orders": "Заявки с сайта",
+    "system-settings": "Настройки системы",
+    campaigns: "Рассылки",
+    account: "Аккаунт",
+    accounts: "Настройка аккаунтов",
+    "company-team": "Моя команда",
+    "access-denied": "Доступ ограничен",
+    trademarks: "Помощь в регистрации знаков",
+    "content-plan": "Контент-план",
+    "content-shooting": "Съёмка",
+    "content-materials": "Материалы",
+    "content-connections": "Подключения",
+    "content-stats": "Статистика",
+    chats: "Чаты",
+    "settings-content": "Настройки контента"
+  });
+  const CRM_API = "/content/crm";
+  const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
+  const byId = (id) => document.getElementById(id);
+  const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"
+  })[character]);
+
+  let identity = null;
+  let allowedProjects = [];
+  let selectedProjectId = null;
+  let currentView = "home";
+  let drawerOpen = false;
+
+  const allowedProjectsFor = (profile) => {
+    return Array.isArray(profile.companies)
+      ? profile.companies.map((company) => ({ id: company.id, name: company.name })) : [];
+  };
+
+  const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
+  const readSelectedProject = () => {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(projectStorageKey());
+    } catch (error) {
+      saved = null;
+    }
+    return allowedProjects.some((project) => project.id === saved) ? saved : allowedProjects[0]?.id || null;
+  };
+  const saveSelectedProject = () => {
+    if (!selectedProjectId) return;
+    try {
+      localStorage.setItem(projectStorageKey(), selectedProjectId);
+    } catch (error) {
+      // The selected project remains available in memory for this session.
+    }
+  };
+  const selectedProject = () => allowedProjects.find((project) => project.id === selectedProjectId) || null;
+  const scopeParams = () => {
+    const project = selectedProject();
+    if (!project || typeof project.id !== "string" || !project.id.trim()) {
+      throw new Error("Не удалось определить выбранный проект. Обновите страницу или выберите проект снова.");
+    }
+    return { companyCode: project.id };
+  };
+  const projectContext = () => selectedProject()?.name || "Проект не определён";
+  const SYSTEM_VIEWS = new Set(['system-settings','accounts','trademarks']);
+  const renderScopeBanner = () => {
+    const el=byId('workspace-scope');
+    el.dataset.scope=SYSTEM_VIEWS.has(currentView)?'system':currentView==='account'?'personal':'company';
+    const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
+    const caption=ownerBoard?'Все проекты · Synapse Задачи':currentView==='trademarks'?'Общая справочная инструкция Synapse'
+      : SYSTEM_VIEWS.has(currentView)?'Управление всей системой · все компании'
+      : currentView==='account'?'Личный аккаунт · '+(identity?.displayName||identity?.login||'')
+      : 'Компания: '+projectContext();
+    el.querySelector('strong').textContent=caption;
+    el.querySelector('button').hidden=ownerBoard||SYSTEM_VIEWS.has(currentView)||currentView==='account';
+    document.title=(factoryViews.includes(currentView)?'Контент завод':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
+    if (ownerBoard) document.title = 'Synapse Задачи';
+  };
+  const renderProjectContexts = () => {
+    byId("analytics-project-context").textContent = `Проект: ${projectContext()}`;
+    byId("crm-project-context").textContent = `Проект: ${projectContext()}`;
+    byId("tasks-project-context").textContent = `Проект: ${projectContext()}`;
+  };
+  const setProjectText = (element, project) => {
+    const isSynapse = project?.id === "synapse-business";
+    const files = new Map([
+      ["taisabai", "brand/project-taisabai.webp"],
+      ["novyi-etap", "brand/project-novyi-etap.webp"],
+      ["alvi", "brand/project-alvi.webp"],
+      ["avokado", "brand/project-avokado.webp"],
+      ["palitra-love", "brand/project-palitra.svg"],
+    ]);
+    const file = files.get(project?.id);
+    const initial = typeof project?.name === "string" ? project.name.trim().charAt(0) || "—" : "—";
+    element.classList.toggle("sb-project-logo", isSynapse || !!file);
+    if (isSynapse) {
+      element.innerHTML = '<span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span>';
+    } else if (file) {
+      const orb = document.createElement("span");
+      orb.className = "sb-orb sb-project-art sb-project-art--" + project.id;
+      orb.setAttribute("aria-hidden", "true");
+      const img = document.createElement("img");
+      img.className = "sb-project-art__image";
+      img.alt = "";
+      img.width = 40;
+      img.height = 40;
+      img.decoding = "async";
+      img.draggable = false;
+      img.addEventListener("error", () => {
+        // A late error from a previous company must never replace the current mark.
+        if (orb.parentNode !== element) return;
+        element.classList.remove("sb-project-logo");
+        element.textContent = initial;
+      }, { once: true });
+      const gleam = document.createElement("i");
+      gleam.className = "sb-project-art__gleam";
+      orb.append(img, gleam);
+      element.replaceChildren(orb);
+      img.src = file;
+    } else {
+      element.textContent = initial;
+    }
+  };
+
+  const renderProjectPicker = () => {
+    const menu = byId("project-menu");
+    const project = selectedProject();
+    menu.replaceChildren();
+    allowedProjects.forEach((item) => {
+      const button = document.createElement("button");
+      const mark = document.createElement("span");
+      const name = document.createElement("span");
+      button.type = "button";
+      button.className = "project-option";
+      button.dataset.projectId = item.id;
+      button.setAttribute("role", "menuitemradio");
+      button.setAttribute("aria-checked", String(item.id === selectedProjectId));
+      mark.className = "project-mark";
+      mark.setAttribute("aria-hidden", "true");
+      setProjectText(mark, item);
+      name.textContent = item.name;
+      button.append(mark, name);
+      menu.append(button);
+    });
+    byId("project-name").textContent = project?.name || "Проекты не настроены";
+    setProjectText(byId("project-mark"), project);
+    byId("mobile-project").textContent = project?.name || "Проекты не настроены";
+    byId("project-trigger").disabled = allowedProjects.length === 0;
+    byId("no-projects").hidden = allowedProjects.length !== 0;
+    renderProjectContexts();
+    updateEditorLinks();
+    renderScopeBanner();
+  };
+
+  byId('workspace-change-company').addEventListener('click',event=>{
+    event.stopPropagation();
+    if(window.matchMedia('(max-width: 760px)').matches)setDrawer(true);
+    else if(document.body.classList.contains('menu-collapsed'))document.querySelector('[data-menu-fold]')?.click();
+    byId('sidebar').scrollTop=0;
+    openProjectMenu();
+  });
+  const closeProjectMenu = (restoreFocus = false) => {
+    const trigger = byId("project-trigger");
+    byId("project-menu").hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (restoreFocus) trigger.focus();
+  };
+  const openProjectMenu = () => {
+    if (!allowedProjects.length) return;
+    byId("project-menu").hidden = false;
+    byId("project-trigger").setAttribute("aria-expanded", "true");
+    const selected = byId("project-menu").querySelector('[aria-checked="true"]');
+    (selected || byId("project-menu").querySelector("button"))?.focus();
+  };
+  const toggleProjectMenu = () => {
+    if (byId("project-menu").hidden) openProjectMenu();
+    else closeProjectMenu(true);
+  };
+  const chooseProject = (projectId) => {
+    if (!allowedProjects.some((project) => project.id === projectId)) return;
+    if (projectId === selectedProjectId) return;
+    document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+    selectedProjectId = projectId;
+    saveSelectedProject();
+    renderProjectPicker();
+    closeProjectMenu(true);
+    if(window.matchMedia("(max-width: 760px)").matches)setDrawer(false);
+    const context = cabinetContext();
+    // Entity IDs and unfinished forms belong to the previous company.
+    history.replaceState(null, '', '#'+(factoryRoutes[currentView] || routeOf(currentView)));
+    const view=registeredViews[currentView];
+    if(view?.onProjectChange) view.onProjectChange(context);
+    else view?.render(document.querySelector(`[data-view="${currentView}"]`),context);
+    SbCabinet.renderModuleGuide?.(document.querySelector(`[data-view="${currentView}"]`),currentView,context);
+    if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
+    window.SynapseModules?.chat.companyChanged();
+  };
+
+  const editorSupported = (kind) =>
+    (EDITOR_PROJECTS.includes(selectedProjectId) || (kind === "price" && selectedProjectId === "palitra-love")) &&
+    (identity?.role === "owner" || identity?.permissions.includes(kind === "price" ? "price.edit" : "site_editor.edit"));
+  const legacyEditorUrl = (kind) => kind === "price" && selectedProjectId === "palitra-love"
+    ? "/price-editor-palitra.html" : `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
+  // Каноническим основным сайтом компании считается её активный опубликованный сайт с
+  // доступным редактором. Раньше общая кнопка строила адрес из кода компании, из-за чего
+  // у Авокадо она вела на черновик прошлой версии, а карточка «Чистовые» — на основной сайт.
+  // Прайс сюда не входит: у Авокадо он общий и остаётся на site=avokado.
+  const canonicalSiteEditors = new Map();
+  const canonicalSiteRequests = new Map();
+  // Недоступный каталог держим отдельно от «сайта нет»: тексты и повторная попытка разные.
+  const canonicalSiteFailures = new Set();
+  const canonicalSiteEditor = (sites) => {
+    // Сервер отдаёт список, уже отсортированный по названию: выбор одного и того же
+    // сайта при равных условиях не зависит от порядка ответа.
+    const site = (Array.isArray(sites) ? sites : []).find((item) =>
+      item && item.isActive && item.publicationStatus === "published" &&
+      item.capabilities?.editSite && typeof item.editorUrls?.site === "string" && item.editorUrls.site);
+    return site ? site.editorUrls.site : null;
+  };
+  const loadCanonicalSiteEditor = (code) => {
+    if (canonicalSiteEditors.has(code)) return Promise.resolve(canonicalSiteEditors.get(code));
+    if (canonicalSiteRequests.has(code)) return canonicalSiteRequests.get(code);
+    // Сбой сохраняем отдельно от пустого каталога; повтор разрешается явным кликом.
+    // До получения основного сайта ссылка ведёт в каталог, а не в старый черновик.
+    const request = apiJson(`/content/sites?companyCode=${encodeURIComponent(code)}&state=published`)
+      .then((data) => {
+        const url = canonicalSiteEditor(data?.sites);
+        canonicalSiteEditors.set(code, url);
+        canonicalSiteFailures.delete(code);
+        return url;
+      })
+      .catch(() => { canonicalSiteFailures.add(code); return null; })
+      .finally(() => canonicalSiteRequests.delete(code));
+    canonicalSiteRequests.set(code, request);
+    return request;
+  };
+  const editorUrl = (kind) => kind === "site"
+    ? (canonicalSiteEditors.get(selectedProjectId) || legacyEditorUrl("site"))
+    : legacyEditorUrl(kind);
+  // Состояние кнопки сайта. Прежний адрес компании здесь больше не используется: пока
+  // основной сайт неизвестен, открывать «какой-нибудь» редактор нельзя — именно так
+  // и получалось попадание в черновик прошлой версии Авокадо.
+  //   ready   — основной сайт известен, ведём прямо в него;
+  //   loading — каталог ещё не ответил, клик ждёт и ничего не открывает;
+  //   missing — ответ получен, подходящего сайта нет: ведём в раздел «Сайты».
+  const siteEditorState = () => {
+    const code = selectedProjectId;
+    if (!code) return "missing";
+    if (canonicalSiteEditors.has(code)) return canonicalSiteEditors.get(code) ? "ready" : "missing";
+    return canonicalSiteFailures.has(code) ? "unavailable" : "loading";
+  };
+  // Обе неопределённости ведут в каталог сайтов, а не в прежний черновик компании.
+  const siteEditorFallsBackToCatalog = (state) => state === "missing" || state === "unavailable";
+  // Сбой каталога сам себя не повторяет. Иначе ожидание на #site-editor превращалось в
+  // бесконечную очередь запросов: неудача не попадает в canonicalSiteEditors, поэтому
+  // следующая же проверка снова считала состояние «ещё грузится». Повтор делает только
+  // сам пользователь — явным кликом по кнопке.
+  const ensureCanonicalSiteEditor = (afterLoad, { retry = false } = {}) => {
+    const code = selectedProjectId;
+    if (!code || canonicalSiteEditors.has(code) || typeof apiJson !== "function") return false;
+    if (canonicalSiteFailures.has(code)) {
+      if (!retry) return false;
+      canonicalSiteFailures.delete(code);
+    }
+    loadCanonicalSiteEditor(code).then(() => { if (selectedProjectId === code) afterLoad(); });
+    return true;
+  };
+  const EDITOR_NOTICES = Object.freeze({
+    denied: "Редактор недоступен для этого проекта или у вашей учётной записи нет права редактирования",
+    loading: "Определяем основной сайт компании — повторите через секунду",
+    missing: "У этой компании нет опубликованного сайта. Откройте раздел «Сайты» и выберите нужный",
+    unavailable: "Не удалось получить список сайтов компании. Откройте раздел «Сайты»"
+  });
+  const showEditorNotice = (reason = "denied") => {
+    const notice = byId("editor-link-notice");
+    notice.textContent = EDITOR_NOTICES[reason] || EDITOR_NOTICES.denied;
+    notice.hidden = false;
+  };
+  const applyEditorLinks = () => {
+    for (const kind of ["site", "price"]) {
+      const supported = editorSupported(kind);
+      const link = byId(`${kind}-editor-link`);
+      // Прайс не зависит от каталога сайтов и не блокируется вместе с ним:
+      // у Авокадо он общий и остаётся на прежнем адресе.
+      const state = kind === "site" && supported ? siteEditorState() : supported ? "ready" : "denied";
+      link.dataset.editorState = state;
+      link.href = state === "ready" ? editorUrl(kind)
+        : siteEditorFallsBackToCatalog(state) ? "#sites"
+        : `#${kind === "site" ? "site-editor" : "price"}`;
+      link.setAttribute("aria-disabled", String(!supported));
+      link.setAttribute("aria-busy", String(state === "loading"));
+      // Новая вкладка открывается только для известной цели: иначе по средней кнопке
+      // мыши уехал бы прежний адрес, минуя проверку состояния.
+      if (state === "ready") {
+        link.target = "_blank";
+        link.rel = "noopener";
+      } else {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+      }
+    }
+    byId("editor-link-notice").hidden = true;
+  };
+  // Загрузку каталога запускает только updateEditorLinks: обновление адресов после ответа
+  // идёт через applyEditorLinks, поэтому постоянная ошибка сети не уходит в бесконечный повтор.
+  const updateEditorLinks = () => {
+    applyEditorLinks();
+    if (editorSupported("site")) ensureCanonicalSiteEditor(applyEditorLinks);
+  };
+  const redirectEditorHash = () => {
+    const kind = location.hash === "#site-editor" ? "site" : location.hash === "#price" ? "price" : null;
+    if (!kind) return false;
+    if (editorSupported(kind)) {
+      if (kind !== "site") {
+        location.replace(editorUrl(kind));
+        return true;
+      }
+      // Переход по #site-editor ждёт каталог сайтов: иначе первый же заход после входа
+      // успевал уйти на прежний адрес раньше, чем становится известен основной сайт.
+      const code = selectedProjectId;
+      if (ensureCanonicalSiteEditor(() => {
+        // Ответ, пришедший после ухода со страницы редактора или после смены компании,
+        // цель уже не меняет: увозить пользователя из того места, где он сейчас, нельзя.
+        if (location.hash !== "#site-editor" || selectedProjectId !== code) return;
+        redirectEditorHash();
+      })) return true;
+      if (siteEditorState() === "ready") {
+        location.replace(editorUrl("site"));
+        return true;
+      }
+      // Каталог ответил пусто или не ответил вовсе: показываем причину и открываем раздел
+      // «Сайты» по-настоящему. Подменять один только адрес в строке нельзя — пользователь
+      // остался бы на пустом месте, а прежняя версия сайта по-прежнему под запретом.
+      showEditorNotice(siteEditorState());
+      navigate("sites");
+      return false;
+    }
+    showEditorNotice();
+    history.replaceState(null, "", `#${defaultView()}`);
+    return false;
+  };
+
+  const hasPermission = (permission) => identity?.role === "owner" ||
+    identity?.permissions.includes(permission);
+  const permittedView = (value) => {
+    if (value === "project-forms") return identity?.role === "owner";
+    if (value === "telegram-sources") return !!selectedProject() && hasPermission("autoposting.view");
+    if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
+    if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
+    if (["content-plan", "content-shooting", "content-materials", "content-connections", "content-stats"].includes(value)) {
+      return !!selectedProject() && (hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
+    }
+    if (value === "chats") return allowedProjects.length > 0;
+    if (value === "settings-content") return !!selectedProject() && (hasPermission("settings.view") || hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
+    // Медиа-наставник переиспользует право раздела публикаций: новых прав не заводим.
+    if (["media-mentor", "media-mentor-rollout", "content-factory-settings", "content-factory-stats"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
+    if (value === "actor-onboarding") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self") || identity?.permissions?.includes("actor-onboarding.manage");
+    if (value === "actor-workspace") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self");
+    if (value === "campaigns") return identity?.role === "owner";
+    if (!identity) return true;
+    // The project chat is authorised by company scope and room membership on the server.
+    // Showing the link to a signed-in company user must not require the CRM client chat right.
+    if (value === "hugh") return allowedProjects.length > 0;
+    if (value === "trademarks") return identity.role === "owner";
+    if (value === "company-team") return hasPermission("team.manage");
+    if (value === "accounts") return hasPermission("account.view");
+    if (value === "settings") return hasPermission("settings.view");
+    if (["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"].includes(value)) {
+      return identity.permissions.includes("analytics.view");
+    }
+    if (["reviews", "crm", "deals", "clients"].includes(value) || value.startsWith("crm-")) {
+      return hasPermission("crm.view");
+    }
+    if (value === "content-factory") {
+      return identity.role === "owner" || identity.permissions.includes("content-factory.view") || identity.permissions.includes("autoposting.view");
+    }
+    return true;
+  };
+  const defaultView = () => "home";
+  /* Экраны, которые монтирует реестр модулей (контракт А, specs/098-content-shell).
+     legacy — прежний рабочий экран, пока модуль не зарегистрирован; иначе заглушка «Скоро». */
+  const MODULE_ROUTES = Object.freeze({
+    "content-plan": {route: "content/plan", stub: {text: "Опросник и готовый план с согласованием появятся здесь.",
+      links: [{href: "#content-factory/plan/proposals", label: "Предложения плана"}, {href: "#content-factory/plan", label: "Постинг"}]}},
+    "content-shooting": {route: "content/shooting", stub: {text: "Рилсы для съёмки по порядку, суфлёр и загрузка материалов появятся здесь.",
+      links: [{href: "#content-factory/sources", label: "Исходники"}]}},
+    "content-materials": {route: "content/materials", stub: {text: "Смонтированные рилсы с предпросмотром по площадкам появятся здесь.",
+      links: [{href: "#content-factory/sources", label: "Исходники"}, {href: "#content-factory/plan", label: "Постинг"}]}},
+    "content-connections": {route: "content/connections", stub: {text: "Статус подключения каждой площадки компании появится здесь.",
+      links: [{href: "#social-stats", label: "Соцсети"}]}},
+    "content-stats": {route: "content/stats", legacy: "content-factory-stats"},
+    chats: {route: "chats", legacy: "hugh"},
+    "settings-content": {route: "settings/content", stub: {text: "Настройки контента загружаются."}}
+  });
+  const routeOf = (view) => MODULE_ROUTES[view]?.route || view;
+  let moduleRoute = {path: "", query: ""};
+  const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
+  /* Контент завод (CF1): четыре вкладки. Канонические адреса видов; прежние адреса (#autoposting,
+     #content-factory/materials, #media-mentor, #media-mentor-rollout, #telegram-sources) переводятся
+     на них с сохранением параметров карточки (?company=…&post=…&revision=…). */
+  const factoryRoutes = {autoposting: "content-factory/plan", "media-mentor": "content-factory/plan/proposals",
+    "telegram-sources": "content-factory/sources", "content-factory-stats": "content-factory/stats",
+    "media-mentor-rollout": "content-factory/progress", "content-factory-settings": "content-factory/settings"};
+  const factoryViews = ["content-factory", ...Object.keys(factoryRoutes)];
+  const factoryParts = {plan: "autoposting", materials: "autoposting", "plan/proposals": "media-mentor", sources: "telegram-sources",
+    stats: "content-factory-stats", progress: "media-mentor-rollout", settings: "content-factory-settings"};
+  const viewFromHash = () => {
+    const raw = decodeURIComponent(location.hash.slice(1));
+    const pathPart = raw.split("?")[0], query = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+    let value = pathPart.split("/")[0];
+    moduleRoute = {path: "", query};
+    const moduleView = Object.keys(MODULE_ROUTES).find(view => pathPart === MODULE_ROUTES[view].route || pathPart.startsWith(MODULE_ROUTES[view].route + "/"));
+    if (moduleView) {
+      value = moduleView;
+      moduleRoute = {path: pathPart.slice(MODULE_ROUTES[moduleView].route.length + 1), query};
+    }
+    if (pathPart === "content/posting") value = "autoposting";
+    if (value === "content-factory") {
+      const part = pathPart.slice("content-factory/".length);
+      if (Object.hasOwn(factoryParts, part)) value = factoryParts[part];
+      else if (!part && permittedView("autoposting")) value = "autoposting";
+    }
+    if (Object.hasOwn(VIEW_TITLES, value) && !permittedView(value)) return "access-denied";
+    if (factoryRoutes[value] && pathPart !== factoryRoutes[value]) {
+      history.replaceState(null, "", "#" + factoryRoutes[value] + query);
+    }
+    return validView(value) ? value : defaultView();
+  };
+  const setCategoryForView = (viewName) => {
+    const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"];
+    const crmViews = ["crm", "deals", "clients", "chat"];
+    const contentViews = [...Object.keys(MODULE_ROUTES).filter(view => view.startsWith("content-")), ...factoryViews, "media-mentor"];
+    const categoryId = contentViews.includes(viewName) ? "content-menu" : ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "content-factory-stats", "content-factory-settings", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
+      ["settings", "site-orders", "system-settings", "accounts", "account", "company-team", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
+      viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
+        ? "crm-menu" : null;
+    if (!categoryId) return;
+    const button = document.querySelector(`[aria-controls="${categoryId}"]`);
+    const menu = byId(categoryId);
+    button.setAttribute("aria-expanded", "true");
+    menu.hidden = false;
+  };
+  // №98: порядок меню «Главная → Контент → Задачи → Чаты → Настройки»; «Хью» становится «Чатами».
+  // Делается здесь, чтобы не трогать соседние строки меню (точечная вставка в общий файл).
+  (() => {
+    const home = document.querySelector('.nav [data-view-link="home"]'), chats = byId("hugh-link");
+    home.after(byId("content-category"), byId("content-menu"));
+    chats.setAttribute("href", "#chats");
+    Object.assign(chats.dataset, {viewLink: "chats", viewAlso: "hugh"});
+    chats.textContent = "Чаты";
+    byId("tasks-link").after(chats);
+  })();
+  let moduleController = null;
+  // Модуль не зарегистрирован, а прежний экран есть — показываем его под тем же пунктом меню.
+  const effectiveView = (view) => {
+    const legacy = MODULE_ROUTES[view]?.legacy;
+    return legacy && !window.SynapseModules?.has(view) && permittedView(legacy) ? legacy : view;
+  };
+  const unmountModule = () => { moduleController?.unmount(); moduleController = null; };
+  const mountModule = (view, element) => {
+    unmountModule();
+    moduleController = window.SynapseModules.mount(element, view, {route: moduleRoute, stub: {title: VIEW_TITLES[view], ...(MODULE_ROUTES[view].stub || {})}});
+  };
+  Object.keys(MODULE_ROUTES).forEach(view => {
+    // Контейнеры экранов модулей создаются здесь: разметка кабинета не меняется.
+    if (!byId(`${view}-view`)) {
+      const section = document.createElement("section");
+      Object.assign(section, {className: "view-panel", id: `${view}-view`, hidden: true});
+      section.dataset.view = view;
+      byId("home-view").before(section);
+    }
+    registeredViews[view] = {
+      render(element) {
+        const definition = window.SynapseModules?.get(view);
+        if (moduleController?.id === view && moduleController.definition === definition && definition?.onRoute) {
+          try { definition.onRoute({path: moduleRoute.path, params: new URLSearchParams(moduleRoute.query)}); } catch (error) { console.error(error); }
+          return;
+        }
+        mountModule(view, element);
+      },
+      // Смена компании всегда перемонтирует модуль: прежний контекст и запросы отменяются.
+      onProjectChange() { if (currentView === view) mountModule(view, byId(`${view}-view`)); },
+      onLeave: unmountModule
+    };
+  });
+  const cabinetContext = () => ({
+    identity,
+    get selectedProjectId() { return selectedProjectId; },
+    get currentView() { return currentView; },
+    byId,
+    escapeHTML,
+    crmQuery,
+    csrfOptions,
+    scopeParams,
+    chooseProject,
+    hasPermission,
+    canView: permittedView,
+    navigate,
+    apiJson,
+    formatMoney,
+    formatROMI,
+    periodDates,
+    dateValue
+  });
+  const setView = (viewName, focusMain = false) => {
+    const routeView = validView(viewName) ? viewName : defaultView();
+    const nextView = effectiveView(routeView);
+    if (nextView !== currentView) registeredViews[currentView]?.onLeave?.();
+    currentView = nextView;
+    const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
+    document.body.classList.toggle('owner-task-board', ownerBoard);
+    document.body.classList.toggle('owner-task-navigation', identity?.role === 'owner');
+    document.querySelector('link[rel="manifest"]').href = ownerBoard ? 'board.webmanifest' : 'manifest.webmanifest';
+    const factory = factoryViews.includes(currentView);
+    byId("content-factory-header").hidden = !factory;
+    byId("content-factory-header").querySelectorAll("[data-factory-view]").forEach(link => {
+      link.hidden = !permittedView(link.dataset.factoryView);
+      const views = [link.dataset.factoryView, ...(link.dataset.factoryAlso || "").split(" ").filter(Boolean)];
+      if (views.includes(currentView)) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+    // Строка действий только на вкладке «Контент-план»; вводные живут в «Настройках модуля», не над доской.
+    const planBar = byId("content-factory-plan-bar");
+    planBar.hidden = !["autoposting", "media-mentor"].includes(currentView) || !permittedView(currentView);
+    if (planBar.hidden) byId("content-factory-compose").hidden = true;
+    else SbCabinet.contentFactory?.bindPlanBar?.(planBar, cabinetContext());
+    document.querySelectorAll("[data-view]").forEach((view) => {
+      view.hidden = view.dataset.view !== currentView;
+    });
+    document.body.dataset.cabinetView = currentView;
+    const claimed = [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(currentView));
+    const settingsView = ["settings", "settings-content"].includes(currentView);
+    byId("settings-tabs").hidden = !settingsView;
+    byId("settings-tabs").querySelectorAll("[data-settings-tab]").forEach(tab => {
+      tab.hidden = !permittedView(tab.dataset.settingsTab);
+      if (tab.dataset.settingsTab === currentView) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
+    });
+    const contentMaterials = !!window.SynapseModules?.has("content-materials");
+    byId("content-factory-plan-bar").querySelector('[data-factory-action="create"]').hidden = contentMaterials;
+    document.querySelectorAll("[data-view-link]").forEach((link) => {
+      const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
+      const also = (link.dataset.viewAlso || "").split(" ").includes(currentView) || link.dataset.viewLink === routeView;
+      if (link.dataset.viewLink === currentView || clientRoute || also || (factory && !claimed && link.dataset.viewLink === "content-factory")) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+    document.querySelectorAll("[data-client-view]").forEach((link) => {
+      if (link.dataset.clientView === currentView) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+    const clientView = currentView === "clients" || currentView.startsWith("crm-");
+    if (clientView) {
+      const target = byId(`${currentView}-view`).querySelector(".content-header");
+      target.insertAdjacentElement("afterend", byId("client-tabs"));
+    }
+    setCategoryForView(currentView);
+    const title = factory ? "Контент завод" : VIEW_TITLES[currentView];
+    byId("mobile-title").textContent = title;
+    renderScopeBanner();
+    const active = document.querySelector(`[data-view="${currentView}"]`);
+    const frame = active.querySelector("iframe[data-src]");
+    if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
+    registeredViews[currentView]?.render(active, cabinetContext());
+    SbCabinet.renderModuleGuide?.(active, currentView, cabinetContext());
+    byId("mobile-shortcuts").querySelectorAll("[data-view-link]").forEach(link => {
+      link.hidden = link.hasAttribute('data-owner-board-entry') ? identity?.role !== 'owner' : !permittedView(link.dataset.viewLink);
+    });
+    if (focusMain) { window.scrollTo({top: 0, behavior: "instant"}); byId("main-content").focus({preventScroll: true}); }
+  };
+  const navigate = (viewName) => {
+    const route = routeOf(viewName);
+    if (location.hash === `#${route}`) setView(viewFromHash(), true);
+    else location.hash = route;
+  };
+
+  const setDrawer = (open, restoreFocus = false) => {
+    drawerOpen = open;
+    byId("sidebar").inert = window.matchMedia("(max-width: 760px)").matches && !open;
+    byId("sidebar").classList.toggle("is-open", open);
+    byId("backdrop").hidden = !open;
+    byId("menu-button").setAttribute("aria-expanded", String(open));
+    byId("mobile-shortcuts").inert = open;
+    document.body.classList.toggle("drawer-open", open);
+    if (window.matchMedia("(max-width: 760px)").matches) byId("main-content").inert = open;
+    if (open) byId("sidebar").querySelector("button:not([disabled]), a[href]")?.focus();
+    else if (restoreFocus) byId("menu-button").focus();
+  };
+
+  const crmQuery = async (path, params = {}, options = {}) => {
+    const companyAtStart=selectedProjectId;
+    const scopedPath=/^\/(?:contacts|companies|legal-entities|tasks|deals|finances|leads|dashboard|summary|expenses|external-stats)(?:[/.]|$)/.test(path);
+    if(scopedPath)params={...scopeParams(),...params};
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== "" && value !== null && value !== undefined) query.set(key, value);
+    });
+    const url = `${CRM_API}${path}${query.size ? `?${query}` : ""}`;
+    if (options.open) {
+      window.open(url, "_blank", "noopener");
+      return null;
+    }
+    const deadline = requestDeadline(url, options);
+    let response;
+    try {
+      response = await fetch(url, {
+      ...options, signal: deadline.signal,
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "Content-Type": "application/json", ...(options.headers || {}) }
+      });
+    } catch (error) {
+      deadline.rethrow(error);
+    }
+    const body = response.status === 204 ? null : await deadline.json(response);
+    if(scopedPath && companyAtStart!==selectedProjectId) throw new Error("Компания изменена. Откройте раздел заново.");
+    if (!response.ok) throw responseError(response, body);
+    return body;
+  };
+  const csrfOptions = (method, body) => ({
+    method,
+    headers: { "X-CSRF-Token": identity.csrfToken },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) })
+  });
+  const dateValue = (date) => date.toISOString().slice(0, 10);
+  const periodDates = (period) => {
+    const to = new Date();
+    const from = new Date(to);
+    if (period === "today") from.setUTCHours(0, 0, 0, 0);
+    if (period === "7d") from.setUTCDate(from.getUTCDate() - 7);
+    if (period === "30d") from.setUTCDate(from.getUTCDate() - 30);
+    return { from: dateValue(from), to: dateValue(to) };
+  };
+  const formatMoney = (value) => new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 2
+  }).format(Number(value) || 0);
+  const formatROMI = (value) => value === null || value === undefined ? "нет расходов" :
+    `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)}%`;
+
+  const renderIdentity = () => {
+    const name = identity.name || identity.login;
+    const role = identity.role;
+    byId("account-name").textContent = name;
+    byId("account-role").textContent = role;
+    byId("account-avatar").textContent = name.charAt(0).toUpperCase();
+    byId("account-detail-name").textContent = name;
+    byId("account-detail-role").textContent = role;
+  };
+  const showAuthError = (message) => {
+    byId("auth-error").textContent = message;
+    byId("auth-error").hidden = false;
+  };
+  const showStartupError = (message) => {
+    byId("startup-error").textContent = message;
+    byId("startup-error").hidden = false;
+    document.querySelectorAll("[data-view]").forEach((view) => { view.hidden = true; });
+    byId("app").hidden = false;
+  };
+  const enterCabinet = (profile) => {
+    try {
+      if (!profile || typeof profile.login !== "string" || typeof profile.role !== "string") {
+        throw new Error("INVALID_IDENTITY");
+      }
+      // Только возврат в существующее приложение после успешного whoami; произвольные next запрещены.
+      const appReturn = new URLSearchParams(location.search).getAll("next");
+      if (location.origin === "https://synapse.synapsebusiness.ru" && appReturn.length === 1 &&
+          appReturn[0] === "/cabinet/palitra-orders/cabinet.html") {
+        location.replace("/cabinet/palitra-orders/cabinet.html");
+        return;
+      }
+      identity = profile;
+      identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
+      allowedProjects = allowedProjectsFor(identity);
+      selectedProjectId = readSelectedProject();
+      scopeParams();
+      byId("analytics-link").hidden = !identity.permissions.includes("analytics.view");
+      byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
+      byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");
+      byId("crm-category").hidden = false;
+      byId("finance-category").hidden = identity.role !== "owner";
+      byId("crm-menu").querySelectorAll("[data-view-link]").forEach((link) => {
+        link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
+      });
+      byId("actor-onboarding-link").hidden = !permittedView("actor-onboarding");
+      byId("actor-workspace-link").hidden = !permittedView("actor-workspace");
+      byId("company-information-link").hidden = !permittedView("company-information");
+      byId("vk-community-link").hidden = !permittedView("vk-community");
+      byId("reviews-link").hidden = !permittedView("reviews");
+      byId("autoposting-view").hidden = !permittedView("autoposting");
+      byId("content-factory-link").hidden = !permittedView("content-factory");
+      byId("content-category").hidden = !permittedView("content-plan") && !permittedView("content-factory");
+      byId("content-menu").querySelectorAll("[data-view-link]").forEach(link => { if (link.id !== "content-factory-link") link.hidden = !permittedView(link.dataset.viewLink); });
+      byId("mobile-content").hidden = byId("content-category").hidden;
+      const settingsTarget = permittedView("settings") ? "settings" : "settings-content";
+      byId("settings-link").dataset.viewLink = settingsTarget;
+      byId("settings-link").href = "#" + routeOf(settingsTarget);
+      byId("content-factory-view").hidden = !permittedView("content-factory");
+      byId("settings-link").hidden = !permittedView("settings") && !permittedView("settings-content");
+      byId("site-orders-link").hidden = !permittedView("site-orders");
+      byId("campaigns-link").hidden = !permittedView("campaigns");
+      byId("company-team-link").hidden = !hasPermission("team.manage");
+      byId("accounts-link").hidden = !hasPermission("account.view");
+      byId("hugh-link").hidden = !permittedView("hugh");
+      byId("project-forms-link").hidden = !permittedView("project-forms");
+      byId("trademarks-link").hidden = identity.role !== "owner";
+      byId("create-site").hidden = !identity.permissions.includes("sites.create");
+      const companyFilter = byId("sites-company");
+      companyFilter.replaceChildren();
+      const companyCreate = byId("site-create-form").elements.companyCode;
+      companyFilter.querySelectorAll("option:not(:first-child)").forEach((item) => item.remove());
+      companyCreate.replaceChildren();
+      identity.companies.forEach((company) => {
+        companyFilter.add(new Option(company.name, company.id));
+        companyCreate.add(new Option(company.name, company.id));
+      });
+      byId("system-settings-link").hidden = identity.role !== "owner";
+      renderIdentity();
+      renderProjectPicker();
+      if (redirectEditorHash()) return;
+      const context = cabinetContext();
+      registeredViews.home.render(byId("home-view"), context);
+      registeredViews.tasks.updateSummary(context);
+      if (identity.permissions.includes("analytics.view")) {
+        registeredViews["analytics-through"].initialize(context);
+      }
+      if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
+      setDrawer(false);
+      SbCabinet.initMenuPreferences?.({identity, setDrawer});
+      // Ключи провайдеров вводит только владелец и только в настройках системы.
+      if (identity.role === "owner") SbCabinet.initHughProviders?.({identity, byId, apiJson, escapeHTML});
+      window.SynapseModules?.attachShell({identity: () => identity, company: selectedProject, apiJson, crmQuery,
+        navigate: (route) => { location.hash = route; }, escapeHTML});
+      window.SynapseModules?.onRegister(id => {
+        // Поздняя регистрация: открытый экран модуля или его прежняя замена перерисовываются.
+        if (id === currentView || MODULE_ROUTES[id]?.legacy === currentView || id === "content-materials") setView(viewFromHash());
+      });
+      setView(viewFromHash());
+      registeredViews.sites.initialize(context);
+      if (hasPermission("account.view")) registeredViews.accounts.initialize(context);
+      byId("app").hidden = false;
+      byId("auth").hidden = true;
+    } catch (error) {
+      byId("auth").hidden = true;
+      showStartupError("Не удалось открыть кабинет. Обновите страницу или войдите снова.");
+    }
+  };
+  const logout = async () => {
+    registeredViews[currentView]?.onLeave?.();
+    try {
+      await fetch("/content/logout", { method: "POST", credentials: "same-origin" });
+    } catch (error) {
+      // The page reload still returns the user to the server-defined session state.
+    }
+    location.reload();
+  };
+
+  byId("project-trigger").addEventListener("click", toggleProjectMenu);
+  byId("project-menu").addEventListener("click", (event) => {
+    const option = event.target.closest("[data-project-id]");
+    if (option) chooseProject(option.dataset.projectId);
+  });
+  byId("project-menu").addEventListener("keydown", (event) => {
+    const options = [...byId("project-menu").querySelectorAll("[role='menuitemradio']")];
+    const index = options.indexOf(document.activeElement);
+    let next = null;
+    if (event.key === "ArrowDown") next = options[(index + 1) % options.length];
+    if (event.key === "ArrowUp") next = options[(index - 1 + options.length) % options.length];
+    if (event.key === "Home") next = options[0];
+    if (event.key === "End") next = options.at(-1);
+    if (next) {
+      event.preventDefault();
+      next.focus();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".project-picker")) closeProjectMenu();
+  });
+  document.querySelector(".nav").addEventListener("click", (event) => {
+    const category = event.target.closest(".nav-category");
+    if (category) {
+      const expanded = category.getAttribute("aria-expanded") === "true";
+      category.setAttribute("aria-expanded", String(!expanded));
+      byId(category.getAttribute("aria-controls")).hidden = expanded;
+      return;
+    }
+    const editorLink = event.target.closest("[data-editor-link]");
+    if (editorLink) {
+      if (editorLink.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
+        showEditorNotice();
+        return;
+      }
+      // Пока каталог не ответил, клик ничего не открывает: прежний адрес компании — это
+      // чужой черновик, и молча уводить в него быстрый клик нельзя.
+      if (editorLink.dataset.editorState === "loading") {
+        event.preventDefault();
+        showEditorNotice("loading");
+        ensureCanonicalSiteEditor(applyEditorLinks);
+        return;
+      }
+      if (editorLink.dataset.editorLink === "site" && siteEditorFallsBackToCatalog(editorLink.dataset.editorState)) {
+        event.preventDefault();
+        showEditorNotice(editorLink.dataset.editorState);
+        // Клик — это и есть пользовательский повтор после сбоя каталога.
+        if (editorLink.dataset.editorState === "unavailable") ensureCanonicalSiteEditor(applyEditorLinks, { retry: true });
+        navigate("sites");
+        if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
+      }
+      return;
+    }
+    const link = event.target.closest("[data-view-link]");
+    if (!link) return;
+    event.preventDefault();
+    navigate(link.dataset.viewLink);
+    if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
+  });
+  byId("mobile-more").addEventListener("click", () => setDrawer(true));
+  byId("mobile-content").addEventListener("click", () => {
+    const button = byId("content-category");
+    button.setAttribute("aria-expanded", "true");
+    byId("content-menu").hidden = false;
+    setDrawer(true);
+    button.focus();
+  });
+  byId("menu-button").addEventListener("click", () => setDrawer(!drawerOpen, drawerOpen));
+  byId("backdrop").addEventListener("click", () => setDrawer(false, true));
+  byId("sidebar").addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || !drawerOpen) return;
+    const focusable = [...byId("sidebar").querySelectorAll("button:not([disabled]):not([hidden]), a[href]")]
+      .filter((element) => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (document.querySelector('.menu-settings[open]')) return;
+    if (!byId("platform-panel").hidden) {
+      byId("platform-panel").hidden = true;
+      byId("platform-trigger").setAttribute("aria-expanded", "false");
+      byId("platform-trigger").focus();
+    } else if (!byId("project-menu").hidden) {
+      closeProjectMenu(true);
+    } else if (drawerOpen) {
+      setDrawer(false, true);
+    }
+  });
+  window.addEventListener("hashchange", () => {
+    if (drawerOpen) setDrawer(false);
+    if (!redirectEditorHash()) setView(viewFromHash(), true);
+  });
+  window.addEventListener("resize", () => {
+    byId("sidebar").inert = window.matchMedia("(max-width: 760px)").matches && !drawerOpen;
+    if (!window.matchMedia("(max-width: 760px)").matches) {
+      byId("main-content").inert = false;
+      if (drawerOpen) setDrawer(false);
+    }
+  });
+  byId("logout").addEventListener("click", logout);
+  byId("account-logout").addEventListener("click", logout);
+  byId("auth-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch("/content/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({
+          login: byId("auth-login").value.trim().toLowerCase(),
+          password: byId("auth-pass").value
+        })
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const disabled = response.status === 403 && /отключ/i.test(body.error || "");
+        showAuthError(response.status === 401 ? "Неверный логин или пароль" : disabled
+          ? "Учётная запись отключена" : response.status === 429
+            ? "Слишком много попыток, подождите 10 минут" : "Ошибка сервера, попробуйте позже");
+        return;
+      }
+      await response.json();
+      enterCabinet(await apiJson("/content/whoami"));
+    } catch (error) {
+      showAuthError("Ошибка сервера, попробуйте позже");
+    }
+  });
+
+  (async () => {
+    try {
+      const response = await fetch("/content/whoami", { credentials: "same-origin", cache: "no-store",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      if (response.ok) {
+        enterCabinet(await response.json());
+        return;
+      }
+      if (response.status !== 401) showAuthError("Сервер входа недоступен");
+    } catch (error) {
+      showAuthError("Сервер входа недоступен");
+    }
+    byId("auth-login").focus();
+  })();
+})();
+</script>
+
+<!-- PALITRA_ACTION_CONTROLS_R3 -->
+<link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
+<script src="/content/ui/palitra-action-icons.js?v=20261021-r5" defer></script>
+</body>
+</html>

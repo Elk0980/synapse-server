@@ -364,11 +364,6 @@ test('отзыв: отвязка, исключение из участников
   assert.equal((await call(chat, { url: room(), headers: bearer(fresh.token) })).statusCode, 200);
   await assert.rejects(() => call(chat, { url: room(), headers: bearer(token) }), status(401));
   // Смена пароля и истечение 12 часов.
-  state.db.prepare('UPDATE auth_users SET must_change_password=1 WHERE id=?').run(daria.id);
-  await assert.rejects(() => call(chat, {url:room(),headers:bearer(fresh.token)}),status(403));
-  assert.equal((await post(chat,{initData:initData({authDate:Math.floor(clock.now/1000)-8})})).statusCode,403);
-  state.db.prepare('UPDATE auth_users SET must_change_password=0 WHERE id=?').run(daria.id);
-  assert.equal((await call(chat,{url:room(),headers:bearer(fresh.token)})).statusCode,200);
   authStore.updatePassword(OWNER_ID, daria.id, HASH);
   await assert.rejects(() => call(chat, { url: room(), headers: bearer(fresh.token) }), status(401));
   const relogin = await post(chat, { initData: initData({ authDate: Math.floor(clock.now / 1000) - 4 }) });

@@ -28,10 +28,10 @@ test('один пункт, старое избранное, переходы и 
  const f=page();try{
  await f.settle();const {w,d}=f;
  assert.equal(w.location.hash,'#content-factory/plan');
- assert.equal(d.querySelectorAll('#content-menu [data-view-link="content-factory"]').length,1,'№98: автопостинг — пункт «Постинг» в меню «Контент»');
+ assert.equal(d.querySelectorAll('#marketing-menu [data-view-link="content-factory"]').length,1);
  assert.equal(d.querySelector('#autoposting-link'),null);assert.equal(d.querySelector('#media-mentor-rollout-link'),null);
  assert.equal(d.querySelectorAll('.menu-favorites a').length,1);
- assert.equal(d.querySelector('.menu-favorites a').textContent,'Постинг');
+ assert.equal(d.querySelector('.menu-favorites a').textContent,'Контент завод');
  const input=d.querySelector('#autoposting-view input');input.value='Несохранённый материал';
  d.querySelector('[href="#content-factory/settings"]').click();await f.settle();
  assert.ok(f.visible('content-factory-settings-view'));assert.ok(!f.visible('autoposting-view'));
