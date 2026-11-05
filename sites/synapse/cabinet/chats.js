@@ -153,6 +153,7 @@
       const opened = nextOpen; nextOpen = null;
       const rooms = await ctx.api.get('people/team-chat/rooms');
       if (ctx.signal?.aborted) return;
+      if (!rooms.hugh) { el.replaceChildren(node('p', 'sbc-notice', 'Личный чат с Хью доступен исполнителям задач компании. Доступ выдаёт владелец.')); return; }
       const start = task => {
         el._sbc?.stop();
         el._sbc = conversation(el, ctx, { room: rooms.hugh, title: 'Хью · личный чат', hint: 'Видите только вы. Хью сведёт ваш запрос с похожими запросами коллег по проекту.',
@@ -176,7 +177,8 @@
       if (ctx.signal?.aborted) return;
       const entries = [{ room: 'common', name: 'Общий чат компании', hint: 'Видят все сотрудники компании. Хью читает и отвечает, только когда к нему обращаются: «Хью, …».' },
         ...rooms.people.map(p => ({ room: p.room, name: p.name, hint: 'Личный чат. Видите только вы двое. Хью отвечает по обращению «Хью, …», ответ видите только вы.' })),
-        { room: rooms.hugh, name: 'Хью · мой личный чат', hint: 'Видите только вы. Здесь ваши запросы и уточнения Хью.' }];
+        // Без доступа к задачам лога Хью нет (№127): сервер отдаёт hugh: null.
+        ...(rooms.hugh ? [{ room: rooms.hugh, name: 'Хью · мой личный чат', hint: 'Видите только вы. Здесь ваши запросы и уточнения Хью.' }] : [])];
       let current = null;
       const open = entry => {
         current?.stop(); shell.classList.add('sbc-chats--open');
