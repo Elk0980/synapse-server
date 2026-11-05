@@ -262,11 +262,37 @@ class AutosyncTest(unittest.TestCase):
         self.assertEqual(self.run_sync('--no-ci'), 0)
         self.assertFalse(os.path.lexists(self.live / 'sites/synapse/cabinet/link.js'))
 
+    @unittest.skipIf(os.name == 'nt', 'real symlink fixture requires Linux CI')
+    def test_symlink_on_live_path_error_logged_once(self):
+        self.put('sites/synapse/cabinet/sub/x.css', 'x1')
+        self.commit('sub')
+        outside = self.tmp / 'outside'
+        outside.mkdir()
+        os.symlink(outside, self.live / 'sites/synapse/cabinet/sub')
+        self.assertEqual(self.run_sync('--no-ci'), 1)
+        self.assertEqual(self.run_sync('--no-ci'), 1)
+        log = (self.tmp / 'log.txt').read_text()
+        self.assertEqual(log.count('ERROR RuntimeError: symlink на пути'), 1)  # без повторов каждые 2 минуты
+        self.assertFalse((outside / 'x.css').exists())
+        os.unlink(self.live / 'sites/synapse/cabinet/sub')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        log = (self.tmp / 'log.txt').read_text()
+        self.assertIn('RECOVERED', log)
+        self.assertEqual((self.live / 'sites/synapse/cabinet/sub/x.css').read_text(), 'x1')
+        self.assertNotIn('error', json.loads((self.tmp / 'st' / 'state.json').read_text()))
+
+    def test_unit_allows_pkey_for_node(self):
+        unit = (HERE / 'synapse-autosync.service').read_text(encoding='utf-8')
+        self.assertIn('SystemCallFilter=@system-service', unit)
+        self.assertIn('SystemCallFilter=@pkey', unit)  # иначе V8 убивается SIGSYS на pkey_alloc
+        self.assertNotIn('MemoryDenyWriteExecute=yes', unit)  # JIT V8 не работает с W^X
+
     def test_ci_gate_waits_and_fails_closed(self):
         self.put('sites/synapse/cabinet/a.js', 'a2')
         self.commit('next')
         calls = []
-        original = autosync.ci_status
+        original, original_fast = autosync.ci_status, autosync.fast_status
+        autosync.fast_status = lambda ctx, sha: 'no:pr'
         try:
             autosync.ci_status = lambda ctx, sha: calls.append(sha) or 'pending'
             self.assertEqual(self.run_sync(), 0)
@@ -287,7 +313,103 @@ class AutosyncTest(unittest.TestCase):
             self.assertEqual(self.run_sync(), 0)
             self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a2')
         finally:
-            autosync.ci_status = original
+            autosync.ci_status, autosync.fast_status = original, original_fast
+
+    # --- быстрый путь: дерево слияния равно проверенному head PR ---
+    def git_out(self, *args):
+        return subprocess.run(['git', *args], cwd=self.src, check=True, capture_output=True, text=True).stdout.strip()
+
+    def merge_pr(self, number=7, behind=False):
+        """PR-ветка от main → merge --no-ff; refs/pull/N/head как на GitHub."""
+        sh('git', 'checkout', '-q', '-b', f'pr{number}', cwd=self.src)
+        self.put('sites/synapse/cabinet/a.js', 'a2')
+        self.commit('pr')
+        pr_head = self.git_out('rev-parse', 'HEAD')
+        sh('git', 'checkout', '-q', 'main', cwd=self.src)
+        if behind:  # main ушёл вперёд, PR не обновлён
+            self.put('sites/synapse/cabinet/other.css', 'o1')
+            self.commit('main moved')
+        sh('git', 'merge', '-q', '--no-ff', '-m', f'Merge pull request #{number}', f'pr{number}', cwd=self.src)
+        sh('git', 'update-ref', f'refs/pull/{number}/head', pr_head, cwd=self.src)
+        return self.git_out('rev-parse', 'HEAD'), pr_head
+
+    def fake_api(self, merge, pr_head, runs, number=7, merged='2026-11-05T08:00:00Z'):
+        calls = []
+
+        def api(ctx, path):
+            calls.append(path)
+            if path == f'/commits/{merge}/pulls':
+                return [{'number': number, 'merge_commit_sha': merge, 'merged_at': merged,
+                         'base': {'ref': 'main'}, 'head': {'sha': pr_head}}]
+            if path.startswith(f'/commits/{pr_head}/check-runs'):
+                return {'total_count': len(runs), 'check_runs': runs}
+            raise AssertionError(f'неожиданный запрос {path}')
+        return api, calls
+
+    def cr(self, name, conclusion, started, status='completed', id=1):
+        return {'id': id, 'name': name, 'status': status, 'conclusion': conclusion, 'started_at': started}
+
+    def test_fast_path_deploys_without_waiting_main_ci(self):
+        merge, pr_head = self.merge_pr()
+        runs = [self.cr('checks', 'success', '2026-11-05T07:50:00Z', id=1),
+                self.cr('site-path-approval', 'success', '2026-11-05T07:51:00Z', id=2),
+                # после слияния охрана закрытого PR падает — не учитывается
+                self.cr('site-path-approval', 'failure', '2026-11-05T08:00:01Z', id=3)]
+        api, calls = self.fake_api(merge, pr_head, runs)
+        with patch.object(autosync, 'api_json', api), \
+                patch.object(autosync, 'ci_status', lambda ctx, sha: 'pending'):
+            self.assertEqual(self.run_sync(), 0)
+            self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a2')
+            self.assertIn('CI fast-path', (self.tmp / 'log.txt').read_text())
+            self.assertEqual(self.run_sync(), 0)  # тот же HEAD — без новых запросов
+        self.assertEqual(len(calls), 2)
+
+    def test_fast_path_refuses_tree_not_tested_on_pr(self):
+        merge, pr_head = self.merge_pr(behind=True)
+        api, _ = self.fake_api(merge, pr_head, [self.cr('checks', 'success', '2026-11-05T07:50:00Z')])
+        with patch.object(autosync, 'api_json', api), \
+                patch.object(autosync, 'ci_status', lambda ctx, sha: 'pending'):
+            self.assertEqual(self.run_sync(), 0)
+        self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a1')
+        state = json.loads((self.tmp / 'st' / 'state.json').read_text())
+        self.assertEqual(state['fast']['result'], 'no:tree')
+
+    def test_fast_path_refuses_red_or_running_pr_checks(self):
+        merge, pr_head = self.merge_pr()
+        for runs, expected in (
+                ([self.cr('checks', 'failure', '2026-11-05T07:50:00Z')], 'no:fail:checks:failure'),
+                ([self.cr('checks', None, '2026-11-05T07:50:00Z', status='in_progress')], 'pending'),
+                ([self.cr('checks', 'success', '2026-11-05T08:00:05Z')], 'no:no-runs'),
+                # последний до слияния прогон красный, хотя ранний был зелёным
+                ([self.cr('checks', 'success', '2026-11-05T07:40:00Z', id=1),
+                  self.cr('checks', 'failure', '2026-11-05T07:50:00Z', id=2)], 'no:fail:checks:failure')):
+            state_path = self.tmp / 'st' / 'state.json'
+            state = json.loads(state_path.read_text()); state.pop('fast', None); state.pop('ci', None)
+            state_path.write_text(json.dumps(state))
+            api, _ = self.fake_api(merge, pr_head, runs)
+            with patch.object(autosync, 'api_json', api), \
+                    patch.object(autosync, 'ci_status', lambda ctx, sha: 'pending'):
+                self.assertEqual(self.run_sync(), 0)
+            self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a1')
+            self.assertEqual(json.loads(state_path.read_text())['fast']['result'], expected)
+
+    def test_fast_path_refuses_moved_pr_ref_and_foreign_merge(self):
+        merge, pr_head = self.merge_pr()
+        runs = [self.cr('checks', 'success', '2026-11-05T07:50:00Z')]
+        other = self.git_out('rev-parse', 'HEAD~1')
+        api, _ = self.fake_api(merge, other, runs)  # API называет другой head, чем refs/pull/7/head
+        with patch.object(autosync, 'api_json', api), \
+                patch.object(autosync, 'ci_status', lambda ctx, sha: 'pending'):
+            self.assertEqual(self.run_sync(), 0)
+        state = json.loads((self.tmp / 'st' / 'state.json').read_text())
+        self.assertEqual(state['fast']['result'], 'no:pr-head-moved')
+        state.pop('fast'); state.pop('ci', None)
+        (self.tmp / 'st' / 'state.json').write_text(json.dumps(state))
+        with patch.object(autosync, 'api_json', lambda ctx, path: []), \
+                patch.object(autosync, 'ci_status', lambda ctx, sha: 'pending'):
+            self.assertEqual(self.run_sync(), 0)
+        self.assertEqual(json.loads((self.tmp / 'st' / 'state.json').read_text())['fast']['result'], 'no:pr')
+        self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a1')
 
 
 if __name__ == '__main__':

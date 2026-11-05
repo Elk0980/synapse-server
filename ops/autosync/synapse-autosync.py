@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Автовыпуск статики кабинета Synapse из публичного main.
 
-Один запуск (таймер — раз в 2 минуты):
+Один запуск (таймер — раз в минуту):
 1. `git fetch` публичного https-репозитория в собственный bare-клон (без токенов).
-2. Новый коммит main выкладывается, только если на GitHub все его проверки (check-runs)
-   завершены успешно. GitHub опрашивается без токена и только при новом коммите
-   (для ожидающего — не чаще раза в CI_RECHECK секунд).
+2. Новый коммит main выкладывается, только если проверки зелёные (GitHub без токена,
+   только при новом коммите; ожидающий — не чаще раза в CI_RECHECK секунд):
+   а) быстрый путь: коммит — слияние PR в main, его дерево равно дереву head PR, и все
+      проверки head PR, начатые до слияния, завершены успешно (то же дерево уже проверено);
+   б) иначе — все check-runs самого коммита main завершены успешно.
 3. Сравниваются файлы белого списка (sites/synapse/cabinet/**, sites/synapse/brand/**,
    кроме cabinet.html, shell-version.json, тестов, скрытых файлов, симлинков и подмодулей)
    между последним выложенным коммитом (база) и новым main.
@@ -36,7 +38,7 @@ DENY = re.compile(r'(^sites/synapse/cabinet\.html$|^sites/synapse/cabinet/shell-
                   r'|\.test\.(c?js|mjs)$|(^|/)\.)')
 SHELL_VERSION = 'sites/synapse/cabinet/shell-version.json'
 GOOD = {'success', 'neutral', 'skipped'}
-CI_RECHECK = 300
+CI_RECHECK = 120
 KEEP_BACKUPS = 10
 MAX_FILE = 5 * 1024 * 1024
 MAX_FILES = 200
@@ -161,12 +163,74 @@ def ci_status(ctx, sha):
     return 'ok'
 
 
+def api_json(ctx, path):
+    req = urllib.request.Request(ctx.api + path,
+                                 headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'synapse-autosync'})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)
+
+
+def fast_status(ctx, head):
+    """Быстрый путь: 'ok' | 'pending' | 'no:<причина>'.
+
+    Коммит main — слияние PR, дерево которого побайтно равно дереву head PR, значит
+    pull_request-проверки head PR проверили ровно это содержимое. Учитываются прогоны,
+    начатые до слияния (после закрытия охрана PR падает с «PR закрыт»); по каждому имени
+    берётся последний такой прогон, и он должен быть завершён успешно.
+    """
+    pulls = api_json(ctx, f'/commits/{head}/pulls')
+    pr = next((p for p in pulls if isinstance(p, dict) and p.get('merge_commit_sha') == head
+               and p.get('merged_at') and (p.get('base') or {}).get('ref') == BRANCH), None)
+    if pr is None:
+        return 'no:pr'
+    number, pr_head, merged = int(pr['number']), (pr.get('head') or {}).get('sha', ''), pr['merged_at']
+    if not re.fullmatch(r'[0-9a-f]{40}', pr_head):
+        return 'no:pr-head'
+    ctx.git('fetch', '--quiet', 'origin', f'+refs/pull/{number}/head:refs/autosync/pr')
+    if ctx.git('rev-parse', 'refs/autosync/pr') != pr_head:
+        return 'no:pr-head-moved'
+    if ctx.git('rev-parse', f'{head}^{{tree}}') != ctx.git('rev-parse', f'{pr_head}^{{tree}}'):
+        return 'no:tree'
+    data = api_json(ctx, f'/commits/{pr_head}/check-runs?per_page=100')
+    runs = data.get('check_runs', [])
+    if data.get('total_count', 0) > len(runs):
+        return 'no:too-many-runs'
+    latest = {}
+    for run in runs:
+        started = run.get('started_at') or ''
+        if not started or started > merged:
+            continue
+        key = (started, run.get('id') or 0)
+        name = run.get('name')
+        if name not in latest or key >= latest[name][0]:
+            latest[name] = (key, run)
+    if not latest:
+        return 'no:no-runs'
+    if any(run.get('status') != 'completed' for _, run in latest.values()):
+        return 'pending'
+    for name, (_, run) in sorted(latest.items()):
+        if run.get('conclusion') not in GOOD:
+            return f'no:fail:{name}:{run.get("conclusion")}'
+    return 'ok'
+
+
 def ci_gate(ctx, state, head):
     if not ctx.check_ci:
         return True
     ci = state.get('ci') or {}
     if ci.get('sha') == head and ci.get('result') == 'ok':
         return True
+    fast = state.get('fast') or {}
+    if fast.get('sha') == head and fast.get('result') == 'ok':
+        return True
+    if fast.get('sha') != head or (fast.get('result') == 'pending'
+                                   and time.time() - fast.get('checked', 0) >= CI_RECHECK):
+        result = fast_status(ctx, head)
+        state['fast'] = {'sha': head, 'result': result, 'checked': int(time.time())}
+        save_state(ctx, state)
+        if result == 'ok':
+            ctx.log(f'CI fast-path head={head}: дерево равно проверенному head PR')
+            return True
     if ci.get('sha') == head and (ci.get('result', '').startswith('fail')
                                   or time.time() - ci.get('checked', 0) < CI_RECHECK):
         stop(ctx, state, f'ci {ci.get("result")} head={head}')
@@ -394,10 +458,26 @@ def main(argv=None):
         except BlockingIOError:
             return 0
         try:
-            return run_once(ctx, a.init)
+            rc = run_once(ctx, a.init)
         except Exception as error:
-            ctx.log(f'ERROR {type(error).__name__}: {error}')
+            # Одинаковая ошибка (например, symlink на пути) пишется в журнал один раз.
+            message = f'ERROR {type(error).__name__}: {error}'
+            try:
+                state = load_state(ctx)
+                if state.get('error') == message:
+                    return 1
+                state['error'] = message
+                save_state(ctx, state)
+            except Exception:
+                pass
+            ctx.log(message)
             return 1
+        state = load_state(ctx)
+        if 'error' in state:
+            state.pop('error')
+            save_state(ctx, state)
+            ctx.log('RECOVERED')
+        return rc
 
 
 if __name__ == '__main__':

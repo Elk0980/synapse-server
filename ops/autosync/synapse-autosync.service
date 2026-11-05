@@ -45,3 +45,6 @@ KeyringMode=private
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
+# Node/V8 при старте вызывает pkey_alloc; без @pkey `node --check` убивается SIGSYS
+# и каждый коммит с JS отклоняется. Проверка: ops/autosync/sandbox-smoke.sh.
+SystemCallFilter=@pkey
