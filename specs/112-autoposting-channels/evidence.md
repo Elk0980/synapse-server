@@ -22,3 +22,9 @@
 - `permission-help.js` (PR 523) сверяет каталог пояснений с PERMISSIONS: кто сливается вторым, добавляет строку для `autoposting.channels`.
 - Версия ресурсов кабинета (`SB_CABINET_ASSET_VERSION`) не менялась, чтобы не конфликтовать с соседними PR; при выпуске её нужно поднять (изменены autoposting.js, account.js).
 - Выпуск, сервер и боевые базы не трогались.
+
+## Прогоны 05.11.2026 (Linux, Node 22)
+- Затронутые наборы (content + CRM HTTP, jsdom autoposting/account/content-factory-settings/vk-community, новые тесты): 133/133.
+- Полный ops/crm: 1051, 1044 pass, 7 fail; на main 73b6bf7 тем же прогоном 5 fail. Разница — нестабильные под нагрузкой (company-links «CRM startup timed out» и на main; vk-materials таймер); calendar-http исправлен (контекст решения по approve), повтор — pass.
+- Полный ops/content: 806, 13 fail при параллельной нагрузке («server starts», «Fixture service did not start»); повтор упавших файлов отдельно — 16/17, оставшийся `media-mentor-proxy.test.js` падает и на main 73b6bf7.
+- gate.py check ok.
