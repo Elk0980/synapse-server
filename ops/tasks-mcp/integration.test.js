@@ -6,6 +6,26 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { startFixture } = require('./test-fixture');
 
+test('вопрос владельцу проходит MCP/CRM и проверяет Unicode, строки, время и прежний blocker', async t => {
+  const f = await startFixture(); t.after(f.stop);
+  const created = await f.call('task_create', {title:'SAMPLE вопрос',project:'palitra-love',client_ref:'owner-question-88'});
+  assert.equal(created.isError,false); const id = created.data.task.id;
+  const question = {owner_question:'😀'.repeat(120),if_yes:'Начнём работу.',if_no:'Отложим работу.',owner_minutes:0};
+  const updated = await f.call('task_update', {task_id:id,...question});
+  assert.equal(updated.isError,false,JSON.stringify(updated));
+  const saved = (await f.call('task_get',{task_id:id})).data.coordination;
+  for (const [key,value] of Object.entries(question)) assert.equal(saved[key],value);
+  const overview = (await f.call('tasks_list',{project:'palitra-love',overview:true})).data.tasks.find(task=>task.id===id).coordination;
+  assert.deepEqual(Object.fromEntries(Object.keys(question).map(key=>[key,overview[key]])),question);
+  for (const invalid of [{owner_question:'😀'.repeat(121)},{owner_question:'Да?\nНет?'},{owner_question:'\nДа?'},{if_yes:'а'.repeat(201)},
+    {if_no:'Да\tНет'},{owner_minutes:-1},{owner_minutes:121},{owner_minutes:1.5}]) {
+    assert.equal((await f.call('task_update',{task_id:id,...invalid})).isError,true,JSON.stringify(invalid));
+  }
+  assert.equal((await f.call('task_update',{task_id:id,blocker:'SAMPLE прежний блокер',owner_question:'',owner_minutes:null})).isError,false);
+  const legacy = (await f.call('task_get',{task_id:id})).data.coordination;
+  assert.equal(legacy.blocker,'SAMPLE прежний блокер'); assert.equal(legacy.owner_question,''); assert.equal(legacy.owner_minutes,null);
+});
+
 test('MCP → настоящий кабинет/CSRF → MCP: одна запись, общий статус, изоляция', async t => {
   const f = await startFixture();
   t.after(f.stop);

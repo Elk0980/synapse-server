@@ -11,7 +11,7 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
   const call=createPeopleCrmClient({crmUrl,apiKey:crmKey});
   const tasks=createPeopleTasks({authStore,db,call});
   const answers=require('./team-chat-answers').createTeamChatAnswers({db,tasks,call,env});
-  const teamChat=require('./team-chat').createTeamChat({db,tasks,call,answers});
+  const teamChat=require('./team-chat').createTeamChat({db,tasks,call,answers,unsafe:require('./team-chat-answers').unsafe});
   const plan=createPeoplePlan({db,authStore,tasks,call});
   const transport={...createPeopleNotificationTransport({vapidSubject:env.PEOPLE_VAPID_SUBJECT,
     vapidPublicKey:env.PEOPLE_VAPID_PUBLIC_KEY,vapidPrivateKey:env.PEOPLE_VAPID_PRIVATE_KEY}),deliveryEnabled:enabled};

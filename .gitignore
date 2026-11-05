@@ -11,3 +11,4 @@ __pycache__/
 docs/handoff/
 docs/seed/
 ops/content/node_modules/
+ops/crm/node_modules/

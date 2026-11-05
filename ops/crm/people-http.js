@@ -30,6 +30,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     return {...Object.fromEntries(fields.map(key=>[key,row[key]])),subtask_count:children.total,subtask_done:children.done,
       coordination:{revision:stored?.revision||0,milestones:Object.fromEntries(stages.map(key=>[key,data.milestones?.[key]||{state:'pending'}]))}};
   }
+  const board=require('./people-board').createPeopleBoard({db,view});
   const integer=(value,fallback,max)=>{const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<0||n>max)fail(400,'Некорректная страница');return n;};
   return async function handle(request,response,url,cors={}) {
     if(!url.pathname.startsWith('/internal/people/'))return false;
@@ -37,7 +38,8 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset',...(url.pathname.endsWith('/ownerDecisionEvents')?['taskId']:[])].includes(key)))fail(400,'Укажите один проект');
     const action=url.pathname.slice('/internal/people/'.length),method=request.method;
     const plan=action==='mediaMentor'||action==='planVariantsDecision';
-    const actor=access(request,code,plan?'content-plan.approve':['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
+    const write=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'].includes(action);
+    const actor=access(request,code,plan?'content-plan.approve':write?'tasks.self.edit':'tasks.self.view');
     let result;
     if(action==='teamChatContext'&&method==='GET') {
       const all=projectRows(code),map=new Map(all.map(row=>[row.id,row]));
@@ -52,7 +54,13 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
       const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
       result=require('./team-chat-task').createTeamChatTask(db,code,fresh,body);
-    } else if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
+    } else if(['hughTask','myBoardAction','taskChatComment'].includes(action)&&method==='POST') {
+      const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
+      if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
+      result=action==='hughTask'?require('./team-chat-task').createTeamChatTask(db,code,fresh,body,'hugh'):
+        action==='myBoardAction'?board.action(code,fresh,body):board.comment(code,fresh,body);
+    } else if(action==='myBoard'&&method==='GET')result=board.board(code,actor);
+    else if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
     else if(action==='planVariantsDecision'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'content-plan.approve');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
@@ -61,7 +69,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
       result=mentor.decideVariants(code,body,{userId:fresh.userId,userName:fresh.userName});
     } else if(['tasks_list','task_get','task_update'].includes(action)&&method==='POST'||action==='taskRecords'&&method==='GET') {
       const body=method==='POST'?await readJson(request):{};
-      const fresh=access(request,code,['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
+      const fresh=access(request,code,write?'tasks.self.edit':'tasks.self.view');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
       const allowed=action==='tasks_list'?['project','limit','offset']:action==='task_get'?['task_id','subtasks_limit','subtasks_offset','comments_limit','comments_offset']:action==='task_update'?['task_id','status','revision']:[];
       if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'Переданы лишние параметры');

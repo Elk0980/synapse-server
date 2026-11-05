@@ -1,0 +1,194 @@
+'use strict';
+/* №98 Б: экран «Контент-план» на настоящем файле модуля, ctx по контракту А и заглушке API (данные SAMPLE). */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { JSDOM } = require('jsdom');
+
+const source = fs.readFileSync(path.join(__dirname, 'content-plan.js'), 'utf8');
+const importSource = fs.readFileSync(path.join(__dirname, 'reel-plan-import.js'), 'utf8');
+const VOCAB = { platforms: [{ id: 'vk', label: 'ВКонтакте' }, { id: 'telegram', label: 'Telegram' }], formats: [{ id: 'reel', label: 'Рилс' }], roles: [{ id: 'reach', label: 'Охватный' }] };
+const idea = (n, extra = {}) => ({ ideaId: `s-${n}`, date: `2026-11-1${n}`, platform: 'vk', format: 'reel', role: 'reach',
+  topic: `SAMPLE тема ${n}`, hook: 'SAMPLE хук', script: 'Мастер: Здравствуйте!\nКлиент: <b>Привет</b>\nПауза, смех',
+  broll: 'SAMPLE руки', style: 'SAMPLE тёплый свет', props: 'SAMPLE халат', filmingBy: 'SAMPLE оператор', variants: { vk: { text: 'SAMPLE подпись', contentRevision: 1 } }, ...extra });
+
+function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '' } = {}) {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://cabinet.test/', runScripts: 'outside-only' });
+  const { window } = dom, calls = [], opened = [];
+  const db = {
+    mentor: { companyCode: 'alpha', brief: { revision: 2, fields: { goal: '', audience: 'есть', platforms: ['vk'] } }, vocabulary: VOCAB,
+      plan: plan.length ? { revision: 4, briefRevision: 2, days: plan } : null,
+      variants: plan.map((p, i) => ({ ideaId: p.ideaId, platform: 'vk', status: i ? 'pending' : 'approved', approvable: true })) },
+    questionnaire: { companyCode: 'alpha', revision: 3, filled: 1, total: 8, updatedAt: null, updatedBy: '', rules: ['Цены — только подтверждённые.'],
+      fields: { goals: 'SAMPLE цель', audience: '', tone: '', rubrics: '', frequency: '', onCamera: '', constraints: '', platforms: ['vk'] } },
+    signoffs: { companyCode: 'alpha', approversSource: 'stub', planRevision: plan.length ? 4 : 0, briefRevision: 2, stage: plan.length ? stage : 'none',
+      approvers: [{ slot: 'owner', label: 'Владелец', checked: false, actorName: '', canCheck: role === 'owner' }], ideas: 2, approvedIdeas: 1, emptyIdeas: [] },
+  };
+  const reply = (method, p, body) => {
+    calls.push({ path: p, method, body: plain(body) });
+    if (p === 'crm/media-mentor') return db.mentor;
+    if (p === 'crm/media-mentor/questionnaire') return method === 'PUT' ? { ...db.questionnaire, revision: db.questionnaire.revision + 1, filled: 2 } : db.questionnaire;
+    if (p === 'crm/media-mentor/plan/signoffs') return method === 'POST' ? { ...db.signoffs, stage: 'smm' } : db.signoffs;
+    if (p === 'crm/media-mentor/brief') return { ...db.mentor, brief: { revision: 3, fields: { ...db.mentor.brief.fields, ...body.brief } } };
+    if (p === 'crm/media-mentor/plan') return db.mentor;
+    if (p === 'crm/media-mentor/plan/import-preview') return { companyCode: 'alpha', rows: [['Дата', 'Площадка', 'Тема', 'Формат', 'Хук', 'Вставки', 'Стиль', 'Реквизит'],
+      ['05.12.2026', 'вк', 'Импорт SAMPLE', 'рилс', 'Импорт хук', 'Импорт вставки', 'Импорт стиль', 'Импорт реквизит']] };
+    if (p === 'media-mentor-suggest') return { status: 'ok', notice: 'Предложение модели', items: [{ date: '2026-11-20', platform: 'vk', format: 'reel', role: 'reach', topic: 'Новая', hook: 'Хук нов' },
+      { date: '2026-11-09', platform: 'vk', format: 'reel', role: 'reach', topic: 'Ранняя', hook: '' }] };
+    throw Error('unexpected ' + p);
+  };
+  const user = { role, permissions };
+  const ctx = {
+    moduleId: 'content-plan', companyCode: 'alpha', user: { id: 7, name: 'SAMPLE', role }, permissions,
+    can: (perm) => role === 'owner' || permissions.includes(perm), signal: new window.AbortController().signal,
+    route: { path: '', params: new URLSearchParams(view ? `view=${view}` : '') },
+    api: { get: async (p) => reply('GET', p), put: async (p, b) => reply('PUT', p, b), post: async (p, b) => reply('POST', p, b) },
+    settings: { content: { get: async () => { if (settings === 'missing') throw Object.assign(Error('нет'), { status: 404 }); return settings || null; } } },
+    navigate: (v) => opened.push(['navigate', v]), openHughChat: () => opened.push(['hugh']),
+  };
+  const registered = [];
+  window.SbCabinet = {};
+  if (withRegistry) window.SynapseModules = { register: (name, def) => registered.push([name, def]) };
+  window.eval(importSource);
+  window.eval(source);
+  const root = window.document.getElementById('root');
+  const def = () => registered.find((r) => r[0] === 'content-plan')?.[1];
+  return { window, root, ctx, calls, opened, registered, user, def, mount: () => def().mount(root, ctx) };
+}
+// Объекты из окна jsdom приводятся к обычным, чтобы deepEqual сравнивал содержимое.
+const plain = (v) => v === undefined ? v : JSON.parse(JSON.stringify(v));
+const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('registers through SynapseModules; without registry it waits in SynapseModulesQueue for the shell', () => {
+  const a = api();
+  assert.deepEqual(a.registered.map((r) => r[0]), ['content-plan']);
+  assert.equal(typeof a.def().mount, 'function'); assert.equal(typeof a.def().unmount, 'function');
+  const b = api({ withRegistry: false });
+  assert.equal(b.registered.length, 0);
+  assert.equal(b.window.SynapseModulesQueue[0][0], 'content-plan');
+  assert.equal(typeof b.window.SynapseModulesQueue[0][1].mount, 'function');
+});
+
+test('short view lists №, date, platform, topic, status; row opens hook, B-roll, style, roles and props as text', async () => {
+  const a = api(); await a.mount();
+  const rows = [...a.root.querySelectorAll('.cp-row')];
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /№1/); assert.match(rows[0].textContent, /ВКонтакте/); assert.match(rows[0].textContent, /SAMPLE тема 1/);
+  assert.match(rows[0].querySelector('.cp-st').textContent, /Согласовано/); assert.match(rows[1].querySelector('.cp-st').textContent, /На согласовании/);
+  assert.equal(rows[0].querySelector('.cp-full'), null);
+  rows[0].querySelector('[data-toggle]').click();
+  const full = a.root.querySelector('.cp-full');
+  for (const text of ['Хук — первые 1–2 с', 'SAMPLE хук', 'SAMPLE руки', 'SAMPLE тёплый свет', 'SAMPLE халат', 'SAMPLE подпись']) assert.ok(full.textContent.includes(text), text);
+  const script = [...full.querySelectorAll('.cp-script tr')].map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td').textContent]);
+  assert.deepEqual(script, [['Мастер', 'Здравствуйте!'], ['Клиент', '<b>Привет</b>'], ['—', 'Пауза, смех']]);
+  assert.equal(full.querySelector('b'), null, 'server text is escaped');
+  assert.match(a.root.querySelector('.cp-stage').textContent, /На согласовании/);
+});
+
+test('full plan is a sheet: one row per reel with hook, B-roll, style, roles, props; № opens the card', async () => {
+  const a = api({ view: 'full' }); await a.mount();
+  const head = [...a.root.querySelectorAll('.cp-sheet thead th')].map((th) => th.textContent);
+  assert.deepEqual(head, ['№', 'Дата', 'Площадки', 'Тема', 'Хук (1–2 с)', 'Вставки (B-roll)', 'Стиль', 'Сценарий по ролям', 'Реквизит', 'Кто снимает', 'Статус']);
+  const rows = [...a.root.querySelectorAll('.cp-sheet > tbody > tr')];
+  assert.equal(rows.length, 2);
+  const cells = Object.fromEntries([...rows[0].children].map((td) => [td.dataset.label, td.textContent.trim()]));
+  assert.equal(cells['Хук (1–2 с)'], 'SAMPLE хук'); assert.equal(cells['Вставки (B-roll)'], 'SAMPLE руки'); assert.equal(cells['Реквизит'], 'SAMPLE халат');
+  assert.equal(rows[0].querySelectorAll('.cp-script tr').length, 3);
+  assert.equal(a.root.querySelector('[data-cp-view="full"]').getAttribute('aria-pressed'), 'true');
+  rows[1].querySelector('[data-open-row]').click();
+  assert.equal(a.root.querySelector('.cp-sheet'), null);
+  assert.equal(a.root.querySelector('.cp-row[data-idea="s-2"] .cp-full') !== null, true);
+  a.root.querySelector('[data-cp-view="full"]').click();
+  assert.ok(a.root.querySelector('.cp-sheet'));
+});
+
+test('questionnaire autosaves only the changed field with the last revision', async () => {
+  const a = api(); await a.mount();
+  const tone = a.root.querySelector('[data-q="tone"]');
+  tone.value = 'дружески'; tone.dispatchEvent(new a.window.Event('input'));
+  await tick(800); await tick();
+  const put = a.calls.filter((c) => c.path === 'crm/media-mentor/questionnaire' && c.method === 'PUT');
+  assert.equal(put.length, 1); assert.deepEqual(put[0].body, { revision: 3, fields: { tone: 'дружески' } });
+  assert.match(a.root.querySelector('[data-cp-saved]').textContent, /Сохранено · заполнено 2 из 8/);
+});
+
+test('Hugh plan fills only empty brief fields, then saves sorted days with captions from hook and topic', async () => {
+  const a = api(); await a.mount();
+  a.root.querySelector('[data-cp="generate"]').click();
+  await tick(); await tick(); await tick();
+  const brief = a.calls.find((c) => c.path === 'crm/media-mentor/brief');
+  assert.deepEqual(brief.body.brief, { goal: 'SAMPLE цель' }, 'filled audience and platforms are not overwritten');
+  const suggest = a.calls.find((c) => c.path === 'media-mentor-suggest');
+  assert.equal(suggest.body.days, 7);
+  a.root.querySelector('[data-cp="accept"]').click(); await tick(); await tick();
+  const put = a.calls.find((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT');
+  assert.equal(put.body.planRevision, 4); assert.equal(put.body.briefRevision, 3);
+  assert.deepEqual(put.body.days.map((d) => d.date), ['2026-11-09', '2026-11-11', '2026-11-12', '2026-11-20']);
+  assert.equal(put.body.days[3].variants.vk.text, 'Хук нов\n\nНовая'); assert.equal(put.body.days[0].variants.vk.text, 'Ранняя');
+});
+
+test('CSV/XLSX import from PR 496 runs inside the screen and saves hook, B-roll, style, props with a caption', async () => {
+  const a = api(); await a.mount();
+  const panel = a.root.querySelector('[data-cp-import] .mentor-import');
+  assert.ok(panel, 'import panel installed');
+  const file = new a.window.File(['x'], 'plan.csv', { type: 'text/csv' });
+  file.arrayBuffer = async () => new Uint8Array([120]).buffer;
+  a.window.crypto.subtle = { digest: async () => new Uint8Array(32).buffer };
+  const input = panel.querySelector('[data-import-file]');
+  Object.defineProperty(input, 'files', { value: [file] });
+  await input.onchange(); await tick();
+  const add = panel.querySelector('[data-import-add]');
+  assert.equal(add.disabled, false, panel.querySelector('[data-import-state]').textContent);
+  add.click(); await tick(); await tick();
+  const put = a.calls.find((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT');
+  const row = put.body.days.find((d) => d.topic === 'Импорт SAMPLE');
+  assert.equal(row.hook, 'Импорт хук'); assert.equal(row.broll, 'Импорт вставки'); assert.equal(row.style, 'Импорт стиль'); assert.equal(row.props, 'Импорт реквизит');
+  assert.equal(row.variants.vk.text, 'Импорт хук\n\nИмпорт SAMPLE');
+  assert.equal(a.calls.find((c) => c.path === 'crm/media-mentor/plan/import-preview').method, 'POST');
+});
+
+test('row edit keeps other fields and replaces caption; signoff posts own slot; chat opens Hugh via ctx', async () => {
+  const a = api(); await a.mount();
+  a.root.querySelector('[data-toggle]').click();
+  const form = a.root.querySelector('[data-edit="s-1"]');
+  form.querySelector('[name="broll"]').value = ' новая вставка '; form.querySelector('[name="caption"]').value = 'Новая подпись';
+  form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick(); await tick();
+  const put = a.calls.find((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT');
+  assert.equal(put.body.days[0].broll, 'новая вставка'); assert.equal(put.body.days[0].variants.vk.text, 'Новая подпись');
+  assert.equal(put.body.days[0].variants.vk.contentRevision, 1); assert.equal(put.body.days[1].broll, 'SAMPLE руки');
+  const box = a.root.querySelector('[data-signoff="owner"]');
+  box.checked = true; box.dispatchEvent(new a.window.Event('change')); await tick(); await tick();
+  assert.deepEqual(a.calls.find((c) => c.method === 'POST' && c.path.endsWith('/signoffs')).body, { planRevision: 4, briefRevision: 2, slot: 'owner', checked: true });
+  a.root.querySelector('[data-cp="chat"]').click();
+  assert.deepEqual(a.opened.at(-1), ['hugh']);
+});
+
+test('approvers come from Настройки → Контент: names from candidates, honest note when server fell back to the owner', async () => {
+  const settings = { version: 2, canEdit: true, settings: { approverUserIds: [5, 7] }, candidates: [{ id: 5, name: 'SAMPLE Лена' }, { id: 7, name: 'SAMPLE Таня' }] };
+  const a = api({ settings }); await a.mount();
+  const block = a.root.querySelector('.cp-approve').textContent;
+  assert.match(block, /Согласуют по «Настройкам → Контент»: SAMPLE Лена, SAMPLE Таня/);
+  assert.match(block, /Сервер не принял выбранных согласующих/);
+  a.root.querySelector('[data-cp="settings"]').click();
+  assert.deepEqual(a.opened.at(-1), ['navigate', 'settings/content']);
+  const b = api({ settings: 'missing', role: 'editor', permissions: ['autoposting.view'] }); await b.mount();
+  assert.match(b.root.querySelector('.cp-approve').textContent, /задаётся в «Настройках → Контент»/);
+  assert.equal(b.root.querySelector('[data-cp="settings"]'), null);
+});
+
+test('viewer without edit right sees the plan read-only and cannot tick another approver', async () => {
+  const a = api({ role: 'editor', permissions: ['autoposting.view'] }); await a.mount();
+  assert.equal(a.root.querySelector('[data-cp="generate"]'), null); assert.equal(a.root.querySelector('.mentor-import'), null);
+  assert.ok(a.root.querySelector('[data-q="goals"]').readOnly); assert.ok(a.root.querySelector('[data-signoff="owner"]').disabled);
+  assert.equal(a.root.querySelectorAll('.cp-row').length, 2);
+});
+
+test('403 from the server is shown as no access, unmount drops late answers', async () => {
+  const a = api();
+  a.ctx.api.get = async () => { throw Object.assign(Error('x'), { status: 403 }); };
+  await a.mount();
+  assert.match(a.root.textContent, /Нет доступа к контент-плану/);
+  const b = api(); const pending = b.mount(); b.def().unmount(b.root, b.ctx); await pending;
+  assert.equal(b.root.querySelector('.cp'), null);
+});
