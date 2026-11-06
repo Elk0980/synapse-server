@@ -1,0 +1,24 @@
+[Unit]
+Description=Cipher-only Synapse backup stream (reviewed inventory required)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /usr/local/lib/synapse-backup/backup_v2.py create-stream /etc/synapse-backup/stream.json
+Restart=always
+RestartSec=60
+SuccessExitStatus=75
+RestartPreventExitStatus=75 78
+RuntimeMaxSec=6h15min
+TimeoutStopSec=30
+KillMode=control-group
+Nice=15
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
