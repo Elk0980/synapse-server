@@ -311,3 +311,11 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-review-history { display: grid; gap: 4px; }
 .ap-review-last { margin: 0; font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .ap-review-notes > summary { cursor: pointer; color: var(--muted); }
+
+/* Spec 182: снятие с площадок — без горизонтальной прокрутки на 390 px. */
+.ap-unpublish-zone { margin-top:12px; max-width:100%; }
+.ap-unpublish-zone:empty { display:none; }
+.ap-unpublish-confirm { display:grid; gap:8px; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); min-width:0; }
+.ap-unpublish-confirm p, .ap-unpublish-list li { margin:0; overflow-wrap:anywhere; }
+.ap-unpublish-list { margin:0; padding-left:18px; display:grid; gap:6px; }
+.ap-unpublish-actions { display:flex; flex-wrap:wrap; gap:8px; }

@@ -288,6 +288,24 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
     return result;
   }
+  /* Снятие опубликованного (spec 182). Только по действию человека; цель канала должна быть той же,
+     что при публикации (ревизия подключения), иначе message_id мог бы указать на чужое сообщение. */
+  async function removePublished({companyCode,channelId,channelRevision,externalId}) {
+    const current = company(companyCode), row = rowFor(current.code,channelId);
+    if (channelId !== 'telegram') throw failure('REMOVE_UNSUPPORTED');
+    if (!row || (row.provider || 'direct') !== 'direct' || !row.encrypted_token) throw failure('CONNECTION_MISSING');
+    if (row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
+    if (typeof externalId !== 'string' || !/^[1-9]\d{0,14}$/.test(externalId)) throw failure('EXTERNAL_ID_INVALID');
+    const result = await call(row,'deleteMessage',{chat_id:row.target,message_id:Number(externalId)},true);
+    if (result !== true) throw failure('RESPONSE_UNCERTAIN',true);
+    return {removed:true};
+  }
+  async function removeProviderPost({companyCode,channelId,channelRevision,providerPostId}) {
+    const current = company(companyCode), row = rowFor(current.code,channelId);
+    if (!row || row.provider !== 'onlypult') throw failure('CONNECTION_MISSING');
+    if (row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
+    return onlypult.remove(row,providerPostId);
+  }
   /* Чтение статистики теми же сохранёнными ключами: только белый список методов только для чтения.
      Ничего не публикует; ключ наружу не выходит. Возвращает null, если канал не настроен. */
   const STATS_METHODS = Object.freeze({telegram: ['getChatMemberCount', 'getChat'], vk: ['stats.get', 'groups.getById', 'wall.get']});
@@ -309,7 +327,7 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     const current = company(code), row = rowFor(current.code, id);
     return {destinationRevision: row?.target && row.encrypted_token ? row.destination_revision : 0, channelRevision: row?.revision || 0};
   }
-  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats,connectionRevision,approvalDestination};
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,removePublished,removeProviderPost,readStats,connectionRevision,approvalDestination};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};

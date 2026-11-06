@@ -280,7 +280,7 @@ function create(container, context) {
     <button class="plain-button" id="autoposting-save" type="submit">Сохранить черновик</button><p id="autoposting-form-status" aria-live="off"></p></form></section>
     <section class="card autoposting-preview-section ap-editor-preview" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3>
     <div class="ap-editor-media"><ul id="autoposting-media-preview" class="autoposting-media-preview" data-empty="Файл ещё не добавлен"></ul></div>
-    <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div><details class="autoposting-workspace-tools"><summary>Дополнительные действия</summary><button class="plain-button" id="autoposting-delete" type="button" hidden>Удалить в корзину</button></details><div id="autoposting-archive-zone" class="ap-archive-zone"></div>
+    <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div><details class="autoposting-workspace-tools"><summary>Дополнительные действия</summary><button class="plain-button" id="autoposting-delete" type="button" hidden>Удалить в корзину</button></details><div id="autoposting-archive-zone" class="ap-archive-zone"></div><div id="autoposting-unpublish-zone" class="ap-unpublish-zone"></div>
     <div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-variant" class="ap-variant-zone"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Согласование относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и согласование ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без согласования; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></details>`;
@@ -929,6 +929,36 @@ function create(container, context) {
       ?`<div class="ap-archive-confirm" role="group" aria-labelledby="autoposting-archive-question"><p id="autoposting-archive-question">Удалить «${esc(post.title||"Без названия")}»? Материал уйдёт из плана в «Удалённые материалы». Текст, файлы, замечания и задачи сохранятся — его можно вернуть.</p><div class="ap-archive-actions"><button type="button" class="danger" id="autoposting-archive-yes">Удалить</button><button type="button" class="plain-button" id="autoposting-archive-no">Отмена</button></div></div>`
       :'<button type="button" class="plain-button ap-archive-button" id="autoposting-archive-button">Удалить черновик</button><p class="autoposting-note" id="autoposting-archive-note"></p>';
   };
+  /* Spec 182: снятие опубликованного с площадок. Кнопка — только с правом правки; сервер проверяет право сам.
+     Сначала окно со списком: что удалит Synapse автоматически, что нужно удалить вручную по ссылке. Затем итог. */
+  let unpublishView=null;
+  const UNPUBLISH_OUTCOME={removed:"Удалено",manual:"Удалите вручную",manual_done:"Удалено вручную",failed:"Не удалось — удалите вручную",uncertain:"Результат не подтверждён — проверьте и удалите вручную"};
+  const unpublishable=item=>item&&(item.status==="published"||receiptsOf(item).length||(item.deliveries||[]).some(d=>["published","needs_review"].includes(d.status)));
+  const unpublishLink=url=>safeUrl(url)?` <a href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">Открыть пост</a>`:"";
+  const renderUnpublish=()=>{
+    const zone_=get("autoposting-unpublish-zone");if(!zone_)return;
+    if(!post||!edit()||!unpublishable(post)){zone_.innerHTML="";unpublishView=null;return;}
+    const view=unpublishView?.postId===post.id?unpublishView:null;
+    if(!view){zone_.innerHTML='<button type="button" class="plain-button" id="autoposting-unpublish-open">Удалить с площадок</button>';}
+    else{
+      const d=view.data,open=(d.targets||[]).filter(x=>!["removed","manual_done"].includes(x.outcome));
+      const rows=(view.results?d.targets:open).map(x=>`<li data-unpublish-target="${esc(x.key)}"><strong>${esc(x.label)}</strong> · <span data-unpublish-mode>${view.results||x.outcome?esc(UNPUBLISH_OUTCOME[x.outcome]||"Ожидает"):x.mode==="auto"?"удалит Synapse автоматически":"удалите вручную"}</span>${x.outcome==="removed"||x.outcome==="manual_done"?"":`<br><span class="autoposting-note">${esc(x.note||"")}</span>`}${unpublishLink(x.url)}${view.results&&["manual","failed","uncertain"].includes(x.outcome)?` <button type="button" class="plain-button" data-unpublish-manual="${esc(x.key)}">Я удалил вручную</button>`:""}</li>`).join("");
+      zone_.innerHTML=`<div class="ap-unpublish-confirm" role="dialog" aria-modal="false" aria-labelledby="autoposting-unpublish-title"><p id="autoposting-unpublish-title"><strong>${view.results?"Итог по площадкам":`Удалить «${esc(post.title||"Без названия")}» с площадок?`}</strong></p>
+        ${rows?`<ul class="ap-unpublish-list">${rows}</ul>`:'<p class="autoposting-note">Снимать нечего: всё уже удалено.</p>'}
+        <p class="autoposting-note">Карточка остаётся в ЛК с историей: кто, когда и что удалено.</p>
+        <div class="ap-unpublish-actions">${!view.results&&open.length?'<button type="button" class="primary-action" id="autoposting-unpublish-yes">Подтвердить удаление</button>':""}<button type="button" class="plain-button" id="autoposting-unpublish-no">${view.results?"Закрыть":"Отмена"}</button></div></div>`;
+    }
+    zone_.onclick=event=>{
+      const target=event.target.closest("button");if(!target||busy)return;const id=post.id,path="/autoposting/posts/"+encodeURIComponent(id)+"/unpublish";
+      if(target.id==="autoposting-unpublish-open")void run(async current=>{const data=await request(path);if(!current())return;unpublishView={postId:id,data,results:null};renderUnpublish();message("Проверьте список площадок перед удалением.");},"Готовим список площадок…","Не удалось получить список площадок.");
+      else if(target.id==="autoposting-unpublish-no"){unpublishView=null;renderUnpublish();}
+      else if(target.id==="autoposting-unpublish-yes"){const d=unpublishView.data,keys=d.targets.filter(x=>!["removed","manual_done"].includes(x.outcome)).map(x=>x.key);
+        void run(async current=>{const data=await request(path,"POST",{revision:d.revision,targets:keys});if(!current())return;unpublishView={postId:id,data,results:data.results||[]};renderUnpublish();
+          message(data.state==="removed"?"Публикация снята со всех площадок.":"Часть площадок нужно удалить вручную — ссылки в списке.");},"Удаляем с площадок…","Не удалось подтвердить удаление. Откройте окно заново: повтор не тронет уже удалённое.");}
+      else if(target.dataset.unpublishManual){const key=target.dataset.unpublishManual;
+        void run(async current=>{const data=await request(path+"/manual","POST",{key});if(!current())return;unpublishView={postId:id,data,results:unpublishView?.results||[]};renderUnpublish();message("Отмечено: удалено вручную.");},"Сохраняем отметку…","Не удалось сохранить отметку.");}
+    };
+  };
   const renderArchive=()=>{
     const node=get("autoposting-archive-list");if(!node)return;
     get("autoposting-archive").querySelector("summary").textContent=archived?`Удалённые материалы (${archived.length}${archivedLimited?"+":""})`:"Удалённые материалы";
@@ -1007,7 +1037,7 @@ function create(container, context) {
     },"Восстанавливаем материал…","Не удалось подтвердить восстановление. Откройте «Удалённые материалы» заново.");
   };
   const renderState=()=>{
-    renderApproval();renderVariant();renderReceipts();renderArchiveZone();
+    renderApproval();renderVariant();renderReceipts();renderArchiveZone();renderUnpublish();
     const node=get("autoposting-post-error");node.hidden=!post?.lastErrorCode;
     node.textContent=post?.lastErrorCode?(ERRORS[post.lastErrorCode]||"Не удалось подтвердить публикацию. Проверьте подключение и данные компании."):"";
     get("autoposting-deliveries").innerHTML=(post?.deliveries||[]).map(item=>`<p>${esc(channels().find(channel=>channel.id===item.channelId)?.name||item.channelId)}: ${esc(STATUS[item.status]||{pending:"Ожидает отправки"}[item.status]||"Требуется проверка")}${item.errorCode&&ERRORS[item.errorCode]?` · ${esc(ERRORS[item.errorCode])}`:""}${safeUrl(item.url)?` · <a href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">Открыть публикацию</a>`:""}</p>`).join("");

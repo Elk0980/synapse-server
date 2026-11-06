@@ -1,0 +1,50 @@
+[
+ {
+  "width": 390,
+  "stage": "confirm",
+  "doc": 390,
+  "view": 390,
+  "zone": {
+   "scroll": 334,
+   "client": 334
+  },
+  "noHorizontalScroll": true,
+  "errors": []
+ },
+ {
+  "width": 390,
+  "stage": "result",
+  "doc": 390,
+  "view": 390,
+  "zone": {
+   "scroll": 334,
+   "client": 334
+  },
+  "noHorizontalScroll": true,
+  "errors": []
+ },
+ {
+  "width": 1440,
+  "stage": "confirm",
+  "doc": 1440,
+  "view": 1440,
+  "zone": {
+   "scroll": 448,
+   "client": 448
+  },
+  "noHorizontalScroll": true,
+  "errors": []
+ },
+ {
+  "width": 1440,
+  "stage": "result",
+  "doc": 1440,
+  "view": 1440,
+  "zone": {
+   "scroll": 448,
+   "client": 448
+  },
+  "noHorizontalScroll": true,
+  "errors": []
+ }
+]

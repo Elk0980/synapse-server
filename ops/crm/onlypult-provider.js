@@ -217,6 +217,24 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (!id(providerPostId) || !id(row.target)) throw failure('PROVIDER_POST_REQUIRED');
     return receipt(await request(row,'GET',`/posts/${encodeURIComponent(providerPostId)}`),row,providerPostId);
   }
-  return {listProfiles,inspectProfiles,check,publish,reconcile};
+  /* Отмена задания. Контракт openapi.yaml (postsDelete): «Delete a draft or scheduled post», успех — 204.
+     Перед удалением статус перечитывается: вышедший пост Onlypult не снимает, и DELETE ему не отправляется. */
+  async function remove(row,providerPostId) {
+    const current = await reconcile(row,providerPostId);
+    if (!['draft','scheduled'].includes(current.providerStatus)) throw failure('PROVIDER_ALREADY_PUBLISHED');
+    const token = tokenFor(row);
+    let response;
+    try {
+      response = await fetchImpl(BASE + `/posts/${encodeURIComponent(providerPostId)}`,{method:'DELETE',redirect:'error',
+        signal:AbortSignal.timeout(20000),headers:{authorization:`Bearer ${token}`}});
+    } catch {throw failure('CONNECTION_UNCERTAIN',true);}
+    if (response.status === 204) return {removed:true};
+    let data = null;
+    try {data = JSON.parse(await readResponse(response,AbortSignal.timeout(20000)));} catch {}
+    const rejected = data && typeof data === 'object' && [400,401,403,404].includes(response.status) && data.status === response.status && Number.isInteger(data.code);
+    if (rejected) throw failure([401,403].includes(response.status) ? 'ACCESS_DENIED' : 'PLATFORM_REJECTED');
+    throw failure('CONNECTION_UNCERTAIN',true);
+  }
+  return {listProfiles,inspectProfiles,check,publish,reconcile,remove};
 }
 module.exports = {createOnlypultProvider};
