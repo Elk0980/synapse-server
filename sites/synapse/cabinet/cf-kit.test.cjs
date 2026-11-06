@@ -228,3 +228,16 @@ test('CfKit загружается один раз и сообщает о гот
   assert.equal(ready, 1);
   assert.ok(Object.isFrozen(w.CfKit));
 });
+
+test('лента: scroll:false не сбрасывает позицию пользователя при перерисовке', async () => {
+  const w = load('<div id="f"><p data-p="1">1</p><p>2</p><p>3</p></div>');
+  const feed = w.document.getElementById('f');
+  let setCalls = 0;
+  const desc = Object.getOwnPropertyDescriptor(w.Element.prototype, 'scrollTop');
+  Object.defineProperty(feed, 'scrollTop', {get() { return desc.get.call(this); }, set(v) { setCalls += 1; desc.set.call(this, v); }, configurable: true});
+  const state = w.CfKit.feedStart(feed, {isAbove: (el) => el.dataset.p === '1', scroll: false});
+  await new Promise((resolve) => w.requestAnimationFrame(() => resolve()));
+  assert.ok(state.separator);
+  assert.equal(setCalls, 0);
+  assert.equal(typeof state.refresh, 'function');
+});
