@@ -335,7 +335,16 @@
       }, {passive: true});
     }
     listEl._cfkFeed = state;
-    if (win.requestAnimationFrame) win.requestAnimationFrame(scrollToStart); else scrollToStart();
+    // scroll:false — перерисовка той же ленты (раскрыли карточку): позиция пользователя не сбрасывается,
+    // пересчитывается только стартовая точка для подписи «выше».
+    const measure = () => {
+      if (!separator) { state.start = 0; listEl.classList.remove('cfk-feed-up'); return; }
+      const head = table?.tHead?.offsetHeight || 0;
+      state.start = separator.getBoundingClientRect().top - listEl.getBoundingClientRect().top + listEl.scrollTop - head;
+      listEl.classList.toggle('cfk-feed-up', listEl.scrollTop < state.start - 8);
+    };
+    const run = opts.scroll === false ? measure : scrollToStart;
+    if (win.requestAnimationFrame) win.requestAnimationFrame(run); else run();
     state.refresh = scrollToStart;
     return state;
   }
