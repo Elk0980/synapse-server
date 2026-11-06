@@ -1,7 +1,8 @@
 {
   "assets": [
     "content-settings",
-    "update-banner"
+    "update-banner",
+    "project-preferences"
   ],
   "styles": [
     "shell",
