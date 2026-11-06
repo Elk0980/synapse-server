@@ -379,7 +379,9 @@ function create(el, ctx) {
     try {
       const reel = await ensureReel();if (ctx.signal.aborted) return;
       /* Редактор открывается внутри окна ролика: его слой над окном, ✕ редактора возвращает к «Редактировать». */
-      sb.reelEditor.open($("[data-detail-modal]"), {ctx, reel, version: state.version, onChange: next => {state.open = next;state.version = next.currentVersion?.version ?? state.version;renderDetail();}});
+      // №204: номер и рилс плана — для заголовка «№N · vK» и дорожек сцен/исходников съёмки.
+      const idea = (state.mentor?.plan?.days || []).find(day => state.item?.ideaId && day.ideaId === state.item.ideaId) || null;
+      sb.reelEditor.open($("[data-detail-modal]"), {ctx, reel, version: state.version, number: state.item?.number ?? null, idea, onChange: next => {state.open = next;state.version = next.currentVersion?.version ?? state.version;renderDetail();}});
     } catch (error) {detailStatus("Не удалось открыть редактор: " + (error?.message || "ошибка"));}
     finally {state.busy = false;}
   }
