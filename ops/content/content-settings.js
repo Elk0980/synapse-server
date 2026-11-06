@@ -10,6 +10,28 @@ const CAPTION_KEYS = 'color,font,size,uppercase';
 const DEFAULTS = Object.freeze({ approverUserIds: [], shootingWeekdays: [], deadlineDays: 2, platforms: [],
   caption: { font: 'Inter', size: 'm', color: '#ffffff', uppercase: false } });
 const ROUTE = '/content/content-settings';
+/* №208: «кому о чём сообщать» — матрица «этап × роль» (Настройки → Контент-план → Уведомления).
+   Только хранение выбора компании: отправку по матрице этот модуль не выполняет. Этапы — id общей цепочки CfKit. */
+const NOTIFY_STAGES = Object.freeze(['script_review', 'script_rework', 'planned', 'shot', 'edit_review', 'edit_rework', 'ready', 'published', 'publish_error']);
+const NOTIFY_ROLES = Object.freeze(['owner', 'approver', 'content', 'shooting', 'editor']);
+const NOTIFY_DEFAULTS = Object.freeze({
+  script_review: ['owner', 'approver'], script_rework: ['content'], planned: ['content', 'shooting'], shot: ['content', 'editor'],
+  edit_review: ['approver', 'content'], edit_rework: ['editor'], ready: ['content'], published: [...NOTIFY_ROLES], publish_error: ['owner', 'content'] });
+const OPTIONAL_KEYS = Object.freeze(['contentPlanSheetUrl', 'notificationMatrix']);
+const matrixDefaults = () => Object.fromEntries(NOTIFY_STAGES.map((stage) => [stage, [...NOTIFY_DEFAULTS[stage]]]));
+// Строго: ровно все этапы, у каждого — массив известных ролей без повторов. Порядок ролей канонический.
+function normalizeMatrix(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype
+    || sortedKeys(value) !== [...NOTIFY_STAGES].sort().join(',')) return null;
+  const out = {};
+  for (const stage of NOTIFY_STAGES) {
+    const roles = value[stage];
+    if (!Array.isArray(roles) || roles.length > NOTIFY_ROLES.length || new Set(roles).size !== roles.length
+      || roles.some((role) => typeof role !== 'string' || !NOTIFY_ROLES.includes(role))) return null;
+    out[stage] = NOTIFY_ROLES.filter((role) => roles.includes(role));
+  }
+  return out;
+}
 
 const fail = (status, message, code) => { throw Object.assign(new Error(message), { status, ...(code ? { details: { code } } : {}) }); };
 const sortedKeys = (value) => Object.keys(value).sort().join(',');
@@ -44,8 +66,16 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
   }
 
   function validate(input, code) {
-    if (!input || typeof input !== 'object' || Array.isArray(input) || ![SETTINGS_KEYS, SETTINGS_KEYS + ',contentPlanSheetUrl'].map(value => value.split(',').sort().join(',')).includes(sortedKeys(input))) {
+    // Обязательные поля — все; необязательные (ссылка таблицы, матрица уведомлений) — по одному разу, лишних нет.
+    const required = SETTINGS_KEYS.split(',');
+    if (!input || typeof input !== 'object' || Array.isArray(input) || !required.every((key) => Object.hasOwn(input, key))
+      || Object.keys(input).some((key) => !required.includes(key) && !OPTIONAL_KEYS.includes(key))) {
       fail(400, 'Ожидались поля approverUserIds, shootingWeekdays, deadlineDays, platforms, caption');
+    }
+    let notificationMatrix = null;
+    if (Object.hasOwn(input, 'notificationMatrix')) {
+      notificationMatrix = normalizeMatrix(input.notificationMatrix);
+      if (!notificationMatrix) fail(400, `Уведомления: для каждого этапа (${NOTIFY_STAGES.join(', ')}) — список ролей из ${NOTIFY_ROLES.join(', ')} без повторов`);
     }
     if (Object.hasOwn(input,'contentPlanSheetUrl')) {
       if (typeof input.contentPlanSheetUrl !== 'string' || input.contentPlanSheetUrl.length > 2048) fail(400,'Некорректная ссылка таблицы');
@@ -68,6 +98,7 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
     if (typeof caption.uppercase !== 'boolean') fail(400, 'uppercase должен быть true или false');
     return {
       ...(Object.hasOwn(input,'contentPlanSheetUrl') ? {contentPlanSheetUrl:input.contentPlanSheetUrl} : {}),
+      ...(notificationMatrix ? { notificationMatrix } : {}),
       approverUserIds: [...input.approverUserIds].sort((a, b) => a - b),
       shootingWeekdays: [...input.shootingWeekdays].sort((a, b) => a - b),
       deadlineDays: input.deadlineDays,
@@ -86,11 +117,13 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
     // Согласующий, потерявший право или доступ, в выдаче не показывается и при сохранении отбрасывается.
     const ids = new Set(people.map((item) => item.id));
     settings.approverUserIds = settings.approverUserIds.filter((id) => ids.has(id));
+    // Матрица не сохранялась или повреждена — значения по умолчанию (каждый узнаёт о своём следующем действии).
+    settings.notificationMatrix = normalizeMatrix(settings.notificationMatrix) || matrixDefaults();
     const editor = row ? authStore.getById(row.updated_by) : null;
     return { companyCode: code, version: row ? row.version : 0, updatedAt: row ? row.updated_at : null,
       updatedBy: row ? (editor?.displayName || editor?.login || 'удалённый пользователь') : null,
       canEdit: canEdit(user), settings, candidates: people,
-      options: { platforms: PLATFORMS, fonts: FONTS, sizes: SIZES } };
+      options: { platforms: PLATFORMS, fonts: FONTS, sizes: SIZES, notifications: { stages: NOTIFY_STAGES, roles: NOTIFY_ROLES } } };
   }
 
   function save(user, code, body) {
@@ -103,9 +136,13 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
       const current = selectRow.get(code);
       if ((current?.version || 0) !== body.version) fail(409, 'Настройки уже изменил другой пользователь. Обновите экран.', 'VERSION_CONFLICT');
       // Старые открытые формы не знают поля ссылки: сохраняем его при старом PUT.
-      if (!Object.hasOwn(body.settings,'contentPlanSheetUrl') && current) {
-        const previous = JSON.parse(current.body);
-        if (Object.hasOwn(previous,'contentPlanSheetUrl')) settings.contentPlanSheetUrl = previous.contentPlanSheetUrl;
+      if (current) {
+        let previous = {};
+        try { previous = JSON.parse(current.body) || {}; } catch { /* повреждённая запись — переносить нечего */ }
+        if (!Object.hasOwn(body.settings,'contentPlanSheetUrl') && Object.hasOwn(previous,'contentPlanSheetUrl')) settings.contentPlanSheetUrl = previous.contentPlanSheetUrl;
+        // Формы, не знающие матрицы уведомлений, её не стирают.
+        const kept = Object.hasOwn(body.settings, 'notificationMatrix') ? null : normalizeMatrix(previous.notificationMatrix);
+        if (kept) settings.notificationMatrix = kept;
       }
       const stamp = new Date().toISOString();
       db.prepare(`INSERT INTO content_settings(company_code, body, version, updated_at, updated_by) VALUES(?,?,?,?,?)
@@ -135,4 +172,4 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
     save: (userId, code, body) => save(actor({ user: { id: userId } }, code), code, body) };
 }
 
-module.exports = { createContentSettings, PLATFORMS, FONTS, SIZES, DEFAULTS };
+module.exports = { createContentSettings, PLATFORMS, FONTS, SIZES, DEFAULTS, NOTIFY_STAGES, NOTIFY_ROLES, NOTIFY_DEFAULTS };

@@ -32,3 +32,25 @@
   .cs-save { width: 100%; }
 }
 @media (max-width: 360px) { .cs-grid { grid-template-columns: 1fr; } }
+
+/* №208: вкладки экрана и матрица «этап × роль» (Настройки → Контент-план → Уведомления). */
+.cs-form[hidden], .cs-more[hidden], .csn-notify[hidden] { display: none; }
+.csn-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.csn-tab { min-height: 34px; padding: 5px 14px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: .9rem; cursor: pointer; }
+.csn-tab[aria-selected="true"] { color: var(--text); border-color: var(--text); font-weight: 700; background: var(--surface); }
+.csn-notify { max-width: 880px; }
+.csn-notify-title { margin: 0; font-size: 1.05rem; }
+.csn-matrix-wrap { max-width: 100%; overflow-x: auto; }
+.csn-matrix { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.csn-matrix th, .csn-matrix td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.csn-matrix thead th { color: var(--muted); font-weight: 400; font-size: .8rem; line-height: 1.25; }
+.csn-matrix th[scope="row"], .csn-matrix thead th:first-child { text-align: left; font-weight: 400; }
+.csn-matrix input { width: 18px; height: 18px; margin: 0; accent-color: var(--blue, #2e6bd6); cursor: pointer; }
+.csn-matrix input:disabled { cursor: not-allowed; }
+.csn-short { display: none; }
+@media (max-width: 640px) {
+  .csn-long { display: none; } .csn-short { display: inline; }
+  .csn-matrix { font-size: .78rem; }
+  .csn-matrix th, .csn-matrix td { padding: 6px 3px; }
+  .csn-matrix th[scope="row"] { width: 42%; }
+}

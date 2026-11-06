@@ -103,3 +103,49 @@ test('№181: ссылка сохраняется, изолирована, ст�
   }
   const cleared=await f.call('root','PUT','avokado',{version:2,settings:valid({contentPlanSheetUrl:''})});assert.equal(cleared.payload.settings.contentPlanSheetUrl,'');
 });
+
+// №208: Настройки → Контент-план → Уведомления — матрица «этап × роль». Только хранение; отправки здесь нет.
+const STAGES=['script_review','script_rework','planned','shot','edit_review','edit_rework','ready','published','publish_error'];
+const ROLES=['owner','approver','content','shooting','editor'];
+const matrix=(over={})=>({script_review:['owner','approver'],script_rework:['content'],planned:['content','shooting'],shot:['content','editor'],
+  edit_review:['approver','content'],edit_rework:['editor'],ready:['content'],published:[...ROLES],publish_error:['owner','content'],...over});
+
+test('№208: матрица уведомлений — значения по умолчанию, этапы и роли в ответе',async t=>{
+  const f=setup(t),r=await f.call('lena','GET','avokado');
+  assert.equal(r.status,200);
+  assert.deepEqual(r.payload.settings.notificationMatrix,matrix());
+  assert.deepEqual(r.payload.options.notifications,{stages:STAGES,roles:ROLES});
+  assert.deepEqual(r.payload.settings.notificationMatrix.script_review,['owner','approver'],'согласующему и владельцу — сценарий на согласовании');
+  assert.deepEqual(r.payload.settings.notificationMatrix.edit_rework,['editor'],'монтажёру — монтаж на доработке');
+  assert.deepEqual(r.payload.settings.notificationMatrix.published,ROLES,'всем — опубликовано');
+});
+
+test('№208: матрица сохраняется и нормализуется, изолирована по компании; старый PUT её не стирает',async t=>{
+  const f=setup(t);
+  const saved=await f.call('tuner','PUT','avokado',{version:0,settings:valid({notificationMatrix:matrix({ready:['editor','owner'],shot:[]})})});
+  assert.equal(saved.status,200);assert.equal(saved.payload.version,1);
+  assert.deepEqual(saved.payload.settings.notificationMatrix.ready,['owner','editor'],'порядок ролей канонический');
+  assert.deepEqual(saved.payload.settings.notificationMatrix.shot,[],'пустой этап — допустим');
+  const old=await f.call('tuner','PUT','avokado',{version:1,settings:valid({deadlineDays:5})});
+  assert.equal(old.status,200);assert.deepEqual(old.payload.settings.notificationMatrix.ready,['owner','editor']);
+  const sheet=await f.call('tuner','PUT','avokado',{version:2,settings:valid({contentPlanSheetUrl:'https://docs.google.com/spreadsheets/d/sample/edit',notificationMatrix:matrix()})});
+  assert.equal(sheet.status,200);assert.deepEqual(sheet.payload.settings.notificationMatrix,matrix());
+  assert.equal(sheet.payload.settings.contentPlanSheetUrl,'https://docs.google.com/spreadsheets/d/sample/edit');
+  const alvi=await f.call('root','GET','alvi');assert.deepEqual(alvi.payload.settings.notificationMatrix,matrix(),'у другой компании — свои значения');
+  assert.equal((await f.call('smm','PUT','avokado',{version:3,settings:valid({notificationMatrix:matrix()})})).status,403,'без settings.edit — отказ');
+});
+
+test('№208: строгая проверка формы матрицы',async t=>{
+  const f=setup(t);
+  const {publish_error,...missing}=matrix();
+  for(const bad of [null,[],'all',{},missing,matrix({unpublished:[]}),matrix({ready:'content'}),matrix({ready:['content','content']}),
+    matrix({ready:['smm']}),matrix({ready:[1]}),matrix({ready:null}),matrix({ready:[...ROLES,'owner']})]){
+    const r=await f.call('tuner','PUT','avokado',{version:0,settings:valid({notificationMatrix:bad})});
+    assert.equal(r.status,400,JSON.stringify(bad));
+  }
+  assert.equal((await f.call('tuner','GET','avokado')).payload.version,0,'отклонённое не сохраняется');
+  // Повреждённая запись в базе не ломает чтение — показываются значения по умолчанию.
+  f.db.prepare('INSERT INTO content_settings(company_code,body,version,updated_at,updated_by) VALUES(?,?,?,?,?)')
+    .run('avokado',JSON.stringify({...valid(),notificationMatrix:{ready:['x']}}),1,new Date().toISOString(),f.owner.id);
+  assert.deepEqual((await f.call('tuner','GET','avokado')).payload.settings.notificationMatrix,matrix());
+});
