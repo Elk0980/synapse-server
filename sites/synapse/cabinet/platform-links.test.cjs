@@ -108,15 +108,3 @@ test('VK view removes the old community link before the next company settings ar
   }finally{f.close();}
 });
 
-test('autoposting separates company pages, provider cabinet and planning; switching clears old external links',async()=>{
-  let release;
-  const f=fixture(['company-information.js','autoposting.js'],call=>call.code==='avokado'&&call.path.endsWith('/company-information')?new Promise(resolve=>{release=resolve;}):undefined);
-  try{
-    await f.views.autoposting.render(f.container,f.ctx);
-    assert.ok(f.d.querySelector('[data-channel-links] a[href="https://vk.com/alvi"]'));assert.ok(f.d.querySelector('[data-channel="vk"] a[href="https://app.ru.onlypult.com/"]'));
-    assert.ok(f.d.querySelector('#autoposting-planning a[href="https://account.2gis.com/"]'));
-    const next=f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});await f.settle();
-    assert.equal(f.d.querySelector('[data-channel-links] a'),null);assert.equal(f.d.getElementById('autoposting-planning').children.length,0);
-    release(profile('avokado'));await next;assert.ok(f.d.querySelector('[data-channel-links] a[href="https://vk.com/avokado"]'));assert.ok(f.calls.every(c=>c.method==='GET'));
-  }finally{f.close();}
-});

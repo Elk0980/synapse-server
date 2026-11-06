@@ -121,6 +121,7 @@
   .autoposting-view { overflow-x:hidden; }
   .autoposting-editor-grid,.autoposting-channel-grid,.autoposting-date-fields,.autoposting-queue-filters { grid-template-columns:minmax(0,1fr); gap:12px; }
   .autoposting-toolbar,.autoposting-actions { flex-direction:column; align-items:stretch; }
+  .autoposting-actions > button { flex-basis:auto; } /* №149: в столбике flex-basis 180px растягивал кнопки в высоту */
   .autoposting-toolbar > select,.autoposting-toolbar > button,.autoposting-actions > button,.autoposting-view .plain-button,.autoposting-view button[type="submit"] { width:100%; min-height:44px; }
   .autoposting-view input,.autoposting-view select,.autoposting-view textarea { width:100%; min-height:44px; box-sizing:border-box; }
   .autoposting-view textarea { min-height:72px; }

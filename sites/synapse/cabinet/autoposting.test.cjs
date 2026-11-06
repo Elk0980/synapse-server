@@ -3,44 +3,9 @@ const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
 const clone=value=>JSON.parse(JSON.stringify(value)),tick=()=>new Promise(resolve=>setImmediate(resolve));
 const channels=()=>[{id:'telegram',platform:'telegram',provider:'direct',name:'Telegram',target:'@fixture',revision:1,enabled:true,connected:true,tokenConfigured:true,caps:{maxText:4096,maxMedia:10}},{id:'vk',platform:'vk',provider:'direct',name:'ВКонтакте',target:'club1',revision:1,enabled:true,connected:true,tokenConfigured:true,caps:{maxText:15000,maxMedia:1,mediaMode:'link'}}];
-test('VK setup separates company reference from verified access and performs no writes',async()=>{
- const f=await fixture({override:call=>{
-  if(call.path.endsWith('/company-information'))return {companyCode:call.code,revision:2,profile:{socials:[{type:'vk',url:'https://vk.ru/'+call.code}]}};
-  if(call.path.endsWith('/autoposting/settings'))return {channels:[{id:'vk',platform:'vk',connected:false,enabled:false,tokenConfigured:false,revision:0}]};
- }});try{
-  const guide=f.node('vk-connection-guide');assert.match(guide.textContent,/ВКонтакте · АЛВИ/);assert.match(guide.textContent,/Авторизация через кнопку ВК в Synapse пока не настроена/);
-  assert.equal(guide.querySelector('a').href,'https://vk.ru/alvi');assert.ok(f.calls.every(c=>c.method==='GET'));
-  f.set('autoposting-company','avokado','change');assert.ok(!guide.textContent.includes('https://vk.ru/alvi'));await f.settle();
-  assert.match(guide.textContent,/ВКонтакте · Авокадо/);assert.equal(guide.querySelector('a').href,'https://vk.ru/avokado');
-  assert.ok(!guide.querySelector('input[type=password]'));assert.ok(f.calls.every(c=>c.method==='GET'));
- }finally{f.close();}
-});
-test('VK setup does not turn a lookalike host into the community link',async()=>{
- const f=await fixture({override:call=>call.path.endsWith('/company-information')?{companyCode:call.code,revision:2,profile:{socials:[{type:'vk',url:'https://vk.ru.attacker.example/group'}]}}:undefined});
- try{assert.equal(f.node('vk-connection-guide').querySelector('a[target=_blank]'),null);assert.match(f.node('vk-connection-guide').textContent,/Доступ проверен/);}finally{f.close();}
-});
 test('company selector delegates to cabinet workspace switch when available',async()=>{
  const f=await fixture();try{let chosen;f.ctx.chooseProject=code=>{chosen=code;};f.set('autoposting-company','avokado','change');assert.equal(chosen,'avokado');
-  await f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});assert.match(f.node('vk-connection-guide').textContent,/ВКонтакте · Авокадо/);
- }finally{f.close();}
-});
-test('VK access failure explains missing permission without exposing provider text',async()=>{
- const f=await fixture({override:call=>call.path.endsWith('/check')?{ok:false,code:'WALL_PERMISSION_REQUIRED',error:'RAW_SECRET'}:undefined});
- try{f.node('autoposting-channels').querySelector('[data-check-channel=vk]').click();await f.settle();assert.match(f.node('autoposting-status').textContent,/разрешение wall/);assert.ok(!f.d.body.textContent.includes('RAW_SECRET'));}finally{f.close();}
-});
-test('channel setup explains its own media rules and TikTok blocker without claiming every channel publishes public Shorts',async()=>{
- const ids=['youtube_shorts','instagram','tiktok','max'];
- const f=await fixture({override:call=>call.path.endsWith('/autoposting/settings')?{
-  timezone:'Asia/Irkutsk',channels:ids.map(id=>({id,platform:id,provider:'onlypult',name:id,revision:1,enabled:false,connected:false,tokenConfigured:false}))
- }:undefined});
- try{
-  const help=id=>f.node('autoposting-channels').querySelector(`[data-channel="${id}"] [data-channel-publishing-help]`).textContent;
-  assert.match(help('youtube_shorts'),/один видеофайл.*Shorts в публичном доступе/);
-  for(const id of ['instagram','tiktok','max'])assert.doesNotMatch(help(id),/Shorts|публичном доступе/);
-  assert.match(help('instagram'),/истории и Reels/);assert.match(help('instagram'),/Reel — ровно одно видео/);
-  assert.match(help('tiktok'),/Отправка пока заблокирована/);assert.match(help('tiktok'),/режимы видимости не подтверждены/);
-  assert.match(help('max'),/Вложения необязательны/);
-  assert.ok(f.calls.every(call=>call.method==='GET'));
+  await f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});assert.equal(f.node('autoposting-company').value,'avokado');
  }finally{f.close();}
 });
 test('корзина: удаление требует второго нажатия по той же версии, убирает материал из списка и восстанавливается',async()=>{
@@ -113,7 +78,7 @@ function fill(f,{text='Текст публикации',media=''}={}){
   const checkbox=f.node('autoposting-platforms').querySelector('[value=telegram]');checkbox.click();
 }
 test('autoposting is permission scoped and read-only viewers cannot mutate or configure',async()=>{
-  for(const permissions of [[],['autoposting.view']]){const f=await fixture({role:'marketer',permissions});try{assert.equal(!!f.node('autoposting-form'),!!permissions.length);if(permissions.length){assert.equal(f.node('autoposting-title').disabled,true);assert.equal(f.node('autoposting-channels').querySelector('input').disabled,true);}assert.ok(f.calls.every(call=>call.method==='GET'));}finally{f.close();}}
+  for(const permissions of [[],['autoposting.view']]){const f=await fixture({role:'marketer',permissions});try{assert.equal(!!f.node('autoposting-form'),!!permissions.length);if(permissions.length){assert.equal(f.node('autoposting-title').disabled,true);assert.equal(f.node('autoposting-channels'),null,'№149: ключи площадок вводятся на «Подключениях»');}assert.ok(f.calls.every(call=>call.method==='GET'));}finally{f.close();}}
 });
 test('explicit save converts company local time to UTC; preview and separate schedule are required',async()=>{
   const f=await fixture();try{fill(f);assert.ok(f.calls.every(call=>call.method==='GET'));await f.click('autoposting-save');const create=f.calls.find(call=>call.method==='POST');
@@ -134,21 +99,11 @@ test('Telegram media caption and VK link caps block scheduling; preview escapes 
     assert.equal(f.node('autoposting-preview-content').querySelector('script'),null);assert.match(f.node('autoposting-preview-content').textContent,/не больше 1/);
   }finally{f.close();}
 });
-test('settings saves only the edited card, omits blank token, retains a failed key for retry, and check never publishes',async()=>{
-  let fail=false;const f=await fixture({override:call=>{if(fail&&call.method==='PUT')throw Error('RAW_SECRET');}});try{
-    let form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');form.querySelector('button[type=submit]').click();await f.settle();const first=f.calls.find(call=>call.method==='PUT'),body=JSON.parse(first.options.body);
-    assert.equal(body.channels.length,1);assert.equal(body.channels[0].id,'telegram');assert.equal(body.channels[0].revision,1);assert.equal('token' in body.channels[0],false);
-    form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');form.querySelector('[data-check-channel]').click();await f.settle();assert.ok(f.calls.some(call=>call.path.endsWith('/check')));assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')),false);
-    fail=true;form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');const token=form.querySelector('[type=password]');token.value='NEW_TEST_SECRET';form.querySelector('button[type=submit]').click();await f.settle();assert.equal(token.value,'NEW_TEST_SECRET');assert.doesNotMatch(f.d.body.textContent,/RAW_SECRET|NEW_TEST_SECRET/);
-    fail=false;form.querySelector('button[type=submit]').click();await f.settle();assert.equal(JSON.parse(f.calls.filter(call=>call.method==='PUT').at(-1).options.body).channels[0].token,'NEW_TEST_SECRET');
-    assert.equal(token.value,'');assert.equal(f.node('autoposting-channels').querySelector('[data-channel=telegram] [type=password]').value,'');
-  }finally{f.close();}
-});
 test('company switch preserves unfinished draft fields but clears credentials and ignores stale responses',async()=>{
   let resolveOld;const f=await fixture({override:call=>call.code==='avokado'&&call.path.endsWith('/posts')&&!resolveOld?new Promise(resolve=>{resolveOld=resolve;}):undefined});try{
-    f.set('autoposting-title','Черновик АЛВИ');f.set('autoposting-timezone','unfinished/zone');f.node('autoposting-channels').querySelector('[type=password]').value='TEMP_SECRET';
+    f.set('autoposting-title','Черновик АЛВИ');f.set('autoposting-timezone','unfinished/zone');
     const old=f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});await f.settle();await f.views.autoposting.onProjectChange(f.ctx);resolveOld({companyCode:'avokado',posts:[]});await old;
-    assert.equal(f.node('autoposting-company').value,'alvi');assert.equal(f.node('autoposting-title').value,'Черновик АЛВИ');assert.equal(f.node('autoposting-timezone').value,'unfinished/zone');assert.equal(f.node('autoposting-channels').querySelector('[type=password]').value,'');
+    assert.equal(f.node('autoposting-company').value,'alvi');assert.equal(f.node('autoposting-title').value,'Черновик АЛВИ');assert.equal(f.node('autoposting-timezone').value,'unfinished/zone');
   }finally{f.close();}
 });
 test('photo selection alone does not upload, explicit upload adds HTTPS photo to draft without publication',async()=>{
@@ -164,209 +119,26 @@ test('uncertain or partially published materials expose safe platform result lin
   }finally{f.close();}
 });
 
-const card=(f,id='vk')=>f.node('autoposting-channels').querySelector(`[data-channel="${id}"]`);
-function channelInput(f,field,value,{id='vk',event='change'}={}){
- const node=card(f,id).querySelector(`[data-channel-field="${field}"]`);
- if(node.type==='checkbox')node.checked=Boolean(value);else node.value=value;
- node.dispatchEvent(new f.w.Event(event,{bubbles:true}));return node;
-}
-async function connectOnlypultKey(f){
- channelInput(f,'provider','onlypult');
- channelInput(f,'token','op_'+'a'.repeat(64),{event:'input'});
- card(f).querySelector('button[type=submit]').click();await f.settle();
-}
 const receiptPost=(code='alvi')=>({id:55,companyCode:code,revision:3,status:'needs_review',title:'Задание принято Onlypult',text:'Подтверждённый текст',mediaUrls:[],platformIds:['vk'],scheduledAt:'2099-01-01T02:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,lastErrorCode:'PROVIDER_PENDING',deliveries:[{channelId:'vk',status:'needs_review',providerPostId:'job-55',providerStatus:'scheduled',externalId:null,url:null}]});
 
-test('switching a provider clears the target, permission and unsaved key without changing saved settings',async()=>{
- const f=await fixture();try{
-  const token=channelInput(f,'token','UNSAVED_TOKEN',{event:'input'});assert.equal(token.value,'UNSAVED_TOKEN');
-  const before=f.calls.length;channelInput(f,'provider','onlypult');
-  assert.equal(card(f).querySelector('[data-channel-field=target]').value,'');
-  assert.equal(card(f).querySelector('[data-channel-field=enabled]').checked,false);
-  assert.equal(card(f).querySelector('[type=password]').value,'');assert.equal(token.isConnected,false);
-  assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').provider,'direct');assert.equal(f.calls.length,before);
-  card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(f.calls.length,before);
-  assert.match(f.node('autoposting-status').textContent,/Сначала сохраните/);
-  channelInput(f,'provider','direct');assert.equal(card(f).querySelector('[data-channel-field=target]').value,'');
-  assert.equal(card(f).querySelector('[data-channel-field=enabled]').checked,false);assert.equal(f.calls.length,before);
- }finally{f.close();}
-});
 
-test('Onlypult setup saves a disabled empty target, lists profiles read-only, then saves the exact company profile',async()=>{
- const f=await fixture();try{
-  await connectOnlypultKey(f);const first=f.calls.find(c=>c.method==='PUT'),body=JSON.parse(first.options.body).channels[0];
-  assert.equal(first.code,'alvi');assert.equal(body.provider,'onlypult');assert.equal(body.target,'');assert.equal(body.enabled,false);
-  assert.equal(body.revision,1);assert.equal(body.token,'op_'+'a'.repeat(64));assert.equal(card(f).querySelector('[type=password]').value,'');
-  assert.match(f.node('autoposting-status').textContent,/Ключ сохранён.*Загрузите профили/);
-  assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);
-  const before=f.calls.length;card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  assert.equal(f.calls.length,before+1);const listing=f.calls.at(-1);assert.equal(listing.path,'/content/crm/autoposting/settings/vk/profiles');assert.equal(listing.method,'GET');assert.equal(listing.code,'alvi');assert.equal(listing.options.body,undefined);
-  const select=card(f).querySelector('[data-channel-field=target]');assert.equal(select.tagName,'SELECT');assert.ok([...select.options].some(o=>o.value==='alvi-vk'));
-  assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);
-  channelInput(f,'target','alvi-vk');assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,false);channelInput(f,'enabled',true);
-  const checkCount=f.calls.length;card(f).querySelector('[data-check-channel]').click();await f.settle();assert.equal(f.calls.length,checkCount);
-  card(f).querySelector('button[type=submit]').click();await f.settle();const second=f.calls.filter(c=>c.method==='PUT').at(-1),saved=JSON.parse(second.options.body).channels[0];
-  assert.equal(saved.target,'alvi-vk');assert.equal(saved.enabled,true);assert.equal(saved.revision,2);assert.equal('token' in saved,false);
-  assert.equal(f.configs.avokado.channels.find(c=>c.id==='vk').provider,'direct');
-  card(f).querySelector('[data-check-channel]').click();await f.settle();
-  assert.ok(f.calls.some(c=>c.path==='/content/crm/autoposting/settings/vk/check'&&c.method==='POST'&&c.code==='alvi'));
-  assert.equal(f.calls.some(c=>c.path.includes('/posts')&&c.method!=='GET'),false);
- }finally{f.close();}
-});
 
-test('Onlypult first save ignores a checked send flag without a profile and a rejected key remains available for retry',async()=>{
- let reject=true;const f=await fixture({override:call=>{if(reject&&call.method==='PUT')throw Error('RAW_PROVIDER_REJECTION');}});
- try{
-  channelInput(f,'provider','onlypult');const enabled=card(f).querySelector('[data-channel-field=enabled]');
-  assert.equal(enabled.disabled,true);enabled.click();assert.equal(enabled.checked,false);
-  const token=channelInput(f,'token','op_'+'b'.repeat(64),{event:'input'});
-  // A stale or restored checkbox must not prevent saving the key before profile selection.
-  enabled.checked=true;card(f).querySelector('button[type=submit]').click();await f.settle();
-  const rejected=JSON.parse(f.calls.find(c=>c.method==='PUT').options.body).channels[0];
-  assert.equal(rejected.target,'');assert.equal(rejected.enabled,false);assert.equal(enabled.checked,false);
-  assert.equal(token.value,'op_'+'b'.repeat(64));assert.equal(token.type,'password');assert.equal(token.disabled,false);
-  assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').provider,'direct');
-  assert.match(f.node('autoposting-status').textContent,/ключ остаётся в поле/);
-  assert.doesNotMatch(f.d.body.textContent,/RAW_PROVIDER_REJECTION|op_b{64}/);assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
-  card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(f.calls.some(c=>c.path.endsWith('/profiles')),false);
-  reject=false;card(f).querySelector('button[type=submit]').click();await f.settle();
-  assert.equal(token.value,'');assert.equal(card(f).querySelector('[type=password]').value,'');
-  assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').provider,'onlypult');assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').enabled,false);
-  assert.match(f.node('autoposting-status').textContent,/Ключ сохранён/);
-  card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  channelInput(f,'target','alvi-vk');assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,false);
-  channelInput(f,'enabled',true);channelInput(f,'target','');
-  assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);assert.equal(card(f).querySelector('[data-channel-field=enabled]').checked,false);
-  assert.equal(f.calls.some(c=>c.path.includes('/posts')&&c.method!=='GET'),false);
- }finally{f.close();}
-});
 
-test('Onlypult setup does not claim a saved key unless the settings response confirms it',async()=>{
- const f=await fixture({override:call=>call.method==='PUT'?{companyCode:call.code,channels:[{...channels()[1],provider:'onlypult',target:'',enabled:false,tokenConfigured:false,connected:false,revision:2}]}:undefined});
- try{
-  await connectOnlypultKey(f);assert.doesNotMatch(f.node('autoposting-status').textContent,/Ключ сохранён/);
-  assert.match(f.node('autoposting-status').textContent,/Вставьте ключ Onlypult/);
-  card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(f.calls.some(c=>c.path.endsWith('/profiles')),false);
- }finally{f.close();}
-});
 
-test('Onlypult empty profile diagnostics distinguish no profiles from unmatched platforms and use Russian count forms',async()=>{
- for(const [total,expected] of [[0,'не вернул профилей для этого ключа'],[1,'вернул 1 профиль,'],[2,'вернул 2 профиля,'],[5,'вернул 5 профилей,'],[11,'вернул 11 профилей,'],[21,'вернул 21 профиль,']]){
-  const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics:{totalProfiles:total,platformCounts:total?[{platform:'vk_variant',count:total}]:[]}}:undefined});
-  try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
-   const status=f.node('autoposting-status').textContent;assert.ok(status.includes(expected),status);
-   if(total){assert.match(status,/для ВКонтакте подходящих профилей не найдено/);assert.ok(status.includes('Обозначения площадок: vk_variant — '+total));assert.doesNotMatch(status,/не вернул профилей для этого ключа/);}
-   else assert.doesNotMatch(status,/Обозначения площадок/);
-   assert.equal(card(f).querySelector('[data-channel-field=target]').options.length,1);assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);
-   assert.equal(f.calls.filter(call=>call.path.endsWith('/profiles')).length,1);assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')),false);
-  }finally{f.close();}
- }
-});
 
-test('Onlypult empty Telegram results show the returned platform counts for the requested channel',async()=>{
- const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics:{totalProfiles:3,platformCounts:[{platform:'vk',count:2},{platform:'unknown',count:1}]}}:undefined});
- try{channelInput(f,'provider','onlypult',{id:'telegram'});channelInput(f,'token','op_'+'c'.repeat(64),{id:'telegram',event:'input'});card(f,'telegram').querySelector('button[type=submit]').click();await f.settle();
-  card(f,'telegram').querySelector('[data-load-profiles]').click();await f.settle();
-  assert.match(f.node('autoposting-status').textContent,/вернул 3 профиля, но для Telegram подходящих профилей не найдено/);
-  assert.match(f.node('autoposting-status').textContent,/vk — 2, unknown — 1/);
-  assert.equal(f.calls.at(-1).path,'/content/crm/autoposting/settings/telegram/profiles');
- }finally{f.close();}
-});
 
-test('Onlypult missing or invalid diagnostics keep an empty response message neutral',async()=>{
- for(const diagnostics of [undefined,{totalProfiles:'0'},{totalProfiles:-1},{totalProfiles:1001}]){
-  const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics}:undefined});
-  try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
-   assert.match(f.node('autoposting-status').textContent,/В ответе Onlypult нет подходящих профилей/);
-   assert.doesNotMatch(f.node('autoposting-status').textContent,/не вернул профилей для этого ключа|вернул 0|В Onlypult нет/);
-   assert.equal(card(f).querySelector('[data-profile-diagnostics]').hidden,true);
-  }finally{f.close();}
- }
-});
 
-test('Onlypult technical diagnostics show only safe shape types and field names and clear on company switch',async()=>{
- const diagnostics={totalProfiles:2,platformCounts:[{platform:'vk',count:2}],profileShapes:[{idType:'number',nameType:'string',statusType:'number',platformType:'undefined',count:1,fieldNames:['id','name','status','network_type']}],otherShapesCount:1};
- let release;const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics}:call.code==='avokado'&&call.path.endsWith('/posts')?new Promise(resolve=>{release=resolve;}):undefined});
- try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  const details=card(f).querySelector('[data-profile-diagnostics]');assert.equal(details.hidden,false);assert.equal(details.open,false);
-  assert.match(details.textContent,/Технические сведения профилей/);assert.match(details.textContent,/id: number; name: string; status: number; platform: undefined/);
-  assert.match(details.textContent,/Поля: id, name, status, network_type/);assert.match(details.textContent,/Профили с другой структурой: 1/);
-  assert.equal(details.querySelectorAll('input,button').length,0);
-  const switching=f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});await f.settle();
-  assert.equal(f.d.body.textContent.includes('network_type'),false);assert.equal(f.node('autoposting-channels').querySelector('[data-profile-diagnostics]'),null);
-  release({companyCode:'avokado',posts:[]});await switching;
-  assert.equal(f.d.body.textContent.includes('network_type'),false);assert.equal(f.node('autoposting-company').value,'avokado');
- }finally{f.close();}
-});
 
-test('Onlypult malicious diagnostics never render markup or raw profile values',async()=>{
- const diagnostics={totalProfiles:1,platformCounts:[{platform:'<img src=x onerror=alert(1)>',count:1},{platform:'vk',count:'<script>attack</script>'}],profileShapes:[
-  {idType:'number',nameType:'string',statusType:'null',platformType:'undefined',count:1,fieldNames:['network_type','<img src=x>','op_'+'d'.repeat(64)],id:'RAW_PRIVATE_ID',name:'RAW_PRIVATE_NAME',status:'RAW_PRIVATE_STATUS'},
-  {idType:'<script>attack</script>',nameType:'string',statusType:'number',platformType:'string',count:1}
- ],raw:'RAW_SECRET',otherShapesCount:'<script>attack</script>'};
- const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics}:undefined});
- try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  assert.match(f.node('autoposting-status').textContent,/unknown — 1/);assert.equal(card(f).querySelectorAll('img,script').length,0);
-  const details=card(f).querySelector('[data-profile-diagnostics]');assert.equal(details.hidden,false);assert.match(details.textContent,/Поля: network_type/);
-  assert.doesNotMatch(f.d.body.textContent,/RAW_PRIVATE|RAW_SECRET|<img|<script>|onerror|op_d{64}/);assert.equal(details.querySelectorAll('p').length,1);
-  assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
-  await f.views.autoposting.render(f.node('view'),{...f.ctx,identity:{...f.ctx.identity,role:'editor',permissions:['autoposting.view','autoposting.edit']}});
-  assert.equal(card(f).querySelector('[data-profile-diagnostics]'),null);
- }finally{f.close();}
-});
 
-test('Onlypult nonempty profiles keep the selection flow without showing diagnostics',async()=>{
- const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[{id:'alvi-vk',name:'Profile',platform:'vk',status:'active'}],diagnostics:{totalProfiles:1,platformCounts:[{platform:'vk',count:1}],profileShapes:[{idType:'string',nameType:'string',statusType:'string',platformType:'string',count:1}]}}:undefined});
- try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  assert.equal(f.node('autoposting-status').textContent,'Выберите профиль этой компании, сохраните и проверьте доступ.');assert.equal(card(f).querySelector('[data-profile-diagnostics]').hidden,true);
-  channelInput(f,'target','alvi-vk');assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,false);
- }finally{f.close();}
-});
 
-test('Onlypult profile labels are escaped and a response for another company cannot populate the selector',async()=>{
- let wrong=true;const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:wrong?'avokado':call.code,profiles:[{id:'exact-vk-id',name:'<img src=x onerror=alert(1)>',platform:'vk',status:'active'}]}:undefined});
- try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  assert.equal(card(f).querySelector('[data-channel-field=target]').options.length,1);assert.match(f.node('autoposting-status').textContent,/Не удалось загрузить/);
-  wrong=false;card(f).querySelector('[data-load-profiles]').click();await f.settle();
-  assert.equal(card(f).querySelector('img'),null);assert.match(card(f).querySelector('[data-channel-field=target]').textContent,/<img/);
-  assert.equal(card(f).querySelector('[data-channel-field=target]').options[1].value,'exact-vk-id');
- }finally{f.close();}
-});
 
-test('Onlypult delayed profile response cannot overwrite another company or expose its profile names',async()=>{
- let release;const f=await fixture({override:call=>call.path.endsWith('/profiles')&&call.code==='alvi'?new Promise(resolve=>{release=resolve;}):undefined});
- try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(typeof release,'function');
-  await f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});
-  release({companyCode:'alvi',profiles:[{id:'alvi-private-profile',name:'ALVI PROFILE FROM PREVIOUS COMPANY',platform:'vk',status:'active'}]});await f.settle();
-  assert.equal(f.node('autoposting-company').value,'avokado');assert.equal(card(f).querySelector('[data-channel-field=provider]').value,'direct');
-  assert.ok(!f.d.body.textContent.includes('ALVI PROFILE FROM PREVIOUS COMPANY'));
-  assert.equal(f.calls.filter(c=>c.path.endsWith('/profiles')).length,1);
- }finally{f.close();}
-});
 
-test('Onlypult profile cache is removed on provider change and disabled viewers cannot load or configure it',async()=>{
- const f=await fixture();try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(card(f).querySelector('[data-channel-field=target]').options.length,2);
-  channelInput(f,'provider','direct');channelInput(f,'provider','onlypult');assert.equal(card(f).querySelector('[data-channel-field=target]').options.length,1);
- }finally{f.close();}
- const viewer=await fixture({role:'editor',permissions:['autoposting.view'],override:call=>call.path.endsWith('/settings')?{channels:[{...channels()[1],provider:'onlypult',target:'alvi-vk'}]}:undefined});
- try{assert.equal(card(viewer).querySelector('[data-channel-field=provider]').disabled,true);assert.equal(card(viewer).querySelector('[data-load-profiles]').disabled,true);
-  card(viewer).querySelector('[data-load-profiles]').click();await viewer.settle();assert.equal(viewer.calls.some(c=>c.path.endsWith('/profiles')),false);
- }finally{viewer.close();}
-});
 
-test('company editors can edit materials but cannot configure owner-managed Onlypult or enumerate its profiles',async()=>{
+test('company editors can edit materials; owner-managed Onlypult is configured on «Подключениях» (№149)',async()=>{
  const f=await fixture({role:'editor',permissions:['autoposting.view','autoposting.edit'],override:call=>call.path.endsWith('/settings')&&call.method==='GET'?{channels:[channels()[0],{...channels()[1],provider:'onlypult',target:'alvi-vk'}],timezone:'Asia/Irkutsk'}:undefined});
  try{
-  const onlypult=card(f),direct=card(f,'telegram');
-  for(const field of onlypult.querySelectorAll('input,select,button'))assert.equal(field.disabled,!field.matches('[data-check-channel]'),field.outerHTML);
-  assert.equal(direct.querySelector('[data-channel-field=provider]').disabled,false);
-  assert.equal(direct.querySelector('[data-channel-field=provider] option[value=onlypult]').disabled,true);
+  assert.equal(f.node('autoposting-channels'),null);assert.equal(f.node('autoposting-connections-link').querySelector('a').getAttribute('href'),'#content/connections');
   assert.equal(f.node('autoposting-title').disabled,false);assert.equal(f.node('autoposting-text').disabled,false);
-  onlypult.querySelector('[data-load-profiles]').dispatchEvent(new f.w.MouseEvent('click',{bubbles:true}));
-  onlypult.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await f.settle();
-  assert.equal(f.calls.some(c=>c.path.endsWith('/profiles')||c.method==='PUT'),false);
-  onlypult.querySelector('[data-check-channel]').click();await f.settle();
-  assert.ok(f.calls.some(c=>c.path.endsWith('/settings/vk/check')&&c.method==='POST'));
   fill(f);await f.click('autoposting-save');assert.equal(f.posts.length,1);assert.equal(f.posts[0].companyCode,'alvi');assert.equal(f.posts[0].status,'draft');
  }finally{f.close();}
 });

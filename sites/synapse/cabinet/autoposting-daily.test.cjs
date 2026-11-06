@@ -556,32 +556,19 @@ test('продолжение по оставшимся площадкам: кн�
   }finally{viewer.close();}
 });
 
-test('карточка подключения YouTube Shorts: только Onlypult, по умолчанию выключено, есть загрузка профилей, проверка и сохранение',async()=>{
+test('подключённый, но выключенный канал не выглядит неподключённым; ключи площадок — на «Подключениях» (№149)',async()=>{
   const channels=[
     {id:'telegram',platform:'telegram',name:'Telegram',enabled:false,connected:true,revision:1,provider:'direct'},
     {id:'youtube_shorts',platform:'youtube_shorts',name:'YouTube Shorts',enabled:false,connected:false,revision:0,
      provider:'onlypult',target:'',caps:{maxText:5000,maxMedia:1,mediaMode:'video'}}];
   const f=await fixture({override:call=>call.path.endsWith('/settings')
     ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
-    f.d.querySelector('.autoposting-connections')?.setAttribute('open','');
-    const card=[...f.d.querySelectorAll('[data-channel]')].find(node=>node.dataset.channel==='youtube_shorts');
-    assert.ok(card,'карточка канала есть');
-    const options=[...card.querySelectorAll('[data-channel-field="provider"] option')].map(node=>node.value);
-    assert.deepEqual(options,['onlypult'],'прямого подключения в выборе нет');
-    assert.equal(card.querySelector('[data-channel-field="provider"]').value,'onlypult');
-    assert.equal(card.querySelector('[data-channel-field="enabled"]').checked,false,'по умолчанию отправка выключена');
-    assert.ok(card.querySelector('[data-channel-field="name"]'),'название канала можно задать');
-    assert.ok(card.querySelector('[data-channel-field="target"]'),'профиль выбирается списком');
-    assert.ok(card.querySelector('[data-load-profiles="youtube_shorts"]'),'есть загрузка профилей');
-    assert.ok(card.querySelector('[data-check-channel="youtube_shorts"]'),'есть проверка доступа');
-    assert.ok(card.querySelector('button[type="submit"]'),'есть сохранение подключения');
-    assert.match(card.textContent,/только через Onlypult/);
-    assert.match(card.textContent,/заголовок|заголовка/i);
-    // Подключённый, но выключенный канал больше не выглядит неподключённым.
+    assert.equal(f.d.querySelector('[data-channel]'),null,'форм ключей в «Постинге» больше нет');
+    assert.equal(f.d.querySelector('#autoposting-connections-link a').getAttribute('href'),'#content/connections');
     const platforms=f.node('autoposting-platforms').textContent;
     assert.match(platforms,/Telegram — отправка выключена/);
     assert.doesNotMatch(platforms,/Telegram — требуется подключение/);
-    assert.ok(f.calls.every(call=>call.method==='GET'),'осмотр карточки ничего не сохраняет');
+    assert.ok(f.calls.every(call=>call.method==='GET'),'осмотр ничего не сохраняет');
   }finally{f.close();}
 });
 
@@ -597,10 +584,6 @@ test('карточка подключения названа своей площ
     scheduledAt:'2026-09-24T23:45:00Z',platformApprovals,approval:{approved:false,stale:false,platforms:platformApprovals}});
   const f=await fixture({entries:[entry],override:call=>call.path.endsWith('/settings')
     ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
-    const youtubeCard=[...f.d.querySelectorAll('[data-channel]')].find(node=>node.dataset.channel==='youtube_shorts');
-    assert.match(youtubeCard.querySelector('h3').textContent,/YouTube Shorts/,'канал назван своей площадкой, а не Telegram');
-    const telegramCard=[...f.d.querySelectorAll('[data-channel]')].find(node=>node.dataset.channel==='telegram');
-    assert.match(telegramCard.querySelector('h3').textContent,/Telegram/);
     await f.click('[data-open-post="1"]');
     await f.click('#autoposting-preview');
     const preview=f.node('autoposting-preview-content').textContent;
