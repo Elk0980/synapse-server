@@ -653,7 +653,7 @@ const handleContentFactoryCompletion=require('./content-factory-completion-http'
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
-const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation}),
+const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation,mentor:()=>mediaMentor}),
   companyModuleContext,readJson,send,trustedService:request=>!request.headers[CRM_IDENTITY_HEADER]});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
@@ -671,7 +671,7 @@ const handleContentFactoryContext=createContentFactoryContextHandler({generation
   planningInsights:{capture:(code,month)=>require('./content-factory-planning-insights').createPlanningInsights({stats:socialStats}).capture(code,month)}});
 const contentPlanDrafts = createContentPlanDrafts(db,{jobs:contentPlanJobs,autoposting});
 const contentPlanWorkspace = require('./content-plan-workspace').createContentPlanWorkspace(db,{mentor:mediaMentor});
-const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,workspace:contentPlanWorkspace,companyModuleContext,readJson,send});
+const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,workspace:contentPlanWorkspace,stages:require('./content-stages').createContentStages(db),companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 const vkDirect = createVkDirect(db,{apiKey:API_KEY});

@@ -75,7 +75,7 @@ function edl(value,durationMs){
   return {v:1,video,audio,captions:titles,coverMs,speed,outputMs:Math.round(total/speed)};
 }
 
-function createReelMaterials(db,{autoposting,information,mediaOrigins=process.env.PUBLISHING_ASSET_ORIGINS||DEFAULT_MEDIA_ORIGINS}={}){
+function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,mediaOrigins=process.env.PUBLISHING_ASSET_ORIGINS||DEFAULT_MEDIA_ORIGINS}={}){
   const allowedOrigins=mediaOriginsOf(mediaOrigins);
   const mediaUrl=(value,code)=>{const result=checkMedia(value,code,allowedOrigins);if(!result.href)fail(result.status,result.message,result.code);return result.href;};
   db.exec(`CREATE TABLE IF NOT EXISTS reel_materials (
@@ -93,6 +93,11 @@ function createReelMaterials(db,{autoposting,information,mediaOrigins=process.en
       edl TEXT, comment TEXT NOT NULL DEFAULT '', start_ms INTEGER, end_ms INTEGER, status TEXT NOT NULL DEFAULT 'pending',
       task_id INTEGER, result_version INTEGER, client_request_id TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(company_id,client_request_id));`);
+  /* Связь ролика с идеей контент-плана (specs/209-cf-stages): добавочная колонка, старые строки остаются без связи. */
+  if(!db.prepare('PRAGMA table_info(reel_materials)').all().some(column=>column.name==='idea_id')){
+    db.exec('ALTER TABLE reel_materials ADD COLUMN idea_id TEXT');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS reel_materials_idea ON reel_materials(company_id,idea_id) WHERE idea_id IS NOT NULL');
   const transaction=fn=>{db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}};
   const rowFor=(owner,id)=>{const row=Number.isSafeInteger(id)&&db.prepare('SELECT * FROM reel_materials WHERE id=? AND company_id=?').get(id,owner.id);if(!row)fail(404,'Ролик не найден','NOT_FOUND');return row;};
   const versionsOf=id=>db.prepare('SELECT * FROM reel_versions WHERE reel_id=? ORDER BY version').all(id).map(v=>({version:v.version,mediaUrl:v.media_url,
@@ -110,7 +115,8 @@ function createReelMaterials(db,{autoposting,information,mediaOrigins=process.en
   function reelDto(row,owner,full){
     const versions=versionsOf(row.id),current=versions.at(-1)||null;
     const base={id:row.id,key:'reel:'+row.id,source:'materials',companyCode:owner.code.toLowerCase(),title:row.title,releaseDate:row.release_date,
-      platforms:parse(row.platforms,[]),postId:row.post_id,currentVersion:current,versionCount:versions.length,
+      platforms:parse(row.platforms,[]),postId:row.post_id,ideaId:row.idea_id||null,planLink:row.idea_id?{ideaId:row.idea_id,source:'materials'}:null,
+      currentVersion:current,versionCount:versions.length,
       openEdits:db.prepare("SELECT COUNT(*) n FROM reel_edits WHERE reel_id=? AND status IN ('pending','in_progress')").get(row.id).n};
     if(!full)return base;
     const edits=db.prepare('SELECT * FROM reel_edits WHERE reel_id=? ORDER BY id').all(row.id).map(editDto);
@@ -149,14 +155,78 @@ function createReelMaterials(db,{autoposting,information,mediaOrigins=process.en
       return insert(owner,{title:plan.title,releaseDate:plan.releaseDate,platforms:plan.platforms,postId:post.id,
         mediaUrl:plan.currentVersion.mediaUrl,sha256:plan.currentVersion.sha256,note:'Из контент-плана'},actor);
     }
-    object(body,['title','releaseDate','platforms','mediaUrl','sha256','durationMs']);
-    return insert(owner,{title:text(body.title??'',200,true),releaseDate:date(body.releaseDate??''),platforms:platforms(body.platforms??[]),postId:null,
-      mediaUrl:mediaUrl(body.mediaUrl,owner.code),sha256:sha(body.sha256),durationMs:body.durationMs===undefined?null:int(body.durationMs,100,MAX_MS,'Длительность'),note:''},actor);
+    object(body,['title','releaseDate','platforms','mediaUrl','sha256','durationMs','ideaId','offPlan']);
+    if(body.ideaId!==undefined&&body.ideaId!==null&&body.ideaId!==''&&body.offPlan===true)fail(400,'Ролик либо к рилсу плана, либо вне плана');
+    if(body.offPlan!==undefined&&typeof body.offPlan!=='boolean')fail(400,'«Вне плана» — true или false');
+    const data={title:text(body.title??'',200,true),releaseDate:date(body.releaseDate??''),platforms:platforms(body.platforms??[]),postId:null,
+      mediaUrl:mediaUrl(body.mediaUrl,owner.code),sha256:sha(body.sha256),durationMs:body.durationMs===undefined?null:int(body.durationMs,100,MAX_MS,'Длительность'),note:'',ideaId:null};
+    if(body.ideaId!==undefined&&body.ideaId!==null&&body.ideaId!==''){
+      data.ideaId=planIdea(owner,body.ideaId).ideaId;
+      /* У идеи уже есть ролик — загрузка становится его новой версией, а не второй карточкой. */
+      const existing=reelForIdea(owner,data.ideaId);
+      if(existing){
+        const added=addVersion(owner.code,existing.id,{mediaUrl:data.mediaUrl,sha256:data.sha256||undefined,durationMs:data.durationMs,note:'Новая загрузка к рилсу плана'},actor?.userName||String(actor?.userId??''));
+        return {...added.reel,appended:true,appendedVersion:added.version.version};
+      }
+    }
+    let offPlan=null;
+    if(body.offPlan===true){offPlan=draftIdea(owner,data,actor);data.ideaId=offPlan.ideaId;}
+    const reel=insert(owner,data,actor);
+    return offPlan?{...reel,offPlan}:reel;
+  }
+  /* Идея плана ищется только в плане своей компании (company_id из проверенной компании). */
+  const IDEA=/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
+  function planDays(owner){
+    const exists=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media_mentor_plans'").get();
+    const row=exists&&db.prepare('SELECT plan FROM media_mentor_plans WHERE company_id=?').get(owner.id);
+    const days=row?parse(row.plan,{}).days:null;return Array.isArray(days)?days:[];
+  }
+  function planIdea(owner,value){
+    if(typeof value!=='string'||!IDEA.test(value))fail(400,'Некорректный рилс плана');
+    const idea=planDays(owner).find(day=>day&&day.ideaId===value);
+    if(!idea)fail(404,'Рилс плана не найден в этой компании','NOT_FOUND');
+    return idea;
+  }
+  function reelForIdea(owner,ideaId){
+    const direct=db.prepare('SELECT * FROM reel_materials WHERE company_id=? AND idea_id=? ORDER BY id LIMIT 1').get(owner.id,ideaId);
+    if(direct)return direct;
+    const transfers=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media_mentor_variant_transfers'").get();
+    return transfers?db.prepare(`SELECT r.* FROM reel_materials r JOIN media_mentor_variant_transfers t ON t.post_id=r.post_id AND t.company_id=r.company_id
+      WHERE r.company_id=? AND t.idea_id=? ORDER BY r.id LIMIT 1`).get(owner.id,ideaId)||null:null;
+  }
+  /* «Вне плана»: черновик идеи (productionStatus=draft) в текущем плане через обычное сохранение плана.
+     Сохранение создаёт новую версию плана, а согласование плана целиком привязано к версии, поэтому черновик
+     добавляется только пока план целиком ждёт решения (pending): согласованный или отклонённый план загрузка
+     не трогает. Не получилось — ролик сохраняется без связи, причина возвращается в offPlan.reason. */
+  function draftIdea(owner,data,actor){
+    const refuse=(reason,message)=>({ideaId:null,created:false,reason,message});
+    if(!mentor)return refuse('NOT_CONFIGURED','Черновики плана не подключены');
+    const service=typeof mentor==='function'?mentor():mentor;
+    let snapshot;try{snapshot=service.get(owner.code);}catch{return refuse('PLAN_UNAVAILABLE','План недоступен');}
+    if(!snapshot.plan)return refuse('PLAN_ABSENT','План ещё не составлен');
+    if(snapshot.approval?.status!=='pending')return refuse('PLAN_DECIDED','План целиком уже согласован или отклонён: черновик не добавлен, чтобы не сбросить решение');
+    const brief=snapshot.brief.fields.platforms||[];
+    const platform=data.platforms.find(id=>brief.includes(id))||brief[0];
+    if(!platform)return refuse('NO_PLATFORM','В брифе нет площадок');
+    let day=data.releaseDate;
+    if(!day){try{day=new Intl.DateTimeFormat('en-CA',{timeZone:db.prepare('SELECT timezone FROM companies WHERE id=?').get(owner.id)?.timezone||'UTC'}).format(new Date(now()));}
+      catch{day=new Date(now()).toISOString().slice(0,10);}}
+    const days=snapshot.plan.days.map(({stage,stageSource,publications,...rest})=>rest);
+    const taken=new Set(days.map(item=>item.ideaId));let n=1,ideaId;
+    do ideaId=`draft-${day}-${String(n++).padStart(2,'0')}`;while(taken.has(ideaId));
+    const draft={ideaId,date:day,platform,format:'reel',role:'reach',topic:data.title||'Рилс вне плана',hook:'',assetId:'',mentorNote:'Загружен вне плана. Роль «Охватный» поставлена по умолчанию — уточните',
+      productionStatus:'draft',variants:{[platform]:{text:'',hook:'',format:'reel',assetId:'',mentorNote:''}}};
+    const next=[...days,draft].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    try{
+      service.savePlan(owner.code,{planRevision:snapshot.plan.revision,briefRevision:snapshot.brief.revision,days:next,reason:'Черновик: рилс загружен вне плана'},
+        {userId:actor?.userId??null,userName:actor?.userName||`#${actor?.userId??''}`});
+    }catch(error){return refuse('PLAN_REJECTED',error.message);}
+    return {ideaId,created:true,reason:'',message:'Черновик добавлен в план'};
   }
   function insert(owner,data,actor){
     return transaction(()=>{
-      const at=iso(),id=Number(db.prepare('INSERT INTO reel_materials(company_id,title,release_date,platforms,post_id,created_at,updated_at,created_by) VALUES(?,?,?,?,?,?,?,?)')
-        .run(owner.id,data.title,data.releaseDate,JSON.stringify(data.platforms),data.postId,at,at,String(actor?.userId??'')).lastInsertRowid);
+      const at=iso(),id=Number(db.prepare('INSERT INTO reel_materials(company_id,title,release_date,platforms,post_id,created_at,updated_at,created_by,idea_id) VALUES(?,?,?,?,?,?,?,?,?)')
+        .run(owner.id,data.title,data.releaseDate,JSON.stringify(data.platforms),data.postId,at,at,String(actor?.userId??''),data.ideaId||null).lastInsertRowid);
       db.prepare('INSERT INTO reel_versions(reel_id,version,media_url,sha256,duration_ms,note,created_at,created_by) VALUES(?,?,?,?,?,?,?,?)')
         .run(id,1,data.mediaUrl,data.sha256||'',data.durationMs??null,data.note,at,String(actor?.userId??''));
       return reelDto(rowFor(owner,id),owner,true);

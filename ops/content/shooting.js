@@ -313,7 +313,40 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     if ((match = /^\/files\/(\d+)$/.exec(route)) && ['GET', 'HEAD'].includes(method)) return sendFile(request, response, row(code, match[1]));
     fail(404, 'Адрес не найден');
   }
-  return {handle, storageInfo, sweep};
+  /* Факты съёмки для вычисляемого этапа идеи в CRM (specs/209-cf-stages). Только чтение, только своя компания.
+     На идею: [кадров в раскадровке, кадров с загруженным дублем, дублей, черновиков монтажа, ручной статус|null].
+     «Отснято» CRM ставит, когда снят каждый кадр раскадровки; без раскадровки — когда есть хотя бы один дубль
+     (та же логика, что summary() выше). Заголовок доверенный: прокси content удаляет присланный браузером. */
+  function facts(code) {
+    if (!Object.hasOwn(COMPANIES, code || '')) return null;
+    const reels = {};
+    const slot = (idea) => (reels[idea] ||= [0, 0, 0, 0, null]);
+    for (const item of db.prepare(`SELECT idea_id, kind, COUNT(*) n FROM shooting_uploads WHERE company_code=? AND status='stored'
+      GROUP BY idea_id, kind`).all(code)) {
+      if (item.kind === 'take') slot(item.idea_id)[2] = item.n; else if (item.kind === 'draft') slot(item.idea_id)[3] = item.n;
+    }
+    for (const state of db.prepare('SELECT idea_id, status, board FROM shooting_reels WHERE company_code=?').all(code)) {
+      let board = [];
+      try { board = JSON.parse(state.board || '[]'); } catch { board = []; }
+      const frames = Array.isArray(board) ? board.length : 0;
+      if (!frames && !state.status && !reels[state.idea_id]) continue;
+      const entry = slot(state.idea_id);
+      entry[0] = frames; entry[4] = STATUSES.includes(state.status) ? state.status : null;
+      if (frames) entry[1] = db.prepare(`SELECT COUNT(DISTINCT frame) n FROM shooting_uploads WHERE company_code=? AND idea_id=?
+        AND status='stored' AND kind='take' AND frame BETWEEN 1 AND ?`).get(code, state.idea_id, frames).n;
+    }
+    return {v: 1, companyCode: code, reels};
+  }
+  const FACTS_HEADER_LIMIT = 12000;
+  function factsHeader(code) {
+    const value = facts(code);
+    if (!value) return '';
+    let encoded = Buffer.from(JSON.stringify(value)).toString('base64url');
+    // Слишком большой заголовок не отправляется целиком: CRM честно пометит, что фактов съёмки нет.
+    if (encoded.length > FACTS_HEADER_LIMIT) encoded = Buffer.from(JSON.stringify({v: 1, companyCode: code, truncated: true})).toString('base64url');
+    return encoded;
+  }
+  return {handle, storageInfo, sweep, facts, factsHeader};
 }
 
 module.exports = {createShooting, readShootingConfig, signatureOk, MAX_FILE, CHUNK, MAX_CHUNK, DEFAULTS, MIN_RESERVE};

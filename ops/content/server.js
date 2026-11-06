@@ -818,6 +818,12 @@ async function proxyCrm(request, response, url, cors) {
   headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(forwardIdentity);
   delete headers['x-synapse-task-principal'];
   delete headers['x-synapse-content-approvers'];
+  delete headers['x-synapse-shooting-facts'];
+  // Этап идеи плана (specs/209-cf-stages): CRM не видит базу съёмки, факты загрузок передаются доверенным заголовком.
+  if (request.method === 'GET' && crmPath === '/media-mentor') {
+    const facts = shooting.factsHeader(String(url.searchParams.get('companyCode') || '').toLowerCase());
+    if (facts) headers['x-synapse-shooting-facts'] = facts;
+  }
   if (crmPath === '/media-mentor/plan/signoffs') {
     const approvers = contentPlanApprovers.header(url.searchParams.get('companyCode'));
     if (approvers) headers['x-synapse-content-approvers'] = approvers;

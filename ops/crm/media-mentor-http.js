@@ -7,6 +7,7 @@
    Согласование версии плана — решение по тексту, а не разрешение публиковать. */
 
 const {fail} = require('./company-information');
+const {shootingFacts} = require('./content-stages');
 
 const NOTICE = 'Бриф и план хранятся в CRM. Согласование версии плана — решение по тексту, ' +
   'а не разрешение публиковать: ничего не отправляется, очередь публикаций не создаётся, ' +
@@ -38,7 +39,7 @@ function configuredApprovers(request) {
   return list.map((item) => ({userId: item.userId, label: String(item.label || `#${item.userId}`).slice(0, 200)}));
 }
 
-function createMediaMentorHandler({mentor, transfer, generation, generationDrafts, workflow, workspace, companyModuleContext, readJson, send}) {
+function createMediaMentorHandler({mentor, transfer, generation, generationDrafts, workflow, workspace, stages, companyModuleContext, readJson, send}) {
   return async function handleMediaMentor(request, response, url, cors = {}) {
     // Раздел внедрения живёт на /media-mentor-rollout и сюда не попадает: после имени
     // модуля обязателен «/» или конец пути.
@@ -85,7 +86,9 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
       else if(!generationJob && request.method==='POST') result=generation.create(code,await readJson(request));
       else fail(405,'Метод не поддерживается');
     } else if (url.pathname === '/media-mentor' && readOnly) {
-      result = {...served(mentor.get(code)), transfer: transfer.status(code),
+      // Этап и публикации идеи (specs/209-cf-stages): только добавочные поля, вычисляются при чтении.
+      const snapshot = mentor.get(code);
+      result = {...served(stages ? stages.apply(snapshot, code, shootingFacts(request, code)) : snapshot), transfer: transfer.status(code),
         variantTransfer: transfer.variantStatus(code),
         // Анкета читается подсказкой Хью вместе с брифом; без модуля поле просто отсутствует.
         ...(workspace ? {questionnaire: workspace.questionnaire(code).fields} : {})};
