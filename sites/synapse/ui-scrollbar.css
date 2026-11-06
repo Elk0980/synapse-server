@@ -1,0 +1,7 @@
+/* Минималистичная полоса прокрутки во всех продуктах Synapse: кабинет, мини-приложение, доска, редакторы.
+   Клиентские сайты этот файл не подключают. Решение владельца 07.11.2026. */
+*{scrollbar-width:thin;scrollbar-color:rgba(140,151,171,.28) transparent}
+*::-webkit-scrollbar{width:4px;height:4px}
+*::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(140,151,171,.28);border-radius:4px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(140,151,171,.55)}
