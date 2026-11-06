@@ -21,7 +21,11 @@
   const LABEL = {topic: 'Тема', hook: 'Хук — первые 1–2 с', script: 'Сценарий (строка «Имя: реплика»)', broll: 'Вставки (B-roll)',
     style: 'Стиль', props: 'Реквизит', filmingBy: 'Кто снимает', caption: 'Подпись к публикации'};
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const day = (iso) => { try { return new Date(iso + 'T00:00:00Z').toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit', weekday: 'short', timeZone: 'UTC'}); } catch { return iso; } };
+  /* Макет 07.11: «Сб 01.11» — день недели с заглавной и дата без года. */
+  const WD = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  const day = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    return m ? `${WD[new Date(Date.UTC(+m[1], m[2] - 1, +m[3])).getUTCDay()]} ${m[3]}.${m[2]}` : String(iso || ''); };
+  const kit = () => window.CfKit || null;
   const isoIn = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   /* Сценарий по ролям: «Имя: реплика». Строка без имени — действие/ремарка. */
   const roles = (script) => String(script || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
@@ -31,14 +35,18 @@
   const caption = (idea) => idea.variants?.[idea.platform]?.text || Object.values(idea.variants || {}).find((v) => v.text)?.text || '';
   const rolesTable = (lines) => `<table class="cp-script"><tbody>${lines.map((l) => `<tr><th scope="row">${esc(l.actor || '—')}</th><td>${esc(l.line)}</td></tr>`).join('')}</tbody></table>`;
   /* Макет Влада 07.11: значки площадок — цветные кружки с подписью, без логотипов. */
+  const NET_ORDER = ['telegram', 'vk', 'youtube_shorts', 'youtube', 'tiktok', 'instagram', 'max', 'two_gis'];
   const NET = {telegram: ['TG', '#229ed9'], vk: ['VK', '#0077ff'], youtube_shorts: ['YT', '#e62117'], youtube: ['YT', '#e62117'],
     tiktok: ['TT', '#111'], instagram: ['IG', '#d6249f'], max: ['MAX', '#6b4eff'], two_gis: ['2Г', '#2f9e44']};
   /* «Сценарий по секундам» строится только из сценария плана. Строка «0–2 с | Кто | Реплика | В кадре | Действие | Титр»
      (копия из Google Таблицы) раскладывается по колонкам; иначе — время в начале строки (если есть) и «Имя: реплика»,
      «Кадр:»/«В кадре:», «Титр:», «Вставка:»/«[…]»/«Действие:». Пустые колонки не показываются. */
-  const SEC = ['Время', 'Кто говорит', 'Реплика', 'В кадре', 'Действие / монтаж', 'Титр'];
+  const SEC = ['Время', 'Кто говорит', 'Точная реплика', 'Кто / что в кадре', 'Действие / монтаж', 'Титр'];
   const TIME = /^(\d+(?:[.,]\d+)?(?:\s*[–—-]\s*\d+(?:[.,]\d+)?)?\s*с(?:ек)?\.?)(?:\s*[·|:—–-]\s*|\s+)/i;
-  const seconds = (script) => String(script || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((raw) => {
+  /* Строки «До съёмки: …» — подготовка, а не сцена: они идут в блок «До съёмки» после сцен. */
+  const BEFORE = /^до\s+съёмки\s*[:—–-]\s*/i;
+  const beforeLines = (script) => String(script || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => BEFORE.test(l)).map((l) => l.replace(BEFORE, '')).filter(Boolean);
+  const seconds = (script) => String(script || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !BEFORE.test(l)).map((raw) => {
     if (raw.includes('|')) { const c = raw.split('|').map((x) => x.trim()); if (!TIME.test(c[0] + ' ')) c.unshift(''); return SEC.map((_, i) => c[i] || ''); }
     const row = ['', '', '', '', '', '']; let rest = raw; const t = TIME.exec(rest);
     if (t) { row[0] = t[1]; rest = rest.slice(t[0].length).trim(); }
@@ -53,8 +61,9 @@
   function secondsTable(script) {
     const rows = seconds(script); if (!rows.length) return '';
     const cols = SEC.map((_, i) => i).filter((i) => rows.some((r) => r[i]));
-    return `<div class="cp-secs"><b>Сценарий по секундам</b><table class="cp-sec"><thead><tr>${cols.map((i) => `<th scope="col">${SEC[i]}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((r) => `<tr>${cols.map((i) => `<td data-label="${SEC[i]}">${esc(r[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    /* «Сцена №N» — жирным в начале каждой строки (макет 07.11). */
+    return `<div class="cp-secs"><b>Сценарий по секундам</b><table class="cp-sec"><thead><tr><th scope="col">Сцена</th>${cols.map((i) => `<th scope="col">${SEC[i]}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r, n) => `<tr><td data-label="Сцена"><b>Сцена №${n + 1}</b></td>${cols.map((i) => `<td data-label="${SEC[i]}">${esc(r[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
 
   /* Доступ к API только через ctx контракта А: компания, CSRF и сессия добавляются оболочкой. */
@@ -74,7 +83,16 @@
 
   let state = null, epoch = 0;
   const sortKey = ctx => `sb-content-plan:${ctx.user?.id || ctx.user?.login || 'user'}:${ctx.companyCode}:sort`;
-  const savedSort = ctx => { try { const value = localStorage.getItem(sortKey(ctx)); return ['date','platform','status'].includes(value) ? value : 'date'; } catch { return 'date'; } };
+  /* ⇅ по макету 07.11: дата выхода (по умолчанию), статус — сначала на согласовании, площадка, номер рилса. */
+  const SORTS = [{id: 'date', label: 'По дате выхода'}, {id: 'status', label: 'По статусу: сначала на согласовании'},
+    {id: 'platform', label: 'По площадке'}, {id: 'number', label: 'По номеру рилса'}];
+  const savedSort = ctx => { if (kit()) return kit().getSort(sortKey(ctx), SORTS);
+    try { const value = localStorage.getItem(sortKey(ctx)); return SORTS.some((o) => o.id === value) ? value : 'date'; } catch { return 'date'; } };
+  const STATUS_RANK = {pending: 0, rejected: 1, empty: 2, approved: 3, excluded: 4};
+  /* Этап цепочки CfKit по тому, что сервер реально знает: решение по версии и productionStatus (planned/shot/editing/draft).
+     Этапов монтажа, выхода и публикации в плане пока нет — их здесь не показываем. */
+  const stageOf = (idea, st) => idea.productionStatus === 'draft' || st === 'empty' ? 'draft' : st === 'pending' ? 'script_review'
+    : st === 'rejected' ? 'script_rework' : st === 'approved' ? ({shot: 'shot', editing: 'editing'}[idea.productionStatus] || 'planned') : '';
   const sheetLink = value => { try { const u = new URL(value); return u.protocol === 'https:' && u.hostname === 'docs.google.com' && !u.port && !u.username && !u.password && /^\/spreadsheets\/d\/[\w-]+(?:\/|$)/.test(u.pathname) ? u.href : ''; } catch { return ''; } };
 
   async function mount(container, ctx) {
@@ -88,7 +106,8 @@
       if (mine !== epoch || ctx.signal?.aborted) return;
       const view = ctx.route?.params?.get?.('view') === 'full' ? 'full' : 'short';
       state = {code, ctx, api, container, mentor, questionnaire, signoffs, settings: settings || null,
-        tab: 'plan', qOpen: false, qMode: 'edit', sort: savedSort(ctx), sortOpen: false, editDrafts: new Map(), view, open: state?.code === code ? state.open : new Set(), pending: {}, saving: null, suggestion: null};
+        tab: 'plan', qOpen: false, qMode: 'edit', sort: savedSort(ctx), sortOpen: false, feedReset: true, calOpen: state?.code === code ? state.calOpen : false,
+        strip: state?.code === code ? state.strip : null, editDrafts: new Map(), view, open: state?.code === code ? state.open : new Set(), pending: {}, saving: null, suggestion: null};
       draw();
     } catch (error) {
       if (mine === epoch && !ctx.signal?.aborted) container.innerHTML = `<p class="cp-error" role="alert">${esc(error.status === 403
@@ -119,16 +138,29 @@
     const status = (idea) => { const st = statusOf(idea);
       /* Влад 06.11: у строки один статус. Пока не согласовано — статус согласования; после — ход работы (Отснято, В монтаже). */
       const prod = st === 'approved' && ['shot', 'editing'].includes(idea.productionStatus) ? idea.productionStatus : '';
+      const stage = kit() && stageOf(idea, st);
+      // Один чип этапа общей цепочки CfKit (неяркий цвет); без CfKit — прежняя подпись.
+      if (stage) return kit().stageChip(stage).replace('class="cfk-chip', `data-status="${esc(prod || st)}" class="cp-st cfk-chip`);
+      if (kit()) return `<span class="cp-st cfk-chip cfk-tone-gray" data-status="${esc(st)}">${esc(VSTATUS[st] || st)}</span>`;
       return `<span class="cp-st" data-status="${esc(prod || st)}">${esc(prod ? PROD[prod] : (VSTATUS[st] || st))}</span>`; };
     /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
        Плана нет — порядок прежний: анкета сверху и открыта, пока не заполнена. */
+    const number = new Map(allDays.map((idea, index) => [idea.ideaId, index]));
     const days = allDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
-      const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru') : state.sort === 'status' ? statusOf(a).localeCompare(statusOf(b),'ru') : 0;
+      const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru')
+        : state.sort === 'status' ? (STATUS_RANK[statusOf(a)] ?? 9) - (STATUS_RANK[statusOf(b)] ?? 9)
+        : state.sort === 'number' ? number.get(a.ideaId) - number.get(b.ideaId) : 0;
       return primary || String(a.date || '').localeCompare(String(b.date || '')) || String(a.ideaId).localeCompare(String(b.ideaId));
     });
     const sheetUrl = sheetLink(state.settings?.settings?.contentPlanSheetUrl);
+    state.sheetUrl = sheetUrl; state.shown = days;
+    /* Лента: прошедшие даты, по которым работа уже пошла дальше согласования, — выше стартовой точки.
+       Публикаций план не знает, поэтому граница — по дате и этапу, а не «вышло на площадке». */
+    const todayKey = kit() ? kit().dayKey(new Date()) : new Date().toISOString().slice(0, 10);
+    const above = (idea) => String(idea.date || '') < todayKey && statusOf(idea) === 'approved';
+    /* Макет 07.11: ⚙ (настройка генерации) стоит прямо на вкладке «Контент-план», а не в шапке списка. */
     const head = `<nav class="cp-tabs cp-head" aria-label="Планы"><div role="tablist" aria-label="Список публикаций">
-      <button type="button" role="tab" data-cp-tab="plan" aria-selected="${state.tab === 'plan'}" aria-controls="cp-publications">Контент-план</button>
+      <span class="cp-tab-plan"><button type="button" role="tab" data-cp-tab="plan" aria-selected="${state.tab === 'plan'}" aria-controls="cp-publications">Контент-план</button><button type="button" class="cp-gear" data-cp="settings-plan" aria-label="Настройка контент-плана: анкета генерации" title="Настройка контент-плана" aria-haspopup="dialog">⚙</button></span>
       <button type="button" role="tab" data-cp-tab="drafts" aria-selected="${state.tab === 'drafts'}" aria-controls="cp-publications">Черновики</button>
       ${edit ? '<button type="button" class="cp-new" data-cp="questionnaire">+ Новый</button>' : ''}</div>
       </nav>`;
@@ -148,38 +180,78 @@
           <label><span>Дней</span><select data-cp-days><option>7</option><option>14</option></select></label>
           <button type="button" class="plain-button" data-cp="generate">Сформировать план через Хью</button></div>`
         : '<button type="button" class="plain-button" data-cp-close>Закрыть</button>'}</div></div>`;
-    const approve = `<section class="cp-card cp-approve"><h3>Согласование</h3>
+    /* Макет 07.11: «На согласовании» не висит отдельным блоком над списком — согласование плана целиком
+       свёрнуто внизу (решения по рилсу — «Сменить статус ▾» в строке). */
+    const approve = `<details class="cp-card cp-approve"${state.approveOpen ? ' open' : ''}><summary>Согласование плана целиком · ${s.approvedIdeas} из ${s.ideas}</summary>
         ${s.planRevision ? `<ul class="cp-approvers">${s.approvers.map((a) => `<li><label class="cp-check"><input type="checkbox" data-signoff="${esc(a.slot)}" ${a.checked ? 'checked' : ''} ${a.canCheck ? '' : 'disabled'}> ${esc(a.label)}${a.userId && a.userId === ctx.user?.id ? ' (вы)' : ''}</label>
           <span class="cp-note">${a.checked ? `✓ ${esc(a.actorName)}` : 'ждёт отметки'}</span></li>`).join('')}</ul>
           ${s.emptyIdeas.length ? `<p class="cp-warn">Без подписи — не войдут в согласование: ${s.emptyIdeas.length}. Откройте строку и заполните подпись.</p>` : ''}`
           : '<p class="cp-note">Согласовывать пока нечего: сначала сформируйте или импортируйте план.</p>'}
-        ${approversNote()}<p class="cp-note">Согласовано материалов: ${s.approvedIdeas} из ${s.ideas}. Когда отметят все — план уходит к СММ и в «Съёмку».</p></section>`;
-    const plan = `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}"><div class="cp-list-head"><h3>Публикации</h3>
-      <div class="cp-tools"><button type="button" class="cp-gear" data-cp="settings-plan" aria-label="Выбор и настройка контент-плана" title="Выбор и настройка контент-плана" aria-haspopup="dialog">⚙</button>
-      ${sheetUrl ? `<a class="cp-sheet-link" href="${esc(sheetUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть Google Таблицу" title="Google Таблица">▦</a>` : ''}
+        ${approversNote()}<p class="cp-note">Согласовано материалов: ${s.approvedIdeas} из ${s.ideas}. Когда отметят все — план уходит к СММ и в «Съёмку».</p></details>`;
+    /* Шапка списка — общий CfKit.header (календарь, ▦, ⇅) и полоса дат; без CfKit — прежние ▦ и ⇅. */
+    const listHead = kit() ? '<div data-cp-header></div><div data-cp-dates></div>' : `<div class="cp-list-head"><h3>Публикации</h3>
+      <div class="cp-tools">${sheetUrl ? `<a class="cp-sheet-link" href="${esc(sheetUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть Google Таблицу" title="Google Таблица">▦</a>` : ''}
       <div class="cp-sort"><button type="button" data-cp-sort-toggle aria-label="Сортировать публикации" aria-expanded="${state.sortOpen}" aria-controls="cp-sort-menu">⇅</button>
-      <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${[['date','По дате'],['platform','По площадке'],['status','По статусу']].map(([value,label])=>`<button type="button" data-cp-sort="${value}" aria-pressed="${state.sort === value}">${state.sort === value ? '✓ ' : ''}${label}</button>`).join('')}</div></div></div></div>
+      <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${SORTS.map(({id, label}) => `<button type="button" data-cp-sort="${id}" aria-pressed="${state.sort === id}">${state.sort === id ? '✓ ' : ''}${esc(label)}</button>`).join('')}</div></div></div></div>`;
+    const plan = `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}">${listHead}
       ${!days.length ? `<p class="cp-note">${allDays.length ? 'В этом списке пока нет публикаций.' : 'Плана пока нет. Нажмите «+ Новый», чтобы заполнить анкету и сформировать план.'}</p>` : ''}
       ${state.view === 'full' ? sheet(days, platforms, status) : `${days.length ? '<div class="cp-thead" aria-hidden="true"><span>Дата</span><span>Тема</span><span>Площадки</span><span>Статус</span><span></span></div>' : ''}
       <ol class="cp-list">${days.map((idea) => {
         /* Макет Влада 07.11: дата и статус; тема со стрелкой ▾/▴ (не кнопка-стрелка — раскрывает вся карточка, кроме кнопок);
            ниже «Сменить статус ▾» и значки площадок. На ПК те же элементы стоят колонками таблицы. */
         const open = state.open.has(idea.ideaId), st = statusOf(idea);
-        return `<li class="cp-row" data-idea="${esc(idea.ideaId)}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea)}</div>
+        return `<li class="cp-row${open ? ' cp-open' : ''}" data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea)}</div>
           <button type="button" class="cp-line" data-toggle aria-expanded="${open}"><span class="cp-topic">${esc(idea.topic)}</span><span class="cp-chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
           ${open ? full(idea, edit, st, status) : ''}
           <div class="cp-acts">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${nets(idea, platformLabel)}</div>
           ${owner && state.menuOpen === idea.ideaId ? rowMenu(idea, st) : ''}</li>`; }).join('')}</ol>`}</section>`;
+    const keepScroll = container.querySelector('.cp-list')?.scrollTop || 0;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
       ${plan}${approve}
       <p class="cp-error" data-cp-error role="alert" hidden></p>${questionnaire}</section>`;
     container.querySelectorAll('[data-edit] textarea').forEach(n => { const key = n.closest('[data-edit]').dataset.edit + ':' + n.name; if (drafts.has(key)) n.value = drafts.get(key); });
     wire();
+    mountKit(keepScroll);
     if (!sheetUrl && ctx.user?.role === 'owner') {
       const hint = document.createElement('button'); hint.type = 'button'; hint.className = 'plain-button'; hint.textContent = 'Указать таблицу'; hint.onclick = () => ctx.navigate('settings/content');
       container.querySelector('.cp-q')?.append(hint);
     }
     if (edit) installImport();
+  }
+
+  /* Шапка «Публикации», полоса дат и стартовая точка ленты — общий CfKit. Полоса дат живёт между перерисовками
+     (позиция и выбранный день не сбрасываются); лента встаёт на старт только при открытии, смене вкладки или сортировки. */
+  function mountKit(keepScroll) {
+    const K = kit(), root = state.container, ctx = state.ctx;
+    if (!K) return;
+    const days = state.shown || [];
+    root.querySelector('[data-cp-header]')?.replaceWith(K.header({title: 'Публикации', actions: ['calendar', 'sheet', 'sort'],
+      sheetUrl: state.sheetUrl, sortOptions: SORTS, sortKey: sortKey(ctx), calendarOpen: state.calOpen,
+      onSort: (id) => { state.sort = id; state.feedReset = true; draw(); },
+      onCalendar: (open) => { state.calOpen = open; state.strip?.setOpen(open); }}));
+    const marked = new Set(days.map((idea) => idea.date).filter(Boolean));
+    if (!state.strip) {
+      state.strip = K.dateStrip({tz: tzLabel(ctx), timeZone: tzName(ctx), marked, selected: new Date(), onSelect: (date) => jumpTo(K.dayKey(date))});
+    } else if ([...marked].sort().join() !== (state.stripMarked || '')) state.strip.setMarked(marked);
+    state.stripMarked = [...marked].sort().join();
+    const slot = root.querySelector('[data-cp-dates]');
+    if (slot) { slot.replaceWith(state.strip); state.strip.setOpen(state.calOpen); }
+    const list = root.querySelector('.cp-list');
+    if (!list) return;
+    const reset = state.feedReset; state.feedReset = false;
+    K.feedStart(list, {isAbove: (row) => row.dataset.above === '1', aboveLabel: '↑ выше — прошедшие даты', scroll: reset});
+    if (!reset) list.scrollTop = keepScroll;
+  }
+  /* Часовой пояс компании кабинет модулю пока не передаёт: тогда дни считаются по устройству и это подписано. */
+  const tzName = (ctx) => ctx.company?.timeZone || ctx.company?.timezone || '';
+  const tzLabel = (ctx) => ctx.company?.timeZoneLabel || (tzName(ctx) ? `Время компании: ${tzName(ctx)}` : 'Время устройства');
+  /* Выбор дня в полосе дат перематывает ленту к первому рилсу этого дня или ближайшему после него. */
+  function jumpTo(key) {
+    const list = state?.container.querySelector('.cp-list');
+    const row = list && [...list.querySelectorAll('.cp-row')].find((item) => String(item.dataset.date) >= key);
+    if (!row) return;
+    const top = row.offsetTop - 4;
+    if (typeof list.scrollTo === 'function') list.scrollTo({top, behavior: 'smooth'}); else list.scrollTop = top;
   }
 
   /* Полный план — одна строка на рилс, как в таблице «КОНТЕНТ ПЛАН»; на телефоне строки становятся карточками. */
@@ -196,7 +268,8 @@
 
   /* Площадки, на которые запланирован рилс: версии идеи без исключённых. Нет площадок — нет значков. */
   function nets(idea, label) {
-    const ids = Object.keys(idea.variants || {}).filter((id) => !idea.variants[id]?.excluded);
+    const rank = (id) => { const i = NET_ORDER.indexOf(id); return i < 0 ? NET_ORDER.length : i; };
+    const ids = Object.keys(idea.variants || {}).filter((id) => !idea.variants[id]?.excluded).sort((a, b) => rank(a) - rank(b));
     if (!ids.length) return '';
     return `<span class="cp-nets" role="img" aria-label="Площадки: ${esc(ids.map(label).join(', '))}">${ids.map((id) => {
       const [abbr, color] = NET[id] || [String(id).slice(0, 3).toUpperCase(), '#667085'];
@@ -234,14 +307,18 @@
     const comments = [...new Set((mentor.variants || []).filter((v) => v.ideaId === idea.ideaId && v.comment)
       .map((v) => (v.actorName ? v.actorName + ': ' : '') + v.comment))];
     const asset = idea.assetId && (mentor.brief?.fields?.assets || []).find((a) => a.id === idea.assetId);
+    /* Макет 07.11 (как лист «КОНТЕНТ ПЛАН»): дата, формат, задача, съёмка, статус, правки, исходники; пустое не выводится. */
     const fields = [['Дата', esc(day(idea.date))], ['Формат', esc((vocab.formats || []).find((f) => f.id === idea.format)?.label || idea.format || '')],
-      ['Съёмка', esc(idea.filmingBy || '')], ['Статус', status(idea)], ['Комментарии', comments.map(esc).join('<br>')],
-      ['Исходники', asset ? esc(asset.title) : '']].filter(([, v]) => v);
-    return `<div class="cp-full"><dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
-      ${secondsTable(idea.script)}<dl>
-      ${block('hook', idea.hook)}${block('broll', idea.broll)}${block('style', idea.style)}
+      ['Задача', esc((vocab.roles || []).find((r) => r.id === idea.role)?.label || '')],
+      ['Съёмка', esc(idea.filmingBy || '')], ['Статус', status(idea)], ['Правки', comments.map(esc).join('<br>') || '—'],
+      ['Исходники', asset ? `📁 ${esc(asset.title)}` : '']].filter(([, v]) => v);
+    /* «До съёмки» — после сцен: хук, вставки, стиль, реквизит, подпись, задание Хью. */
+    const before = `${block('hook', idea.hook)}${block('broll', idea.broll)}${block('style', idea.style)}
       ${block('props', idea.props)}${block('caption', caption(idea))}
-      ${idea.mentorNote ? `<div><dt>Задание Хью</dt><dd>${esc(idea.mentorNote)}</dd></div>` : ''}</dl>
+      ${idea.mentorNote ? `<div><dt>Задание Хью</dt><dd>${esc(idea.mentorNote)}</dd></div>` : ''}
+      ${beforeLines(idea.script).map((line) => `<div><dt>Подготовка</dt><dd>${esc(line)}</dd></div>`).join('')}`.trim();
+    return `<div class="cp-full"><dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      ${secondsTable(idea.script)}${before ? `<div class="cp-before"><b>До съёмки</b><dl>${before}</dl></div>` : ''}
       ${edit ? `<details class="cp-edit"><summary>Изменить</summary><form data-edit="${esc(idea.ideaId)}">
         ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
         <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}</div>`;
@@ -409,10 +486,11 @@
     root.querySelectorAll('[data-q]').forEach((field) => field.addEventListener('input', () => queueSave({[field.dataset.q]: field.value})));
     root.querySelectorAll('[data-q-platform]').forEach((box) => box.addEventListener('change', () =>
       queueSave({platforms: [...root.querySelectorAll('[data-q-platform]:checked')].map((b) => b.dataset.qPlatform)})));
-    /* Макет 07.11: раскрывает нажатие на любое место карточки, кроме кнопок, ссылок, полей и уже открытого полного вида. */
+    /* Макет 07.11: нажатие на любое место карточки раскрывает полный вид, нажатие в открытой карточке сворачивает её;
+       кнопки, ссылки, поля, форма правки и меню «Сменить статус ▾» карточку не трогают. */
     root.querySelectorAll('.cp-row').forEach((row) => row.addEventListener('click', (event) => {
       const t = event.target;
-      if (!t.closest('[data-toggle]') && t.closest('button, a, input, textarea, select, label, summary, form, .cp-full, .cp-pop')) return;
+      if (!t.closest('[data-toggle]') && t.closest('button, a, input, textarea, select, label, summary, form, details, .cp-pop')) return;
       if (!t.closest('[data-toggle]') && String(window.getSelection?.() || '')) return;
       const id = row.dataset.idea; state.open.has(id) ? state.open.delete(id) : state.open.add(id); draw();
       root.querySelector(`[data-idea="${id}"] [data-toggle]`)?.focus();
@@ -440,10 +518,11 @@
     root.querySelectorAll('[data-cp-close]').forEach((button) => button.addEventListener('click', closeQuestionnaire));
     root.querySelector('[data-cp="generate"]')?.addEventListener('click', (event) => void generate(event.currentTarget));
     root.querySelector('[data-cp="settings"]')?.addEventListener('click', () => ctx.navigate('settings/content'));
-    root.querySelectorAll('[data-cp-tab]').forEach(button => button.onclick = () => { state.tab = button.dataset.cpTab; draw(); root.querySelector(`[data-cp-tab="${state.tab}"]`)?.focus(); });
+    root.querySelector('.cp-approve')?.addEventListener('toggle', (event) => { state.approveOpen = event.currentTarget.open; });
+    root.querySelectorAll('[data-cp-tab]').forEach(button => button.onclick = () => { state.tab = button.dataset.cpTab; state.feedReset = true; draw(); root.querySelector(`[data-cp-tab="${state.tab}"]`)?.focus(); });
     root.querySelector('[data-cp-sort-toggle]')?.addEventListener('click', () => { state.sortOpen = !state.sortOpen; draw(); root.querySelector('[data-cp-sort-toggle]')?.focus(); });
     root.querySelectorAll('[data-cp-sort]').forEach(button => button.onclick = () => {
-      state.sort = button.dataset.cpSort; state.sortOpen = false; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
+      state.sort = button.dataset.cpSort; state.sortOpen = false; state.feedReset = true; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
     });
     root.onkeydown = event => { if (event.key === 'Escape' && state?.qOpen) { event.preventDefault(); closeQuestionnaire(); return; }
       if (event.key === 'Escape' && state?.menuOpen) { const id = state.menuOpen; state.menuOpen = null; state.fixOpen = null; draw();
@@ -461,7 +540,7 @@
   }
 
   const definition = {title: 'Контент-план', mount,
-    unmount() { epoch++; if (state) clearTimeout(state.timer); state = null; document.body.classList.remove('cp-modal-open'); viewportPin(false); }};
+    unmount() { epoch++; if (state) { clearTimeout(state.timer); state.strip?.closeMonth?.(); } state = null; document.body.classList.remove('cp-modal-open'); viewportPin(false); }};
   sb.contentPlan = {definition, roles};
   // Реестр каркаса (контракт А). Без реестра — очередь SynapseModulesQueue: реестр А разбирает её при загрузке.
   if (typeof window.SynapseModules?.register === 'function') window.SynapseModules.register('content-plan', definition);

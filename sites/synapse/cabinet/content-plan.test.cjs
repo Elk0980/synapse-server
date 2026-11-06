@@ -8,18 +8,19 @@ const { JSDOM } = require('jsdom');
 
 const source = fs.readFileSync(path.join(__dirname, 'content-plan.js'), 'utf8');
 const importSource = fs.readFileSync(path.join(__dirname, 'reel-plan-import.js'), 'utf8');
+const kitSource = fs.readFileSync(path.join(__dirname, 'cf-kit.js'), 'utf8');
 const VOCAB = { platforms: [{ id: 'vk', label: 'ВКонтакте' }, { id: 'telegram', label: 'Telegram' }], formats: [{ id: 'reel', label: 'Рилс' }], roles: [{ id: 'reach', label: 'Охватный' }] };
 const idea = (n, extra = {}) => ({ ideaId: `s-${n}`, date: `2026-11-1${n}`, platform: 'vk', format: 'reel', role: 'reach',
   topic: `SAMPLE тема ${n}`, hook: 'SAMPLE хук', script: 'Мастер: Здравствуйте!\nКлиент: <b>Привет</b>\nПауза, смех',
   broll: 'SAMPLE руки', style: 'SAMPLE тёплый свет', props: 'SAMPLE халат', filmingBy: 'SAMPLE оператор', variants: { vk: { text: 'SAMPLE подпись', contentRevision: 1 } }, ...extra });
 
-function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null } = {}) {
+function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null, withKit = false, variants = null } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://cabinet.test/', runScripts: 'outside-only' });
   const { window } = dom, calls = [], opened = [];
   const db = {
     mentor: { companyCode: 'alpha', brief: { revision: 2, fields: { goal: '', audience: 'есть', platforms: briefPlatforms } }, vocabulary: VOCAB,
       plan: plan.length ? { revision: 4, briefRevision: 2, days: plan } : null,
-      variants: plan.map((p, i) => ({ ideaId: p.ideaId, platform: 'vk', status: i ? 'pending' : 'approved', approvable: true })) },
+      variants: variants || plan.map((p, i) => ({ ideaId: p.ideaId, platform: 'vk', status: i ? 'pending' : 'approved', approvable: true })) },
     questionnaire: { companyCode: 'alpha', revision: 3, filled: 1, total: 8, updatedAt: null, updatedBy: '', rules: ['Цены — только подтверждённые.'],
       fields: { goals: 'SAMPLE цель', audience: '', tone: '', rubrics: '', frequency: '', onCamera: '', constraints: '', platforms: qPlatforms } },
     signoffs: { companyCode: 'alpha', approversSource: 'stub', planRevision: plan.length ? 4 : 0, briefRevision: 2, stage: plan.length ? stage : 'none',
@@ -53,6 +54,7 @@ function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stag
   window.SbCabinet = {};
   if (withRegistry) window.SynapseModules = { register: (name, def) => registered.push([name, def]) };
   window.eval(importSource);
+  if (withKit) window.eval(kitSource);
   window.eval(source);
   const root = window.document.getElementById('root');
   const def = () => registered.find((r) => r[0] === 'content-plan')?.[1];
@@ -87,12 +89,18 @@ test('макет 07.11: карточка — дата, статус, тема с
   const full = a.root.querySelector('.cp-full');
   assert.equal(a.root.querySelector('[data-idea="s-1"] .cp-chev').textContent, '▴');
   const fields = Object.fromEntries([...full.querySelectorAll('.cp-fgrid > div')].map((d) => [d.querySelector('dt').textContent, d.querySelector('dd').textContent]));
-  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Съёмка', 'Статус'], 'комментариев и исходников в данных нет — не показываются');
-  assert.equal(fields['Формат'], 'Рилс'); assert.equal(fields['Съёмка'], 'SAMPLE оператор');
+  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Задача', 'Съёмка', 'Статус', 'Правки'], 'исходников в данных нет — не показываются; правок нет — «—»');
+  assert.equal(fields['Формат'], 'Рилс'); assert.equal(fields['Съёмка'], 'SAMPLE оператор'); assert.equal(fields['Задача'], 'Охватный'); assert.equal(fields['Правки'], '—');
+  assert.match(fields['Дата'], /^(Пн|Вт|Ср|Чт|Пт|Сб|Вс) \d{2}\.\d{2}$/, 'дата как в макете: «Сб 01.11»');
+  // «До съёмки» — после сцен.
+  const blocks = [...full.children].map((n) => n.className);
+  assert.ok(blocks.indexOf('cp-before') > blocks.indexOf('cp-secs'), 'блок «До съёмки» после «Сценария по секундам»');
+  assert.equal(full.querySelector('.cp-before > b').textContent, 'До съёмки');
   for (const text of ['Хук — первые 1–2 с', 'SAMPLE хук', 'SAMPLE руки', 'SAMPLE тёплый свет', 'SAMPLE халат', 'SAMPLE подпись']) assert.ok(full.textContent.includes(text), text);
-  assert.deepEqual([...full.querySelectorAll('.cp-sec th')].map((th) => th.textContent), ['Кто говорит', 'Реплика', 'Действие / монтаж'], 'пустые колонки скрыты');
+  assert.deepEqual([...full.querySelectorAll('.cp-sec th')].map((th) => th.textContent), ['Сцена', 'Кто говорит', 'Точная реплика', 'Действие / монтаж'], 'пустые колонки скрыты');
   const script = [...full.querySelectorAll('.cp-sec tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent));
-  assert.deepEqual(script, [['Мастер', 'Здравствуйте!', ''], ['Клиент', '<b>Привет</b>', ''], ['', '', 'Пауза, смех']]);
+  assert.deepEqual(script, [['Сцена №1', 'Мастер', 'Здравствуйте!', ''], ['Сцена №2', 'Клиент', '<b>Привет</b>', ''], ['Сцена №3', '', '', 'Пауза, смех']]);
+  assert.equal(full.querySelector('.cp-sec td[data-label="Сцена"] b').textContent, 'Сцена №1', '«Сцена №N» жирным');
   assert.ok(![...full.querySelectorAll('b')].some((b) => b.textContent === 'Привет'), 'server text is escaped');
   assert.equal(a.root.querySelector('.cp-stage'), null, 'статус уже в шапке кабинета');
 });
@@ -284,7 +292,8 @@ test('№186: анкеты на вкладке нет; «+ Новый» и ⚙ �
   assert.doesNotMatch(a.root.textContent, /Анкета проекта/);
   assert.equal(a.root.querySelectorAll('.cp-plan .cp-row').length, 2);
   const tools = [...a.root.querySelectorAll('.cp-tools > *')];
-  assert.deepEqual(tools.map((n) => n.matches('.cp-gear') ? 'gear' : n.matches('.cp-sort') ? 'sort' : '?'), ['gear', 'sort'], '⚙ и ⇅ в одном ряду справа от «Публикации»');
+  assert.deepEqual(tools.map((n) => n.matches('.cp-gear') ? 'gear' : n.matches('.cp-sort') ? 'sort' : '?'), ['sort'], 'справа от «Публикации» только ▦ ⇅, без ⚙');
+  assert.ok(a.root.querySelector('.cp-tab-plan [data-cp-tab="plan"] + .cp-gear'), 'макет 07.11: ⚙ стоит на вкладке «Контент-план ⚙»');
   assert.equal(a.root.querySelector('.cp-list-head h3').textContent, 'Публикации');
   assert.match(a.root.querySelector('.cp-gear').getAttribute('aria-label'), /настройка контент-плана/i);
   for (const [sel, title] of [['[data-cp="questionnaire"]', /Новый контент-план/], ['[data-cp="settings-plan"]', /Настройка контент-плана/]]) {
@@ -368,9 +377,11 @@ test('макет 07.11: клик по любому месту карточки �
   const row = () => a.root.querySelector('[data-idea="s-2"]');
   row().querySelector('.cp-date').click();
   assert.ok(row().querySelector('.cp-full'), 'клик по дате раскрывает');
-  assert.deepEqual([...row().querySelectorAll('.cp-sec thead th')].map((th) => th.textContent), ['Время', 'Кто говорит', 'Реплика', 'В кадре', 'Действие / монтаж', 'Титр']);
-  assert.deepEqual([...row().querySelectorAll('.cp-sec tbody tr')[1].children].map((td) => td.textContent), ['2–6 с', 'Мастер', 'Первый визит — …', '', '', '']);
-  row().querySelector('.cp-full dd').click(); assert.ok(row().querySelector('.cp-full'), 'клик внутри полного вида не сворачивает');
+  assert.deepEqual([...row().querySelectorAll('.cp-sec thead th')].map((th) => th.textContent), ['Сцена', 'Время', 'Кто говорит', 'Точная реплика', 'Кто / что в кадре', 'Действие / монтаж', 'Титр']);
+  assert.deepEqual([...row().querySelectorAll('.cp-sec tbody tr')[1].children].map((td) => td.textContent), ['Сцена №2', '2–6 с', 'Мастер', 'Первый визит — …', '', '', '']);
+  row().querySelector('.cp-edit summary').click(); assert.ok(row().querySelector('.cp-full'), '«Изменить» в полном виде не сворачивает');
+  row().querySelector('.cp-full dd').click(); assert.equal(row().querySelector('.cp-full'), null, 'макет 07.11: нажатие в открытой карточке сворачивает');
+  row().querySelector('.cp-top').click(); assert.ok(row().querySelector('.cp-full'));
   row().querySelector('.cp-top').click(); assert.equal(row().querySelector('.cp-full'), null, 'повторный клик сворачивает');
   row().querySelector('[data-cp-menu]').click();
   assert.equal(row().querySelector('.cp-full'), null, 'кнопка не раскрывает');
@@ -414,7 +425,8 @@ test('№181: сортировка по площадке/статусу меня
   const a=api({plan:[idea(1,{platform:'telegram',variants:{telegram:{text:'a'}}}),idea(2,{platform:'vk',variants:{vk:{text:'b'}}})]}); await a.mount();
   const ids=()=>[...a.root.querySelectorAll('.cp-row')].map(n=>n.dataset.idea);
   a.root.querySelector('[data-cp-sort-toggle]').click(); a.root.querySelector('[data-cp-sort="platform"]').click(); assert.deepEqual(ids(),['s-2','s-1']);
-  a.root.querySelector('[data-cp-sort-toggle]').click(); a.root.querySelector('[data-cp-sort="status"]').click(); assert.deepEqual(ids(),['s-1','s-2']);
+  a.root.querySelector('[data-cp-sort-toggle]').click(); a.root.querySelector('[data-cp-sort="status"]').click(); assert.deepEqual(ids(),['s-2','s-1'],'по статусу: сначала на согласовании');
+  a.root.querySelector('[data-cp-sort-toggle]').click(); a.root.querySelector('[data-cp-sort="number"]').click(); assert.deepEqual(ids(),['s-1','s-2'],'по номеру рилса в плане');
   a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
   a.root.querySelector('[data-edit="s-1"] [name="topic"]').value='Несохранённый текст';
   a.root.querySelector('[data-cp-tab="drafts"]').click(); a.root.querySelector('[data-cp-tab="plan"]').click();
@@ -449,4 +461,81 @@ test('Влад 06.11: у публикации «Согласовать» и «В
 test('Влад 06.11: без роли владельца кнопок решения в списке нет', async () => {
   const a = api({ role: 'smm', permissions: ['autoposting.edit'] }); await a.mount();
   assert.equal(a.root.querySelector('[data-cp-menu]'), null);
+});
+
+/* №205: Контент-план на общем наборе CfKit (макет 07.11). */
+test('CfKit: шапка «Публикации» — календарь, ▦, ⇅ в одну строку; ⚙ только на вкладке; сортировка из 4 пунктов запоминается', async () => {
+  const a = api({ withKit: true, plan: [idea(1, { platform: 'telegram', variants: { telegram: { text: 'a' } } }), idea(2)] }); await a.mount();
+  const head = a.root.querySelector('.cp-plan .cfk-head');
+  assert.equal(head.querySelector('.cfk-title').textContent, 'Публикации');
+  assert.deepEqual([...head.querySelectorAll('.cfk-ico')].map((n) => n.dataset.cfkAct), ['calendar', 'sheet', 'sort']);
+  assert.ok(!head.textContent.includes('⚙'), '⚙ не в шапке списка');
+  assert.ok(a.root.querySelector('.cp-tab-plan .cp-gear'));
+  assert.ok(head.querySelector('[data-cfk-act="sheet"]').disabled, 'таблица не указана — ▦ неактивна с подсказкой');
+  assert.equal(a.root.querySelector('.cp-list-head'), null, 'прежняя шапка не дублируется');
+  head.querySelector('[data-cfk-act="sort"]').click();
+  const items = [...head.querySelectorAll('[data-cfk-sort]')];
+  assert.deepEqual(items.map((b) => b.dataset.cfkSort), ['date', 'status', 'platform', 'number']);
+  assert.match(items[0].textContent, /По дате выхода.*по умолчанию/);
+  items[1].click();
+  assert.deepEqual([...a.root.querySelectorAll('.cp-row')].map((n) => n.dataset.idea), ['s-2', 's-1'], 'сначала на согласовании');
+  assert.equal(a.window.localStorage.getItem('cfkit.sort.sb-content-plan:7:alpha:sort'), 'status');
+  await a.mount();
+  assert.equal(a.root.querySelector('.cfk-head').dataset.sort, 'status');
+  const b = api({ withKit: true, settings: { settings: { approverUserIds: [], contentPlanSheetUrl: 'https://docs.google.com/spreadsheets/d/sample/edit' }, candidates: [] } }); await b.mount();
+  assert.equal(b.root.querySelector('a[data-cfk-act="sheet"]').getAttribute('href'), 'https://docs.google.com/spreadsheets/d/sample/edit');
+});
+
+test('CfKit: один чип этапа общей цепочки по данным сервера; значки площадок в порядке TG VK YT TT IG', async () => {
+  const plan = [idea(1, { variants: { instagram: { text: 'i' }, vk: { text: 'v' }, telegram: { text: 't' } } }), idea(2), idea(3, { productionStatus: 'shot' }), idea(4)];
+  const variants = [{ ideaId: 's-1', platform: 'vk', status: 'approved', approvable: true }, { ideaId: 's-2', platform: 'vk', status: 'pending', approvable: true },
+    { ideaId: 's-3', platform: 'vk', status: 'approved', approvable: true }, { ideaId: 's-4', platform: 'vk', status: 'rejected', approvable: true, comment: 'Короче хук' }];
+  const a = api({ withKit: true, plan, variants }); await a.mount();
+  const chip = (id) => a.root.querySelector(`[data-idea="${id}"] .cp-top .cfk-chip`);
+  assert.deepEqual(['s-1', 's-2', 's-3', 's-4'].map((id) => [chip(id).dataset.stage, chip(id).textContent]),
+    [['planned', 'Запланировано'], ['script_review', 'Сценарий на согласовании'], ['shot', 'Отснято'], ['script_rework', 'Сценарий на доработке']]);
+  assert.equal(a.root.querySelectorAll('[data-idea="s-2"] .cp-top .cfk-chip').length, 1, 'один статус без «Согласовано · …»');
+  assert.deepEqual([...a.root.querySelectorAll('[data-idea="s-1"] .cp-nb')].map((n) => n.textContent), ['TG', 'VK', 'IG']);
+  assert.ok(a.root.querySelector('[data-idea="s-1"] .cp-acts .cp-nets'), 'значки в одной строке с «Сменить статус ▾»');
+  a.root.querySelector('[data-idea="s-4"] .cp-date').click();
+  assert.match(a.root.querySelector('[data-idea="s-4"] .cp-full').textContent, /Правки.*Короче хук/s);
+  a.root.querySelector('[data-cp-tab="drafts"]').click();
+  assert.equal(a.root.querySelectorAll('.cp-row').length, 0);
+});
+
+test('CfKit: полоса дат скрыта, календарь показывает её с точками дней плана; раскрытие карточки не пересоздаёт полосу', async () => {
+  const a = api({ withKit: true }); await a.mount();
+  const strip = a.root.querySelector('.cfk-dates');
+  assert.ok(strip && strip.hidden);
+  a.root.querySelector('[data-cfk-act="calendar"]').click();
+  assert.equal(a.root.querySelector('.cfk-dates').hidden, false);
+  assert.ok(strip.querySelector('[data-cfk-day="2026-11-11"]').classList.contains('has'));
+  assert.ok(strip.querySelector('[data-cfk-day="2026-11-12"]').classList.contains('has'));
+  a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  assert.equal(a.root.querySelector('.cfk-dates'), strip, 'та же полоса после перерисовки');
+  assert.equal(strip.hidden, false, 'и остаётся открытой');
+  assert.equal(a.root.querySelector('[data-cfk-act="calendar"]').getAttribute('aria-pressed'), 'true');
+  a.root.querySelector('[data-cfk-act="calendar"]').click();
+  assert.ok(strip.hidden);
+});
+
+test('CfKit: лента стоит на первом неопубликованном — прошедшие согласованные выше пунктирной линии', async () => {
+  const plan = [idea(1, { date: '2026-01-05' }), idea(2, { date: '2026-01-06' }), idea(3, { date: '2099-01-01' })];
+  const variants = plan.map((p, i) => ({ ideaId: p.ideaId, platform: 'vk', status: i === 1 ? 'pending' : 'approved', approvable: true }));
+  const a = api({ withKit: true, plan, variants }); await a.mount();
+  const list = a.root.querySelector('.cp-list');
+  assert.ok(list.classList.contains('cfk-feed'));
+  assert.deepEqual([...list.querySelectorAll('.cp-row')].map((r) => r.dataset.above), ['1', '0', '0'], 'прошедшая, но не согласованная — не выше линии');
+  const sep = list.querySelector('.cfk-feed-sep');
+  assert.equal(sep.tagName, 'LI');
+  assert.equal(sep.nextElementSibling.dataset.idea, 's-2');
+  assert.match(sep.textContent, /выше — прошедшие даты/);
+});
+
+test('макет 07.11: строка «До съёмки: …» не становится сценой — она в блоке «До съёмки» после сцен', async () => {
+  const a = api({ plan: [idea(1, { script: '0–2 с | Гостья | «Привет» | У стойки | Хук | Привет\nДо съёмки: подготовить форму' }), idea(2)] }); await a.mount();
+  a.root.querySelector('[data-idea="s-1"] .cp-date').click();
+  const full = a.root.querySelector('.cp-full');
+  assert.equal(full.querySelectorAll('.cp-sec tbody tr').length, 1);
+  assert.match(full.querySelector('.cp-before').textContent, /подготовить форму/);
 });
