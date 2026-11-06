@@ -1,0 +1,12 @@
+{
+  "assets": [
+    "content-settings",
+    "update-banner",
+    "project-preferences"
+  ],
+  "styles": [
+    "shell",
+    "content-settings",
+    "update-banner"
+  ]
+}
