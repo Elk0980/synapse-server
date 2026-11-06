@@ -1016,7 +1016,9 @@ test('подписи и согласование охватывают семь �
   const f=fixture(t);
   const captions=Object.fromEntries(SEVEN.map(id=>[id,'Подпись '+id]));
   const post=f.api.create('alvi',{title:'Подписи',text:'Общий текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
-    platformIds:SEVEN,captions,dayKey:'D1',scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+    platformIds:SEVEN,captions,dayKey:'D1',scheduledAt:null,timezone:'Asia/Irkutsk',
+    // Снимок №84: готовность с TikTok требует выбранной аудитории (проверка с боевого строже main).
+    platformOptions:{tiktok:{privacy:'SELF_ONLY'}},profileRevision:f.information.get('alvi').revision},7);
   assert.deepEqual(Object.keys(post.captions).sort(),SEVEN.slice().sort());
   assert.deepEqual(post.platformApprovals.map(item=>item.platformId).sort(),SEVEN.slice().sort());
   assert.ok(post.platformApprovals.every(item=>item.state==='pending'));
@@ -1077,12 +1079,22 @@ test('публикуемые опции входят в версию содер�
   assert.ok(changed.platformApprovals.every(item=>item.state==='pending'));
   // Закрытая схема: чужие поля, чужие площадки и неподтверждённые значения не принимаются.
   const revision=changed.revision,profileRevision=f.information.get('alvi').revision;
-  for(const options of [{instagram:{is_video:true}},{telegram:{pin_message:true}},{tiktok:{privacy:'FRIENDS'}},
-    {instagram:{is_story:true,is_reels:true}},{max:{pin_message:'да'}}]){
+  // Снимок №84: схема расширена боевыми опциями (Telegram/VK/YouTube, автоудаление, опросы, first_comment,
+  // graduation_strategy). Закрытость проверяется на площадке без опций (2ГИС) и полях вне расширенного списка.
+  for(const options of [{instagram:{is_video:true}},{two_gis:{pin_message:true}},{telegram:{is_story:true}},{tiktok:{privacy:'FRIENDS'}},
+    {instagram:{is_story:true,is_reels:true}},{max:{pin_message:'да'}},{max:{delete_after_value:3}},{instagram:{first_comment:'  '}}]){
     assert.throws(()=>f.api.update(changed.id,'alvi',{revision,platformOptions:options,profileRevision}),error=>error.status===400);
   }
   assert.deepEqual(f.api.get(changed.id,'alvi').platformOptions,{instagram:{is_story:true},max:{pin_message:true},tiktok:{privacy:'SELF_ONLY'}},
     'отклонённые правки ничего не записали');
+  // Гарантия main распространяется на расширенные опции: их правка тоже снимает согласование.
+  const reapproved=f.api.approve(changed.id,'alvi',{revision:changed.revision,approved:true},{userId:1,userName:'Влад'});
+  assert.equal(reapproved.approval.approved,true);
+  const extended=f.api.update(reapproved.id,'alvi',{revision:reapproved.revision,
+    platformOptions:{instagram:{is_story:true},tiktok:{privacy:'SELF_ONLY'},max:{pin_message:true,delete_after_value:2,delete_after_unit:'days'}},
+    profileRevision:f.information.get('alvi').revision});
+  assert.equal(extended.contentRevision,reapproved.contentRevision+1,'автоудаление — новая версия содержимого');
+  assert.equal(extended.approval.approved,false,'согласование снято и для расширенной опции');
 });
 
 test('согласование не запускает доставку, а выбранная неподключённая площадка остаётся в плане',async t=>{
@@ -1150,8 +1162,13 @@ test('импорт пакета принимает публикуемые опц
   // Закрытая схема действует и в импорте.
   assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D2',title:'Чужое поле',platformOptions:{instagram:{is_video:true}}})]},7),
     error=>error.status===400);
-  assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D3',title:'Чужая площадка',platformOptions:{telegram:{pin_message:true}}})]},7),
+  // Снимок №84: Telegram теперь имеет опции; чужая площадка — 2ГИС, у которой публикуемых опций нет.
+  assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D3',title:'Чужая площадка',platformOptions:{two_gis:{pin_message:true}}})]},7),
     error=>error.status===400);
+  // Отличие только в расширенной опции — тоже не повтор.
+  const extended=f.api.importPackage('alvi',{items:[item({platformOptions:{instagram:{is_reels:true,first_comment:'Первый комментарий'},tiktok:{privacy:'SELF_ONLY'}}})]},7);
+  assert.equal(extended.created.length,0);
+  assert.equal(extended.skipped[0].reason,'options_differ');
 });
 
 const IG={id:'instagram',platform:'instagram',provider:'onlypult',name:'Instagram',enabled:true,connected:true,revision:1};

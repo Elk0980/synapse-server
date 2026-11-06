@@ -1,0 +1,23 @@
+/* Site launcher only. The iframe keeps the existing /chat renderer and its private state. */
+.pw-launch,.pw-panel,.pw-panel *,.pw-invitation,.pw-invitation * { box-sizing:border-box; }
+.pw-launch { position:fixed; z-index:1200; right:16px; bottom:max(16px,env(safe-area-inset-bottom)); display:inline-flex; align-items:center; justify-content:center; gap:8px; min-width:60px; min-height:48px; padding:12px 18px; border:1px solid var(--pw-accent,#59612f); border-radius:999px; background:var(--pw-accent,#69723e); color:#fff; font:700 16px/1.3 system-ui,sans-serif; box-shadow:0 6px 24px #26261f26; cursor:pointer; }
+.pw-launch svg { display:block; width:22px; height:22px; }
+.pw-launch[hidden],.pw-panel[hidden] { display:none!important; }
+.pw-invitation[hidden] { display:none!important; }
+.pw-invitation { position:fixed; z-index:1200; right:16px; bottom:calc(max(16px,env(safe-area-inset-bottom)) + 60px); display:flex; align-items:flex-start; gap:2px; width:min(280px,calc(100% - 32px)); max-height:min(180px,calc(100dvh - 100px)); margin:0; padding:6px; overflow:hidden; border:1px solid #d9d5c8; border-radius:20px; background:#fffdf8; color:#302f2a; box-shadow:0 8px 28px #26261f26; font:15px/1.45 system-ui,sans-serif; }
+.pw-invitation__open { flex:1 1 0; min-width:0; min-height:44px; max-height:min(160px,calc(100dvh - 120px)); padding:8px 10px; overflow:auto; border:0; border-radius:14px; background:transparent; color:inherit; font:inherit; text-align:left; overflow-wrap:anywhere; cursor:pointer; }
+.pw-invitation__close { flex:0 0 44px; width:44px; height:44px; min-height:44px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--pw-accent,#69723e); font:24px/1 system-ui,sans-serif; cursor:pointer; }
+.pw-invitation__open:focus-visible,.pw-invitation__close:focus-visible { outline:3px solid var(--pw-accent,#69723e); outline-offset:2px; }
+.pw-panel { position:fixed; padding:0; z-index:1201; right:16px; top:var(--pw-top,12px); width:min(var(--pw-width,360px),calc(100% - 32px)); height:var(--pw-height,min(520px,calc(100dvh - 24px))); display:flex; flex-direction:column; min-height:0; overflow:hidden; border:1px solid #d9d5c8; border-radius:var(--pw-radius,28px); background:#fffdf8; color:#302f2a; box-shadow:0 12px 48px #26261f38; font:16px/1.4 system-ui,sans-serif; }
+.pw-head { position:static; display:flex; flex:0 0 auto; align-items:center; gap:8px; min-width:0; padding:8px 10px; border-bottom:1px solid #e1dccd; background:#fffdf8; }
+.pw-name { flex:1 1 auto; min-width:0; margin:0; font-size:16px; font-weight:700; overflow-wrap:anywhere; }
+.pw-avatar { flex:0 0 32px; position:relative; width:32px; height:32px; overflow:hidden; border-radius:50%; background:#e9ecd9; }
+.pw-avatar img { position:absolute; display:block; left:0; top:-109.0909%; width:218.1818%; height:387.8788%; max-width:none; object-fit:fill; }
+.pw-control { display:inline-flex; flex:0 0 44px; align-items:center; justify-content:center; width:44px; height:44px; min-width:44px; min-height:44px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--pw-accent,#4c542b); font:24px/1 system-ui,sans-serif; cursor:pointer; }
+.pw-control:hover { background:#e9ecd9; }
+.pw-frame { display:block; flex:1 1 0; min-height:0; min-width:0; width:100%; height:100%; border:0; background:#fffdf8; }
+.pw-panel.is-expanded { top:var(--pw-full-top,0px); right:0; width:100%; height:var(--pw-full-height,100dvh); border:0; border-radius:0; }
+.pw-panel.is-expanded .pw-head { padding-top:max(8px,env(safe-area-inset-top)); }
+.pw-launch:focus-visible,.pw-control:focus-visible { outline:3px solid #4b5426; outline-offset:3px; }
+@media(max-width:480px) { .pw-launch { right:12px; } .pw-panel { right:12px; width:min(var(--pw-width,360px),calc(100% - 24px)); } .pw-invitation { right:12px; width:min(280px,calc(100% - 24px)); } }
+@media(prefers-reduced-motion:reduce) { .pw-panel,.pw-launch { scroll-behavior:auto; } }

@@ -1,0 +1,223 @@
+/* Palitra — рабочее место. Мобильный экран — основной (Telegram WebView и телефон): нижняя панель вкладок,
+   крупные кнопки от 44px; с 768px вкладки сверху, на широком экране — список диалогов рядом с перепиской.
+   Стили касаются только этой страницы; редакторы во вкладках живут в своих iframe со своими стилями. */
+:root {
+  --pw-bg: #f6f4ec;
+  --pw-surface: #ffffff;
+  --pw-ink: #2c2f24;
+  --pw-muted: #6b6f5c;
+  --pw-olive: #6f7a3a;
+  --pw-olive-dark: #545d2a;
+  --pw-olive-soft: #e8ebd6;
+  --pw-line: #dcdcc8;
+  --pw-error: #a3361f;
+  --pw-ok: #3f6b2a;
+  --pw-warn: #8a6410;
+  --pw-radius: 28px;
+  --pw-radius-small: 16px;
+  --pw-tabs-h: 64px;
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--pw-bg);
+  color: var(--pw-ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+[hidden] { display: none !important; }
+h1, h2 { margin: 0; line-height: 1.2; }
+h1 { font-size: 1.35rem; }
+h2 { font-size: 1.1rem; }
+p { margin: 0; }
+a { color: var(--pw-olive-dark); }
+:focus-visible { outline: 3px solid var(--pw-olive); outline-offset: 2px; }
+
+.pw { min-height: 100%; display: flex; flex-direction: column; padding-bottom: calc(var(--pw-tabs-h) + env(safe-area-inset-bottom, 0px)); }
+
+/* шапка */
+.pw-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+  background: var(--pw-surface); border-bottom: 1px solid var(--pw-line);
+}
+.pw-brand { display: flex; flex-direction: column; line-height: 1.1; }
+.pw-brand strong { color: var(--pw-olive-dark); font-size: 1.15rem; }
+.pw-brand span { color: var(--pw-muted); font-size: .8rem; }
+.pw-user { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pw-user__name { font-weight: 600; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
+
+/* кнопки */
+.pw-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 8px 16px; border-radius: var(--pw-radius);
+  border: 1px solid var(--pw-olive); background: var(--pw-olive); color: #fff;
+  font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; touch-action: manipulation;
+}
+.pw-btn:hover { background: var(--pw-olive-dark); border-color: var(--pw-olive-dark); }
+.pw-btn--quiet { background: var(--pw-surface); color: var(--pw-olive-dark); }
+.pw-btn--quiet:hover { background: var(--pw-olive-soft); }
+.pw-btn--main { min-width: 140px; }
+.pw-btn:disabled { opacity: .55; cursor: progress; }
+.pw-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pw-more { width: 100%; margin-top: 12px; }
+
+/* статусы */
+.pw-status { margin: 8px 12px 0; padding: 10px 14px; border-radius: var(--pw-radius-small); background: var(--pw-olive-soft); }
+.pw-status[data-state="error"], .pw-panel-status[data-state="error"], .pw-card__note[data-state="error"], .pw-composer__state[data-state="error"] { color: var(--pw-error); }
+.pw-composer__state[data-state="ok"] { color: var(--pw-ok); }
+.pw-panel-status:empty, .pw-card__note:empty, .pw-composer__state:empty, .pw-error:empty { display: none; }
+.pw-muted { color: var(--pw-muted); font-size: .9rem; }
+.pw-error { color: var(--pw-error); }
+
+/* вход и отказ */
+.pw-login, .pw-denied {
+  margin: 24px auto; width: min(420px, calc(100% - 24px)); padding: 24px;
+  background: var(--pw-surface); border-radius: var(--pw-radius); border: 1px solid var(--pw-line);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.pw-login form { display: flex; flex-direction: column; gap: 12px; }
+.pw-field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.pw-field input, .pw-composer textarea {
+  font: inherit; font-weight: 400; color: inherit; min-height: 44px; padding: 10px 14px;
+  border: 1px solid var(--pw-line); border-radius: var(--pw-radius-small); background: #fff; width: 100%;
+}
+
+/* разделы */
+.pw-main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.pw-panel { padding: 12px; flex: 1; min-height: 0; }
+.pw-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.pw-panel-status { margin-bottom: 10px; }
+
+/* заявки */
+.pw-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.pw-card {
+  background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: var(--pw-radius);
+  padding: 16px; display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere;
+}
+.pw-card__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pw-card__name { font-weight: 600; }
+.pw-card__items { margin: 0; padding-left: 20px; }
+.pw-card__comment { white-space: pre-wrap; background: var(--pw-bg); border-radius: var(--pw-radius-small); padding: 8px 12px; }
+.pw-card__contact, .pw-card__work, .pw-card__checks { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.pw-check {
+  min-height: 44px; padding: 8px 14px; border-radius: var(--pw-radius); border: 1px solid var(--pw-line);
+  background: var(--pw-surface); color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.pw-check.is-on { background: var(--pw-olive-soft); border-color: var(--pw-olive); }
+
+/* переписка */
+.pw-chat { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.pw-chat.is-open .pw-chat__list { display: none; }
+.pw-dialogs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pw-dialog {
+  width: 100%; min-height: 56px; padding: 12px 16px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: var(--pw-radius-small);
+  display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;
+}
+.pw-dialog:hover { border-color: var(--pw-olive); }
+.pw-dialog__top { display: flex; justify-content: space-between; gap: 8px; }
+.pw-dialog__last { color: var(--pw-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-badge { background: var(--pw-olive); color: #fff; border-radius: 999px; padding: 0 10px; font-size: .8rem; white-space: nowrap; }
+.pw-chat__view { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.pw-chat__title:focus { outline: none; }
+.pw-messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pw-msg {
+  max-width: 88%; padding: 10px 14px; border-radius: var(--pw-radius-small); overflow-wrap: anywhere;
+  display: flex; flex-direction: column; gap: 4px; background: var(--pw-surface); border: 1px solid var(--pw-line);
+}
+.pw-msg--in { align-self: flex-start; }
+.pw-msg--out { align-self: flex-end; background: var(--pw-olive-soft); border-color: transparent; }
+.pw-msg--system { align-self: center; background: transparent; border-style: dashed; color: var(--pw-muted); font-size: .9rem; }
+.pw-msg__meta { color: var(--pw-muted); font-size: .78rem; }
+.pw-msg__text { white-space: pre-wrap; }
+.pw-msg__file { min-height: 44px; display: inline-flex; align-items: center; }
+.pw-msg__status { font-size: .8rem; font-weight: 600; color: var(--pw-muted); }
+.pw-msg__status.is-sent { color: var(--pw-ok); }
+.pw-msg__status.is-uncertain { color: var(--pw-warn); }
+.pw-msg__status.is-failed { color: var(--pw-error); }
+/* PALITRA-WEBCHAT-PHASEC: два списка в одной вкладке, статусы копий чата сайта, «Показать ранее». */
+.pw-list-title { font-size: 1rem; margin: 14px 0 8px; color: var(--pw-muted); }
+.pw-list-title:first-of-type { margin-top: 0; }
+.pw-badge--warn { background: var(--pw-warn); }
+.pw-msg__status.is-stored, .pw-msg__status.is-queued { color: var(--pw-muted); }
+.pw-msg__status.is-not_queued, .pw-msg__status.is-unknown { color: var(--pw-warn); }
+.pw-chat__note:empty { display: none; }
+.pw-card__legacy { align-self: flex-start; }
+#composer-hint { font-weight: 400; }
+/* PALITRA-WEBCHAT-PHASED1: вложения чата сайта в ширине сообщения, без автозапуска. */
+.pw-file { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+.pw-file__kind { color: var(--pw-muted); font-size: .85rem; }
+.pw-file__image, .pw-file__video { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: var(--pw-radius-small); background: var(--pw-bg); }
+.pw-file__video--round { width: min(240px, 100%); aspect-ratio: 1 / 1; object-fit: cover; border-radius: 50%; }
+.pw-file__audio { width: min(320px, 100%); max-width: 100%; }
+.pw-composer {
+  position: sticky; bottom: calc(var(--pw-tabs-h) + env(safe-area-inset-bottom, 0px));
+  background: var(--pw-bg); padding: 8px 0; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--pw-line);
+}
+.pw-composer textarea { resize: vertical; min-height: 88px; max-height: 40vh; }
+.pw-composer textarea[readonly] { background: var(--pw-olive-soft); }
+.pw-composer__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* PALITRA-WEBCHAT-PHASEE: «Прикрепить файл» в форме ответа — настоящий input[type=file] (фокус с клавиатуры), видимая
+   подпись-кнопка, имя и размер файла переносятся по словам в ширине экрана. */
+.pw-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; position: relative; min-width: 0; }
+.pw-attach__input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+.pw-attach__input:focus-visible + .pw-attach__pick { outline: 3px solid var(--pw-olive); outline-offset: 2px; }
+.pw-attach__input:disabled + .pw-attach__pick { opacity: .55; cursor: progress; }
+.pw-attach__pick { cursor: pointer; }
+.pw-attach__name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+
+/* редакторы во вкладках */
+.pw-panel--frame { padding: 0; display: flex; flex-direction: column; }
+.pw-frame-note { margin: 12px; padding: 12px 16px; border-radius: var(--pw-radius-small); background: var(--pw-olive-soft); display: flex; flex-direction: column; gap: 8px; }
+.pw-frame-host { flex: 1; display: flex; min-height: calc(100dvh - 72px - var(--pw-tabs-h)); }
+.pw-frame { flex: 1; width: 100%; border: 0; background: #fff; min-height: calc(100dvh - 72px - var(--pw-tabs-h)); }
+
+/* вкладки: снизу на телефоне */
+.pw-tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  min-height: var(--pw-tabs-h); padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--pw-surface); border-top: 1px solid var(--pw-line);
+}
+.pw-tab {
+  min-height: 44px; border: 0; background: transparent; color: var(--pw-muted);
+  font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; padding: 6px 2px; touch-action: manipulation;
+}
+.pw-tab[aria-selected="true"] { color: var(--pw-olive-dark); box-shadow: inset 0 3px 0 var(--pw-olive); background: var(--pw-olive-soft); }
+
+@media (max-width: 359px) {
+  .pw-btn { padding: 8px 12px; }
+  .pw-tab { font-size: .8rem; }
+  .pw-user__name { max-width: 30vw; }
+}
+
+/* планшет и шире: вкладки сверху под шапкой */
+@media (min-width: 768px) {
+  .pw { padding-bottom: 0; }
+  .pw-tabs {
+    position: sticky; top: 0; order: 1; bottom: auto; border-top: 0; border-bottom: 1px solid var(--pw-line);
+    grid-template-columns: repeat(4, minmax(120px, 180px)); justify-content: start; padding: 0 12px; min-height: 52px;
+  }
+  .pw-top { order: 0; }
+  .pw-status { order: 2; }
+  .pw-login, .pw-denied { order: 3; }
+  .pw-main { order: 4; }
+  .pw-tab[aria-selected="true"] { box-shadow: inset 0 -3px 0 var(--pw-olive); }
+  .pw-panel { padding: 16px 20px; }
+  .pw-cards { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .pw-composer { bottom: 0; }
+  .pw-frame-host, .pw-frame { min-height: calc(100dvh - 130px); }
+}
+
+/* широкий экран: список диалогов слева, переписка справа */
+@media (min-width: 1100px) {
+  .pw-chat { flex-direction: row; align-items: flex-start; }
+  .pw-chat__list { width: 360px; flex: 0 0 360px; position: sticky; top: 64px; max-height: calc(100dvh - 140px); overflow: auto; }
+  .pw-chat.is-open .pw-chat__list { display: block; }
+  .pw-chat__view { flex: 1; }
+  #chat-back { display: none; }
+  .pw-msg { max-width: 70%; }
+}

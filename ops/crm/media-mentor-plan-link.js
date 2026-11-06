@@ -30,6 +30,8 @@ function createMediaMentorPlanLink(db) {
     && has('media_mentor_briefs') && has('media_mentor_variant_approvals');
 
   function linkOf(postId, companyId) {
+    const copy=require('./media-mentor-publication-copies.cjs').link(db,{id:postId,company_id:companyId});
+    if(copy)return {...JSON.parse(copy.source_plan),publicationCopy:true,copyVersionId:copy.version_id};
     if (!ready()) return null;
     return db.prepare(`SELECT idea_id ideaId,platform,content_revision contentRevision,
       plan_revision planRevision,brief_revision briefRevision
@@ -39,6 +41,7 @@ function createMediaMentorPlanLink(db) {
   /* Пусто — отправка разрешена. Непустая строка — причина запрета.
      Проверяются ровно те факты, которые делают отправку правомерной сейчас, а не когда-то. */
   function blockedReason(row) {
+    if(require('./media-mentor-publication-copies.cjs').link(db,row))return require('./media-mentor-publication-copies.cjs').blocked(db,row);
     if (!row || !row.id || !row.company_id) return '';
     const link = linkOf(row.id, row.company_id);
     if (!link) return '';
@@ -73,6 +76,8 @@ function createMediaMentorPlanLink(db) {
      эту проверку не отменяет — оно про текст и медиа, а не про то, куда они уйдут. */
   function platformMismatch(row, platform) {
     if (!row || !row.id || !row.company_id) return '';
+    const copy=require('./media-mentor-publication-copies.cjs').link(db,row);
+    if(copy)return copy.target_platform===platform?'':PLATFORM_REASON;
     const link = linkOf(row.id, row.company_id);
     if (!link) return '';
     return link.platform === platform ? '' : PLATFORM_REASON;

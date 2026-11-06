@@ -288,6 +288,16 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
     return result;
   }
+  // 02.11.2026: чтение постов профиля и поиск ссылки — только GET; подключение не меняется, ключ наружу не выходит.
+  async function onlypultRead({companyCode,channelId,channelRevision},read) {
+    const current = company(companyCode), row = rowFor(current.code,channelId);
+    if (!row || row.provider !== 'onlypult' || row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
+    const result = await read(row);
+    if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
+    return result;
+  }
+  const findPosts = input => onlypultRead(input,row => onlypult.listPosts(row));
+  const findLink = input => onlypultRead(input,row => onlypult.findLink(row,input));
   /* Чтение статистики теми же сохранёнными ключами: только белый список методов только для чтения.
      Ничего не публикует; ключ наружу не выходит. Возвращает null, если канал не настроен. */
   const STATS_METHODS = Object.freeze({telegram: ['getChatMemberCount', 'getChat'], vk: ['stats.get', 'groups.getById', 'wall.get']});
@@ -309,7 +319,7 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     const current = company(code), row = rowFor(current.code, id);
     return {destinationRevision: row?.target && row.encrypted_token ? row.destination_revision : 0, channelRevision: row?.revision || 0};
   }
-  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats,connectionRevision,approvalDestination};
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,findPosts,findLink,readStats,connectionRevision,approvalDestination};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};

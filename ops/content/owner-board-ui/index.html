@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f8fc">
+  <title>Synapse — личный кабинет</title>
+  <link rel="stylesheet" href="style.css?v=board-mobile-1">
+  <link rel="stylesheet" href="mobile.css?v=board-mobile-1">
+  <script src="app.js?v=board-mobile-1" defer></script>
+</head>
+<body class="synapse-app">
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="Synapse Business — главная">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M11 11 29 29M11 29 29 11M11 11l18 0M11 29h18M11 11v18M29 11v18" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="11" r="4" fill="currentColor"/><circle cx="29" cy="11" r="4" fill="currentColor"/><circle cx="20" cy="20" r="5" fill="currentColor"/><circle cx="11" cy="29" r="4" fill="currentColor"/><circle cx="29" cy="29" r="4" fill="currentColor"/></svg></span>
+      <span class="brand-wordmark">Synapse<span>BUSINESS</span></span>
+    </a>
+    <div class="header-project"><span class="project-avatar" aria-hidden="true">П</span><span><small>Текущий проект</small><strong>Палитра</strong></span></div>
+    <button type="button" id="refresh" class="refresh-button" aria-label="Обновить" title="Обновить данные"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg></button>
+  </header>
+
+  <nav class="tabs" aria-label="Основная навигация">
+    <div class="nav-caption">Личный кабинет</div>
+    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 10 8.5-7 8.5 7v10a1 1 0 0 1-1 1h-5v-7h-5v7h-5a1 1 0 0 1-1-1Z"/></svg><span class="nav-label">Главная</span></button>
+    <button type="button" data-tab="tasks"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4.5" width="16" height="16" rx="3"/><path d="M9 4.5V3h6v1.5M8 10l1.5 1.5L12 9M14 10h3M8 16h9"/></svg><span class="nav-label">Задачи</span><span id="open-count" class="nav-count"></span></button>
+    <button type="button" data-tab="done"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12 2.7 2.7 5.3-5.4"/></svg><span class="nav-label">Готово</span><span id="done-count" class="nav-count"></span></button>
+    <button type="button" data-tab="rules"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 6v6c0 4.7 4 7.5 7.5 9 3.5-1.5 7.5-4.3 7.5-9V6Z"/><path d="m8.5 11.5 2.3 2.3 4.7-4.6"/></svg><span class="nav-label">Правила</span></button>
+    <div class="nav-note">Задания и результаты<br>в одном месте</div>
+  </nav>
+
+  <main class="app-main">
+    <div class="page-heading"><div class="eyebrow">ЛИЧНЫЙ КАБИНЕТ</div><h1 id="page-title">Главная</h1><p class="muted" id="page-subtitle">Палитра · задачи и результаты работы</p></div>
+
+    <section id="view-home" class="app-view">
+      <div class="home-summary"><div><span class="section-kicker">Обзор проекта</span><h2>Всё по Палитре</h2><p>Что делаем сейчас, что дальше и что уже проверено.</p></div><span class="project-tag">Палитра</span></div>
+      <div class="stats-grid" aria-label="Состояние задач">
+        <button type="button" class="stat-card" data-open-tab="tasks"><span class="stat-label">Открыто</span><strong id="stat-open">—</strong><span class="stat-detail">задач</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+        <button type="button" class="stat-card" data-open-tab="tasks" data-open-filter="paused"><span class="stat-label">На паузе</span><strong id="stat-paused">—</strong><span class="stat-detail">по вашему выбору</span></button>
+        <button type="button" class="stat-card" data-open-tab="done"><span class="stat-label">Готово</span><strong id="stat-done">—</strong><span class="stat-detail">с результатами</span></button>
+      </div>
+
+      <div class="home-grid">
+        <section class="now panel"><div class="section-label"><span class="status-dot" aria-hidden="true"></span><span>Текущий отчёт</span></div><p id="current">Загружаю состояние…</p><div class="next"><span>Дальше по вашему приоритету</span><strong id="next-task">—</strong></div><button type="button" class="text-action" data-open-tab="tasks">Открыть задачи <span aria-hidden="true">→</span></button></section>
+        <section class="report-panel panel"><div class="section-label">Следующее обновление</div><div class="timer"><span>Отчёт через</span><strong id="clock">—</strong><small id="due">Время Бангкока</small></div><div class="report-details"><h3>Что будет в отчёте</h3><p id="home-next-report">Загружаю план следующего отчёта…</p></div></section>
+      </div>
+
+      <section class="next-action-panel panel"><div><span class="section-kicker">Следующий результат</span><h2>Ближайший шаг</h2><p id="home-next-action">Загружаю следующий шаг…</p></div><button type="button" class="primary-button" data-open-tab="tasks">Управлять задачами <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></section>
+    </section>
+
+    <section id="view-tasks" class="app-view" hidden>
+      <div class="task-toolbar"><label class="search-box" for="task-search"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><input id="task-search" type="search" placeholder="Найти задачу" autocomplete="off" aria-label="Поиск задач"></label><div class="filters" aria-label="Фильтр задач"><button type="button" data-filter="all" aria-pressed="true">Все</button><button type="button" data-filter="active" aria-pressed="false">Активные</button><button type="button" data-filter="paused" aria-pressed="false">На паузе</button></div></div>
+      <div class="list-heading"><h2>Открытые задачи</h2></div><p class="muted help">Приоритет и пауза — ваш выбор. В карточке задачи находятся задание, фотографии и подтверждения результата.</p><div id="task-list" class="task-list"></div>
+    </section>
+
+    <section id="view-done" class="app-view" hidden><div class="list-heading"><h2>Завершённые задачи</h2></div><p class="muted help">В каждой карточке — результат и границы проверки. Завершённая часть не означает приёмку всего проекта.</p><div id="done-list" class="task-list"></div><section class="panel today-panel"><div class="section-kicker">Сегодняшняя сессия</div><h2>Сделано сегодня</h2><ul id="today" class="check-list"></ul></section></section>
+
+    <section id="view-rules" class="app-view" hidden><div class="rules-intro"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 6v6c0 4.7 4 7.5 7.5 9 3.5-1.5 7.5-4.3 7.5-9V6Z"/><path d="m8.5 11.5 2.3 2.3 4.7-4.6"/></svg><div><h2>Как выполняются задачи</h2><p>Общие правила для работы и приёмки. Исполнитель читает их перед началом задачи и проверкой результата.</p></div></div><div id="rules-list"></div></section>
+
+    <footer class="app-footer"><div><span id="updated">Получаю данные…</span><span id="sync-status" role="status"></span></div><span class="footer-brand">Synapse Business</span></footer>
+  </main>
+
+  <div id="toast" role="status" hidden></div>
+  <dialog id="task-dialog" aria-labelledby="task-title"><div class="dialog-head"><button id="close-task" type="button" class="icon-button" aria-label="Назад к задачам"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button><h2 id="task-title"></h2></div><div id="task-content" class="dialog-body"></div></dialog>
+  <dialog id="image-dialog" aria-label="Просмотр скриншота"><div class="image-head"><span id="image-caption"></span><button type="button" id="close-image" class="icon-button" aria-label="Закрыть скриншот"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><img id="full-image" alt=""></dialog>
+</body>
+</html>

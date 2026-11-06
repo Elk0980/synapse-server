@@ -18,7 +18,14 @@
   // Локальный обработчик отдаёт ссылку и код входа не сразу: команда уходит на компьютер Хью.
   const LOGIN_POLL_MS = 3000, LOGIN_POLLS = 40;
   // Ответ ИИ помечается всегда одинаково: участники видят, что пишет бот, а не Влад.
-  const AI_BADGE = "ИИ · бизнес-ассистент Синапс Бизнес";
+  const assistantBadge = message => {
+    if(message.workTask?.kind==='codex-work')return 'Codex · результат работы';
+    const p=message.assistantProvenance;
+    if(p?.kind==='owner-reviewed')return 'Текст проверен владельцем';
+    if(p?.kind==='model'&&p.provider==='codex')return 'Codex · ИИ';
+    if(p?.kind==='model'&&p.provider)return 'Хью · ИИ · резервный ответ';
+    return 'ИИ · источник ответа не подтверждён';
+  };
   /* Правка отправленного сообщения Хью меняет одну часть Telegram (3500 символов) вместе с подписью
      Хью и переводом строки. Сервер проверяет то же самое; здесь лишь подсказка до отправки. */
   const EDIT_TEXT_LIMIT = 3500 - "Хью, бизнес-ассистент Синапс Бизнес (ИИ)".length - 1;
@@ -278,14 +285,15 @@
     if (edit.status === "sent") return `<small>${escape(editStates.sent)}${message.editedAt ? ` ${escape(date(message.editedAt))}` : ""}</small>`;
     return `<small>${escape(editStates[edit.status])}</small>`;
   };
+  const workLabels={queued:'Поручение в очереди Codex',claimed:'Codex принял поручение',running:'Codex выполняет',waiting:'Нужны данные или доступ',review_required:'Результат ждёт проверки',needs_review:'Нужно проверить незавершённую работу',completed:'Работа проверена',failed:'Работа не завершена',cancelled:'Поручение отменено'};
   const messagesHTML = state => {
     const ai = aiInfo(state), reply = canReply(state);
     return timeline(state).map(message => `<li class="pc-message${message.authorType === "assistant" ? " pc-message-ai" : ""}" data-message-id="${escape(message.id)}">
-    <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${AI_BADGE}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
+    <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${escape(assistantBadge(message))}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
     ${message.text ? `<p class="pc-message-text">${escape(message.text)}</p>` : ""}
     ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachment => attachmentHTML(attachment, state)).join("")}</div>` : ""}
     <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${message.reviewedByOwner ? '<small>Проверено владельцем</small>' : ''}${editNoteHTML(message)}${receiptLinks(message)}${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}${canEditMessage(state, message) ? `<button type="button" data-pc-message-edit="${escape(message.id)}">Изменить в Telegram</button>` : ""}</div>
-    ${aiNoteHTML(message, ai)}
+    ${message.workTask?`<p class="pc-muted">${escape(workLabels[message.workTask.status]||"Состояние работы уточняется")}</p>`:""}${aiNoteHTML(message, ai)}
   </li>`).join("") || '<li class="pc-empty">Здесь будет общая переписка участников проекта.</li>';
   };
   const renderSnapshot = (state, view) => {
@@ -307,6 +315,8 @@
     q(state, "[data-pc-members]").textContent = list(data.members).map(member => member.displayName).join(", ") || "Участники пока не назначены";
     q(state, "[data-pc-connection]").textContent = data.room?.telegramChatId ? "Telegram привязан к проекту. Состояние доставки показано у сообщений." : "Telegram пока не привязан";
     q(state, "[data-pc-ai]").textContent = aiSummary(state);
+    const workNode=q(state,"[data-pc-work-status]"),work=data.codexWork||{};
+    if(workNode)workNode.textContent=!work.enabled?'Codex пока не подключён к работе.':!work.canAssign?'Поручения Codex доступны допущенным участникам.':work.ready?'Поручение для Codex начните с «Codex, …».':work.connected?'Codex проверяет подключение.':'Codex сейчас не в сети. Поручение сохранится в очереди.';
     const alerts = q(state,"[data-pc-alerts]");
     if (alerts) {
       alerts.hidden = !isOwner(state) || !(state.data.ownerAlerts || []).length;
@@ -998,7 +1008,7 @@
     }
   }
 
-  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.sharedTitle || state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p class="opc-audience opc-audience-shared" role="note">Общий чат проекта: сообщения видят клиент и участники, они уходят в Telegram проекта.</p><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><section class="pc-personas" data-pc-personas hidden role="note"><h3 data-pc-personas-title></h3><ul data-pc-personas-list></ul><button type="button" data-pc-personas-close>Понятно</button></section><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><p class="pc-muted pc-personas-hint" data-pc-personas-hint></p><div data-pc-pending class="pc-pending"></div><label data-pc-owner hidden><input type="checkbox" data-pc-reviewed> Отправить от Хью — текст и файлы проверены мной</label><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><section data-pc-alerts hidden role="status"></section><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
+  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.sharedTitle || state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p class="opc-audience opc-audience-shared" role="note">Общий чат проекта: сообщения видят клиент и участники, они уходят в Telegram проекта.</p><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><p class="pc-muted" data-pc-work-status role="status"></p><section class="pc-personas" data-pc-personas hidden role="note"><h3 data-pc-personas-title></h3><ul data-pc-personas-list></ul><button type="button" data-pc-personas-close>Понятно</button></section><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><p class="pc-muted pc-personas-hint" data-pc-personas-hint></p><div data-pc-pending class="pc-pending"></div><label data-pc-owner hidden><input type="checkbox" data-pc-reviewed> Отправить от Хью — текст и файлы проверены мной</label><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><section data-pc-alerts hidden role="status"></section><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
   const switchMode = async (state, mode) => {
     if (!active(state) || (mode === "private" && state.ctx.identity.role !== "owner")) return;
     const body = q(state, "[data-pc-body]");
@@ -1008,6 +1018,8 @@
     if (draft && !state.revoked) state.draft = draft.value;
     cabinet.ownerPrivateChat?.stop();
     state.mode = mode;
+    state.root.classList.toggle('pc-fixed-chat',mode==='shared');
+    state.fitViewport?.();
     state.view++;
     const view = state.view;
     state.readSequence++;
@@ -1052,6 +1064,15 @@
     cabinet.ownerPrivateChat?.stop();
     const root = ctx.byId("hugh-view");
     const state = current = { ctx, root, selectedCompany: ctx.selectedProjectId, company: ctx.selectedProjectId, base: "/content/project-chat/" + encodeURIComponent(ctx.selectedProjectId), controller: new AbortController(), mode: "shared", view: 0, readSequence: 0, attachments: [], history: [], seen: new Map(), loadedOlder: false, hasMore: false, cursor: null, loadingOlder: false, busy: false, attempt: null, draft: "", revoked: false };
+    state.fitViewport=()=>{
+      if(!active(state)||state.mode!=='shared')return;
+      const v=window.visualViewport,height=v?.height||window.innerHeight,top=root.getBoundingClientRect().top-(v?.offsetTop||0);
+      const available=Math.max(120,Math.floor(height-Math.max(0,top)-12));
+      root.style.setProperty('--pc-chat-height',available+'px');
+    };
+    for(const target of [window,window.visualViewport].filter(Boolean))target.addEventListener('resize',state.fitViewport,{signal:state.controller.signal});
+    root.addEventListener('focusin',state.fitViewport,{signal:state.controller.signal});
+    root.addEventListener('focusout',()=>requestAnimationFrame(state.fitViewport),{signal:state.controller.signal});
     root.innerHTML = '<p role="status">Открываем переписку…</p>';
     try {
       const resolved = ctx.authHeaders ? {shared:false} : await request(state, '/resolve');
@@ -1108,6 +1129,8 @@
     clearTimeout(current.loginTimer);
     releaseAssets(current);
     current.root?.querySelectorAll("dialog").forEach(dialog => dialog.remove());
+    current.root?.classList.remove('pc-fixed-chat');
+    current.root?.style.removeProperty('--pc-chat-height');
     current = null;
   };
   cabinet.registerView("hugh", { title: "Хью", render: mount, onProjectChange: ctx => mount(null, ctx), unmount });

@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Чат — Palitra Love</title>
+<link rel="stylesheet" href="/assets/palitra-chat.css?v=20261021-orders-unified-r1">
+</head>
+<body>
+<div class="pc" id="pc">
+  <header class="pc-top">
+    <a class="pc-brand" href="/">Palitra</a>
+    <span class="pc-sub">чат с магазином</span>
+  </header>
+
+  <p class="pc-status" id="pc-status" role="status" aria-live="polite">Открываем чат…</p>
+  <div class="pc-row pc-restart" id="pc-restart-wrap" hidden="">
+    <button type="button" class="pc-btn" id="pc-restart">Открыть чат заново</button>
+  </div>
+
+  <main class="pc-main" id="pc-main" hidden="">
+    <section class="pc-list" id="pc-list" aria-labelledby="pc-list-title">
+      <h2 class="pc-list__title" id="pc-list-title">Мои чаты</h2>
+      <p class="pc-muted" id="pc-list-status" role="status" aria-live="polite"></p>
+      <ul class="pc-threads" id="pc-threads"></ul>
+      <button type="button" class="pc-btn pc-btn--quiet pc-more" id="pc-threads-more" hidden="">Показать ещё</button>
+    </section>
+
+    <section class="pc-view" id="pc-view" hidden="" aria-labelledby="pc-title"><div class="pc-history" id="pc-history">
+      <div class="pc-head">
+        <button type="button" class="pc-btn pc-btn--quiet" id="pc-back">← Мои чаты</button>
+        <h1 class="pc-title" id="pc-title" tabindex="-1"></h1>
+      </div><details class="pc-actions" id="pc-actions"><summary>Действия чата</summary><p class="pc-muted" id="pc-telegram-state"></p><div class="pc-row">
+        <button type="button" class="pc-btn pc-btn--quiet" id="pc-telegram" hidden="">Открыть Telegram</button>
+      </div><p class="pc-note" id="pc-telegram-note" role="status" aria-live="polite"></p><button type="button" class="pc-link" id="pc-revoke">Выйти из чата на этом устройстве</button></details>
+      
+      
+      
+      <p class="pc-muted" id="pc-view-status" role="status" aria-live="polite"></p>
+      <button type="button" class="pc-btn pc-btn--quiet pc-more" id="pc-earlier" hidden="">Показать ранее</button>
+      <ol class="pc-messages" id="pc-messages"></ol>
+      <p class="pc-note" id="pc-new-below" role="status" aria-live="polite"></p>
+      
+    </div><form class="pc-composer" id="pc-composer" novalidate="">
+        <label class="pc-sr-only" for="pc-text">Сообщение</label>
+        
+        
+        
+        
+        
+      <div class="pc-compose-feedback" id="pc-compose-feedback"><div class="pc-selected" id="pc-selected" hidden=""></div><p class="pc-state" id="pc-state" role="status" aria-live="polite"></p><div class="pc-row" id="pc-blocked" hidden="">
+          <button type="button" class="pc-btn pc-btn--quiet" id="pc-open-pending">Открыть заявку с неотправленным сообщением</button>
+        </div><div class="pc-row" id="pc-unknown" hidden="">
+          <button type="button" class="pc-btn" id="pc-retry">Проверить и повторить ту же отправку</button>
+          <button type="button" class="pc-btn pc-btn--quiet" id="pc-drop">Отказаться от этой отправки</button>
+        </div><span class="pc-muted" id="pc-count" hidden="" aria-hidden="true">0 / 4000</span></div><div class="pc-compose-row" id="pc-compose-row"><textarea id="pc-text" rows="1" maxlength="4000" placeholder="Написать сообщение"></textarea><button type="submit" class="pc-btn pc-btn--main" id="pc-send">Отправить</button></div></form></section>
+
+    
+  </main>
+</div>
+<script src="/love-app/workflow-ui.js?v=20261023-chat-paths-r1" defer=""></script>
+<script src="/assets/palitra-attribution.js?v=20261021-orders-unified-r1" defer=""></script>
+<script src="/assets/palitra-chat.js?v=20261021-orders-unified-r1" defer=""></script>
+
+
+<script src="/love-app/push-adapter.js?v=20261020-client-chat-offers-r1" defer=""></script>
+
+<!-- PALITRA_ACTION_CONTROLS_R3 -->
+<link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
+<script src="/content/ui/palitra-action-icons.js?v=20261021-r5" defer></script>
+</body></html>

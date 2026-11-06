@@ -89,11 +89,23 @@ test('план строится по брифу, согласуется поим
 
   const tables=f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row=>row.name);
   // CF1: рядом с брифом живут вводные контент-завода — это не таблицы публикации.
+  // №84 (боевое состояние): media-mentor-publication-copies.cjs хранит неизменяемое происхождение копии
+  // текста плана и решения владельца по ней. Это не очередь автопостинга: строки поста создаёт
+  // autoposting.js, а копии только ограничивают его отправку (PLAN_APPROVAL_REVOKED). Разрешены явным списком.
+  const COPY_TABLES=['media_mentor_publication_copy_decisions','media_mentor_publication_copy_links'];
   assert.deepEqual(tables,['companies','content_factory_month_versions','content_factory_months',
     'content_factory_profile_versions','content_factory_profiles','media_mentor_brief_versions','media_mentor_briefs',
     'media_mentor_plan_approvals','media_mentor_plan_feedback','media_mentor_plan_versions','media_mentor_plans',
-    'media_mentor_variant_approvals','media_mentor_variant_revisions'],
-    'модуль не создаёт таблиц публикации');
+    ...COPY_TABLES,'media_mentor_variant_approvals','media_mentor_variant_revisions'],
+    'модуль не создаёт таблиц публикации, кроме копий текста и решений по ним');
+  assert.ok(!tables.some(name=>/^autoposting_|queue|outbox|deliver|dispatch/.test(name)),'нет таблиц очереди автопостинга');
+  for(const name of COPY_TABLES)
+    assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${name}`).get().n,0,`план и его согласование не создают копий публикации: ${name}`);
+  // Нет транспорта: модули наставника не обращаются к сети и площадкам.
+  const source=['./media-mentor.js','./media-mentor-publication-copies.cjs']
+    .map(file=>require('node:fs').readFileSync(require.resolve(file),'utf8')).join('\n');
+  assert.doesNotMatch(source,/fetch\(|require\(['"](node:)?(https?|net)['"]\)|onlypult|autoposting-transport|transport/i,
+    'медиа-наставник не вызывает транспорт публикации');
 });
 
 test('изменение брифа возвращает согласованный план на пересогласование',t=>{

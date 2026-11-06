@@ -571,6 +571,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Синапс" data-palitra-content="Synapse Business">
 <script src="brand/app-identity.js?v=20261105-1"></script>
+<link rel="stylesheet" href="./cabinet/sites-projects.css?v=20261007-2">
 </head>
 <body>
 <div class="auth" id="auth">
@@ -617,6 +618,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <nav class="nav" aria-label="Разделы кабинета">
       <a class="nav-link" href="#home" data-view-link="home">Главная</a>
       <a class="nav-link" id="hugh-link" href="#hugh" data-view-link="hugh">Хью</a>
+      <a class="nav-link" id="project-forms-link" href="#project-forms" data-view-link="project-forms" hidden>Формы проектов</a>
       <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
         Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
       </a>
@@ -933,7 +935,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
           <option value="active">Активен</option><option value="draft">Черновик</option>
           <option value="published">Опубликован</option></select>
         <button id="refresh-sites" type="button">Обновить список</button>
-        <button id="create-site" type="button">Создать сайт</button>
+        <button id="create-site" type="button">Клонировать сайт</button>
       </div>
       <p id="sites-refresh-status" class="site-refresh-status" role="status"></p>
       <div id="sites-content" aria-live="polite">Загрузка…</div>
@@ -945,6 +947,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
     </section>
     <section class="view-panel" id="hugh-view" data-view="hugh" hidden></section>
+    <section class="view-panel" id="project-forms-view" data-view="project-forms" hidden></section>
     <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden></section>
     <section class="view-panel" id="media-mentor-view" data-view="media-mentor" hidden></section>
     <section class="view-panel" id="actor-onboarding-view" data-view="actor-onboarding" hidden></section>
@@ -1061,10 +1064,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </main>
 </div>
 <dialog id="site-create-dialog"><form id="site-create-form" class="field-stack">
-  <h2>Создать сайт</h2><input name="name" required maxlength="120" placeholder="Название сайта">
-  <select name="companyCode" required></select><div class="site-actions">
-    <button type="button" data-close-dialog>Отмена</button>
-  <button type="submit">Создать</button></div><p role="alert"></p></form></dialog>
+  <h2>Клонировать сайт</h2>
+  <label>Исходный сайт<select name="sourceSiteId" required></select></label>
+  <label>Название копии<input name="name" required maxlength="120" placeholder="Название черновика"></label>
+  <label>Проект<select name="companyCode" required disabled></select></label>
+  <p class="site-clone-note">Копия получит адрес Synapse и появится в черновиках этого проекта.</p>
+  <div class="site-actions"><button type="button" data-close-dialog>Отмена</button>
+  <button type="submit">Клонировать</button></div><p role="alert"></p></form></dialog>
 <dialog id="task-create-dialog">
   <form id="task-create-form" class="crm-form">
     <h2 class="wide">Добавить задачу</h2>
@@ -1093,7 +1099,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
-  const cabinetAssets = ["platform-links", "home", "task-overview", "task-text", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
+  const cabinetAssets = ["platform-links", "home", "task-overview", "task-text", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "project-forms", "analytics",
     "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "permission-help", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
   const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
   document.write(cabinetStyles.map((asset) =>
@@ -1193,6 +1199,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const VIEW_TITLES = Object.freeze({
     home: "Главная",
     hugh: "Хью",
+    "project-forms": "Формы проектов",
     tasks: "Задачи",
     crm: "Заявки",
     deals: "Сделки",
@@ -1556,6 +1563,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
+    if (value === "project-forms") return identity?.role === "owner";
     if (value === "telegram-sources") return !!selectedProject() && hasPermission("autoposting.view");
     if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
@@ -1882,6 +1890,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       if (!profile || typeof profile.login !== "string" || typeof profile.role !== "string") {
         throw new Error("INVALID_IDENTITY");
       }
+      // Только возврат в существующее приложение после успешного whoami; произвольные next запрещены.
+      const appReturn = new URLSearchParams(location.search).getAll("next");
+      if (location.origin === "https://synapse.synapsebusiness.ru" && appReturn.length === 1 &&
+          appReturn[0] === "/cabinet/palitra-orders/cabinet.html") {
+        location.replace("/cabinet/palitra-orders/cabinet.html");
+        return;
+      }
       identity = profile;
       window.SynapseViewAs?.render(profile);
       identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
@@ -1916,6 +1931,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("company-team-link").hidden = !hasPermission("team.manage");
       byId("accounts-link").hidden = !hasPermission("account.view");
       byId("hugh-link").hidden = !permittedView("hugh");
+      byId("project-forms-link").hidden = !permittedView("project-forms");
       byId("trademarks-link").hidden = identity.role !== "owner";
       byId("create-site").hidden = !identity.permissions.includes("sites.create");
       const companyFilter = byId("sites-company");
@@ -2124,5 +2140,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   })();
 })();
 </script>
+
+<!-- PALITRA_ACTION_CONTROLS_R3 -->
+<link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
+<script src="/content/ui/palitra-action-icons.js?v=20261021-r5" defer></script>
 </body>
 </html>

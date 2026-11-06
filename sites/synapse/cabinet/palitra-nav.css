@@ -1,0 +1,34 @@
+/* PALITRA-EDITOR-NAV-38 (13.10.2026): общее меню «☰ Меню» трёх редакторов Palitra.
+   Все правила только под .pnav — существующие стили редактора прайса, фото сайта и хаба не затрагиваются.
+   Нативные details/summary: без JS, без onclick, CSP не меняется. Пункты 44px, перенос длинного текста,
+   выпадающий список не шире экрана (320/390). */
+.pnav { position: relative; z-index: 60; display: block; width: fit-content; max-width: 100%; margin: 0 0 .5rem; font-family: inherit; }
+.pnav__menu { position: relative; }
+.pnav__toggle {
+  display: inline-flex; align-items: center; gap: .45rem; box-sizing: border-box; min-height: 44px; min-width: 44px;
+  padding: .5rem 1rem; border: 2px solid #24527a; border-radius: 999px; background: #fff; color: #24527a;
+  font-family: inherit; font-size: 1rem; font-weight: 600; line-height: 1.2; cursor: pointer; list-style: none;
+  -webkit-user-select: none; user-select: none;
+}
+.pnav__toggle::-webkit-details-marker { display: none; }
+.pnav__toggle::marker { content: ""; }
+.pnav__toggle:hover, .pnav__menu[open] > .pnav__toggle { background: #e6eef5; }
+.pnav__toggle:focus-visible { outline: 3px solid #1a73c9; outline-offset: 2px; }
+.pnav__icon { display: block; width: 20px; height: 20px; flex: 0 0 auto; }
+.pnav__list {
+  position: absolute; left: 0; top: calc(100% + .4rem); z-index: 70; box-sizing: border-box; margin: 0; padding: .4rem;
+  list-style: none; width: max-content; min-width: min(15rem, calc(100vw - 1.5rem)); max-width: min(22rem, calc(100vw - 1.5rem));
+  background: #fff; border: 1px solid #d3d9df; border-radius: 14px; box-shadow: 0 8px 24px rgba(20, 32, 43, .16);
+}
+.pnav__item { margin: 0; padding: 0; }
+.pnav__link {
+  display: flex; align-items: center; gap: .3rem; box-sizing: border-box; min-height: 44px; padding: .55rem .8rem;
+  border-radius: 10px; color: #14202b; font-size: 1rem; font-weight: 600; line-height: 1.3; text-decoration: none;
+  overflow-wrap: anywhere; word-break: normal;
+}
+.pnav__link:hover { background: #e6eef5; color: #14202b; }
+.pnav__link:focus-visible { outline: 3px solid #1a73c9; outline-offset: -3px; }
+.pnav__link[aria-current="page"] { background: #24527a; color: #fff; }
+.pnav__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (forced-colors: active) { .pnav__toggle, .pnav__list { border: 1px solid CanvasText; } .pnav__link[aria-current="page"] { outline: 2px solid CanvasText; } }
+@media print { .pnav { display: none; } }

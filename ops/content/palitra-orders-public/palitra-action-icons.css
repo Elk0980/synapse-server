@@ -1,0 +1,4 @@
+/* CONTENT_DAY_SUCCESSOR: all selectors are scoped; composer remains untouched. */
+.app-action-icon{display:inline-grid!important;place-items:center;flex:0 0 44px;width:44px!important;min-width:44px;min-height:44px;height:44px;padding:0!important;border-radius:50%!important;box-sizing:border-box;vertical-align:middle}
+.app-action-icon__original{display:none!important}
+.app-action-icon:focus-visible,.content-day button:focus-visible{outline:3px solid currentColor;outline-offset:3px}
