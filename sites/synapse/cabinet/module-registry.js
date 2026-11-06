@@ -241,3 +241,41 @@
   });
   window.SynapseModulesQueue = { push: ([id, definition]) => registry.register(id, definition) };
 })();
+
+/* Плашка «Вышло обновление»: приложение на телефоне может висеть открытым часами и не
+   подхватывать выпуски. Автовыкладка пишет cabinet/shell-version.json {"commit"}; если коммит
+   сменился с момента открытия — показываем кнопку «Обновить», по нажатию перезагрузка. */
+(() => {
+  if (window.__sbUpdateWatch || typeof fetch !== 'function') return;
+  window.__sbUpdateWatch = true;
+  let first = null, shown = false, last = 0;
+  const check = async () => {
+    if (shown || Date.now() - last < 60000) return;
+    last = Date.now();
+    try {
+      const response = await fetch('cabinet/shell-version.json?t=' + Date.now(), {cache: 'no-store'});
+      if (!response.ok) return;
+      const commit = String((await response.json()).commit || '');
+      if (!commit) return;
+      if (first === null) { first = commit; return; }
+      if (commit !== first) show();
+    } catch { /* нет сети — проверим позже */ }
+  };
+  const show = () => {
+    shown = true;
+    const bar = document.createElement('div');
+    bar.className = 'sb-update'; bar.setAttribute('role', 'status');
+    bar.innerHTML = '<span>Вышло обновление кабинета</span><button type="button">Обновить</button>';
+    bar.querySelector('button').addEventListener('click', () => location.reload());
+    document.body.appendChild(bar);
+  };
+  const style = document.createElement('style');
+  style.textContent = '.sb-update{position:fixed;z-index:200;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:12px;max-width:calc(100% - 24px);padding:8px 8px 8px 16px;border-radius:14px;background:var(--surface,#1b2230);color:var(--text,#e8edf5);border:1px solid var(--line,#283143);box-shadow:0 8px 30px #0006;font:500 15px/1.3 inherit}'
+    + '.sb-update button{min-height:44px;padding:0 16px;border:0;border-radius:10px;background:var(--accent,#7d9bff);color:#fff;font:600 15px inherit;cursor:pointer}'
+    + '@media(min-width:761px){.sb-update{bottom:24px}}';
+  document.head.appendChild(style);
+  // Первая проверка — после загрузки экрана, чтобы не мешать стартовым запросам.
+  setTimeout(() => { check(); setInterval(check, 120000); }, 5000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { last = 0; check(); } });
+  window.addEventListener('focus', () => { last = 0; check(); });
+})();
