@@ -1,19 +1,20 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
+const kitScript=fs.readFileSync(require.resolve('./cf-kit.js'),'utf8');
 const cabinetHtml=fs.readFileSync(require.resolve('../cabinet.html'),'utf8');
 const shellRouting=cabinetHtml.slice(cabinetHtml.indexOf('  const defaultView ='),cabinetHtml.indexOf('  const setCategoryForView ='));
 const {materialUrl}=require('../../../ops/content/content-review-reminders');
 const clone=value=>JSON.parse(JSON.stringify(value));
 const row=(id,extra={})=>({id,companyCode:'alpha',revision:4,contentRevision:3,status:'draft',title:'Материал '+id,text:'Проверенный текст',mediaUrls:['https://example.test/material.webp'],platformIds:['telegram'],scheduledAt:'2026-09-24T23:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,captions:{telegram:'Подпись'},deliveries:[],readiness:{ready:true,issues:[]},approval:{approved:false,stale:false},...extra});
-async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha',url='https://fixture.test',chooseProject=false,routeThroughShell=false,beforeRender}={}){
+async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha',url='https://fixture.test',chooseProject=false,routeThroughShell=false,beforeRender,kit=false}={}){
   const dom=new JSDOM('<section id="view"></section>',{url,runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries);
   if(routeThroughShell){
     assert.match(shellRouting,/const viewFromHash =/);
     assert.equal(w.eval(`(()=>{const VIEW_TITLES={home:'Главная',autoposting:'Материалы','media-mentor-rollout':'Этапы'};const permittedView=()=>true;${shellRouting}\nreturn viewFromHash();})()`),'autoposting');
   }
   const NativeDate=w.Date;w.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-24T23:30:00Z']));}static now(){return Date.parse('2026-09-24T23:30:00Z');}};
-  w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
+  w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};if(kit)w.eval(kitScript);scripts.forEach(source=>w.eval(source));
   const ctx={selectedProjectId:companyCode,identity:{role,permissions,companies:[{id:companyCode,name:'Тест А'},{id:'beta',name:'Тест Б'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'fixture'},body:JSON.stringify(body)}),apiJson:async(url,options={})=>{
     const parsed=new URL(url,'https://fixture.test'),code=parsed.searchParams.get('companyCode'),path=parsed.pathname,method=options.method||'GET',call={code,path,method,url,options};calls.push(call);
     if(override){const result=await override(call,posts);if(result!==undefined)return clone(result);}
@@ -36,7 +37,7 @@ async function fixture({entries=[row(1)],role='owner',permissions=[],override,li
   if(chooseProject)ctx.chooseProject=code=>{ctx.selectedProjectId=code;w.history.replaceState(null,'','#content-factory/materials');void views.autoposting.onProjectChange(ctx);};
   if(beforeRender)beforeRender(w);
   await views.autoposting.render(d.getElementById('view'),ctx);
-  const f={w,d,ctx,views,calls,posts,node:id=>d.getElementById(id),settle:async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));},set(id,value){const node=f.node(id);node.value=value;node.dispatchEvent(new w.Event('change',{bubbles:true}));},async click(selector){const node=d.querySelector(selector);assert.ok(node,selector);node.click();await f.settle();},visibleIds:()=>[...d.querySelectorAll('#autoposting-posts .ap-board [data-daily-post]')].map(node=>node.dataset.dailyPost),undatedIds:()=>[...d.querySelectorAll('#autoposting-posts .ap-undated [data-daily-post]')].map(node=>node.dataset.dailyPost),close:()=>w.close()};return f;
+  const f={w,d,ctx,views,calls,posts,node:id=>d.getElementById(id),settle:async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));},set(id,value){const node=f.node(id);node.value=value;node.dispatchEvent(new w.Event('change',{bubbles:true}));},async click(selector){const node=d.querySelector(selector);assert.ok(node,selector);node.click();await f.settle();},visibleIds:()=>[...d.querySelectorAll('#autoposting-posts .ap-team-list [data-daily-post]')].map(node=>node.dataset.dailyPost),undatedIds:()=>[...d.querySelectorAll('#autoposting-posts .ap-undated [data-daily-post]')].map(node=>node.dataset.dailyPost),close:()=>w.close()};return f;
 }
 const palitraRow=extra=>row(1,{companyCode:'palitra-love',dayKey:'',captions:{},scheduledAt:'2026-09-25T01:00:00Z',approvalRequired:true,approveAndScheduleAvailable:true,...extra});
 
@@ -149,37 +150,99 @@ test('Palitra: текстовый Telegram доступен без изобра�
     }finally{f.close();}
   }
 });
-test('CF3-BOARD: доска открывается на текущей неделе по поясу компании, время отделено от даты плана, без даты — отдельной группой',async()=>{
-  const f=await fixture({entries:[row(1),row(2,{scheduledAt:null,plannedDate:'2026-09-25',planPlatform:'vk',platformIds:[],captions:{}}),row(3,{scheduledAt:null}),row(4,{scheduledAt:'2026-09-25T23:00:00Z'})]});try{
-    assert.match(f.node('autoposting-week-label').textContent,/Неделя 4 из 5 · 21–27 сентября 2026/);
-    assert.deepEqual([...f.d.querySelectorAll('[data-board-day]')].map(node=>node.dataset.boardDay),['2026-09-21','2026-09-22','2026-09-23','2026-09-24','2026-09-25','2026-09-26','2026-09-27','undated']);
-    assert.deepEqual(f.visibleIds(),['1','2','4'],'внутри дня: сначала со временем, потом только с датой плана');assert.deepEqual(f.undatedIds(),['3']);
-    assert.match(f.node('autoposting-calendar-zone').textContent,/часовому поясу проекта Asia\/Irkutsk.*Сегодня: 2026-09-25/);
-    assert.ok(f.d.querySelector('[data-board-day="2026-09-25"]').classList.contains('is-today'));
-    assert.match(f.d.querySelector('[data-daily-post="1"] .ap-card-meta').textContent,/^07:00/);
-    assert.match(f.d.querySelector('[data-daily-post="2"]').textContent,/время не задано/);
-    assert.match(f.d.querySelector('.autoposting-undated').textContent,/Без даты · 1[\s\S]*Материал 3/);assert.equal(f.node('autoposting-editor').open,false);
-    assert.ok([...f.d.querySelectorAll('[data-daily-approve]')].every(node=>!node.checked));assert.ok(f.calls.every(call=>call.method==='GET'));
-    assert.ok(![...f.d.querySelectorAll('h2,h3')].some(node=>/^Материалы$/.test(node.textContent.trim())),'нет дубля «Материалы»');assert.equal(f.d.querySelector('h2').textContent,'Постинг');
+/* №209 «Публикации» по макету Влада 07.11: лента готовых рилсов (CfKit), окно публикации, «Для команды». */
+const feedRows=()=>[
+  row(1,{status:'published',title:'№1 Первый визит',mediaUrls:['https://example.test/r1.mp4'],scheduledAt:'2026-09-20T02:00:00Z',approval:{approved:true,stale:false},
+    deliveries:[{channelId:'telegram',status:'published',url:'https://t.me/alpha_channel/15'}]}),
+  row(2,{title:'№2 Уход после процедуры',mediaUrls:['https://example.test/r2.mp4'],scheduledAt:'2026-09-26T10:00:00Z',approval:{approved:true,stale:false}}),
+  row(3,{status:'scheduled',scheduledAt:'2026-09-25T09:00:00Z',approval:{approved:true,stale:false}}),
+  row(4,{scheduledAt:'2026-09-27T09:00:00Z'}),
+  row(5,{scheduledAt:null,approval:{approved:true,stale:false}}),
+  row(6,{status:'failed',lastErrorCode:'AUTH_FAILED',scheduledAt:'2026-09-24T01:00:00Z',approval:{approved:true,stale:false},deliveries:[{channelId:'telegram',status:'failed',errorCode:'AUTH_FAILED'}]})];
+const feedIds=f=>[...f.d.querySelectorAll('#autoposting-feed [data-feed-post]')].map(node=>node.dataset.feedPost);
+test('№209 Публикации: шапка CfKit, только готовые рилсы с датой выхода, опубликованные выше, старт — ближайший неопубликованный',async()=>{
+  const f=await fixture({kit:true,entries:feedRows()});try{
+    assert.equal(f.d.querySelector('#autoposting-head .cfk-title').textContent,'Публикации');
+    assert.deepEqual([...f.d.querySelectorAll('#autoposting-head [data-cfk-act]')].map(node=>node.dataset.cfkAct),['calendar','sheet','sort']);
+    assert.equal(f.d.querySelector('#autoposting-head [data-cfk-act="sheet"]').disabled,true,'таблица не подключена — ▦ неактивна с подсказкой');
+    assert.equal(f.d.querySelector('#autoposting-head .cfk-dates').hidden,true,'полоса дат скрыта до нажатия на календарь');
+    assert.deepEqual(feedIds(f),['1','6','3','2'],'по датам; черновик №4 и №5 без даты в ленту не попадают');
+    const card=id=>f.d.querySelector(`#autoposting-feed [data-feed-post="${id}"]`);
+    assert.equal(f.d.querySelector('#autoposting-feed .cfk-feed-sep').nextElementSibling,card(6),'стартовая точка — первый неопубликованный');
+    assert.match(f.d.querySelector('#autoposting-feed .cfk-feed-sep').textContent,/выше — опубликованные/);
+    assert.deepEqual(['1','6','3','2'].map(id=>card(id).querySelector('.cfk-chip').textContent),['Опубликовано','Ошибка публикации','Запланировано к выходу','Готово к выходу']);
+    assert.equal(card(1).querySelector('.ap-feed-title').textContent,'№1 Первый визит');assert.equal(card(3).querySelector('.ap-feed-title').textContent,'№3 Материал 3');
+    assert.equal(card(3).querySelector('.ap-feed-when').textContent,'Пятница, 25 сентября · 17:00');
+    const video=card(1).querySelector('.ap-feed-thumb video');assert.ok(video);assert.equal(video.getAttribute('src'),'https://example.test/r1.mp4#t=0.5');
+    assert.equal(video.getAttribute('preload'),'metadata');assert.ok(video.hasAttribute('muted')&&video.hasAttribute('playsinline'));
+    assert.equal(card(3).querySelector('video'),null,'превью-кадр только у смонтированного ролика');
+    assert.equal(card(1).querySelector('.ap-pf[data-platform="telegram"]').textContent,'TG');
+    assert.match(card(6).querySelector('.ap-feed-note').textContent,/не приняла ключ/);
+    assert.doesNotMatch(f.d.body.textContent,/Создать публикацию|Обзор месяца/);
+    for(const id of ['autoposting-overview','autoposting-prev-week','autoposting-month','autoposting-day-strip','autoposting-calendar'])assert.equal(f.node(id),null,id+' убран');
+    assert.equal(f.d.querySelector('.ap-board'),null,'недельной доски нет');
+    assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
-test('CF3-BOARD: месяц грузится целиком, недели внутри месяца, переход к дате и фильтры ничего не пишут',async()=>{
-  const f=await fixture({listIds:[1],entries:[row(1),row(2,{scheduledAt:'2026-10-10T01:00:00Z',platformIds:[],captions:{vk:'Текст'}}),row(3,{scheduledAt:'2026-10-11T01:00:00Z'})]});try{
-    f.set('autoposting-month','2026-10');await f.settle();
-    const call=f.calls.filter(call=>call.path.endsWith('/calendar')).at(-1);assert.match(call.url,/from=2026-10-01&to=2026-10-31/);
-    assert.match(f.node('autoposting-week-label').textContent,/Неделя 1 из 5 · 1–4 октября 2026/,'первая неделя месяца короче семи дней');assert.deepEqual(f.visibleIds(),[]);
-    await f.click('#autoposting-next-week');assert.deepEqual(f.visibleIds(),['2','3']);
-    f.set('autoposting-daily-platform','vk');assert.deepEqual(f.visibleIds(),['2']);assert.match(f.node('autoposting-filter-count').textContent,/Активных фильтров: 1/);
-    f.set('autoposting-jump','2026-09-25');await f.settle();assert.match(f.node('autoposting-week-label').textContent,/21–27 сентября/);
-    assert.deepEqual(f.visibleIds(),[]);assert.match(f.node('autoposting-posts').textContent,/По выбранным фильтрам на этой неделе публикаций нет/);
-    await f.click('[data-filter-reset]');assert.deepEqual(f.visibleIds(),['1']);assert.equal(f.node('autoposting-filter-reset').hidden,true);
-    await f.click('#autoposting-prev-week');await f.click('#autoposting-prev-week');await f.click('#autoposting-prev-week');await f.click('#autoposting-prev-week');await f.settle();
-    assert.match(f.node('autoposting-week-label').textContent,/Неделя 6 из 6 · 31 августа 2026/,'переход за пределы месяца переключает месяц');
-    assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.posts.length,3);
+test('№209 Публикации: ⇅ — время выхода, площадка, статус (ошибки и ожидание → вышло); выбор запоминается; полоса дат ведёт ленту и месяц',async()=>{
+  const f=await fixture({kit:true,entries:feedRows()});try{
+    await f.click('#autoposting-head [data-cfk-act="sort"]');
+    assert.deepEqual([...f.d.querySelectorAll('[data-cfk-sort]')].map(node=>node.dataset.cfkSort),['time','platform','status']);
+    await f.click('[data-cfk-sort="status"]');assert.deepEqual(feedIds(f),['6','3','2','1']);assert.equal(f.d.querySelector('#autoposting-feed .cfk-feed-sep'),null);
+    assert.equal(f.w.localStorage.getItem('cfkit.sort.autoposting'),'status');
+    await f.click('#autoposting-head [data-cfk-act="sort"]');await f.click('[data-cfk-sort="time"]');assert.deepEqual(feedIds(f),['1','6','3','2']);
+    await f.click('#autoposting-head [data-cfk-act="calendar"]');const strip=f.d.querySelector('#autoposting-head .cfk-dates');assert.equal(strip.hidden,false);
+    for(const day of ['2026-09-20','2026-09-24','2026-09-25','2026-09-26'])assert.ok(strip.querySelector(`[data-cfk-day="${day}"]`).classList.contains('has'),day);
+    assert.ok(!strip.querySelector('[data-cfk-day="2026-09-27"]').classList.contains('has'),'черновик не отмечен');
+    assert.equal(strip.querySelector('.cfk-tz').textContent,'Иркутское время');
+    await f.click('[data-cfk-day="2026-09-24"]');assert.equal(f.d.querySelector('#autoposting-feed [data-feed-post="6"]').dataset.day,'selected');
+    await f.click('[data-cfk-week="1"]');await f.settle();
+    assert.match(f.calls.filter(call=>call.path.endsWith('/calendar')).at(-1).url,/from=2026-10-01&to=2026-10-31/,'выбор дня другого месяца перечитывает его календарь');
+    assert.deepEqual(feedIds(f),['1','6','3','2'],'лента прежних месяцев остаётся');assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
-test('CF3-BOARD: карточка открывает единственный редактор окном поверх доски; закрытие и фильтры сохраняют несохранённый ввод',async()=>{
+test('№209 окно публикации: маска IG/TT/YT/VK/TG, статусы по площадкам — ссылка на пост, страница сообщества или «ссылка позже», время, текст, «Скачать»; ✕ и Esc',async()=>{
+  const information={companyCode:'alpha',revision:2,profile:{timezone:'Asia/Irkutsk',socials:[{type:'vk',url:'https://vk.com/alpha_club'},{type:'telegram',url:'https://t.me/alpha_booking'}]}};
+  const entries=[row(1,{status:'published',title:'№1 Первый визит',mediaUrls:['https://example.test/r1.mp4'],platformIds:['telegram','vk','tiktok'],captions:{telegram:'Подпись TG'},
+    deliveries:[{channelId:'telegram',status:'published',url:'https://t.me/alpha_channel/15'},{channelId:'vk',status:'needs_review',errorCode:'PROVIDER_LINK_UNAVAILABLE'},{channelId:'tiktok',status:'published'}]})];
+  const f=await fixture({kit:true,entries,override:call=>call.path.endsWith('/company-information')?information:undefined});try{
+    const open=f.d.querySelector('[data-feed-open="1"]');open.click();await f.settle();
+    const pub=f.node('autoposting-pub');assert.equal(pub.hidden,false);assert.equal(pub.getAttribute('role'),'dialog');assert.ok(f.d.body.classList.contains('autoposting-modal-open'));
+    assert.equal(f.node('autoposting-pub-title').textContent,'№1 Первый визит');
+    assert.deepEqual([...pub.querySelectorAll('[data-pub-tab]')].map(node=>node.textContent),['IG','TT','YT','VK','TG']);
+    assert.equal(pub.querySelector('[data-pub-tab][aria-selected="true"]').dataset.pubTab,'tiktok');assert.equal(pub.querySelector('.ap-mask').dataset.mask,'tiktok');
+    const st=platform=>pub.querySelector(`[data-pub-platform="${platform}"] .ap-pub-st`);
+    assert.equal(st('telegram').textContent,'вышло ↗');assert.equal(st('telegram').querySelector('a').href,'https://t.me/alpha_channel/15');
+    assert.equal(st('vk').textContent,'вышло · сообщество ↗');assert.equal(st('vk').querySelector('a').href,'https://vk.com/alpha_club');
+    assert.equal(st('tiktok').textContent,'вышло · ссылка позже','нет ссылки и страницы TikTok в карточке компании — не выдумываем');
+    assert.match(pub.querySelector('.ap-pub-line').textContent,/Опубликовано.*Пятница, 25 сентября · 07:00/);
+    assert.equal(pub.querySelector('.ap-pub-text').textContent,'Проверенный текст');assert.match(pub.textContent,/TikTok · общий текст/);
+    await f.click('[data-pub-tab="telegram"]');assert.equal(pub.querySelector('.ap-pub-text').textContent,'Подпись TG');assert.equal(pub.querySelector('.ap-mask').dataset.mask,'telegram');
+    const download=pub.querySelector('[data-pub-download]');assert.equal(download.textContent,'Скачать');assert.equal(download.getAttribute('href'),'https://example.test/r1.mp4');assert.ok(download.hasAttribute('download'));
+    assert.ok(pub.querySelector('.ap-pub-screen video[controls]'));assert.equal(pub.querySelector('[data-pub-unpublish]'),null,'без API снятия кнопки нет');
+    assert.doesNotMatch(pub.textContent,/Создать публикацию/);
+    await f.click('[data-pub-close]');assert.equal(pub.hidden,true);assert.ok(!f.d.body.classList.contains('autoposting-modal-open'));assert.equal(f.d.activeElement,f.d.querySelector('[data-feed-open="1"]'));
+    f.d.querySelector('[data-feed-post="1"] .ap-feed-foot').click();await f.settle();assert.equal(pub.hidden,false,'нажатие в любом месте карточки');
+    pub.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(pub.hidden,true);
+    f.d.querySelector('[data-feed-open="1"]').click();await f.settle();await f.click('[data-pub-edit]');
+    assert.equal(pub.hidden,true);assert.equal(f.node('autoposting-editor').open,true,'«Открыть в редакторе» — прежний редактор со статусами доставки и ретраями');
+    assert.ok(f.calls.every(call=>call.method==='GET'));assert.ok(!f.calls.some(call=>/unpublish/.test(call.path)),'API снятия не запрашивается, пока его окна нет в кабинете');
+  }finally{f.close();}
+});
+test('№209 «Удалить публикацию» (PR 579) — только когда в кабинете есть его окно и сервер отвечает на …/unpublish',async()=>{
+  for(const api of [true,false]){
+    const entries=[row(1,{status:'published',mediaUrls:['https://example.test/r1.mp4'],deliveries:[{channelId:'telegram',status:'published',url:'https://t.me/alpha_channel/15'}]})];
+    const f=await fixture({kit:true,entries,override:call=>{if(/\/unpublish$/.test(call.path)){if(!api)throw Object.assign(Error('Not found'),{status:404});return {companyCode:'alpha',revision:4,targets:[]};}}});try{
+      f.node('autoposting-editor').insertAdjacentHTML('beforeend','<div id="autoposting-unpublish-zone"></div>');
+      f.d.querySelector('[data-feed-open="1"]').click();await f.settle();
+      assert.equal(Boolean(f.d.querySelector('[data-pub-unpublish]')),api,api?'кнопка есть':'404 — кнопки нет');
+      assert.equal(f.calls.filter(call=>/\/unpublish$/.test(call.path)).length,1,'один GET-запрос, без записи');assert.ok(f.calls.every(call=>call.method==='GET'));
+    }finally{f.close();}
+  }
+});
+test('№209 «Для команды»: прежняя карточка открывает единственный редактор окном; закрытие сохраняет несохранённый ввод',async()=>{
   const f=await fixture();try{
+    assert.equal(f.node('autoposting-team').open,false,'список для команды свёрнут');assert.match(f.node('autoposting-team').querySelector('summary').textContent,/Для команды · все материалы и согласование \(1\)/);
     await f.click('[data-daily-post="1"] .ap-card-title');assert.equal(f.node('autoposting-editor').open,true);assert.equal(f.d.querySelectorAll('#autoposting-form').length,1);
     assert.ok(f.d.body.classList.contains('autoposting-modal-open'));assert.equal(f.node('autoposting-editor').getAttribute('role'),'dialog');
     assert.match(f.node('autoposting-editor-title').textContent,/Публикация: Материал 1/);
@@ -187,32 +250,30 @@ test('CF3-BOARD: карточка открывает единственный р
     await f.click('#autoposting-editor-close');assert.equal(f.node('autoposting-editor').open,false);assert.ok(!f.d.body.classList.contains('autoposting-modal-open'));
     assert.equal(f.d.activeElement,f.d.querySelector('[data-open-post="1"]'),'фокус возвращается на карточку');
     assert.match(f.node('autoposting-status').textContent,/Несохранённые правки остались/);assert.match(f.d.querySelector('[data-daily-post="1"]').textContent,/Есть несохранённые правки/);
-    f.set('autoposting-daily-platform','vk');f.set('autoposting-filter-status','draft');f.set('autoposting-month','2026-10');await f.settle();
-    await f.click('#autoposting-prev-week');await f.settle();f.set('autoposting-daily-platform','');f.set('autoposting-filter-status','');
     await f.click('[data-open-post="1"]');
     assert.equal(f.node('autoposting-text').value,'Несохранённая правка');assert.equal(f.node('autoposting-date').value,'2026-10-02T12:10');assert.equal(f.node('autoposting-photo').files[0],file);
     f.node('autoposting-editor').dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(f.node('autoposting-editor').open,false);
     assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.posts[0].text,'Проверенный текст');
   }finally{f.close();}
 });
-test('CF3-BOARD: флажок — только выбор; пустая доска приглашает к настройке; телефонная полоска дней и панель фильтров; уход из вкладки закрывает окно без потери ввода',async()=>{
-  const f=await fixture({entries:[row(1),row(2,{scheduledAt:'2026-09-22T02:00:00Z'})]});try{
+test('№209 «Для команды»: по датам, без даты — отдельной группой; флажок — только выбор; пустая лента честно говорит, где готовить; уход из вкладки закрывает окна без потери ввода',async()=>{
+  const f=await fixture({entries:[row(1),row(2,{scheduledAt:null,plannedDate:'2026-09-25',planPlatform:'vk',platformIds:[],captions:{}}),row(3,{scheduledAt:null}),row(4,{scheduledAt:'2026-09-25T23:00:00Z'}),row(5,{scheduledAt:'2026-09-22T02:00:00Z'})]});try{
+    assert.deepEqual(f.visibleIds(),['5','1','2','4'],'по дате, внутри дня — сначала со временем');assert.deepEqual(f.undatedIds(),['3']);
+    assert.match(f.node('autoposting-calendar-zone').textContent,/часовому поясу проекта Asia\/Irkutsk.*Сегодня: 2026-09-25/);
+    assert.match(f.d.querySelector('[data-daily-post="1"] .ap-card-meta').textContent,/^07:00/);assert.match(f.d.querySelector('[data-daily-post="2"]').textContent,/время не задано/);
+    assert.match(f.d.querySelector('.autoposting-undated').textContent,/Без даты · 1[\s\S]*Материал 3/);
+    assert.match(f.node('autoposting-feed').textContent,/Готовых к выходу рилсов пока нет/);assert.ok(f.d.querySelector('#autoposting-feed a[href="#content/materials"]'));
     await f.click('[data-daily-approve="1"]');
     assert.equal(f.d.querySelector('[data-daily-post="1"] .ap-status').textContent,'Черновик','выбор не меняет статус');
     assert.match(f.node('autoposting-batch').textContent,/Флажок на карточке — только выбор/);assert.match(f.node('autoposting-batch-approve').textContent,/Согласовать выбранные \(1\)/);
     assert.ok(f.calls.every(call=>call.method==='GET'),'выбор ничего не пишет');assert.equal(f.node('autoposting-editor').open,false,'флажок не открывает окно');
-    const strip=[...f.d.querySelectorAll('[data-strip-date]')];assert.equal(strip.length,7);assert.match(strip[1].getAttribute('aria-label'),/Вт, 22 сен: публикаций 1/);
-    await f.click('[data-strip-date="2026-09-22"]');assert.ok(f.d.querySelector('[data-board-day="2026-09-22"]').classList.contains('is-selected'));
-    assert.equal(f.node('autoposting-filters-toggle').getAttribute('aria-expanded'),'false');await f.click('#autoposting-filters-toggle');
-    assert.equal(f.node('autoposting-filters-toggle').getAttribute('aria-expanded'),'true');assert.ok(f.node('autoposting-filters').classList.contains('is-open'));
-    await f.click('#autoposting-overview');assert.equal(f.node('autoposting-month-controls').hidden,false);await f.click('[data-calendar-date="2026-09-03"]');
-    assert.match(f.node('autoposting-week-label').textContent,/Неделя 1 из 5/);
-    await f.click('[data-calendar-date="2026-09-22"]');await f.click('[data-open-post="2"]');f.set('autoposting-text','Ввод до ухода');
+    await f.click('[data-open-post="5"]');f.set('autoposting-text','Ввод до ухода');
     f.views.autoposting.onLeave();assert.equal(f.node('autoposting-editor').open,false);assert.ok(!f.d.body.classList.contains('autoposting-modal-open'));
-    await f.click('[data-open-post="2"]');assert.equal(f.node('autoposting-text').value,'Ввод до ухода');
+    await f.click('[data-open-post="5"]');assert.equal(f.node('autoposting-text').value,'Ввод до ухода');
+    assert.equal(f.d.querySelector('h2').textContent,'Публикации');
   }finally{f.close();}
   const empty=await fixture({entries:[]});try{
-    assert.match(empty.node('autoposting-posts').textContent,/На доске пока пусто/);assert.ok(empty.d.querySelector('#autoposting-posts a[href="#content-factory/settings"]'));
+    assert.match(empty.node('autoposting-posts').textContent,/Материалов пока нет/);assert.ok(empty.d.querySelector('#autoposting-posts a[href="#content-factory/settings"]'));
     assert.match(empty.node('autoposting-posts').textContent,/Без даты · 0/);
   }finally{empty.close();}
 });
@@ -423,11 +484,11 @@ test('unavailable or mismatched calendar is labelled incomplete instead of claim
 test('hidden selections remain explicitly listed and removable without losing the editor draft',async()=>{
   const f=await fixture({entries:[row(1),row(2,{captions:{vk:'Подпись'},platformIds:[]})]});try{
     await f.click('[data-daily-approve="1"]');await f.click('[data-open-post="2"]');f.set('autoposting-text','Несохранённый текст');
-    f.set('autoposting-daily-platform','vk');assert.deepEqual(f.visibleIds(),['2']);assert.match(f.node('autoposting-selected-list').textContent,/Материал 1 · версия 3/);assert.match(f.node('autoposting-selected-list').textContent,/за пределами текущего фильтра/);
+    assert.match(f.node('autoposting-selected-list').textContent,/Материал 1 · версия 3/);assert.match(f.node('autoposting-selected-list').textContent,/даже если список для команды свёрнут/);
     await f.click('[data-daily-unselect="1"]');assert.equal(f.node('autoposting-batch-approve').disabled,true);assert.equal(f.node('autoposting-text').value,'Несохранённый текст');assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
-test('CF3-BOARD: карточка показывает площадку подписью, формат, ОВП, время и один понятный статус; фильтры формата/ОВП/статуса',async()=>{
+test('CF3-BOARD: карточка «Для команды» показывает площадку подписью, формат, ОВП, время и один понятный статус',async()=>{
   const f=await fixture({entries:[row(1,{status:'published'}),row(2,{scheduledAt:'2026-09-25T23:00:00Z',platformIds:[],captions:{vk:'Подпись'},meta:{format:'reel',role:'sale'}}),
     row(3,{scheduledAt:'2026-09-23T02:30:00Z',review:{state:'pending'},meta:{format:'post',role:'reach'}}),row(4,{scheduledAt:'2026-09-23T03:00:00Z',approval:{approved:true,stale:false,approvedAt:'2026-09-22T01:00:00Z',approvedByName:'Владелец'}}),
     row(5,{scheduledAt:'2026-09-23T04:00:00Z',review:{state:'rejected'}})]});try{
@@ -438,10 +499,8 @@ test('CF3-BOARD: карточка показывает площадку подп
     assert.match(card(2).querySelector('.ap-chips').textContent,/ВКонтакте/);assert.equal(card(2).dataset.platform,'vk','цвет площадки задан и продублирован подписью');
     assert.match(card(2).querySelector('.ap-card-meta').textContent,/07:00 · Reels \/ Shorts \/ клип · ОВП: Продажи/);
     assert.ok(card(1).querySelector('.ap-thumb img'),'превью при наличии файла');
-    f.set('autoposting-daily-platform','vk');assert.deepEqual(f.visibleIds(),['2']);f.set('autoposting-daily-platform','');
-    f.set('autoposting-filter-format','post');assert.deepEqual(f.visibleIds(),['3']);f.set('autoposting-filter-format','none');assert.deepEqual(f.visibleIds(),['4','5','1']);f.set('autoposting-filter-format','');
-    f.set('autoposting-filter-role','sale');assert.deepEqual(f.visibleIds(),['2']);f.set('autoposting-filter-role','');
-    f.set('autoposting-filter-status','published');assert.deepEqual(f.visibleIds(),['1']);
+    assert.deepEqual(f.visibleIds(),['3','4','5','1','2'],'фильтров доски больше нет: все материалы по дате');
+    assert.deepEqual([...f.d.querySelectorAll('#autoposting-feed [data-feed-post]')].map(node=>node.dataset.feedPost),['4','1'],'в ленте — только согласованные и вышедшие');
     assert.equal(f.views.autoposting.title,'Постинг');assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
