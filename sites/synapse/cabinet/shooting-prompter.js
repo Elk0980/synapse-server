@@ -1,7 +1,7 @@
-/* Съёмка (№98 · В): суфлёр и «Поделиться». Работает без сети и ничего не пишет на сервер.
-   Суфлёр: весь сценарий или реплики одного актёра, скорость, старт/пауза касанием, стоп, назад,
-   зеркало, размер шрифта. «Поделиться»: на телефоне navigator.share, на ПК Telegram/WhatsApp/VK
-   и «Скопировать» для MAX; PNG и PDF с выделенными цветом репликами актёра. */
+/* Съёмка (№98 · В; макет Влада 07.11, №206): суфлёр и «Поделиться». Работает без сети и ничего не пишет на сервер.
+   Суфлёр — окно во весь экран: выбор актёра («Все»), одна кнопка ▶/⏸, скорость 1×/1.2×/1.5×/2×, полоса
+   прокрутки справа. «Поделиться»: на телефоне navigator.share, на ПК Telegram/WhatsApp/VK и «MAX · Скопировать»;
+   форматы Текст, PNG и PDF с выделенными цветом репликами актёра. */
 (function (root, factory) {
   const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -68,8 +68,8 @@
     };
     for (const frame of parsed.frames) {
       const own = frame.type === 'line' && frame.actor === actor;
-      const label = frame.type === 'line' ? `${own ? '▶ ' + frame.actor.toUpperCase() : frame.actor}: ${frame.text}`
-        : frame.type === 'insert' ? `[Вставка: ${frame.text}]` : `(${frame.text})`;
+      const label = `Сцена №${frame.n}  ` + (frame.type === 'line' ? `${own ? '▶ ' + frame.actor.toUpperCase() : frame.actor}: ${frame.text}`
+        : frame.type === 'insert' ? `[Вставка: ${frame.text}]` : `(${frame.text})`);
       rows.push({lines: wrap(label, own), own});
     }
     const height = pad * 2 + 80 + rows.reduce((n, r) => n + r.lines.length * lineH + 18, 0);
@@ -101,8 +101,15 @@
     setTimeout(() => root.URL.revokeObjectURL(url), 30000);
   }
 
-  /* Выбор актёра и «Поделиться» рядом с ним. state — общий объект {actor} карточки и суфлёра. */
-  function shareControls({parsed, title, state = {actor: parsed.actors[0] || ''}, onActor}) {
+  /* Значок «Поделиться» — три точки, соединённые линиями (как в телефонах). */
+  const SHARE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="currentColor" aria-hidden="true">'
+    + '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>'
+    + '<path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4" stroke-width="2" fill="none"/></svg>';
+
+  /* Выбор актёра («Все» — весь сценарий) и «Поделиться» рядом. state — общий объект {actor} с суфлёром.
+     Телефон — системное меню navigator.share; ПК — Telegram / WhatsApp / VK / «MAX · Скопировать»
+     и форматы Текст / PNG / PDF. */
+  function shareControls({parsed, title, state = {actor: ''}, onActor}) {
     const status = h('span', {class: 'shoot-share__status', role: 'status'});
     const say = (message) => { status.textContent = message; };
     const text = (bold) => S().script.shareText(parsed, state.actor, {title, bold});
@@ -116,80 +123,104 @@
         else { download(file); say(`${kind.toUpperCase()} сохранён — отправьте его актёру`); }
       } catch (error) { if (error?.name !== 'AbortError') say(error.message); }
     };
-    const menu = h('div', {class: 'shoot-share__menu', hidden: true, role: 'menu'},
-      h('a', {role: 'menuitem', target: '_blank', rel: 'noopener', 'data-share': 'telegram', text: 'Telegram'}),
-      h('a', {role: 'menuitem', target: '_blank', rel: 'noopener', 'data-share': 'whatsapp', text: 'WhatsApp'}),
-      h('a', {role: 'menuitem', target: '_blank', rel: 'noopener', 'data-share': 'vk', text: 'ВКонтакте',
-        onclick: () => copy('Текст скопирован: вставьте его в сообщение ВКонтакте')}),
-      h('button', {type: 'button', role: 'menuitem', 'data-share': 'copy', text: 'Скопировать (для MAX)', onclick: () => copy('Текст скопирован — вставьте в MAX')}),
-      h('button', {type: 'button', role: 'menuitem', 'data-share': 'png', text: 'Картинка PNG', onclick: () => shareFile('png')}),
-      h('button', {type: 'button', role: 'menuitem', 'data-share': 'pdf', text: 'PDF', onclick: () => shareFile('pdf')}));
+    const who = h('span', {class: 'shoot-share__who'});
+    const menu = h('div', {class: 'shoot-share__menu', hidden: true, role: 'menu', 'aria-label': 'Поделиться репликами'},
+      h('b', {class: 'shoot-share__label'}, 'Поделиться репликами', who),
+      h('div', {class: 'shoot-share__row'},
+        h('a', {role: 'menuitem', target: '_blank', rel: 'noopener', 'data-share': 'telegram', text: 'Telegram'}),
+        h('a', {role: 'menuitem', target: '_blank', rel: 'noopener', 'data-share': 'whatsapp', text: 'WhatsApp'}),
+        h('a', {role: 'menuitem', target: '_blank', rel: 'noopener', 'data-share': 'vk', text: 'VK',
+          onclick: () => copy('Текст скопирован: вставьте его в сообщение ВКонтакте')}),
+        h('button', {type: 'button', role: 'menuitem', 'data-share': 'copy', text: 'MAX · Скопировать', onclick: () => copy('Текст скопирован — вставьте в MAX')})),
+      h('span', {class: 'shoot-share__label'}, 'Формат'),
+      h('div', {class: 'shoot-share__row'},
+        h('button', {type: 'button', role: 'menuitem', 'data-share': 'text', text: 'Текст', onclick: () => copy('Текст скопирован — вставьте в сообщение')}),
+        h('button', {type: 'button', role: 'menuitem', 'data-share': 'png', text: 'PNG', onclick: () => shareFile('png')}),
+        h('button', {type: 'button', role: 'menuitem', 'data-share': 'pdf', text: 'PDF', onclick: () => shareFile('pdf')})),
+      status);
     const refreshLinks = () => {
       const cabinet = `${root.location.origin}/cabinet.html`;
+      who.textContent = state.actor ? ` · ${state.actor}` : ' · весь сценарий';
       menu.querySelector('[data-share=telegram]').href = `https://t.me/share/url?url=${enc(text('**'))}`;
       menu.querySelector('[data-share=whatsapp]').href = `https://wa.me/?text=${enc(text('*'))}`;
       menu.querySelector('[data-share=vk]').href = `https://vk.com/share.php?url=${enc(cabinet)}&title=${enc(title || 'Сценарий')}&comment=${enc(text(''))}`;
     };
-    const button = h('button', {type: 'button', class: 'plain-button shoot-share__button', 'aria-haspopup': 'menu', 'aria-label': 'Поделиться сценарием', text: '⤴ Поделиться',
+    const button = h('button', {type: 'button', class: 'shoot-share__button', 'aria-haspopup': 'menu', 'aria-label': 'Поделиться репликами', title: 'Поделиться репликами',
       onclick: async () => {
         if (mobile()) {
           try { await root.navigator.share({title, text: text('**')}); say('Отправлено'); return; }
           catch (error) { if (error?.name === 'AbortError') return; }
         }
         refreshLinks(); menu.hidden = !menu.hidden;
+        button.setAttribute('aria-expanded', String(!menu.hidden));
       }});
+    button.innerHTML = SHARE_ICON;
     const select = parsed.hasRoles ? h('select', {class: 'shoot-share__actor', 'aria-label': 'Актёр',
       onchange: (event) => { state.actor = event.target.value; refreshLinks(); onActor?.(state.actor); }},
-      onActor ? h('option', {value: '', text: 'Весь сценарий', selected: !state.actor}) : null,
+      h('option', {value: '', text: 'Все', selected: !state.actor}),
       parsed.actors.map((name) => h('option', {value: name, text: name, selected: name === state.actor}))) : null;
-    return h('div', {class: 'shoot-share'}, select, button, menu, status);
+    return h('div', {class: 'shoot-share'}, select, button, menu);
   }
 
-  function open({parsed, title}) {
+  const SPEEDS = [1, 1.2, 1.5, 2];
+  const BASE = 72; // px/с при 1× — прежняя скорость суфлёра по умолчанию (4 × 18)
+
+  /* Суфлёр — окно во весь экран: «← Съёмка», справа актёр и «Поделиться»; сцены «Сцена №N», реплики
+     выбранного актёра выделены (▶ ИМЯ), остальные приглушены; одна кнопка ▶/⏸, скорость 1× → 1.2× → 1.5× → 2×,
+     полоса прокрутки справа показывает место в сценарии и тянется. Прокрутка — прежняя: translateY по кадрам. */
+  function open({parsed, title, subtitle = '', backLabel = '← Съёмка'}) {
     const doc = root.document;
-    const state = {actor: '', speed: 4, font: 44, mirror: false, playing: false, pos: 0};
-    let frame = 0, last = 0, lock = null;
+    const narrow = (root.innerWidth || 1024) < 600;
+    const state = {actor: '', speed: 0, font: narrow ? 30 : 40, playing: false, pos: 0};
+    let frame = 0, last = 0, lock = null, drag = null;
     const text = h('div', {class: 'prompter__text'});
     const viewport = h('div', {class: 'prompter__viewport', 'aria-label': 'Текст суфлёра. Коснитесь, чтобы запустить или остановить', onclick: () => toggle()}, text);
-    const speedLabel = h('span', {class: 'prompter__value', 'aria-live': 'polite'});
-    const fontLabel = h('span', {class: 'prompter__value'});
-    const playButton = h('button', {type: 'button', 'data-act': 'play', onclick: () => toggle()});
-    const btn = (act, label, aria, fn) => h('button', {type: 'button', 'data-act': act, 'aria-label': aria, text: label, onclick: fn});
-    const overlay = h('div', {class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Суфлёр'},
+    const thumb = h('span', {class: 'prompter__thumb'});
+    const track = h('div', {class: 'prompter__track', role: 'scrollbar', 'aria-orientation': 'vertical', 'aria-label': 'Место в сценарии — можно тянуть',
+      'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0', tabindex: '0'}, thumb);
+    const playButton = h('button', {type: 'button', class: 'prompter__play', 'data-act': 'play', onclick: () => toggle()});
+    const speedButton = h('button', {type: 'button', class: 'prompter__speed', 'data-act': 'speed', 'aria-label': 'Скорость', title: 'Скорость: 1× → 1.2× → 1.5× → 2×',
+      onclick: () => { state.speed = (state.speed + 1) % SPEEDS.length; render(); }});
+    const overlay = h('div', {class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Суфлёр'},
       h('div', {class: 'prompter__bar'},
-        shareControls({parsed, title, state, onActor: () => { layout(); stop(); }}),
-        h('span', {class: 'prompter__group'}, btn('slower', '−', 'Медленнее', () => setSpeed(-1)), speedLabel, btn('faster', '+', 'Быстрее', () => setSpeed(1))),
-        h('span', {class: 'prompter__group'}, btn('smaller', 'A−', 'Мельче', () => setFont(-6)), fontLabel, btn('bigger', 'A+', 'Крупнее', () => setFont(6))),
-        btn('mirror', '⇋ Зеркало', 'Зеркальный режим', () => { state.mirror = !state.mirror; render(); }),
-        btn('back', '↑ Назад', 'Назад', () => { state.pos = Math.max(0, state.pos - viewport.clientHeight * 0.3 - 3 * state.font); render(); }),
-        btn('stop', '■ Стоп', 'Стоп', () => stop()), playButton,
-        btn('close', '✕', 'Закрыть суфлёр', () => close())),
-      viewport);
+        h('button', {type: 'button', class: 'prompter__back', 'data-act': 'close', text: backLabel, onclick: () => close()}),
+        h('span', {class: 'prompter__title', title: subtitle || null}, h('b', {text: title || 'Суфлёр'}), subtitle ? h('span', {text: ` ${subtitle}`}) : null),
+        shareControls({parsed, title: [title, subtitle].filter(Boolean).join(' · '), state, onActor: () => layout()})),
+      h('div', {class: 'prompter__body'}, viewport, track),
+      h('div', {class: 'prompter__controls'}, playButton, h('span', {class: 'prompter__sp'}), speedButton));
+    const maxPos = () => Math.max(0, text.scrollHeight - viewport.clientHeight * 0.5);
     function layout() {
-      const rows = [];
-      parsed.frames.forEach((item, index) => {
-        if (state.actor && !(item.type === 'line' && item.actor === state.actor)) return;
-        const prev = parsed.frames[index - 1];
-        if (state.actor && prev) rows.push(h('p', {class: 'prompter__cue', text: prev.type === 'line' ? `${prev.actor}: ${prev.text}` : `(${prev.text})`}));
-        const own = item.type === 'line' && (!state.actor || item.actor === state.actor);
-        rows.push(h('p', {class: `prompter__line${own && state.actor ? ' prompter__line--own' : ''}`},
-          item.type === 'line' ? h('b', {text: `${item.actor}: `}) : null, item.type === 'line' ? item.text : `(${item.text})`));
+      const rows = parsed.frames.map((item) => {
+        const own = Boolean(state.actor) && item.type === 'line' && item.actor === state.actor;
+        const dim = Boolean(state.actor) && !own;
+        const say = item.type === 'line'
+          ? (own ? [h('b', {class: 'prompter__who', text: `▶ ${item.actor.toUpperCase()}: `}), h('b', {text: item.text})] : [h('span', {class: 'prompter__who', text: `${item.actor}: `}), item.text])
+          : [`(${item.text})`];
+        return h('p', {class: `prompter__line${own ? ' prompter__line--own' : ''}${dim ? ' prompter__line--dim' : ''}`, 'data-scene': item.n},
+          h('b', {class: 'prompter__scene', text: `Сцена №${item.n} `}), ...say);
       });
       text.replaceChildren(...rows, h('p', {class: 'prompter__end', text: '— конец —'}));
-      state.pos = 0; render();
+      render();
     }
     function render() {
       text.style.fontSize = `${state.font}px`;
-      text.style.transform = `translateY(${-Math.round(state.pos)}px)${state.mirror ? ' scaleX(-1)' : ''}`;
-      overlay.classList.toggle('is-mirror', state.mirror); overlay.classList.toggle('is-playing', state.playing);
-      speedLabel.textContent = `Скорость ${state.speed}`; fontLabel.textContent = `${state.font}px`;
-      playButton.textContent = state.playing ? '❚❚ Пауза' : '▶ Старт';
+      text.style.transform = `translateY(${-Math.round(state.pos)}px)`;
+      overlay.classList.toggle('is-playing', state.playing);
+      playButton.textContent = state.playing ? '⏸' : '▶';
+      playButton.setAttribute('aria-label', state.playing ? 'Пауза' : 'Старт');
+      speedButton.textContent = `${SPEEDS[state.speed]}×`;
+      const max = maxPos(), view = viewport.clientHeight || 0, total = text.scrollHeight || 0;
+      const ratio = max ? Math.min(1, state.pos / max) : 0;
+      const size = total ? Math.max(8, Math.min(100, (view / total) * 100)) : 100;
+      thumb.style.height = `${size}%`;
+      thumb.style.top = `${ratio * (100 - size)}%`;
+      track.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
     }
     function tick(now) {
       if (!state.playing) return;
       const dt = last ? Math.min(0.1, Math.max(0, (now - last) / 1000)) : 0; last = now;
-      const max = Math.max(0, text.scrollHeight - viewport.clientHeight * 0.5);
-      state.pos = Math.min(max || Infinity, state.pos + state.speed * 18 * dt);
+      const max = maxPos();
+      state.pos = Math.min(max || Infinity, state.pos + SPEEDS[state.speed] * BASE * dt);
       if (max && state.pos >= max) state.playing = false;
       render();
       if (state.playing) frame = root.requestAnimationFrame(tick);
@@ -198,13 +229,26 @@
       state.playing = !state.playing; last = 0; render();
       if (state.playing) frame = root.requestAnimationFrame(tick); else root.cancelAnimationFrame(frame);
     }
-    function stop() { state.playing = false; root.cancelAnimationFrame(frame); state.pos = 0; render(); }
-    const setSpeed = (delta) => { state.speed = Math.min(15, Math.max(1, state.speed + delta)); render(); };
-    const setFont = (delta) => { state.font = Math.min(120, Math.max(20, state.font + delta)); render(); };
+    const seek = (pos) => { state.pos = Math.max(0, Math.min(maxPos(), pos)); render(); };
+    /* Полоса прокрутки: нажатие ставит место, перетаскивание ведёт его; суфлёр при этом не останавливается. */
+    const fromPointer = (event) => {
+      const box = track.getBoundingClientRect();
+      const ratio = box.height ? (event.clientY - box.top) / box.height : 0;
+      seek(Math.max(0, Math.min(1, ratio)) * maxPos());
+    };
+    track.addEventListener('pointerdown', (event) => {
+      drag = event.pointerId ?? 1; track.setPointerCapture?.(drag); fromPointer(event); event.preventDefault();
+    });
+    track.addEventListener('pointermove', (event) => { if (drag !== null) fromPointer(event); });
+    const endDrag = () => { if (drag !== null) track.releasePointerCapture?.(drag); drag = null; };
+    track.addEventListener('pointerup', endDrag);
+    track.addEventListener('pointercancel', endDrag);
+    viewport.addEventListener('wheel', (event) => { event.preventDefault(); seek(state.pos + event.deltaY); }, {passive: false});
     const keys = (event) => {
       if (event.key === 'Escape') close();
-      else if (event.key === ' ' && event.target === doc.body) { event.preventDefault(); toggle(); }
-      else if (event.key === 'ArrowUp') { state.pos = Math.max(0, state.pos - 3 * state.font); render(); }
+      else if (event.key === ' ' && (event.target === doc.body || event.target === overlay)) { event.preventDefault(); toggle(); }
+      else if (event.key === 'ArrowUp') seek(state.pos - 3 * state.font);
+      else if (event.key === 'ArrowDown') seek(state.pos + 3 * state.font);
     };
     function close() {
       state.playing = false; root.cancelAnimationFrame(frame); doc.removeEventListener('keydown', keys);
@@ -217,8 +261,8 @@
     overlay.requestFullscreen?.()?.catch?.(() => {});
     root.navigator?.wakeLock?.request?.('screen').then((value) => { lock = value; }).catch(() => {});
     layout();
-    return {close, overlay, state, toggle};
+    return {close, overlay, state, toggle, seek};
   }
 
-  return {open, shareControls, pdfFromJpeg, renderCanvas};
+  return {open, shareControls, pdfFromJpeg, renderCanvas, SPEEDS};
 });

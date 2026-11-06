@@ -14,12 +14,43 @@
   const LINE = /^([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9 .'’-]{0,39})\s*:\s*(.+)$/;
   const WEEKDAYS = ['', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
   const SHORT = ['', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  /* «Сценарий по секундам» из Google Таблицы (макет 07.11): «0–2 с | Кто | Реплика | В кадре | Действие | Титр»
+     или время в начале строки. «ДО СЪЁМКИ: …» — подготовка, не сцена. */
+  const TIME = /^(\d+(?:[.,]\d+)?(?:\s*[–—-]\s*\d+(?:[.,]\d+)?)?\s*с(?:ек)?\.?)(?:\s*[·|:—–-]\s*|\s+)/i;
+  const BEFORE = /^до\s+съ[её]мки\s*[:—-]\s*/i;
+  const SHOT = /^(?:в кадре|кадр)\s*[:—-]\s*/i;
+  const TITLE = /^(?:титр|текст на экране)\s*[:—-]\s*/i;
+  const NO_ACTOR = /^(?:—|-|–|нет)?$/i;
+
+  function tableRow(raw) {
+    const cells = raw.split('|').map((cell) => cell.trim());
+    if (!TIME.test(`${cells[0]} `)) cells.unshift('');
+    const [time, who, text, shot, action, title] = cells.map((cell) => cell || '');
+    const actor = NO_ACTOR.test(who) ? '' : who;
+    const type = actor && text ? 'line' : 'action';
+    return {type, actor: type === 'line' ? actor : '', text: text || shot || action || title, props: [],
+      time: time.replace(/\s*[|·:—–-]\s*$/, ''), shot, action, title};
+  }
 
   function parse(script, fallback = {}) {
-    const frames = [], props = [], actors = [];
+    const frames = [], props = [], actors = [], before = [];
     const lines = String(script || '').replace(/\r\n?/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean);
-    for (const raw of lines) {
-      let match;
+    for (const original of lines) {
+      let match, raw = original;
+      if (BEFORE.test(raw)) { before.push(raw.replace(BEFORE, '').trim()); continue; }
+      if (raw.includes('|') && raw.split('|').length >= 3) {
+        const frame = tableRow(raw);
+        if (frame.type === 'line' && !actors.includes(frame.actor)) actors.push(frame.actor);
+        frames.push(frame);
+        continue;
+      }
+      const time = TIME.exec(raw);
+      if (time) raw = raw.slice(time[0].length).trim();
+      // «В кадре:» и «Титр:» сразу после сцены дополняют её, а не становятся отдельной сценой.
+      const last = frames[frames.length - 1];
+      if (!time && last && SHOT.test(raw) && !last.shot) { last.shot = raw.replace(SHOT, '').trim(); continue; }
+      if (!time && last && TITLE.test(raw) && !last.title) { last.title = raw.replace(TITLE, '').trim(); continue; }
+      const meta = {time: time ? time[1] : '', shot: '', action: '', title: ''};
       if (PROPS.test(raw)) {
         const items = raw.replace(PROPS, '').split(/[,;]/).map((item) => item.trim()).filter(Boolean);
         props.push(...items);
@@ -27,21 +58,22 @@
         continue;
       }
       if (/^\[.*\]$/.test(raw) || INSERT.test(raw)) {
-        frames.push({type: 'insert', actor: '', text: raw.replace(/^\[|\]$/g, '').replace(INSERT, '').trim(), props: []});
+        frames.push({...meta, type: 'insert', actor: '', text: raw.replace(/^\[|\]$/g, '').replace(INSERT, '').trim(), props: []});
       } else if (!ACTION.test(raw) && (match = LINE.exec(raw))) {
         const actor = match[1].trim();
         if (!actors.includes(actor)) actors.push(actor);
-        frames.push({type: 'line', actor, text: match[2].trim(), props: []});
+        frames.push({...meta, type: 'line', actor, text: match[2].trim(), props: []});
       } else {
-        frames.push({type: 'action', actor: '', text: raw.replace(ACTION, '').trim() || raw, props: []});
+        frames.push({...meta, type: 'action', actor: '', text: raw.replace(ACTION, '').trim() || raw, props: []});
       }
     }
     if (!frames.length) {
-      if (fallback.hook) frames.push({type: 'action', actor: '', text: `Хук (первые 1–2 с): ${fallback.hook}`, props: []});
-      if (fallback.topic) frames.push({type: 'action', actor: '', text: fallback.topic, props: []});
+      const empty = {time: '', shot: '', action: '', title: ''};
+      if (fallback.hook) frames.push({...empty, type: 'action', actor: '', text: `Хук (первые 1–2 с): ${fallback.hook}`, props: []});
+      if (fallback.topic) frames.push({...empty, type: 'action', actor: '', text: fallback.topic, props: []});
     }
     frames.forEach((frame, index) => { frame.n = index + 1; });
-    return {frames, actors, props: [...new Set(props)], hasRoles: actors.length > 0, source: lines.length ? 'script' : 'hook'};
+    return {frames, actors, props: [...new Set(props)], before, hasRoles: actors.length > 0, source: lines.length ? 'script' : 'hook'};
   }
 
   const day = (value) => {
@@ -107,6 +139,22 @@
   }
 
   const STATUS = {approved: 'согласовано', shot: 'снято', editing: 'в монтаже', draft: 'черновик'};
+  /* Этап общей цепочки CfKit (решение Влада 07.11; «Снимается» нет). Сервер съёмки знает только
+     approved/shot/editing/draft: согласованный рилс ждёт съёмки — «Запланировано», загружен черновик
+     монтажа — «Монтаж на согласовании». Если план однажды начнёт отдавать idea.stage, берётся он. */
+  const STAGE = {approved: 'planned', shot: 'shot', editing: 'editing', draft: 'edit_review'};
+  const STAGE_LABEL = {planned: 'Запланировано', shot: 'Отснято', editing: 'В монтаже', edit_review: 'Монтаж на согласовании',
+    edit_rework: 'Монтаж на доработке', ready: 'Готово к выходу', scheduled: 'Запланировано к выходу', published: 'Опубликовано',
+    publish_error: 'Ошибка публикации', unpublished: 'Снято с публикации'};
+  const stageOf = (reel = {}) => (STAGE_LABEL[reel.idea?.stage] ? reel.idea.stage : STAGE[reel.status] || 'planned');
+  /* На «Съёмке» только то, что ещё снимать и монтировать: опубликованное и снятое с публикации
+     не показывается, готовое/запланированное к выходу — после даты выхода. Сегодняшняя дата — строкой YYYY-MM-DD. */
+  function onShoot(reel, today) {
+    const stage = stageOf(reel);
+    if (stage === 'published' || stage === 'unpublished') return false;
+    if ((stage === 'ready' || stage === 'scheduled') && reel.idea?.date && reel.idea.date < today) return false;
+    return true;
+  }
 
   /* Текст для актёра: его реплики жирным и с «▶ ИМЯ». bold — '**' (Telegram, MAX), '*' (WhatsApp)
      или '' (VK не размечает текст — остаётся только ▶). */
@@ -125,5 +173,5 @@
     return out.join('\n');
   }
 
-  return {parse, schedule, reels, isVideo, kindLabel, shareText, STATUS, WEEKDAYS};
+  return {parse, schedule, reels, isVideo, kindLabel, shareText, STATUS, STAGE, STAGE_LABEL, stageOf, onShoot, WEEKDAYS};
 });

@@ -23,29 +23,46 @@ function page({share = null, coarse = false} = {}) {
 }
 const transformY = (node) => Number(/translateY\((-?\d+)px\)/.exec(node.style.transform)?.[1] || 0);
 
-test('суфлёр: весь сценарий и реплики актёра, старт/пауза касанием, скорость, стоп, назад, зеркало, шрифт', () => {
-  const p = page(), prompter = p.w.SbShooting.prompter.open({parsed: p.parsed, title: 'Рилс №1'});
+test('суфлёр по макету 07.11: «← Съёмка», актёр «Все», сцены, выделение реплик, ▶/⏸, скорость 1×→2×, полоса прокрутки', () => {
+  const p = page(), prompter = p.w.SbShooting.prompter.open({parsed: p.parsed, title: 'Суфлёр · №1', subtitle: 'Новое меню'});
   const o = p.d.querySelector('.prompter'), text = o.querySelector('.prompter__text');
   assert.ok(o && o.getAttribute('role') === 'dialog'); assert.ok(p.d.body.classList.contains('prompter-open'));
+  assert.equal(o.querySelector('.prompter__back').textContent, '← Съёмка');
+  assert.ok(o.querySelector('.shoot-share__button svg circle'), 'значок «Поделиться» — три точки');
+  for (const gone of ['back', 'stop', 'mirror', 'slower', 'faster', 'smaller', 'bigger']) assert.equal(o.querySelector(`[data-act=${gone}]`), null, `нет кнопки ${gone}`);
+  assert.doesNotMatch(o.textContent, /Весь сценарий|Только реплики|Зеркало|Стоп|Назад/);
   assert.equal(text.querySelectorAll('.prompter__line').length, 4, 'весь сценарий');
+  assert.deepEqual([...text.querySelectorAll('.prompter__scene')].map((b) => b.textContent.trim()), ['Сцена №1', 'Сцена №2', 'Сцена №3', 'Сцена №4']);
   const select = o.querySelector('.shoot-share__actor');
-  assert.deepEqual([...select.options].map((x) => x.textContent), ['Весь сценарий', 'Лена', 'Таня']);
+  assert.deepEqual([...select.options].map((x) => x.textContent), ['Все', 'Лена', 'Таня']);
+  assert.equal(text.querySelectorAll('.prompter__line--dim').length, 0, '«Все» — ничего не приглушено');
   select.value = 'Лена'; select.dispatchEvent(new p.w.Event('change'));
-  assert.equal(text.querySelectorAll('.prompter__line').length, 2); assert.equal(text.querySelectorAll('.prompter__line--own').length, 2);
-  assert.equal(text.querySelectorAll('.prompter__cue').length, 1, 'перед репликой — подсказка партнёра');
-  Object.defineProperty(text, 'scrollHeight', {value: 5000}); Object.defineProperty(o.querySelector('.prompter__viewport'), 'clientHeight', {value: 800});
-  o.querySelector('.prompter__viewport').click();
-  assert.equal(prompter.state.playing, true); p.run(1000);
+  assert.equal(text.querySelectorAll('.prompter__line').length, 4, 'сценарий остаётся целиком');
+  assert.equal(text.querySelectorAll('.prompter__line--own').length, 2); assert.equal(text.querySelectorAll('.prompter__line--dim').length, 2);
+  assert.match(text.querySelector('.prompter__line--own').textContent, /Сцена №1 ▶ ЛЕНА: Привет!/);
+  const viewport = o.querySelector('.prompter__viewport');
+  Object.defineProperty(text, 'scrollHeight', {value: 5000}); Object.defineProperty(viewport, 'clientHeight', {value: 800});
+  const play = o.querySelector('[data-act=play]'), speed = o.querySelector('[data-act=speed]');
+  assert.equal(play.textContent, '▶'); assert.equal(speed.textContent, '1×');
+  play.click(); assert.equal(prompter.state.playing, true); assert.equal(play.textContent, '⏸');
+  p.run(1000);
   const slow = transformY(text); assert.ok(slow < 0, 'текст поехал');
-  o.querySelector('[data-act=faster]').click(); o.querySelector('[data-act=faster]').click();
-  assert.match(o.textContent, /Скорость 6/);
+  const speeds = []; for (let i = 0; i < 4; i += 1) { speed.click(); speeds.push(speed.textContent); }
+  assert.deepEqual(speeds, ['1.2×', '1.5×', '2×', '1×'], 'скорость по кругу');
+  speed.click(); speed.click(); speed.click(); // 2×
   const before = transformY(text); p.run(1000); assert.ok(before - transformY(text) > -slow, 'быстрее прокручивает больше');
-  o.querySelector('.prompter__viewport').click(); assert.equal(prompter.state.playing, false, 'пауза касанием');
+  viewport.click(); assert.equal(prompter.state.playing, false, 'пауза касанием текста'); assert.equal(play.textContent, '▶');
   const paused = transformY(text); p.run(500); assert.equal(transformY(text), paused);
-  o.querySelector('[data-act=back]').click(); assert.ok(transformY(text) > paused, 'назад');
-  o.querySelector('[data-act=mirror]').click(); assert.match(text.style.transform, /scaleX\(-1\)/); assert.ok(o.classList.contains('is-mirror'));
-  o.querySelector('[data-act=bigger]').click(); assert.equal(text.style.fontSize, '50px');
-  o.querySelector('[data-act=stop]').click(); assert.equal(transformY(text), 0); assert.equal(prompter.state.playing, false);
+  // Полоса прокрутки показывает место и тянется.
+  const track = o.querySelector('.prompter__track'), thumb = o.querySelector('.prompter__thumb');
+  assert.ok(Number(track.getAttribute('aria-valuenow')) > 0);
+  track.getBoundingClientRect = () => ({top: 0, height: 400, left: 0, width: 14});
+  const pointer = (type, y) => { const e = new p.w.MouseEvent(type, {clientY: y, bubbles: true}); track.dispatchEvent(e); };
+  pointer('pointerdown', 0); assert.equal(transformY(text), 0, 'наверх');
+  pointer('pointermove', 200); pointer('pointerup', 200);
+  assert.equal(transformY(text), -2300, 'середина полосы — середина сценария'); assert.equal(track.getAttribute('aria-valuenow'), '50');
+  assert.match(thumb.style.top, /%$/);
+  pointer('pointermove', 400); assert.equal(transformY(text), -2300, 'после отпускания полоса не тянется');
   p.d.dispatchEvent(new p.w.KeyboardEvent('keydown', {key: 'Escape'}));
   assert.equal(p.d.querySelector('.prompter'), null); assert.equal(p.frames.length, 0); assert.ok(!p.d.body.classList.contains('prompter-open'));
 });
@@ -57,8 +74,8 @@ test('сценарий без ролей: весь текст, выбора ак
   assert.equal(p.d.querySelectorAll('.prompter__line').length, 2);
 });
 
-test('«Поделиться» на ПК: Telegram, WhatsApp, VK, копирование для MAX — реплики актёра жирным с ▶', async () => {
-  const p = page(), controls = p.w.SbShooting.prompter.shareControls({parsed: p.parsed, title: 'Рилс №1'});
+test('«Поделиться» на ПК: Telegram, WhatsApp, VK, «MAX · Скопировать», форматы Текст/PNG/PDF — реплики актёра жирным с ▶', async () => {
+  const p = page(), controls = p.w.SbShooting.prompter.shareControls({parsed: p.parsed, title: 'Рилс №1', state: {actor: 'Лена'}});
   p.d.body.append(controls);
   controls.querySelector('.shoot-share__button').click(); await new Promise((r) => setTimeout(r, 0));
   const menu = controls.querySelector('.shoot-share__menu'); assert.equal(menu.hidden, false);
@@ -69,12 +86,15 @@ test('«Поделиться» на ПК: Telegram, WhatsApp, VK, копиров
   const select = controls.querySelector('.shoot-share__actor'); select.value = 'Таня'; select.dispatchEvent(new p.w.Event('change'));
   menu.querySelector('[data-share=copy]').click(); await new Promise((r) => setTimeout(r, 0));
   assert.match(p.copied[0], /\*\*▶ ТАНЯ: А что нового\?\*\*/); assert.match(controls.textContent, /вставьте в MAX/);
+  assert.deepEqual([...menu.querySelectorAll('[data-share]')].map((b) => b.textContent), ['Telegram', 'WhatsApp', 'VK', 'MAX · Скопировать', 'Текст', 'PNG', 'PDF']);
+  menu.querySelector('[data-share=text]').click(); await new Promise((r) => setTimeout(r, 0));
+  assert.equal(p.copied.length, 2);
   menu.querySelector('[data-share=png]').click(); await new Promise((r) => setTimeout(r, 0));
   assert.match(controls.querySelector('.shoot-share__status').textContent, /Картинка недоступна/, 'jsdom без canvas — честный отказ');
 });
 
 test('«Поделиться» на телефоне — системное меню navigator.share с текстом', async () => {
-  const p = page({share: true, coarse: true}), controls = p.w.SbShooting.prompter.shareControls({parsed: p.parsed, title: 'Рилс №1'});
+  const p = page({share: true, coarse: true}), controls = p.w.SbShooting.prompter.shareControls({parsed: p.parsed, title: 'Рилс №1', state: {actor: 'Лена'}});
   p.d.body.append(controls); controls.querySelector('.shoot-share__button').click(); await new Promise((r) => setTimeout(r, 0));
   assert.equal(p.shared.length, 1); assert.match(p.shared[0].text, /\*\*▶ ЛЕНА/); assert.equal(controls.querySelector('.shoot-share__menu').hidden, true);
 });
