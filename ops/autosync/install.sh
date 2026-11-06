@@ -67,6 +67,7 @@ cmp "$0" "$SRC/install.sh"
 changed=1
 install -m 644 "$SRC/synapse-autosync.py" "$LIB/synapse-autosync.py"
 install -m 644 "$SRC/sandbox-smoke.sh" "$LIB/sandbox-smoke.sh"
+install -m 644 "$SRC/sandbox-run.sh" "$LIB/sandbox-run.sh"
 install -m 644 "$SRC/synapse-autosync.service" /etc/systemd/system/
 install -m 644 "$SRC/synapse-autosync.timer" /etc/systemd/system/
 mkdir -p /etc/systemd/system/synapse-autosync.service.d
@@ -77,11 +78,11 @@ args=(--backups "$OPS")
 if [[ -n ${2:-} ]]; then args+=(--site-public "$2"); fi
 # Preserve an existing processed baseline on reinstallation.
 if [[ ! -e $STATE/state.json ]]; then
-  runuser -u synapse-autosync -- python3 "$LIB/synapse-autosync.py" "${args[@]}" --init
+  bash "$LIB/sandbox-run.sh" "${args[@]}" --init
 else
   echo 'BASELINE сохранён (существующее состояние)'
 fi
-runuser -u synapse-autosync -- python3 "$LIB/synapse-autosync.py" "${args[@]}" --bootstrap-avokado
+bash "$LIB/sandbox-run.sh" "${args[@]}" --bootstrap-avokado
 systemctl enable --now synapse-autosync.timer
 trap - ERR
 report_disk

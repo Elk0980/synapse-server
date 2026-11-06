@@ -21,6 +21,6 @@ echo 'eaa509393766bb1f20acb23595d616844111a37a733f5af04bb3eae300aa0a5f  /opt/syn
 sudo grep 'BASELINE' /var/log/synapse-autosync/autosync.log
 sudo systemctl is-enabled synapse-autosync.timer
 # Exercise real runtime through the installed sandbox, not a mocked subprocess.
-sudo systemd-run --wait --pipe --collect -p User=synapse-autosync /usr/bin/python3 /usr/local/lib/synapse-autosync/synapse-autosync.py --backups /var/backups/synapse-autosync/operations --rollback
+sudo bash /usr/local/lib/synapse-autosync/sandbox-run.sh --backups /var/backups/synapse-autosync/operations --rollback
 echo 'a7ff72162e9568d0fd6330a4b32bd1c6bbe20f071e11785c6d2f4eb3e4721b07  /opt/synapse/sites/avokado3/index.html' | sha256sum -c -
 echo 'INSTALL CI: 6/6 — baseline, install, exact site hash, timer, disk report, rollback'
