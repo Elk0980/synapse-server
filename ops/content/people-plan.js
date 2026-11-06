@@ -10,7 +10,8 @@ function createPeoplePlan({db,authStore,tasks,call}) {
     const actor=authStore.getById(actorId);
     if(!actor||actor.role!=='owner'||!actor.companyCodes.includes(code))fail(403,'Право назначает владелец');
     if(typeof enabled!=='boolean')fail(400,'Укажите состояние права согласования');
-    const target=tasks.access(userId,code);
+    // Owner may prepare approval access before the person's first login.
+    const target=tasks.access(userId,code,false,{allowPasswordChange:true});
     if(target.role==='owner')fail(400,'Владелец уже имеет право согласования');
     db.exec('BEGIN IMMEDIATE');
     try {

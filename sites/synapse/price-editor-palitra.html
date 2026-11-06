@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script src="/cabinet/view-as.js?v=20261105-1"></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Редактор прайса Palitra — кабинет Synapse</title>
@@ -435,6 +436,9 @@
   const statusEl = $('#ed-status');
   const subEl = $('#ed-sub');
   const saveBtn = $('#ed-save');
+  function passwordRequired(response, body) { if (response.status !== 403 || !body?.details?.mustChangePassword) return;
+    if (!$('#ed-password-change')) statusEl.after(Object.assign(document.createElement('a'), { id: 'ed-password-change', href: '/cabinet/people.html', target: '_blank', rel: 'noopener', textContent: 'Нужно сменить пароль' }));
+    setStatus('Нужно сменить пароль', 'error'); throw new Error('Нужно сменить пароль'); }
 
   function setStatus(text, kind) {
     statusEl.textContent = text;
@@ -825,8 +829,8 @@
   }
   document.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; uploadPhoto(t.dataset.photoUpload, f); t.value = ''; }
-    if (t.dataset.galleryUpload && t.files && t.files.length) { const files = [...t.files]; uploadGallery(t.dataset.galleryUpload, files); t.value = ''; }
+    if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; void uploadPhoto(t.dataset.photoUpload, f).then(() => { if (!$('#ed-password-change')) t.value = ''; }); }
+    if (t.dataset.galleryUpload && t.files && t.files.length) { const files = [...t.files]; void uploadGallery(t.dataset.galleryUpload, files).then(() => { if (!$('#ed-password-change')) t.value = ''; }); }
   });
 
   function newId(cat) {
@@ -959,6 +963,7 @@
     try {
       const r = await fetch('/content/whoami', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
       const profile = await r.json().catch(() => ({}));
+      passwordRequired(r, profile);
       if (!r.ok) throw Object.assign(new Error(r.status === 401 ? 'Войдите в кабинет, чтобы редактировать прайс.'
         : 'Не удалось проверить вход. Повторите попытку.'), { status: r.status });
       const allowed = profile.role === 'owner' || (profile.permissions?.includes('price.edit') &&
@@ -985,6 +990,7 @@
     const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null;
     try { body = await r.json(); } catch (e) {}
+    passwordRequired(r, body);
     if (!r.ok) {
       const msg = r.status === 401 ? 'Войдите в кабинет, чтобы продолжить.' : body?.error || `HTTP ${r.status}`;
       const details = Array.isArray(body?.details) ? '\n— ' + body.details.join('\n— ') : '';

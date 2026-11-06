@@ -12,10 +12,14 @@
     try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
     catch { return ''; }
   };
-  const linkedText = value => String(value || '').split(/(https?:\/\/[^\s<>]+)/g).map(part => {
-    const href = /^https?:\/\//.test(part) && safeUrl(part);
-    return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>` : esc(part);
-  }).join('');
+  const linkedText = value => esc(value);
+  const waitingAge = since => {
+    const minutes=Math.max(0,Math.floor((Date.now()-Date.parse(since))/60000));
+    if(minutes<1)return 'Ждёт меньше минуты';
+    if(minutes<60)return `Ждёт ${minutes} мин`;
+    const hours=Math.floor(minutes/60);
+    return hours<24?`Ждёт ${hours} ч ${minutes%60} мин`:`Ждёт ${Math.floor(hours/24)} дн ${hours%24} ч`;
+  };
   const day = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Bangkok', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
   const stamp = value => { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString('ru-RU') : ''; };
   const options = (values, selected) => Object.entries(values).map(([value, label]) => `<option value="${esc(value)}"${String(value) === String(selected) ? ' selected' : ''}>${esc(label)}</option>`).join('');
@@ -67,6 +71,9 @@
     const state = {view:initial.view || saved.view || 'board', project:initial.project ?? saved.project ?? '', product:initial.product ?? saved.product ?? '', search:'', ...initial};
     const tool = (name, args = {}) => ctx.crmQuery(`/coordination/mcp/${name}`, {}, ctx.csrfOptions('POST', args));
     const name = code => code === UNASSIGNED ? 'Без проекта' : PROJECTS[code] || ctx.identity.companies?.find(item => (item.id || item.code) === code)?.name || code || 'Без проекта';
+    const productNames = () => [...products.map(item=>item.name),...Object.values(PROJECTS),...(ctx.identity.companies || []).map(item=>item.name)];
+    const ownerDecision = task => window.SbTaskOverview?.decision(task,productNames());
+    const ownerText = (value,max=120) => window.SbTaskOverview?.ownerText(value,max,productNames()) || '';
     const projects = () => [...new Set([...ctx.identity.companies?.map(item => item.id || item.code).filter(Boolean) || [], ...tasks.map(task => task.company_code || UNASSIGNED)])];
     const matchesProject = (task,project=state.project) => !project || (task.company_code || UNASSIGNED) === project;
     const isVisibleWork = task => task.status !== 'cancelled' && !task.product_placeholder && !structuralTaskIds.has(task.id);
@@ -93,10 +100,10 @@
     const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Готовность"></progress>`;
     const overviewMarkup = () => {
       const helper = window.SbTaskOverview; if (!helper) return '';
-      const model = helper.build(tasks.filter(task => matchesProject(task)));
+      const model = helper.build(tasks.filter(task => matchesProject(task)),productNames());
       const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
         const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
-        return `<button type="button" class="tb-waiting-row" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(helper.waitingNeed(task))}</strong>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</button>`;
+        return `<article class="tb-waiting-row"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(ownerDecision(task).question)}</strong></button>${linksMarkup(task)}${waitingInstructions(task)}${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}</article>`;
       }).join('')}</div></section>` : '';
       if (state.view !== 'projects') return waiting;
       const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
@@ -106,16 +113,16 @@
       const directions = activeModules.length ? `<section class="tb-directions" data-active-directions data-modules><h2>Модули</h2><div class="tb-direction-grid">${activeModules.map(module => `<article class="tb-direction" data-module-id="${module.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${module.task.id}"><strong>${esc(module.title)}</strong></button>${percentage(module.progress)}</div><p class="tb-module-state">Работа начата</p>${module.why ? `<p class="tb-direction-why">Зачем: ${esc(module.why)}</p>` : ''}${module.task.assignee_name || module.task.reviewer_name ? `<p class="tb-direction-people">${module.task.assignee_name ? `Ведёт ${esc(module.task.assignee_name)}` : ''}${module.task.reviewer_name ? ` · Принимает ${esc(module.task.reviewer_name)}` : ''}</p>` : ''}<div class="tb-direction-current tb-module-tasks">${module.allMembers.map(task => `<button type="button" class="tb-module-task" data-module-task="${task.id}" data-task-open="${task.id}"><strong>№${task.id} ${esc(displayTitle(task))}</strong><span class="tb-module-task-progress">${helper.progress(task)}%</span><span class="tb-module-task-stage">${esc(helper.stageText(task))}</span></button>`).join('') || '<p class="tb-direction-people">Задач пока нет</p>'}</div></article>`).join('')}</div></section>` : '';
       const next = modules.filter(module => !module.started);
       const upcoming = next.length ? `<section class="tb-upcoming"><h2>Дальше по плану</h2><div>${next.map(direction => `<button type="button" data-task-open="${direction.task.id}">${esc(direction.title)} · ${direction.progress}%</button>`).join('')}</div></section>` : '';
-      const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(item.task.title)}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
+      const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(displayTitle(item.task))}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
       return `<div class="tb-overview">${waiting}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
     };
     async function hydrateOverview(records) {
       if (!window.SbTaskOverview) return records;
-      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction')));
+      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction') || !Object.hasOwn(task.coordination || {},'owner_question') || (window.SbTaskOverview.isWaiting(task) && !Array.isArray(task.coordination?.links))));
       let cursor = 0;
       await Promise.all(Array.from({length:Math.min(3,pending.length)},async () => {
         while (cursor < pending.length && alive) {
-          const {task,index} = pending[cursor++], signature = JSON.stringify([task.coordination?.revision,task.updated_at]);
+          const {task,index} = pending[cursor++], signature = JSON.stringify([task.coordination?.revision,task.updated_at,...['blocker','nextAction','owner_question','if_yes','if_no','owner_minutes'].map(key => task.coordination?.[key])]);
           const cached = overviewCache.get(task.id);
           if (cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
           try {
@@ -148,13 +155,18 @@
       }
       return {tasks:await hydrateOverview(records), products:allProducts, agents:agentData.agents || []};
     }
-    async function render(next = {}) {
+    // Background refresh must not replace the search field or quick-task input while someone types.
+    const editingField = () => { const field = document.activeElement; return !!field && container.contains(field) && !!field.matches?.('[data-board-search],[data-quick-task] input'); };
+    let deferredRefresh = false;
+    async function render(next = {}, {background = false} = {}) {
       Object.assign(state, next);
       const version = ++sequence;
       if (!tasks.length) container.innerHTML = '<p class="tb-loading" role="status">Загрузка задач…</p>';
       try {
         const data = await load(); if (!alive || version !== sequence) return;
-        ({tasks, products, agents} = data); draw();
+        ({tasks, products, agents} = data);
+        if (background && editingField()) { deferredRefresh = true; return; }
+        draw();
         if (next.taskId) await openTask(Number(next.taskId));
       } catch (error) {
         if (!alive || version !== sequence) return;
@@ -180,6 +192,10 @@
           return ['done','cancelled'].includes(status) ? `<details class="tb-plan-group"><summary>${STATUS[status]} <span>${list.length}</span></summary>${rows}</details>` : `<section class="tb-plan-group"><h3>${STATUS[status]} <span>${list.length}</span></h3>${rows || '<p class="tb-empty">Нет задач</p>'}</section>`;
         }).join('')}</div>`;
       } else body = `<div class="tb-columns" aria-label="Доска по статусам">${['inbox','planned','in_progress','done'].map(status => `<section class="tb-column" data-drop-status="${status}"><h3><span class="tb-dot" data-status="${status}"></span>${STATUS[status]} <span>${statusCount(records,status)}</span></h3><div>${records.filter(task => task.status === status).map(card).join('') || '<p class="tb-empty">Нет задач</p>'}</div></section>`).join('')}</div>`;
+      if (state.view === 'agents' && window.SbTaskOverview) {
+        const pending=window.SbTaskOverview.build(tasks.filter(task=>matchesProject(task)),productNames()).unprepared;
+        if (pending.length) body += `<section data-question-queue><h3>Подготовить вопросы</h3>${pending.map(task=>`<button type="button" data-task-open="${task.id}">№${task.id} · Вопрос не оформлен</button>`).join('')}</section>`;
+      }
       const legacy = tasks.filter(task => task.product_placeholder && task.status !== 'cancelled' && matchesProject(task));
       container.innerHTML = `<div class="tb-board"><header class="tb-toolbar"><div class="tb-heading"><h2>Задачи</h2><button type="button" class="tb-primary" data-create-task>+ Задача</button></div><nav class="tb-project-tabs" aria-label="Проекты"><button type="button" data-project="" aria-pressed="${!state.project}">Все проекты</button>${projects().map(code => `<button type="button" data-project="${esc(code)}" aria-pressed="${state.project === code}">${esc(name(code))}</button>`).join('')}</nav><div class="tb-controls"><nav class="tb-view-tabs" aria-label="Вид задач">${Object.entries({board:'Доска',plan:'План',today:'План дня',projects:'Обзор',agents:'Агенты'}).map(([view,label]) => `<button type="button" data-board-view="${view}" aria-pressed="${state.view === view}">${label}</button>`).join('')}</nav><button type="button" data-board-refresh aria-label="Обновить доску">↻</button><input type="search" data-board-search aria-label="Поиск задач" placeholder="Поиск задач" value="${esc(state.search)}"></div>${visibleProducts.length ? `<nav class="tb-product-chips" aria-label="Продукты"><button type="button" data-product="" aria-pressed="${!state.product}">Все продукты</button>${visibleProducts.map(product => `<button type="button" data-product="${product.id}" aria-pressed="${String(state.product) === String(product.id)}">${esc(product.name)}</button>`).join('')}</nav>` : ''}</header><p class="tb-notice" data-board-notice role="status"></p>${state.project && !['agents','projects'].includes(state.view) ? '<form class="tb-quick" data-quick-task><input name="title" required maxlength="300" aria-label="Новая задача" placeholder="Что сделать?"><button type="submit">+ Задача</button></form>' : ''}${body}${legacy.length ? `<details class="tb-cancelled"><summary>Прежние продукты · ${legacy.length}</summary><div class="tb-cancelled-list">${legacy.map(card).join('')}</div></details>` : ''}</div>`;
       container.querySelector('.tb-board').insertAdjacentHTML('afterbegin',overviewMarkup());
@@ -233,15 +249,22 @@
       return {overlay, body:overlay.querySelector('[data-sheet-body]'), close};
     }
     const taskLinks = task => task.coordination?.links || task.links || [];
+    const waitingInstructions = task => `<details class="tb-waiting-instructions" data-waiting-instructions open><summary>Полный текст ожидания</summary><p class="tb-waiting-text">${esc(task.coordination?.blocker || window.SbTaskOverview.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}</details>`;
+    const linksMarkup = task => `<div class="tb-waiting-links">${taskLinks(task).map(link=>{const href=safeUrl(link.url);return href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(link.label||href)} ↗</a>`:'';}).join('')}</div>`;
+
     const chatUrl = task => safeUrl(task.chat_url) || safeUrl(taskLinks(task).find(link => /^чат/i.test(link.label || ''))?.url) || safeUrl(agents.find(agent => agent.name === task.assignee_name)?.chat_url || agents.find(agent => agent.name === task.assignee_name)?.chat);
     const productOptions = (project, selected) => `<option value="">Без продукта</option>${products.filter(product => product.company_code === project).map(product => `<option value="${product.id}"${Number(product.id) === Number(selected) ? ' selected' : ''}>${esc(product.name)}</option>`).join('')}`;
     function waitingPanel(task,own) {
-      if (!window.SbTaskOverview?.isWaiting(task)) return;
+      const decision=ownerDecision(task);
+      if (!window.SbTaskOverview?.isWaiting(task) || !decision) return;
       const id = task.id, draftKey = `waitreply:${id}`, previous = read(draftKey) || {};
-      const panel = document.createElement('section'); panel.className = 'tb-waiting-actions'; panel.dataset.waitingActions = ''; panel.dataset.waitTask = String(id);
-      panel.innerHTML = `<h3>Ждёт вашего решения</h3><p>${esc(window.SbTaskOverview.waitingNeed(task))}</p><form data-wait-reply><label>Ответить<textarea name="text" maxlength="3990" required>${esc(previous.text || '')}</textarea></label><div class="tb-wait-buttons"><button type="submit">Отправить ответ</button><button type="button" data-wait-choice="Да">Да</button><button type="button" data-wait-choice="Нет">Нет</button><button type="button" data-wait-check hidden>Проверить отправку</button></div><p data-wait-result role="status"></p></form><button type="button" data-wait-clear>Снять ожидание</button>`;
+      const panel = document.createElement('section'); panel.className = 'tb-waiting-actions'; panel.dataset.waitingActions = ''; panel.dataset.waitTask = String(id); panel.dataset.ownerDecision = '';
+      panel.innerHTML = `<h3>Ждёт вашего решения</h3><p data-owner-question><strong>${esc(decision.question)}</strong></p><p>Да → ${esc(decision.yes)}</p><p>Нет → ${esc(decision.no)}</p><p>Ваше время: ${decision.minutes === 0 ? 'меньше минуты' : decision.minutes+' мин.'}</p>${linksMarkup(task)}<form data-wait-reply><label data-wait-custom ${previous.text ? '' : 'hidden'}>Свой вариант<textarea name="text" maxlength="3990" required>${esc(previous.text || '')}</textarea></label><div class="tb-wait-buttons"><button type="button" data-wait-choice="Да">Да</button><button type="button" data-wait-choice="Нет">Нет</button><button type="button" data-wait-own>Свой вариант</button><button type="submit" data-wait-submit ${previous.text ? '' : 'hidden'}>Отправить ответ</button><button type="button" data-wait-check hidden>Проверить отправку</button></div><p data-wait-result role="status"></p></form><button type="button" data-wait-clear>Снять ожидание</button>`;
       own.body.querySelector('.tb-task-project').after(panel);
+      // №108 + №88: вопрос остаётся простым, полный текст ожидания — рядом, свёрнутым блоком.
+      panel.insertAdjacentHTML('afterend',waitingInstructions(task));
       const form = panel.querySelector('form'), result = panel.querySelector('[data-wait-result]');
+      const showError = error => { result.textContent=ownerText(error.message,200) || 'Не удалось подтвердить действие. Откройте расширенную карточку.'; const diagnostic=own.body.querySelector('[data-detail-result]'); if (diagnostic) diagnostic.textContent=error.message; };
       const canClearBlocker = window.SbTaskOverview.hasWaitingBlocker(task);
       const canClearNextStep = window.SbTaskOverview.hasWaitingNextStep?.(task) === true;
       const canClearWaiting = canClearBlocker || canClearNextStep;
@@ -253,6 +276,7 @@
         edit.onclick = () => { const plan = own.body.querySelector('[data-plan-form]'); if (plan) { plan.closest('details').open = true; plan.elements.executor.focus(); } };
         panel.append(hint,edit);
       }
+      panel.querySelector('[data-wait-own]').onclick = () => { panel.querySelector('[data-wait-custom]').hidden=false; panel.querySelector('[data-wait-submit]').hidden=false; form.elements.text.focus(); };
       const persist = () => write(draftKey,{...(read(draftKey) || {}),text:form.elements.text.value});
       const sync = () => {
         const pending = read(draftKey)?.pending, running = waitingInflight.has(id);
@@ -261,7 +285,7 @@
         form.querySelector('[data-wait-check]').hidden = !pending;
         form.querySelector('[data-wait-check]').disabled = running;
         if (running) result.textContent = 'Ответ отправляется…';
-        else if (pending) result.textContent = `${pending.error ? pending.error+'. ' : ''}Исход отправки ещё не подтверждён. Отправка не повторяется автоматически; сначала проверьте результат.`;
+        else if (pending) result.textContent = `${pending.error ? 'Не удалось подтвердить действие. ' : ''}Исход отправки ещё не подтверждён. Отправка не повторяется автоматически; сначала проверьте результат.`;
       };
       panel.addEventListener('tb-wait-sync',sync);
       const finish = pending => {
@@ -284,7 +308,7 @@
         } catch (error) {
           const current = read(draftKey);
           if (current?.pending?.id === pending.id) write(draftKey,{...current,pending:{...current.pending,error:error.message}});
-          if (own.overlay.isConnected) { sync(); result.textContent = `${error.message}. Отправка не повторяется автоматически; сначала проверьте результат.`; }
+          if (own.overlay.isConnected) { sync(); showError(error); result.append(" Отправка не повторяется автоматически; сначала проверьте результат."); }
         } finally {
           if (waitingInflight.get(id) === pending.id) waitingInflight.delete(id);
           window.dispatchEvent(new CustomEvent('sb-waiting-reply-settled',{detail:{key,id}}));
@@ -308,7 +332,7 @@
             const current = read(draftKey); if (current?.pending?.id === pending.id) write(draftKey,{...current,pending:undefined});
             sync(); result.textContent = 'Ответ не найден среди последних комментариев. Проверьте ход работы; повторная отправка возможна только по вашему действию.';
           } else result.textContent = 'Проверена часть истории. Исход отправки ещё неизвестен; повтор остаётся заблокирован.';
-        } catch (error) { result.textContent = `${error.message}. Ответ остаётся в черновике.`; }
+        } catch (error) { showError(error); result.append(" Ответ остаётся в черновике."); }
         finally { button.disabled = false; }
       };
       panel.querySelector('[data-wait-clear]').onclick = async event => {
@@ -326,9 +350,22 @@
             if (output) output.textContent = residual ? 'Маркер ожидания снят. Ожидание остаётся в карточке: проверьте план задачи.' : 'Маркер ожидания снят.';
           }
         }
-        catch (error) { result.textContent = error.message; button.disabled = false; }
+        catch (error) { showError(error); button.disabled = false; }
       };
       sync();
+    }
+    function compactDetails(task,own) {
+      const details=document.createElement('details'); details.dataset.taskTechnical='';
+      details.innerHTML='<summary>Расширенная карточка</summary>';
+      details.append(...own.body.childNodes); own.body.append(details);
+      const panel=details.querySelector('[data-waiting-actions]');
+      if (panel) { own.body.prepend(panel); const full=details.querySelector('[data-waiting-instructions]'); if (full) panel.after(full); for (const node of panel.querySelectorAll('[data-wait-clear],.tb-waiting-hint,[data-wait-edit-plan]')) details.append(node); }
+      else { const summary=document.createElement('section'); summary.dataset.taskSimple=''; summary.innerHTML=`<h3>${esc(window.SbTaskOverview?.isWaiting(task) ? 'Вопрос пока не оформлен' : displayTitle(task))}</h3>`; own.body.prepend(summary); }
+      const next=window.SbTaskOverview?.hasWaitingNextStep(task) ? '' : ownerText(task.coordination?.nextAction);
+      if (next) { const line=document.createElement('p'); line.className='tb-simple-next'; line.textContent=`Следующий шаг: ${next}`; line.title=next; details.before(line); }
+      details.open=read(`details:${task.id}`)===true;
+      details.ontoggle=()=>write(`details:${task.id}`,details.open);
+      details.addEventListener('click',event=>{ if (event.target.closest('[data-wait-edit-plan]')) details.open=true; });
     }
     async function openTask(id) {
       taskSheet?.close(); createSheet?.close();
@@ -431,7 +468,8 @@
           try { const response = await more('subtasks',subtasksOffset), next = response.task || response; const list = own.body.querySelector('[data-subtasks]'); for (const item of next.subtasks || []) { if (!isVisibleWork(item)) continue; const li = document.createElement('li'), child = document.createElement('button'); child.type = 'button'; child.textContent = `${STATUS[item.status] || ''} · №${item.id} ${displayTitle(item)}`; child.onclick = () => openTask(item.id); li.append(child); list.append(li); } subtasksOffset += next.subtasks?.length || 0; button.hidden = subtasksOffset >= (next.subtasks_pagination?.total || 0); }
           catch (error) { result.textContent = error.message; } finally { button.disabled = false; }
         });
-      } catch (error) { if (taskSheet === own) own.body.innerHTML = `<p role="alert">${esc(error.message)}</p>`; }
+        compactDetails(task,own);
+      } catch (error) { if (taskSheet === own) own.body.innerHTML = `<p role="alert">${esc(ownerText(error.message,200) || 'Не удалось открыть задачу. Попробуйте обновить доску.')}</p><details data-task-technical><summary>Расширенная карточка</summary><p class="tb-diagnostic">${esc(error.message)}</p></details>`; }
     }
     function openCreate(preset = {}) {
       taskSheet?.close(); createSheet?.close();
@@ -529,20 +567,40 @@
       }
       saveDraft(); form.elements.title.focus(); if (draft.title) searchDuplicates();
     }
-    const recover = async () => {
-      if (!alive || document.visibilityState === 'hidden') return;
-      if (taskSheet || createSheet) {
-        try { const data = await load(); if (!alive) return; ({tasks,products,agents} = data); notice('Доска обновлена. Открытый черновик сохранён.'); }
-        catch (error) { if (alive) notice(error.message,true); }
-      } else await render();
+    let recovery=null;
+    const recover = ({force = false} = {}) => {
+      if (!alive || document.visibilityState === 'hidden') return Promise.resolve();
+      if (!force && editingField()) { deferredRefresh = true; return Promise.resolve(); }
+      if(recovery)return recovery;
+      deferredRefresh = false;
+      recovery=render({}, {background:!force}).then(()=>{if(alive&&(taskSheet||createSheet))notice('Доска обновлена. Открытый черновик сохранён.');}).finally(()=>{recovery=null;});
+      return recovery;
     };
-    const pageShow = event => { if (event.persisted) void recover(); };
+    const pageShow = () => { void recover(); };
     const visibility = () => { if (document.visibilityState === 'visible') void recover(); };
+    const focus = () => { void recover(); };
+    let pull=null;
+    const touchStart=event=>{
+      if(taskSheet||createSheet||window.scrollY>0||event.touches?.length!==1||event.target.closest('input,textarea,button,a,select,[contenteditable]')){pull=null;return;}
+      pull={x:event.touches[0].clientX,y:event.touches[0].clientY,distance:0};
+    };
+    const touchMove=event=>{
+      if(!pull||event.touches?.length!==1)return;
+      const dy=event.touches[0].clientY-pull.y,dx=Math.abs(event.touches[0].clientX-pull.x);
+      pull.distance=dy>dx*2?dy:0;
+      if(pull.distance>20&&event.cancelable)event.preventDefault();
+    };
+    const touchEnd=()=>{const distance=pull?.distance||0;pull=null;if(distance>=75){notice('Обновляем доску…');void recover({force:true});}};
+    // Apply a postponed refresh once the field loses focus (checked after focus settles).
+    const focusOut=()=>{ if(!deferredRefresh)return; window.setTimeout(()=>{ if(alive&&deferredRefresh&&!editingField())void recover(); },0); };
+    const touchCancel=()=>{pull=null;};
+    const refreshTimer=window.setInterval(()=>void recover(),45000);
+    container.addEventListener('touchstart',touchStart,{passive:true});container.addEventListener('touchmove',touchMove,{passive:false});container.addEventListener('touchend',touchEnd);container.addEventListener('touchcancel',touchCancel);container.addEventListener('focusout',focusOut);
     const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
-    window.addEventListener('pageshow',pageShow); document.addEventListener('visibilitychange',visibility);
+    window.addEventListener('pageshow',pageShow);window.addEventListener('focus',focus); document.addEventListener('visibilitychange',visibility);
     window.addEventListener('sb-waiting-reply-settled',replySettled);
     mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel);container.removeEventListener('focusout',focusOut); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});

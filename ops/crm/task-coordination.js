@@ -1,5 +1,6 @@
 'use strict';
 const {waitingSince} = require('./task-waiting');
+const {OWNER_DEFAULTS,OWNER_FIELDS,ownerQuestionFields} = require('./task-owner-question');
 const {hasBoardSchema,boardFields,createTaskProducts,validatedChat} = require('./task-products');
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
@@ -20,7 +21,7 @@ const date = value => {
   if (!Number.isFinite(parsed)) fail(400, 'Нужны дата и время проверки');
   return new Date(parsed).toISOString();
 };
-const empty = () => ({codeRequired:true,...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
+const empty = () => ({...OWNER_DEFAULTS,codeRequired:true,...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
   milestones: Object.fromEntries(STAGES.map(key => [key, {state:'pending', evidence:'', checkedAt:''}]))});
 
 function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = {}) {
@@ -46,7 +47,7 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
     const saved = db.prepare('SELECT * FROM task_coordination WHERE task_id=?').get(row.id);
     return {taskId:row.id, title:row.title, companyCode:row.company_code, taskStatus:row.status,
       assigneeName:row.assignee_name, revision:saved?.revision || 0, updatedAt:saved?.updated_at || '',
-      updatedBy:saved?.updated_by ?? null, ...(saved ? JSON.parse(saved.data) : empty()),
+      updatedBy:saved?.updated_by ?? null, ...OWNER_DEFAULTS,...(saved ? JSON.parse(saved.data) : empty()),
       // Ручная фиксация не подтверждает активный процесс и не захватывает ресурс.
       tracking:'manual', ...(hasMcpSchema(db) ? {...taskExtras(db, row, now()),executorName:row.assignee_name} : {})};
   };
@@ -73,7 +74,8 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
     const data={...empty(),...saved,codeRequired:saved.codeRequired!==false,
       links:saved.links||[],milestones:{...empty().milestones,...saved.milestones}};
     if('codeRequired' in body.data){if(typeof body.data.codeRequired!=='boolean')fail(400,'codeRequired должен быть логическим');data.codeRequired=body.data.codeRequired;}
-    if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].includes(k))) fail(400, 'Неизвестное поле карточки');
+    if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,...OWNER_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].includes(k))) fail(400, 'Неизвестное поле карточки');
+    Object.assign(data,ownerQuestionFields(body.data));
     if ('links' in body.data) data.links = validateLinks(body.data.links);
     for (const key of TEXT_FIELDS) if (key in body.data) data[key] = text(body.data[key], ['scope','acceptance','result','blocker','nextAction'].includes(key) ? 4000 : 200);
     if (data.ownerThreadName && !data.ownerThreadId) fail(400, 'Укажите постоянный идентификатор ответственного чата');
@@ -96,8 +98,11 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
     }
     return data;
   };
-  const save = (id,body,actor) => {
+  // №142: правила доски (якорь, «проверено», «готово») проверяются до сторожа и до записи.
+  const checkRules=(row,after,status,actor)=>watchdog?.rules?.beforeUpdate(row,{before:entry(row),after,status},actor);
+  const save = (id,body,actor,{status,rulesChecked=false}={}) => {
     const data=normalize(id,body,actor);
+    if(!rulesChecked)checkRules(task(id),data,status,actor);
     const permit=watchdog?.guard(id,data,actor);
     const ownTransaction = !db.isTransaction;
     if (ownTransaction) db.exec('BEGIN IMMEDIATE');
@@ -138,6 +143,7 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if(String(row.company_code).toLowerCase()!==companyCode||actor.role!=='owner'&&row.assignee_name!==`person:${actor.userId}`)fail(404,'Задача не найдена');
       const previous=db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(id);
       if((previous?.revision||0)!==body.revision)fail(409,'Задача изменилась. Обновите карточку');
+      if(body.status==='done')checkRules(row,entry(row),'done',actor);
       // Статус не нормализует и не выбрасывает неизвестные прежние метаданные.
       const json=previous?.data||JSON.stringify({...empty(),executorName:row.assignee_name}),revision=body.revision+1,stamp=new Date(now()).toISOString();
       withCoordinatedWrite(db,id,()=>db.prepare('UPDATE tasks SET status=?,updated_at=? WHERE id=?').run(body.status,stamp,id));
@@ -148,23 +154,29 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if(own)db.exec('COMMIT');return result;
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
-  const tool=createTaskTools(db,{now,owner,entry,save,watchdog});
-  const saveAsync=async(id,body,actor)=>{const data=normalize(id,body,actor);await watchdog?.prepare(id,data,actor);return save(id,body,actor);};
+  const rulesChecked=new WeakSet();
+  const tool=createTaskTools(db,{now,owner,entry,save,watchdog,rulesChecked});
+  const saveAsync=async(id,body,actor)=>{const data=normalize(id,body,actor);checkRules(task(id),data,undefined,actor);await watchdog?.prepare(id,data,actor);return save(id,body,actor,{rulesChecked:true});};
   const toolAsync=async(name,args,actor)=>{
-    if(name==='task_update'&&args.stage){
+    if(name==='task_update'&&object(args)&&(args.stage||args.status==='done')){
       const current=tool('task_get',{task_id:args.task_id},actor).coordination;
-      const data=Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+      const data=Object.fromEntries([...TEXT_FIELDS,...OWNER_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+      Object.assign(data,ownerQuestionFields(args));
       if('executor' in args)data.executorName=args.executor;
       if('blocker' in args)data.blocker=args.blocker;
       if('next_step' in args)data.nextAction=args.next_step;
       if('links' in args)data.links=args.links;
-      data.milestones={...data.milestones,[args.stage]:{state:'confirmed',evidence:args.evidence,checkedAt:args.checked_at}};
-      await watchdog?.prepare(args.task_id,normalize(args.task_id,{revision:current.revision,data},actor),actor);
+      if(args.stage)data.milestones={...data.milestones,[args.stage]:{state:'confirmed',evidence:args.evidence,checkedAt:args.checked_at}};
+      const normalized=normalize(args.task_id,{revision:current.revision,data},actor);
+      // Правила — до сторожа: без якоря не нужен запрос к GitHub за доказательством.
+      checkRules(db.prepare('SELECT * FROM tasks WHERE id=? AND is_deleted=0').get(args.task_id),normalized,args.status==='done'?'done':undefined,actor);
+      rulesChecked.add(args);
+      if(args.stage)await watchdog?.prepare(args.task_id,normalized,actor);
     }
     return tool(name,args,actor);
   };
   const acceptDispatch=(id,actor)=>{
-    const current=get(id,actor),data=Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+    const current=get(id,actor),data=Object.fromEntries([...TEXT_FIELDS,...OWNER_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
     data.milestones={...data.milestones,accepted:{state:'confirmed',evidence:'Влад принял результат в диспетчере',checkedAt:new Date(now()).toISOString()}};
     const body={revision:current.revision,data},normalized=normalize(id,body,actor);
     watchdog?.accept(id,normalized,actor);save(id,body,actor);
@@ -399,10 +411,11 @@ function taskExtras(db, row, now) {
   return {reviewer_name:row.reviewer_name, parent_task_id:row.parent_task_id, source:row.source,
     due_date:row.due_date, subtask_count:counts.total, subtask_done:counts.done,
     ...boardFields(db,row),
-    ...(require('./task-watchdog').silence(db,row,now))};
+    ...(require('./task-watchdog').silence(db,row,now)),
+    rules_anchor:require('./task-rules').anchorStatus(db,row)};
 }
 
-function createTaskTools(db, {now,owner,entry,save,watchdog}) {
+function createTaskTools(db, {now,owner,entry,save,watchdog,rulesChecked=new WeakSet()}) {
   // Архив устанавливается отдельно с резервной копией; чтение старых задач не запускает DDL.
   const archive = require('./module-archive').createModuleArchive(db, {now});
   const stamp = () => new Date(now()).toISOString();
@@ -459,9 +472,11 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       ...(overview===true?{description,description_truncated:descriptionTruncated,
         created_at:row.created_at,waiting_since:waitingSince(db,row,coordination,now())}:{}),
       coordination:{revision:coordination.revision,executorName:row.assignee_name,
-        ...(overview===true?{blocker:coordination.blocker,nextAction:coordination.nextAction,updatedAt:coordination.updatedAt}:{}),
+        ...(overview===true?{blocker:coordination.blocker,nextAction:coordination.nextAction,updatedAt:coordination.updatedAt,
+          ...Object.fromEntries(OWNER_FIELDS.map(key=>[key,coordination[key]]))}:{}),
         milestones:Object.fromEntries(STAGES.map(stage=>[stage,{state:coordination.milestones[stage].state}]))}};
   };
+  const commentView = row => ({...row,identity:watchdog?.commentIdentity(row)??{source:'task-watchdog',verified:false}});
   const taskView = (row, actor, detail=false, args={}) => {
     const fields = ['id','created_at','updated_at','title','description','company_code','assignee_name',
       'status','priority','due_date','source','parent_task_id','reviewer_name','client_ref'];
@@ -476,7 +491,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
         .all(row.id,...codes,subtasks.limit,subtasks.offset).map(taskSummary);
       result.subtasks_pagination={total:db.prepare(`SELECT count(*) n FROM tasks WHERE ${childWhere}`).get(row.id,...codes).n,...subtasks};
       result.comments = db.prepare(`SELECT id,task_id,author,text,created_at FROM task_comments WHERE task_id=?
-        ORDER BY id DESC LIMIT ? OFFSET ?`).all(row.id,comments.limit,comments.offset);
+        ORDER BY id DESC LIMIT ? OFFSET ?`).all(row.id,comments.limit,comments.offset).map(commentView);
       result.comments_pagination={total:db.prepare('SELECT count(*) n FROM task_comments WHERE task_id=?').get(row.id).n,...comments};
     }
     return result;
@@ -492,17 +507,17 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
     }
     return result;
   };
-  const touch = (row, changes, actor) => {
+  const touch = (row, changes, actor, options) => {
     const previous = entry(row);
-    const data = Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(key => [key,previous[key] ?? empty()[key]]));
+    const data = Object.fromEntries([...TEXT_FIELDS,...OWNER_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(key => [key,previous[key] ?? empty()[key]]));
     Object.assign(data,changes);
-    save(row.id,{revision:previous.revision,data},actor);
+    save(row.id,{revision:previous.revision,data},actor,options);
   };
   const update = (args, actor) => transaction(() => {
     const row = scopedTask(args.task_id,actor);
     const previous = entry(row);
     if (args.revision !== undefined && args.revision !== previous.revision) fail(409, 'Задача изменена. Обновите карточку');
-    const updates = {}, changes = {};
+    const updates = {}, changes = ownerQuestionFields(args);
     if ('status' in args) updates.status = enumValue(args.status,statuses,'status');
     if ('executor' in args) { updates.assignee_name = text(args.executor,200); changes.executorName=updates.assignee_name; }
     if ('reviewer' in args) updates.reviewer_name = text(args.reviewer,200);
@@ -531,7 +546,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
     if (Object.keys(updates).length) withCoordinatedWrite(db, row.id, () =>
       db.prepare(`UPDATE tasks SET ${Object.keys(updates).map(key=>`${key}=?`).join(',')},updated_at=? WHERE id=?`)
         .run(...Object.values(updates),stamp(),row.id));
-    touch({...row,...updates},changes,actor);
+    touch({...row,...updates},changes,actor,{status:complete?'done':undefined,rulesChecked:rulesChecked.has(args)});
     if(complete)withCoordinatedWrite(db,row.id,()=>db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),row.id));
     return {task:taskView(scopedTask(row.id,actor),actor,true)};
   });
@@ -626,6 +641,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       }
       const title=text(args.title,1000); if(!title)fail(400,'Укажите название задачи');
       if(args.force!==undefined&&typeof args.force!=='boolean')fail(400,'force должен быть логическим');
+      watchdog?.rules?.beforeCreate({title,description:args.description||''},actor);
       const executor=text(args.executor || '',200), reviewer=text(args.reviewer || '',200);validateReviewer(executor,reviewer);
       const parent=args.parent_id==null?null:integer(args.parent_id,'parent_id');
       if(parent!==null) {
@@ -660,13 +676,17 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       if(!author||!message)fail(400,'Укажите автора и текст комментария');
       const result=db.prepare('INSERT INTO task_comments(task_id,author,text,created_at) VALUES(?,?,?,?)').run(row.id,author,message,stamp());
       watchdog?.comment(row.id,Number(result.lastInsertRowid),actor);
+      // №135: ответ Влада сразу снимает ожидание — в этой же транзакции.
+      require('./task-owner-answer').applyOwnerAnswer(db,{taskId:row.id,commentId:Number(result.lastInsertRowid),text:message,stamp:stamp(),userId:actor.userId});
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
-      return {comment:db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid))};
+      return {comment:commentView(db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid)))};
     });
     if(name==='agents_list')return {agents:db.prepare('SELECT * FROM agents ORDER BY id').all().map(row=>agentView(row,actor))};
     if(name==='agent_report')return transaction(()=>({agent:reportAgent(args,actor)}));
     if(name==='session_start')return transaction(()=>{
       const request=text(args.request,4000), agent=reportAgent({...args,state:'work',last_event:'подключился'},actor);
+      // №142: версия правил приходит от tasks-mcp вместе с текстом правил; сервер запоминает её для проверки якорей.
+      watchdog?.rules?.seen(args);
       const existing=db.prepare('SELECT * FROM agent_sessions WHERE agent_id=? AND ended_at IS NULL').get(agent.id);
       const projects=JSON.stringify([...allowed(actor)].sort());
       if(existing) {

@@ -27,6 +27,30 @@ test('реальные content→CRM запросы editor: узкие зада�
   }
   const branch=await create('Своя ветка','person:2'),own=await create('Прямая задача','person:2',branch.id),inherited=await create('Неназначенная задача','',branch.id),foreign=await create('Чужая ветка','person:3'),foreignChild=await create('Закрытая подветка','person:3',branch.id),wrongProject=await create('Другой проект','person:2',null,'beta');
   const call=createPeopleCrmClient({crmUrl:base,apiKey:key});
+  const scopedContext=await call('teamChatContext',{},user,'alpha');
+  assert.equal(scopedContext.companyCode,'alpha');assert.deepEqual(scopedContext.tasks.map(t=>t.id),[branch.id,own.id,inherited.id]);
+  assert.ok(scopedContext.tasks.every(t=>!('description' in t)&&!('assignee_name' in t)));
+  await assert.rejects(call('teamChatContext',{},user,'beta'),{status:403});
+  await t.test('owner decision events: scope, editor denial, create, blocker changes and dedupe',async()=>{
+    const decision=await create('Решение','Влад');
+    const route='/internal/people/ownerDecisionEvents?companyCode=alpha';
+    assert.equal((await request(route,'GET',undefined,editor)).status,403);
+    assert.equal((await request(route,'GET',undefined,owner,false)).status,401);
+    let events=(await request(route)).body.events;
+    assert.ok(events.some(e=>e.eventKey===`owner-decision:${decision.id}:created`));
+    assert.equal((await request('/coordination/mcp/task_update','POST',{task_id:decision.id,blocker:'ждёт Влада: выбор'},owner)).status,200);
+    const read=async()=> (await request(route)).body.events.find(e=>e.taskId===decision.id);
+    const a=await read();assert.match(a.eventKey,/:blocker:/);
+    await request('/coordination/mcp/task_update','POST',{task_id:decision.id,next_action:'Новый отчёт'},owner);
+    assert.equal((await read()).eventKey,a.eventKey);
+    await request('/coordination/mcp/task_update','POST',{task_id:decision.id,blocker:'ждёт Влада: другой выбор'},owner);
+    assert.notEqual((await read()).eventKey,a.eventKey);
+    const other=await request('/internal/people/ownerDecisionEvents?companyCode=beta','GET',undefined,{...owner,companyCodes:['beta']});
+    assert.ok(!other.body.events.some(e=>e.taskId===decision.id));
+    const fromClient=await call('ownerDecisionEvents',{taskId:decision.id},{id:1,role:'owner',companyCodes:['alpha']},'alpha');
+    assert.equal(fromClient.events.length,1);
+  });
+
   await t.test('identity, API key, компания и capability проверяются CRM до чтения',async()=>{
     const route='/internal/people/tasks_list?companyCode=alpha',body={project:'alpha',limit:100,offset:0};
     assert.equal((await request(route,'POST',body,editor,false)).status,401);
@@ -72,6 +96,13 @@ test('реальные content→CRM запросы editor: узкие зада�
     const days=Array.from({length:7},(_,i)=>({date:`2026-11-${String(9+i).padStart(2,'0')}`,platform:'vk',format:'post',role:'reach',topic:`Тема ${i+1}`,variants:{vk:{text:`Полный текст ${i+1}`}}}));
     assert.equal((await request('/media-mentor/plan?companyCode=alpha','PUT',{planRevision:0,briefRevision:1,days})).status,200);
     const snapshot=await call('mediaMentor',{},user,'alpha');assert.equal(snapshot.plan.days.length,7);
+    const context=await call('teamChatContext',{},user,'alpha');assert.equal(context.plan.length,7);assert.deepEqual(context.plan[0].scripts,['Полный текст 1']);
+    const tasksOnly={...user,permissions:['tasks.self.view']};
+    const restricted=await call('teamChatContext',{},tasksOnly,'alpha');assert.deepEqual(restricted.plan,[]);assert.ok(restricted.tasks.length>0);
+    assert.ok(!JSON.stringify(restricted).includes('Полный текст'));assert.ok(!JSON.stringify(restricted).includes('Тема 1'));
+    const raw=await request('/internal/people/teamChatContext?companyCode=alpha','GET',undefined,{...editor,permissions:['tasks.self.view']});
+    assert.equal(raw.status,200);assert.deepEqual(raw.body.plan,[]);
+    const ownerContext=await call('teamChatContext',{}, {...user,id:1,role:'owner',permissions:[]},'alpha');assert.equal(ownerContext.plan.length,7);
     const body={planRevision:1,briefRevision:1,scope:'plan',decision:'approved',comment:''};
     const approved=await call('planVariantsDecision',body,user,'alpha');assert.equal(approved.variants.filter(v=>v.status==='approved').length,7);assert.equal(approved.variants[0].actorId,2);
     const missing={...user,permissions:['tasks.self.view']};await assert.rejects(call('planVariantsDecision',body,missing,'alpha'),{status:403});

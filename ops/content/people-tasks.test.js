@@ -43,6 +43,23 @@ test('отзыв прав в уже открытой сессии и во вре
   const f=fixture(t);f.setHook(name=>{if(name==='tasks_list')f.auth.updateAccess(1,f.lena.id,['synapse-business'],[]);});
   await assert.rejects(f.tasks.list(f.lena.id,'synapse-business'),{status:403});
 });
+
+test('выдача временного пароля во время чтения закрывает ответ и запись статуса',async t=>{
+  for(const action of ['list','update']) {
+    const f=fixture(t);let issued=false;
+    f.setHook(name=>{if(!issued&&['taskRecords','task_get'].includes(name)){issued=true;f.auth.issueTemporary(1,f.lena.id);}});
+    await assert.rejects(action==='list'?f.tasks.list(f.lena.id,'synapse-business'):f.tasks.update(f.lena.id,'synapse-business',1,{status:'done',revision:1}),{status:403});
+    assert.equal(f.calls.some(c=>c.name==='task_update'),false);
+  }
+});
+
+test('сброс и установка личного пароля не возобновляют старую мутацию',async t=>{
+  const f=fixture(t);let changed=false;
+  f.setHook(name=>{if(!changed&&name==='tasks_list'){changed=true;f.auth.issueTemporary(1,f.lena.id);
+    f.auth.setOwnPassword(f.lena.id,f.auth.getById(f.lena.id).sessionVersion,'new-own-password');}});
+  await assert.rejects(f.tasks.update(f.lena.id,'synapse-business',1,{status:'done',revision:1}),{status:401});
+  assert.equal(f.calls.some(c=>c.name==='task_update'),false);
+});
 test('переназначение во время чтения не отдаёт прежнему исполнителю detail',async t=>{
   const f=fixture(t);f.setHook(name=>{if(name==='task_get')f.setRows([f.task(1,{assignee_name:`person:${f.other.id}`})]);});
   await assert.rejects(f.tasks.get(f.lena.id,'synapse-business',1),{status:404});

@@ -8,14 +8,14 @@ const {JSDOM,VirtualConsole}=require('jsdom');
 const {COMPANIES,PERMISSIONS,DEPENDENCIES,PRICE_CLIENT_PRESET}=require('../../../ops/content/auth-store');
 const html=fs.readFileSync(path.join(__dirname,'../cabinet.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'account.js'),'utf8');
-async function fixture(fail=false) {
+async function fixture(fail=false,accounts=[]) {
  const errors=[],created=[],views={}; let rejectOptions=fail, resolveOptions;
  const gate=new Promise(resolve=>{resolveOptions=resolve;});
  const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error.message));
  const dom=new JSDOM(html,{url:'https://cabinet.test/cabinet.html',runScripts:'outside-only',virtualConsole:vc});
  const w=dom.window,d=w.document;
  w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};
- w.eval(script);
+ w.eval(fs.readFileSync(path.join(__dirname,'permission-help.js'),'utf8'));w.eval(script);
  const escapeHTML=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const options={companies:Object.entries(COMPANIES).map(([id,c])=>({id,...c})),permissions:PERMISSIONS,dependencies:DEPENDENCIES,presets:[PRICE_CLIENT_PRESET]};
  views.accounts.initialize({identity:{role:'owner',csrfToken:'synthetic-csrf'},byId:id=>d.getElementById(id),escapeHTML,
@@ -26,7 +26,7 @@ async function fixture(fail=false) {
     // Never retain generated test passwords in logs, snapshots or fixtures.
     delete body.password;created.push(body);return {};
    }
-   return {accounts:[]};
+   return {accounts};
   }});
  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setImmediate(r));};
  const fill=()=>{const f=d.querySelector('#account-create');f.elements.login.value='qa_client';f.elements.displayName.value='QA';
@@ -81,5 +81,17 @@ test('Palitra client sidebar opens its price editor and does not enable the site
   const price=f.d.querySelector('#price-editor-link'),site=f.d.querySelector('#site-editor-link');
   assert.equal(price.getAttribute('href'),'/price-editor-palitra.html');assert.equal(price.getAttribute('aria-disabled'),'false');
   assert.equal(site.getAttribute('aria-disabled'),'true');
+ }finally{f.close();}
+});
+
+test('existing account summary and edit show Russian rights/help without changing stored codes',async()=>{
+ const account={id:2,displayName:'Лена',login:'lena',role:'editor',companies:[{id:'alvi',name:'ALVI'}],permissions:['price.view','price.edit']};
+ const f=await fixture(false,[account]);try{await f.ready();const card=f.d.querySelector('.account-card');
+ assert.match(card.textContent,/Смотреть прайс/);assert.match(card.textContent,/Менять прайс и цены/);assert.equal(card.querySelectorAll('.permission-help-button').length,2);
+ card.querySelector('[data-account-edit]').click();const form=card.querySelector('.account-edit-form');
+ assert.deepEqual([...form.querySelectorAll('input[name="permissions"]:checked')].map(i=>i.value).sort(),account.permissions.slice().sort());
+ assert.equal(form.querySelectorAll('.permission-help-button').length,PERMISSIONS.length);
+ const before=[...form.querySelectorAll('input:checked')].map(i=>i.value);form.querySelector('.permission-help-button').click();
+ assert.deepEqual([...form.querySelectorAll('input:checked')].map(i=>i.value),before);assert.equal(f.created.length,0);
  }finally{f.close();}
 });

@@ -11,4 +11,9 @@ test('№180: настоящий HTTP — свои записи, чужой user
  assert.equal((await req(route,a,'PUT',body)).status,200);assert.equal((await req(route,a,'PUT',body)).status,200);
  const stored=await(await req(route,a)).json();assert.equal(stored.preferences.lastCompanyCode,'avokado');assert.equal(stored.preferences.companies[0].picks30d,1);assert.equal((await(await req(route,b)).json()).preferences.lastCompanyCode,null);
  const device=await login('one'),profile=await(await req('/content/whoami',device)).json();assert.equal(profile.projectPreferences.lastCompanyCode,'avokado');assert.equal(profile.companies[0].id,'avokado');assert.equal((await req(route+'/2',a)).status,404);
+ const ownerSession=await login('root'),issued=await(await req('/content/view-as',ownerSession,'POST',{userId:profile.userId})).json();
+ const headers={cookie:ownerSession.cookie,'x-view-as':issued.token};
+ assert.equal((await fetch(`http://127.0.0.1:${port}${route}`,{headers})).status,403);
+ const impersonated=await(await fetch(`http://127.0.0.1:${port}/content/whoami`,{headers})).json();assert.equal(impersonated.projectPreferences,null);assert.equal(impersonated.viewAs.active,true);
+
 });

@@ -23,6 +23,6 @@ jobs:
       - name: Core, HTTP, existing accounts and sessions (loopback fixtures)
         env:
           PEOPLE_TEST_REAL_WEB_PUSH: '1'
-        run: node --test ops/content/people-*.test.js ops/content/company-team*.test.js ops/content/content-admin.test.js ops/content/session-persistence.test.js ops/content/crm-permissions.test.js ops/crm/people-http.test.js ops/crm/task-coordination.test.js
+        run: node --test ops/content/people-*.test.js ops/content/company-team*.test.js ops/content/content-admin.test.js ops/content/session-persistence.test.js ops/content/crm-permissions.test.js ops/content/project-chat-miniapp.test.js ops/crm/people-http.test.js ops/crm/task-coordination.test.js ops/crm/owner-decision-events.test.js
       - name: People UI and service worker (DOM, no browser or delivery)
         run: NODE_PATH="$PWD/ops/content/node_modules" node --test sites/synapse/cabinet/people.test.cjs

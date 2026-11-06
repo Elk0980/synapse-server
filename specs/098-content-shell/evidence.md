@@ -34,3 +34,13 @@
 - Очередь window.SynapseModulesQueue (jsdom): регистрация до загрузки реестра и push после — обе работают.
 
 Не проверено: рабочая система, выпуск, права Лены/Тани/СММ на живом кабинете.
+
+## Согласование с main после №495/497, 05.11
+
+Родители: принятый520@aba39b8e280c457ff25d5bdd44798709c6492c9c и main@dedae14e0f5831f38bac621d1e80c1d2c9913330. Два конфликта разрешены сохранением принятой520 версии ресурсов и общего тестового ожидания; оба этих файла побайтно равны520@aba. Остальные исходники соответствуют автоматическому merge-tree, до дополнения этих документов tree9ecd744e0f4e02e641efc04e8246ce61bcd7f92b.
+
+task-coordination/watchdog/task-owner-question, MCPtools, task-board.js/css и task-overview.js побайтно равны main@deda. Content/server.js равен520@aba. В CRM сохранён ровно один вызов миграции12 и обработчики сборки520. Registry содержит15 shellAssets и8 shellStyles, все файлы существуют; task-board/overview сохраняются в прежнем loader.
+
+Windows Node24.18.1, jsdom26.1.0 из существующей тестовой среды: восемь групп routing/board/overview/content-plan/chats/shooting/shooting-board/reel-editor —89PASS/0FAIL/0SKIP. node --check13 изменённых JS/CJS и трёх inline script —PASS; git diff --check —PASS. Это не новый полный прогон999 тестов, не Linux CI и не визуальная приёмка рабочего кабинета.
+
+Сервер, базы, ключи, права и уведомления этим согласованием не изменялись. Контекст integration.patch для живого HTML после495 и privacy-safe fallback до миграции комнат остаются отдельными проверками выпуска; новое принятие Claude требуется.

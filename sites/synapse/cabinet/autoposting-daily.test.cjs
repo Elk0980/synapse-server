@@ -160,7 +160,7 @@ test('CF3-BOARD: доска открывается на текущей неде�
     assert.match(f.d.querySelector('[data-daily-post="2"]').textContent,/время не задано/);
     assert.match(f.d.querySelector('.autoposting-undated').textContent,/Без даты · 1[\s\S]*Материал 3/);assert.equal(f.node('autoposting-editor').open,false);
     assert.ok([...f.d.querySelectorAll('[data-daily-approve]')].every(node=>!node.checked));assert.ok(f.calls.every(call=>call.method==='GET'));
-    assert.ok(![...f.d.querySelectorAll('h2,h3')].some(node=>/^Материалы$/.test(node.textContent.trim())),'нет дубля «Материалы»');assert.equal(f.d.querySelector('h2').textContent,'Контент-план');
+    assert.ok(![...f.d.querySelectorAll('h2,h3')].some(node=>/^Материалы$/.test(node.textContent.trim())),'нет дубля «Материалы»');assert.equal(f.d.querySelector('h2').textContent,'Постинг');
   }finally{f.close();}
 });
 test('CF3-BOARD: месяц грузится целиком, недели внутри месяца, переход к дате и фильтры ничего не пишут',async()=>{
@@ -442,7 +442,7 @@ test('CF3-BOARD: карточка показывает площадку подп
     f.set('autoposting-filter-format','post');assert.deepEqual(f.visibleIds(),['3']);f.set('autoposting-filter-format','none');assert.deepEqual(f.visibleIds(),['4','5','1']);f.set('autoposting-filter-format','');
     f.set('autoposting-filter-role','sale');assert.deepEqual(f.visibleIds(),['2']);f.set('autoposting-filter-role','');
     f.set('autoposting-filter-status','published');assert.deepEqual(f.visibleIds(),['1']);
-    assert.equal(f.views.autoposting.title,'Контент-план');assert.ok(f.calls.every(call=>call.method==='GET'));
+    assert.equal(f.views.autoposting.title,'Постинг');assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
 test('daily view precedes folded company settings and approval controls appear only after selection',async()=>{

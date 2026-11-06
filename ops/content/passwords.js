@@ -4,9 +4,9 @@ const crypto = require('node:crypto');
 
 const OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
-function validatePassword(password) {
-  if (typeof password !== 'string' || password.length < 12 || password.length > 256) {
-    throw Object.assign(new Error('Пароль должен содержать от 12 до 256 символов'), { status: 400 });
+function validatePassword(password, minimum = 12) {
+  if (typeof password !== 'string' || password.length < minimum || password.length > 256) {
+    throw Object.assign(new Error(`Пароль должен содержать от ${minimum} до 256 символов`), { status: 400 });
   }
   if (Buffer.byteLength(password, 'utf8') > 1024) {
     throw Object.assign(new Error('Пароль не должен превышать 1024 байта UTF-8'), { status: 400 });
@@ -23,8 +23,8 @@ function isPasswordHash(value) {
   }
 }
 
-function hashPassword(password) {
-  validatePassword(password);
+function hashPassword(password, minimum = 12) {
+  validatePassword(password, minimum);
   const salt = crypto.randomBytes(16);
   const hash = crypto.scryptSync(password, salt, 32, OPTIONS);
   return `scrypt$16384$8$1$${salt.toString('base64url')}$${hash.toString('base64url')}`;
