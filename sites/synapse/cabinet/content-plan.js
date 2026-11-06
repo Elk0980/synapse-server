@@ -306,14 +306,27 @@
 
   function openQuestionnaire(mode, opener) {
     state.qOpen = true; state.qMode = mode; state.qOpener = opener?.dataset?.cp || 'questionnaire';
-    document.body.classList.add('cp-modal-open'); draw();
+    document.body.classList.add('cp-modal-open'); viewportPin(true); draw();
     state.container.querySelector('[data-cp-modal] textarea:not([readonly])')?.focus();
+  }
+  /* iPhone: при клавиатуре окно браузера сдвигается вверх и шапка анкеты уезжает за экран.
+     Окно держим ровно в видимой области (visualViewport) — шапка всегда сверху, кнопка над клавиатурой. */
+  function viewportPin(on) {
+    const vv = window.visualViewport, root = document.documentElement;
+    if (!vv) return;
+    if (!on) { vv.removeEventListener('resize', pinSync); vv.removeEventListener('scroll', pinSync);
+      root.style.removeProperty('--cp-vvh'); root.style.removeProperty('--cp-vvt'); return; }
+    vv.addEventListener('resize', pinSync); vv.addEventListener('scroll', pinSync); pinSync();
+  }
+  function pinSync() {
+    const vv = window.visualViewport, root = document.documentElement;
+    root.style.setProperty('--cp-vvh', vv.height + 'px'); root.style.setProperty('--cp-vvt', vv.offsetTop + 'px');
   }
   function closeQuestionnaire() {
     if (!state) return;
     // Набранное, но ещё не ушедшее на сервер, остаётся в данных: сохранение продолжится само.
     Object.assign(state.questionnaire.fields, state.pending);
-    state.qOpen = false; document.body.classList.remove('cp-modal-open'); draw();
+    state.qOpen = false; document.body.classList.remove('cp-modal-open'); viewportPin(false); draw();
     state.container.querySelector(`[data-cp="${state.qOpener}"]`)?.focus();
   }
 
@@ -356,7 +369,7 @@
   }
 
   const definition = {title: 'Контент-план', mount,
-    unmount() { epoch++; if (state) clearTimeout(state.timer); state = null; document.body.classList.remove('cp-modal-open'); }};
+    unmount() { epoch++; if (state) clearTimeout(state.timer); state = null; document.body.classList.remove('cp-modal-open'); viewportPin(false); }};
   sb.contentPlan = {definition, roles};
   // Реестр каркаса (контракт А). Без реестра — очередь SynapseModulesQueue: реестр А разбирает её при загрузке.
   if (typeof window.SynapseModules?.register === 'function') window.SynapseModules.register('content-plan', definition);

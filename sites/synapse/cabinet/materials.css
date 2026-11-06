@@ -71,3 +71,7 @@
 .ap-mask-previews figcaption { font-size:13px; margin-top:4px; }
 .ap-mask-previews .mt-screen { border-width:4px; border-radius:18px; }
 @media (max-width:430px) { .mt-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; } .mt-filters label { max-width:none; flex-basis:120px; } }
+/* iPhone: поле даты держит собственную ширину и вылезает за край — снимаем системный вид. */
+.mt-view input[type=date], .mt-upload input[type=date] { -webkit-appearance:none; appearance:none; display:block; max-width:100%; box-sizing:border-box; }
+.mt-view input[type=date]::-webkit-date-and-time-value, .mt-upload input[type=date]::-webkit-date-and-time-value { text-align:left; }
+@media (max-width:430px) { .mt-filters label { flex:1 1 calc(50% - 6px); } }
