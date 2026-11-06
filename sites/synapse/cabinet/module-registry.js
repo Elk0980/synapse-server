@@ -66,6 +66,7 @@
     const user = currentUser(), company = currentCompany();
     const companyCode = company?.id || '';
     return Object.freeze({
+      projectPreferences:shell.projectPreferences?.() || null,
       moduleId, companyCode, companyName: company?.name || '',
       user: Object.freeze({ id: user?.userId ?? null, login: user?.login || '', name: user?.displayName || user?.login || '', role: user?.role || '' }),
       permissions: Object.freeze([...(user?.permissions || [])]),

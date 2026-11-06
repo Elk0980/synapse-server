@@ -1251,6 +1251,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 
   const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
   const readSelectedProject = () => {
+    const preferred=identity.projectPreferences?.lastCompanyCode;
+    if(!identity.viewAs && allowedProjects.some(project=>project.id===preferred))return preferred;
     let saved = null;
     try {
       saved = localStorage.getItem(projectStorageKey());
@@ -1396,6 +1398,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     selectedProjectId = projectId;
     saveSelectedProject();
+    if(!identity.viewAs){
+      (window.SynapseProjectPreferenceQueue ||= []).push({userId:identity.userId,companyCode:projectId,requestId:crypto.randomUUID()});
+      window.dispatchEvent(new Event('sb:project-picked'));
+    }
     renderProjectPicker();
     closeProjectMenu(true);
     if(window.matchMedia("(max-width: 760px)").matches)setDrawer(false);
@@ -1877,6 +1883,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
       allowedProjects = allowedProjectsFor(identity);
       selectedProjectId = readSelectedProject();
+      // Однократный перенос прежнего выбора в серверный журнал до первого показа.
+      if(!identity.viewAs && selectedProjectId && !identity.projectPreferences?.lastCompanyCode)
+        (window.SynapseProjectPreferenceQueue ||= []).push({userId:identity.userId,companyCode:selectedProjectId,requestId:crypto.randomUUID()});
       scopeParams();
       byId("analytics-link").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
@@ -1932,7 +1941,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       SbCabinet.initMenuPreferences?.({identity, setDrawer});
       // Ключи провайдеров вводит только владелец и только в настройках системы.
       if (identity.role === "owner") SbCabinet.initHughProviders?.({identity, byId, apiJson, escapeHTML});
-      window.SynapseModules?.attachShell({identity: () => identity, company: selectedProject, apiJson, crmQuery,
+      window.SynapseModules?.attachShell({identity: () => identity, projectPreferences:()=>identity.projectPreferences, company: selectedProject, apiJson, crmQuery,
         navigate: (route) => { location.hash = route; }, escapeHTML});
       window.SynapseModules?.onRegister(id => {
         // Поздняя регистрация: открытый экран модуля или его прежняя замена перерисовываются.

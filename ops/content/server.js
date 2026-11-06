@@ -177,6 +177,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const userProjectPrefs = require('./user-project-prefs').createUserProjectPrefs({db,requireSession,requireCsrf,readJson,sendJson:send});
 const companyTeam = require('./company-team').createCompanyTeam(authStore);
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
@@ -1007,9 +1008,11 @@ const server = http.createServer(async (request, response) => {
       return reply(200, { ok: true }, { 'set-cookie': 'synapse_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0' });
     }
 
+    if (await userProjectPrefs.handle(request,response,url)) return;
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
       const session = requireSession(request);
-      return reply(200, { ...publicIdentity(session.user), csrfToken: session.csrf });
+      const preferences=userProjectPrefs.get(session.user);
+      return reply(200, { ...publicIdentity(session.user), companies:userProjectPrefs.order(session.user.companies,preferences), projectPreferences:preferences, csrfToken: session.csrf });
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
