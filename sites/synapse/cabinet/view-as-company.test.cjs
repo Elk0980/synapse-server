@@ -99,3 +99,24 @@ test('№137: «Выйти» убирает режим, владелец сно�
     assert.deepEqual(back.storage(), {[OWNER_KEY]: 'synapse-business'});
   } finally { back.close(); }
 });
+
+// Порядок готовности документа и ответа whoami не должен менять подписанный профиль.
+for (const profileFirst of [true, false]) {
+  test(`№137: ${profileFirst ? 'профиль раньше DOMContentLoaded' : 'DOMContentLoaded раньше профиля'} — имя не заменяется заглушкой`, async () => {
+    const profile = LENA([{id:'synapse-business',name:'SAMPLE Synapse Бизнес'}]);
+    const f = cabinet({who:profile,shellToo:false,session:{'synapse-view-as':'synthetic-token'}});
+    try {
+      if (!profileFirst) {
+        await settle();
+        assert.match(f.d.getElementById('view-as-banner').textContent,/сотрудник — только просмотр/,'до профиля доступен выход из режима');
+      }
+      f.w.SynapseViewAs.render(profile);
+      await settle();
+      assert.match(f.d.getElementById('view-as-banner').textContent,/SAMPLE Лена — только просмотр/);
+      assert.equal(f.d.querySelectorAll('#view-as-banner').length,1);
+      assert.equal(f.d.getElementById('view-as-start').hidden,true);
+      assert.equal(f.d.querySelector('#view-as-banner button').textContent,'Выйти');
+      assert.deepEqual(f.errors,[]);
+    } finally { f.close(); }
+  });
+}
