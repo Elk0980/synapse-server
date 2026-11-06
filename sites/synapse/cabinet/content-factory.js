@@ -6,7 +6,49 @@
      месяца не меняют постоянный профиль. CF2 (клиент): запуск серверного составления плана, его состояния,
      вопросы, предложения и создание черновиков — через серверную очередь, без автосогласования и публикации. */
   const sb = window.SbCabinet;
-  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+
+  /* №205: общий набор вкладок CfKit (cf-kit.js/.css). Пока страница разбирается, файлы вписываются сразу
+     за этим скриптом — CfKit готов раньше экранов раздела «Контент» и до DOMContentLoaded. Позже — обычной
+     вставкой; cf-kit.js сообщает о готовности событием «cfkit:ready». cabinet.html не меняется. */
+  function ensureCfKit(doc = document) {
+    const win = doc.defaultView || window;
+    if (win.CfKit || doc.querySelector('[data-cf-kit-asset]')) return;
+    const version = win.SB_CABINET_ASSET_VERSION ? `?v=${encodeURIComponent(win.SB_CABINET_ASSET_VERSION)}` : '';
+    if (doc.readyState === 'loading' && doc.currentScript) {
+      doc.write(`<link rel="stylesheet" href="cabinet/cf-kit.css${version}" data-cf-kit-asset><script src="cabinet/cf-kit.js${version}" data-cf-kit-asset><\/script>`);
+      return;
+    }
+    const link = doc.createElement('link');
+    link.rel = 'stylesheet'; link.href = `cabinet/cf-kit.css${version}`; link.dataset.cfKitAsset = '';
+    const script = doc.createElement('script');
+    script.src = `cabinet/cf-kit.js${version}`; script.async = false; script.dataset.cfKitAsset = '';
+    doc.head.append(link, script);
+  }
+  ensureCfKit();
+
+  /* №205: пункт «Материалы» называется «Монтаж» (макет 07.11). Адрес #content/materials и вид content-materials
+     не меняются; подпись меняется в меню, мобильном заголовке и заголовке вкладки браузера. */
+  const MATERIALS_LABEL = 'Материалы', EDITING_LABEL = 'Монтаж';
+  function relabelMaterials(doc = document) {
+    doc.querySelectorAll('[data-view-link="content-materials"]').forEach((link) => {
+      if (link.textContent.trim() === MATERIALS_LABEL) link.textContent = EDITING_LABEL;
+    });
+    const mobile = doc.getElementById('mobile-title');
+    if (mobile && mobile.textContent === MATERIALS_LABEL) mobile.textContent = EDITING_LABEL;
+    if (doc.title.startsWith(`${MATERIALS_LABEL} — `)) doc.title = EDITING_LABEL + doc.title.slice(MATERIALS_LABEL.length);
+  }
+  function watchMaterialsLabel(doc = document) {
+    relabelMaterials(doc);
+    const win = doc.defaultView;
+    if (!win?.MutationObserver) return;
+    const observer = new win.MutationObserver(() => relabelMaterials(doc));
+    [doc.getElementById('mobile-title'), doc.querySelector('title'), doc.querySelector('[data-view-link="content-materials"]')?.parentElement]
+      .filter(Boolean).forEach((node) => observer.observe(node, {childList: true, characterData: true, subtree: true}));
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => watchMaterialsLabel(document), {once: true});
+  else watchMaterialsLabel(document);
+
+  const esc =(value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
   const canRead = (ctx) => ctx.identity?.role === 'owner' || (ctx.identity?.permissions || []).includes('autoposting.view');
   const canEdit = (ctx) => ctx.identity?.role === 'owner' || (ctx.identity?.permissions || []).includes('autoposting.edit');
   const canAnalytics = (ctx) => ctx.identity?.role === 'owner' || (ctx.identity?.permissions || []).includes('analytics.view');
@@ -1398,7 +1440,7 @@
     });
   }
 
-  sb.contentFactory = {bindPlanBar, monthNow};
+  sb.contentFactory = {bindPlanBar, monthNow, ensureCfKit, relabelMaterials};
   sb.registerView('content-factory-settings', {title: 'Настройки модуля', render: renderSettings,
     onProjectChange: (ctx) => { const node = document.querySelector('[data-view="content-factory-settings"]') || document.querySelector('#view'); if (node) renderSettings(node, ctx); }});
   sb.registerView('content-factory-stats', {title: 'Статистика контента', render: renderStats,
