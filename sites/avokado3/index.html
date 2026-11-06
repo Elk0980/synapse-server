@@ -132,6 +132,8 @@
     padding:0;
     font-weight:700;font-size:15px;
   }
+  /* Пока видно уведомление о cookie (z-index 100), оно перекрывало кнопку записи и клики не доходили до ссылки. */
+  body:has(.cookie-notice:not(.hidden))>#cta{bottom:76px}
   .sticky-cta>a{display:flex;align-items:center;justify-content:center;min-height:48px;padding:13px 25px;border-radius:999px;text-decoration:none;white-space:nowrap;text-align:center}
   .sticky-price{color:#f1dca5;background:rgba(16,26,19,.94);border:1px solid #d8b981;box-shadow:0 8px 28px #0006;backdrop-filter:blur(12px)}
   .sticky-price:hover{background:#263322;color:#fff2d2}
@@ -407,6 +409,7 @@
     .sticky-cta{right:auto;left:50%;width:calc(100% - 24px);gap:8px;font-size:12px;padding:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translate(-50%,90px)}
     .sticky-cta>a{flex:1;min-width:0;min-height:52px;padding:10px 12px;line-height:1.35;white-space:normal}
     .sticky-cta.on{transform:translate(-50%,0)}
+    body:has(.cookie-notice:not(.hidden))>#cta{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
     .sticky-cta.on.finale-hidden{transform:translate(-50%,18px)}
     .sticky-cta.on.is-scrolling{transform:translate(-50%,90px);opacity:0;visibility:hidden;pointer-events:none;transition:transform .18s ease,opacity .18s ease}
     .t-slogan{letter-spacing:.18em;font-size:12px}

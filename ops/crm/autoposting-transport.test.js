@@ -455,6 +455,36 @@ test('Telegram через Onlypult: подпись к видео до 1024 си�
  assert.ok(ids.includes('telegram')&&ids.includes('vk')&&ids.includes('youtube_shorts'));
 });
 
+test('Telegram через Onlypult — «фото или одно видео»: рилс уходит один с подписью, видео с фото и два видео отклоняются',async t=>{
+ const f=onlypultFixture(t);f.replies['/posts']={id:'job-123',status:'scheduled',profile_ids:['alvi-tg']};
+ f.api.saveSettings('alvi',{channels:[channel('telegram',0,{provider:'onlypult',target:'alvi-tg',token:OP_TOKEN})]});
+ assert.equal(f.api.getSettings('alvi').channels.find(item=>item.id==='telegram').caps.mediaMode,'photos_or_video');
+ assert.equal((await f.api.checkChannel('alvi','telegram')).ok,true);
+ const posts=()=>f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST');
+ const send=(text,mediaUrls)=>f.api.publish({companyCode:'alvi',channelId:'telegram',post:{id:41,text,mediaUrls}});
+ const reel=await send('п'.repeat(1024),['https://cdn.example.test/reel.mp4']);
+ assert.equal(reel.providerPostId,'job-123');assert.equal(reel.status,'needs_review','идентификатор провайдера публикацией не считается');
+ assert.deepEqual(posts().at(-1).body.media_urls,['https://cdn.example.test/reel.mp4']);
+ assert.equal(posts().at(-1).body.content,'п'.repeat(1024));
+ assert.equal(Object.hasOwn(posts().at(-1).body,'platform_options'),false,'опций для Telegram не отправляем');
+ const before=posts().length;
+ for(const [name,media] of [
+   ['видео + фото',['https://cdn.example.test/reel.mp4','https://cdn.example.test/d1.jpg']],
+   ['фото + видео',['https://cdn.example.test/d1.jpg','https://cdn.example.test/reel.mp4']],
+   ['два видео',['https://cdn.example.test/a.mp4','https://cdn.example.test/b.mov']],
+   ['видео с фрагментом рядом с фото',['https://cdn.example.test/d1.jpg','https://cdn.example.test/reel.mp4#t=1']],
+ ]) await assert.rejects(send('Подпись',media),error=>error.code==='CONTENT_LIMIT',name);
+ assert.equal(posts().length,before,'отклонённое до Onlypult не доходит');
+ // Фото и текст — как раньше.
+ await send('Подпись к фото',['https://cdn.example.test/d1.jpg','https://cdn.example.test/d2.png']);
+ assert.deepEqual(posts().at(-1).body.media_urls,['https://cdn.example.test/d1.jpg','https://cdn.example.test/d2.png']);
+ await send('Только текст',[]);
+ assert.equal(Object.hasOwn(posts().at(-1).body,'media_urls'),false);assert.equal(posts().at(-1).body.content,'Только текст');
+ await assert.rejects(send('п'.repeat(1025),['https://cdn.example.test/reel.mp4']),error=>error.code==='CONTENT_LIMIT','подпись к видео до 1024');
+ // Прямой бот Telegram остаётся «только фото».
+ assert.equal(fixture(t).api.getSettings('alvi').channels.find(item=>item.id==='telegram').caps.mediaMode,'photos');
+});
+
 test('новый формат ответа без platform не принимается, явный profile_id:null рядом со списком тоже; старый список без platform принимается',async t=>{
  for (const [name,reply] of [
    ['одиночный profile_id без platform',{id:'a1b2c3d4e5f6a7b8',profile_id:1863531,status:'draft'}],
