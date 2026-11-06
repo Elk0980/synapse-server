@@ -3,7 +3,7 @@
   const defaultOrders = new WeakMap();
   // №139: старые и служебные разделы — в «Ещё» (переносятся, не удаляются). Ключ = data-view-link или editor:<вид>.
   // Ответ Влада «оставить X на месте» = убрать X из этого списка.
-  const MORE_ITEMS = ['social-stats','platform-demand','hypotheses','competitors','calltracking','editor:site','editor:price','project-forms','actor-onboarding','actor-workspace','company-information','vk-community','reviews','campaigns','site-orders','system-settings','accounts','account','trademarks'];
+  const MORE_ITEMS = ['social-stats','platform-demand','hypotheses','competitors','calltracking','editor:site','editor:price','actor-onboarding','actor-workspace','company-information','vk-community','reviews','campaigns','site-orders','system-settings','accounts','account','trademarks'];
   api.MENU_MORE_ITEMS = MORE_ITEMS;
   api.initMenuPreferences = ({identity, setDrawer}) => {
     // №180: порядок блока «Проект» — отдельная часть ниже; её сбой не мешает меню разделов.

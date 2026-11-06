@@ -60,7 +60,7 @@ const navOrder=d=>[...d.querySelectorAll('.nav a.nav-link')].map(a=>a.dataset.vi
 const pristine=()=>{const d=new JSDOM(fs.readFileSync(require.resolve('../cabinet.html'),'utf8')).window.document;return navOrder(d);};
 test('more: listed sections move into «Ещё», emptied groups disappear, nothing is deleted',()=>{
   const {dom,w,d}=setup();const more=d.querySelector('#more-menu');
-  assert.equal(w.SbCabinet.MENU_MORE_ITEMS.length,19);
+  assert.equal(w.SbCabinet.MENU_MORE_ITEMS.length,18);assert.ok(!w.SbCabinet.MENU_MORE_ITEMS.includes("project-forms"));
   const inMore=[...more.querySelectorAll('a.nav-link')].map(a=>a.dataset.viewLink||'editor:'+a.dataset.editorLink);
   assert.deepEqual(inMore,[...w.SbCabinet.MENU_MORE_ITEMS].filter(id=>pristine().includes(id)));
   assert.equal(navOrder(d).length,pristine().length);
@@ -86,12 +86,12 @@ test('more: one switch returns every section to its old place and back',()=>{
   assert.equal(d.querySelectorAll('[data-menu-show-all]').length,1);
   dom.window.close();
 });
-test('more: permissions still hide moved links; active moved link opens «Ещё»; live-only «Формы проектов» moves too',async()=>{
+test('more: permissions still hide moved links; active moved link opens «Ещё»; «Формы проектов» stays next to «Задачи»',async()=>{
   const shell=fs.readFileSync(require.resolve('../cabinet.html'),'utf8').replace('<a class="nav-link" id="hugh-link"','<a class="nav-link" id="project-forms-link" href="#project-forms" data-view-link="project-forms" hidden>Формы проектов</a>\n      <a class="nav-link" id="hugh-link"');
   const dom=new JSDOM(shell,{url:'https://example.test',runScripts:'outside-only'});const w=dom.window,d=w.document;w.matchMedia=()=>({matches:false});
   w.eval(fs.readFileSync(require.resolve('./menu-preferences.js'),'utf8'));
   w.SbCabinet.initMenuPreferences({identity:{login:'owner'},setDrawer(){}});
-  const forms=d.getElementById('project-forms-link');assert.equal(forms.parentElement.id,'more-menu');assert.equal(d.querySelectorAll('#more-menu a.nav-link').length,19);
+  const forms=d.getElementById('project-forms-link');assert.equal(forms.parentElement.className,'nav');assert.equal(forms.nextElementSibling.id,'hugh-link');assert.equal(d.querySelectorAll('#more-menu a.nav-link').length,18);
   [...d.querySelectorAll('#more-menu a.nav-link')].forEach(a=>{a.hidden=true;});
   await new Promise(r=>w.setTimeout(r,0));assert.equal(d.querySelector('#more-category').hidden,true);
   const reviews=d.getElementById('reviews-link');reviews.hidden=false;reviews.setAttribute('aria-current','page');
