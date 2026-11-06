@@ -181,9 +181,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const userProjectPrefs = require('./user-project-prefs').createUserProjectPrefs({db,requireSession,requireCsrf,readJson,sendJson:send});
 const viewAs = require('./view-as').createViewAs({ secret: SESSION_SECRET, authStore, db });
 // №98 Б: согласующие контент-плана из «Настроек → Контент» — доверенным заголовком в CRM.
 const contentPlanApprovers = require('./content-plan-approvers').createContentPlanApprovers({ db, authStore });
+
 const companyTeam = require('./company-team').createCompanyTeam(authStore);
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
@@ -1080,9 +1082,12 @@ const server = http.createServer(async (request, response) => {
         return reply(200, viewAs.issue(session, (await readJson(request)).userId));
       }
     }
+    if (await userProjectPrefs.handle(request,response,url)) return;
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
       const session = requireSession(request);
-      return reply(200, { ...publicIdentity(session.user), viewAs: session.viewAs || null, csrfToken: session.csrf });
+      const preferences=session.viewAs?null:userProjectPrefs.get(session.user);
+      return reply(200, { ...publicIdentity(session.user), companies:preferences?userProjectPrefs.order(session.user.companies,preferences):session.user.companies, projectPreferences:preferences, viewAs:session.viewAs || null, csrfToken: session.csrf });
+
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
