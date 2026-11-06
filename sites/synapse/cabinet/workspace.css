@@ -130,3 +130,6 @@ body { background:var(--bg); font-family:"Segoe UI",system-ui,sans-serif; }
 .menu-more-note { margin:6px 12px 8px; color:var(--muted); font-size:12px; line-height:1.4; }
 .menu-show-all { display:flex; align-items:center; gap:10px; margin-top:16px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); font-weight:600; cursor:pointer; }
 .menu-show-all input { width:18px; height:18px; flex-shrink:0; accent-color:var(--accent); }
+
+/* №186: с клавиатурой на телефоне нижнее меню не закрывает поле ввода (класс ставит content-plan.js по focusin/focusout). */
+@media(max-width:760px){ body.kbd-open .mobile-shortcuts { display:none; } }

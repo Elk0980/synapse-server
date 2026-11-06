@@ -94,3 +94,16 @@
 @media(max-width:430px){.cp-tabs button{padding:7px 6px;font-size:13px}}
 
 .cp-sort button{color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+
+/* №186: анкета проекта — окно поверх; шестерёнка рядом с сортировкой. */
+.cp-tools{display:flex;align-items:center;gap:4px}.cp-tools [data-cp-sort-toggle],.cp-tools .cp-gear{font-size:24px;min-width:44px;line-height:1;padding:0 8px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.cp-new{white-space:nowrap}
+body.cp-modal-open{overflow:hidden}
+.cp-modal{position:fixed;z-index:70;inset:0;margin:auto;width:min(760px,calc(100% - 32px));height:fit-content;max-height:calc(100dvh - 48px);display:flex;flex-direction:column;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:14px;box-shadow:0 0 0 100vmax #0009,0 18px 60px #0007;overflow:hidden}
+.cp-modal-bar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.cp-modal-bar h3{flex:1;margin:0;font-size:1rem;line-height:1.3;overflow-wrap:break-word}
+.cp-modal-bar button{min-width:44px;font-size:22px;line-height:1;padding:0 10px;background:transparent;border:0;color:var(--text)}
+.cp-modal-body{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;padding:12px 14px}
+.cp-modal-foot{padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface)}
+.cp-modal-foot .cp-gen{margin-top:0}
+@media(max-width:760px){.cp-modal{inset:0;width:100%;height:100dvh;max-height:none;border:0;border-radius:0;margin:0;box-shadow:none}}

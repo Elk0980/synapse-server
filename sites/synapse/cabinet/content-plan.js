@@ -62,7 +62,7 @@
       if (mine !== epoch || ctx.signal?.aborted) return;
       const view = ctx.route?.params?.get?.('view') === 'full' ? 'full' : 'short';
       state = {code, ctx, api, container, mentor, questionnaire, signoffs, settings: settings || null,
-        tab: 'plan', sort: savedSort(ctx), sortOpen: false, editDrafts: new Map(), view, open: state?.code === code ? state.open : new Set(), pending: {}, saving: null, suggestion: null};
+        tab: 'plan', qOpen: false, qMode: 'edit', sort: savedSort(ctx), sortOpen: false, editDrafts: new Map(), view, open: state?.code === code ? state.open : new Set(), pending: {}, saving: null, suggestion: null};
       draw();
     } catch (error) {
       if (mine === epoch && !ctx.signal?.aborted) container.innerHTML = `<p class="cp-error" role="alert">${esc(error.status === 403
@@ -103,39 +103,47 @@
       <button type="button" role="tab" data-cp-tab="drafts" aria-selected="${state.tab === 'drafts'}" aria-controls="cp-publications">Черновики</button>
       ${edit ? '<button type="button" class="cp-new" data-cp="questionnaire">+ Новый</button>' : ''}</div>
       ${sheetUrl ? `<a class="cp-sheet-link" href="${esc(sheetUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть Google Таблицу" title="Google Таблица"><svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true"><path fill="currentColor" d="M3 0h11l7 7v15a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm2 10v10h12V10H5zm2 2h3v2H7v-2zm5 0h3v2h-3v-2zm-5 4h3v2H7v-2zm5 0h3v2h-3v-2z"/></svg></a>` : ''}</nav>`;
-    const questionnaire = `<details class="cp-card cp-q" ${q.filled < q.total && !days.length ? 'open' : ''}><summary>Анкета проекта · <span data-cp-q-count>заполнено ${q.filled} из ${q.total}</span></summary>
+    /* №186: анкеты нет на вкладке. Окно поверх открывают «+ Новый» (новый план) и ⚙ (настройка текущего). На телефоне — на весь экран:
+       «←» и крестик сверху, главная кнопка закреплена внизу. Поля сохраняются сами, как раньше. */
+    const questionnaire = !state.qOpen ? '' : `<div class="cp-modal" data-cp-modal role="dialog" aria-modal="true" aria-labelledby="cp-q-title">
+      <div class="cp-modal-bar"><button type="button" class="cp-back" data-cp-close aria-label="Назад к контент-плану">←</button>
+        <h3 id="cp-q-title">${state.qMode === 'new' ? 'Новый контент-план' : 'Настройка контент-плана'} · анкета <span data-cp-q-count>заполнено ${q.filled} из ${q.total}</span></h3>
+        <button type="button" class="cp-x" data-cp-close aria-label="Закрыть">✕</button></div>
+      <div class="cp-modal-body cp-q">
         <p class="cp-note">Можно заполнять частями и дополнять потом: каждое поле сохраняется само. ${esc((q.rules || []).join(' '))}</p>
         <form class="cp-q-form" data-cp-form>${Q.map(([key, label, hint]) => `<label>${label}<textarea data-q="${key}" rows="2" maxlength="2000" placeholder="${esc(hint)}" ${edit ? '' : 'readonly'}>${esc(q.fields[key])}</textarea></label>`).join('')}
           <fieldset data-cp-platforms tabindex="-1"><legend>Площадки</legend>${vocab.platforms.map((p) => `<label class="cp-check"><input type="checkbox" data-q-platform="${esc(p.id)}" ${q.fields.platforms.includes(p.id) ? 'checked' : ''} ${edit ? '' : 'disabled'}> ${esc(p.label)}</label>`).join('')}</fieldset>
         </form><p class="cp-note" data-cp-saved role="status">${q.updatedAt ? `Сохранено${q.updatedBy ? ' · ' + esc(q.updatedBy) : ''}` : 'Ещё не сохранялась'}</p>
-        ${edit ? `<div class="cp-gen"><label><span>Начало</span><input type="date" data-cp-start value="${isoIn(1)}"></label>
+        ${edit ? '<div data-cp-suggest></div><div data-cp-import></div>' : ''}</div>
+      <div class="cp-modal-foot">${edit ? `<div class="cp-gen"><label><span>Начало</span><input type="date" data-cp-start value="${isoIn(1)}"></label>
           <label><span>Дней</span><select data-cp-days><option>7</option><option>14</option></select></label>
-          <button type="button" class="plain-button" data-cp="generate">Сформировать план через Хью</button></div>
-          <div data-cp-suggest></div><div data-cp-import></div>` : ''}</details>`;
+          <button type="button" class="plain-button" data-cp="generate">Сформировать план через Хью</button></div>`
+        : '<button type="button" class="plain-button" data-cp-close>Закрыть</button>'}</div></div>`;
     const approve = `<section class="cp-card cp-approve"><h3>Согласование</h3>
         ${s.planRevision ? `<ul class="cp-approvers">${s.approvers.map((a) => `<li><label class="cp-check"><input type="checkbox" data-signoff="${esc(a.slot)}" ${a.checked ? 'checked' : ''} ${a.canCheck ? '' : 'disabled'}> ${esc(a.label)}${a.userId && a.userId === ctx.user?.id ? ' (вы)' : ''}</label>
           <span class="cp-note">${a.checked ? `✓ ${esc(a.actorName)}` : 'ждёт отметки'}</span></li>`).join('')}</ul>
           ${s.emptyIdeas.length ? `<p class="cp-warn">Без подписи — не войдут в согласование: ${s.emptyIdeas.length}. Откройте строку и заполните подпись.</p>` : ''}`
           : '<p class="cp-note">Согласовывать пока нечего: сначала сформируйте или импортируйте план.</p>'}
         ${approversNote()}<p class="cp-note">Согласовано материалов: ${s.approvedIdeas} из ${s.ideas}. Когда отметят все — план уходит к СММ и в «Съёмку».</p></section>`;
-    const plan = allDays.length ? `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}"><div class="cp-list-head"><h3>Публикации</h3>
+    const plan = `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}"><div class="cp-list-head"><h3>Публикации</h3>
+      <div class="cp-tools"><button type="button" class="cp-gear" data-cp="settings-plan" aria-label="Выбор и настройка контент-плана" title="Выбор и настройка контент-плана" aria-haspopup="dialog">⚙</button>
       <div class="cp-sort"><button type="button" data-cp-sort-toggle aria-label="Сортировать публикации" aria-expanded="${state.sortOpen}" aria-controls="cp-sort-menu">⇅</button>
-      <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${[['date','По дате'],['platform','По площадке'],['status','По статусу']].map(([value,label])=>`<button type="button" data-cp-sort="${value}" aria-pressed="${state.sort === value}">${state.sort === value ? '✓ ' : ''}${label}</button>`).join('')}</div></div></div>
-      ${!days.length ? '<p class="cp-note">В этом списке пока нет публикаций.</p>' : ''}
+      <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${[['date','По дате'],['platform','По площадке'],['status','По статусу']].map(([value,label])=>`<button type="button" data-cp-sort="${value}" aria-pressed="${state.sort === value}">${state.sort === value ? '✓ ' : ''}${label}</button>`).join('')}</div></div></div></div>
+      ${!days.length ? `<p class="cp-note">${allDays.length ? 'В этом списке пока нет публикаций.' : 'Плана пока нет. Нажмите «+ Новый», чтобы заполнить анкету и сформировать план.'}</p>` : ''}
       ${state.view === 'full' ? sheet(days, platforms, status) : `<ol class="cp-list">${days.map((idea, index) => {
         const open = state.open.has(idea.ideaId);
         return `<li class="cp-row" data-idea="${esc(idea.ideaId)}"><button type="button" class="cp-line" data-toggle aria-expanded="${open}">
           <span class="cp-n">№${index + 1}</span><span class="cp-date">${esc(day(idea.date))}</span>
           <span class="cp-pl">${esc(platforms(idea))}</span><span class="cp-topic">${esc(idea.topic)}</span>${status(idea)}</button>
-          ${open ? full(idea, edit) : ''}</li>`; }).join('')}</ol>`}</section>` : '';
-    container.innerHTML = `<section class="cp" data-cp-layout="${allDays.length ? 'plan' : 'questionnaire'}">${head}
-      ${allDays.length ? plan + approve + questionnaire : questionnaire + approve}
-      <p class="cp-error" data-cp-error role="alert" hidden></p></section>`;
+          ${open ? full(idea, edit) : ''}</li>`; }).join('')}</ol>`}</section>`;
+    container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
+      ${plan}${approve}
+      <p class="cp-error" data-cp-error role="alert" hidden></p>${questionnaire}</section>`;
     container.querySelectorAll('[data-edit] textarea').forEach(n => { const key = n.closest('[data-edit]').dataset.edit + ':' + n.name; if (drafts.has(key)) n.value = drafts.get(key); });
     wire();
     if (!sheetUrl && ctx.user?.role === 'owner') {
       const hint = document.createElement('button'); hint.type = 'button'; hint.className = 'plain-button'; hint.textContent = 'Указать таблицу'; hint.onclick = () => ctx.navigate('settings/content');
-      container.querySelector('.cp-q').append(hint);
+      container.querySelector('.cp-q')?.append(hint);
     }
     if (edit) installImport();
   }
@@ -221,7 +229,6 @@
     node.innerHTML = `<p class="cp-warn" role="alert">${NO_PLATFORMS}</p>`;
     const box = state.container.querySelector('[data-cp-platforms]');
     if (!box) return;
-    box.closest('details').open = true;
     (box.querySelector('input:not([disabled])') || box).focus();
   }
 
@@ -297,6 +304,19 @@
     } catch (err) { input.checked = !input.checked; input.disabled = false; error(err.message); }
   }
 
+  function openQuestionnaire(mode, opener) {
+    state.qOpen = true; state.qMode = mode; state.qOpener = opener?.dataset?.cp || 'questionnaire';
+    document.body.classList.add('cp-modal-open'); draw();
+    state.container.querySelector('[data-cp-modal] textarea:not([readonly])')?.focus();
+  }
+  function closeQuestionnaire() {
+    if (!state) return;
+    // Набранное, но ещё не ушедшее на сервер, остаётся в данных: сохранение продолжится само.
+    Object.assign(state.questionnaire.fields, state.pending);
+    state.qOpen = false; document.body.classList.remove('cp-modal-open'); draw();
+    state.container.querySelector(`[data-cp="${state.qOpener}"]`)?.focus();
+  }
+
   function wire() {
     const root = state.container, ctx = state.ctx;
     root.querySelectorAll('[data-q]').forEach((field) => field.addEventListener('input', () => queueSave({[field.dataset.q]: field.value})));
@@ -312,7 +332,9 @@
     root.querySelectorAll('[data-cp-view]').forEach((button) => button.addEventListener('click', () => { state.view = button.dataset.cpView; draw(); }));
     root.querySelectorAll('[data-edit]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void saveRow(form); }));
     root.querySelectorAll('[data-signoff]').forEach((input) => input.addEventListener('change', () => void signoff(input)));
-    root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', () => { const d = root.querySelector('.cp-q'); d.open = true; d.querySelector('textarea')?.focus(); });
+    root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', (event) => openQuestionnaire('new', event.currentTarget));
+    root.querySelector('[data-cp="settings-plan"]')?.addEventListener('click', (event) => openQuestionnaire('edit', event.currentTarget));
+    root.querySelectorAll('[data-cp-close]').forEach((button) => button.addEventListener('click', closeQuestionnaire));
     root.querySelector('[data-cp="generate"]')?.addEventListener('click', (event) => void generate(event.currentTarget));
     root.querySelector('[data-cp="settings"]')?.addEventListener('click', () => ctx.navigate('settings/content'));
     root.querySelectorAll('[data-cp-tab]').forEach(button => button.onclick = () => { state.tab = button.dataset.cpTab; draw(); root.querySelector(`[data-cp-tab="${state.tab}"]`)?.focus(); });
@@ -320,11 +342,21 @@
     root.querySelectorAll('[data-cp-sort]').forEach(button => button.onclick = () => {
       state.sort = button.dataset.cpSort; state.sortOpen = false; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
     });
-    root.onkeydown = event => { if (event.key === 'Escape' && state?.sortOpen) { state.sortOpen = false; draw(); root.querySelector('[data-cp-sort-toggle]')?.focus(); } };
+    root.onkeydown = event => { if (event.key === 'Escape' && state?.qOpen) { event.preventDefault(); closeQuestionnaire(); return; }
+      if (event.key === 'Escape' && state?.sortOpen) { state.sortOpen = false; draw(); root.querySelector('[data-cp-sort-toggle]')?.focus(); } };
+  }
+
+  /* №186: на телефоне при фокусе в поле ввода нижнее меню не должно висеть над полем. Класс на body, правило — в workspace.css (≤760px). */
+  if (!window.__sbKeyboardNav) {
+    window.__sbKeyboardNav = true;
+    const field = (n) => n && n.matches && n.matches('input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),textarea,select');
+    const sync = () => document.body.classList.toggle('kbd-open', field(document.activeElement));
+    document.addEventListener('focusin', sync);
+    document.addEventListener('focusout', () => setTimeout(sync, 0));
   }
 
   const definition = {title: 'Контент-план', mount,
-    unmount() { epoch++; if (state) clearTimeout(state.timer); state = null; }};
+    unmount() { epoch++; if (state) clearTimeout(state.timer); state = null; document.body.classList.remove('cp-modal-open'); }};
   sb.contentPlan = {definition, roles};
   // Реестр каркаса (контракт А). Без реестра — очередь SynapseModulesQueue: реестр А разбирает её при загрузке.
   if (typeof window.SynapseModules?.register === 'function') window.SynapseModules.register('content-plan', definition);
