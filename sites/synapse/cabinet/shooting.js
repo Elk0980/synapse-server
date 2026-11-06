@@ -155,8 +155,10 @@
       const k = kit();
       if (!k) return null;
       const marked = new Set(this.list.map((reel) => this.dayOf(reel)).filter(Boolean));
-      const timeZone = this.ctx.company?.timeZone || this.ctx.timeZone || 'Asia/Irkutsk';
-      this.strip = k.dateStrip({tz: timeZone === 'Asia/Irkutsk' ? 'Иркутское время' : timeZone, timeZone, marked,
+      /* Пояс компании: из кабинета, иначе из /media-mentor нового сервера (company.timeZone). Нет нигде — время устройства
+         с честной подписью; прежнее «Asia/Irkutsk по умолчанию» было догадкой. */
+      const timeZone = this.ctx.company?.timeZone || this.snapshot?.company?.timeZone || this.ctx.timeZone || '';
+      this.strip = k.dateStrip({tz: timeZone === 'Asia/Irkutsk' ? 'Иркутское время' : timeZone ? `Время компании: ${timeZone}` : 'Время устройства', timeZone: timeZone || undefined, marked,
         onSelect: (picked) => this.jumpTo(k.dayKey(picked))});
       if (this.calendarOpen) this.strip.setOpen(true);
       return this.strip;

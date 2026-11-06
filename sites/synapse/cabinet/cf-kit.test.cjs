@@ -246,3 +246,57 @@ test('лента: scroll:false не сбрасывает позицию поль
   assert.equal(setCalls, 0);
   assert.equal(typeof state.refresh, 'function');
 });
+
+/* Пакет H: короткая лента после стартовой точки. Эмуляция ленты с max-height 600: окно растёт вместе с содержимым,
+   пока не упрётся в предел (как content-box с max-height), прокрутка ограничена диапазоном. */
+function shortFeed(w, {maxH = 600, itemH = 100, overflow = 'auto'} = {}) {
+  const feed = w.document.getElementById('f');
+  feed.style.overflowY = overflow;
+  const kids = () => [...feed.children];
+  const heightOf = (node) => node.classList.contains('cfk-feed-pad') ? parseFloat(node.style.height) || 0 : node.classList.contains('cfk-feed-sep') ? 0 : itemH;
+  const content = () => kids().reduce((sum, node) => sum + heightOf(node), 0);
+  const client = () => Math.min(content(), maxH);
+  let top = 0;
+  Object.defineProperty(feed, 'clientHeight', {get: client, configurable: true});
+  Object.defineProperty(feed, 'scrollHeight', {get: () => Math.max(client(), content()), configurable: true});
+  Object.defineProperty(feed, 'scrollTop', {get: () => top, set: (v) => { top = Math.max(0, Math.min(v, feed.scrollHeight - feed.clientHeight)); }, configurable: true});
+  const rectOf = (node) => { let y = -top; for (const kid of kids()) { if (kid === node) break; y += heightOf(kid); } return {top: y, left: 0, width: 390, height: heightOf(node)}; };
+  w.Element.prototype.getBoundingClientRect = function () { return this === feed ? {top: 0, left: 0, width: 390, height: client()} : rectOf(this); };
+  return feed;
+}
+const frame = (w) => new Promise((resolve) => w.requestAnimationFrame(() => resolve()));
+
+test('лента: короткая лента после стартовой точки встаёт наверх (распорка, а не padding по scrollHeight)', async () => {
+  const w = load(`<div id="f">${['published', 'published', 'edit_review'].map((s, i) => `<article data-stage="${s}">№${i + 1}</article>`).join('')}</div>`);
+  const feed = shortFeed(w);
+  const state = w.CfKit.feedStart(feed, {isAbove: (el) => el.dataset.stage === 'published'});
+  await frame(w);
+  assert.equal(state.start, 200);
+  assert.equal(feed.scrollTop, 200, 'первый неопубликованный — у верха ленты');
+  const pad = feed.querySelector('.cfk-feed-pad');
+  assert.ok(pad, 'распорка добавлена последним элементом');
+  assert.equal(feed.lastElementChild, pad);
+  assert.equal(pad.getAttribute('aria-hidden'), 'true');
+  assert.equal(feed.scrollHeight - feed.clientHeight, 200, 'распорка ровно по нужному диапазону, без лишнего хвоста');
+  assert.equal(feed.style.paddingBottom, '', 'padding-bottom ленты не трогаем');
+  // Повторный вызов не плодит распорки.
+  w.CfKit.feedStart(feed, {isAbove: (el) => el.dataset.stage === 'published'});
+  await frame(w);
+  assert.equal(feed.querySelectorAll('.cfk-feed-pad').length, 1);
+  assert.equal(feed.scrollTop, 200);
+});
+
+test('лента: длинной ленте и ленте без своей прокрутки распорка не нужна', async () => {
+  const long = load(`<div id="f">${[1, 1, 0, 0, 0, 0, 0, 0, 0, 0].map((p) => `<article data-p="${p}">x</article>`).join('')}</div>`);
+  const feed = shortFeed(long);
+  long.CfKit.feedStart(feed, {isAbove: (el) => el.dataset.p === '1'});
+  await frame(long);
+  assert.equal(feed.querySelector('.cfk-feed-pad'), null);
+  assert.equal(feed.scrollTop, 200);
+  const page = load('<div id="f"><article data-p="1">1</article><article>2</article></div>');
+  const flat = shortFeed(page, {overflow: 'visible'});
+  page.CfKit.feedStart(flat, {isAbove: (el) => el.dataset.p === '1'});
+  await frame(page);
+  assert.equal(flat.querySelector('.cfk-feed-pad'), null, 'без overflow:auto лента не получает хвост');
+  assert.match(kitCss, /\.cfk-feed-pad \{[^}]*grid-column: 1 \/ -1/);
+});
