@@ -6,8 +6,9 @@
 - [x] Добавить manifest-based rollback, атомарную запись и hash gate bootstrap.
 - [x] Добавить install.sh с snapshot, BASELINE, pinned Авокадо, отчётом диска без очистки.
 - [x] Подготовить Ubuntu24.04 systemd install CI и loopback HTTP.
-- [ ] Пройти unit и реальный systemd/install CI точного head.
-- [ ] Обновить evidence, перевести PR518 ready, передать результат Claude комментарием №178.
+- [x] Пройти unit и реальный systemd/install CI промежуточного93cbf35e; окончательный head проверяется отдельно.
+- [x] Обновить evidence и перевести PR518 ready.
+- [ ] Итоговые head/цифры/команда — комментарием №178 после CI окончательной версии.
 - [ ] Независимая приёмка Claude (отдельно от собственной проверки автора).
 
 Production, main merge и метки в этой задаче не выполняются.

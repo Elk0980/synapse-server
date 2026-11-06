@@ -1,7 +1,7 @@
 name: static-autosync
 on:
   pull_request:
-    paths: ['ops/autosync/**', '.github/workflows/static-autosync.yml']
+    paths: ['ops/autosync/**', 'specs/098-static-autosync/**', '.github/workflows/static-autosync.yml']
 permissions:
   contents: read
 jobs:

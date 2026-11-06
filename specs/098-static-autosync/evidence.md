@@ -23,3 +23,7 @@ Linux CI ещё не выполнен; workflow подготовлен. Лока
 ## №178, 06.11.2026 (Бангкок)
 PR560 уже находится в PR518@e1bf5edc; diff runtime/CI с PR560 пуст. Caddyfile и compose прочитаны, не изменены. Расширение только в разрешённых ops/autosync, workflow и specs/098.
 Локально Python compile и bash -n PASS. Linux unittest и полный Ubuntu24.04 systemd install/BASELINE/site/rollback: ожидается CI нового head, цифры будут добавлены после фактического результата. Production-доступов, merge и меток: 0.
+
+Проверенный промежуточный CI93cbf35e: https://github.com/Elk0980/synapse-server/actions/runs/42158177942 — unit26/26, systemd sandbox2/2 (с @pkey и отказ без него), install6/6 (реальная служба, BASELINE, exact SHA Авокадо, таймер, disk report, rollback1файл). Проверка производится на одноразовой Ubuntu24.04 VM с loopback HTTP, не на сервере. Дополнительно проверяются повторная установка без сброса baseline и отказ при локальной правке (8 сценариев итогового installer CI).
+SpecKit локально:48 файлов и5/5 unit PASS. Windows unittest:26 всего,23PASS/3Linux-onlySKIP с test-only fcntl shim — не доказательство kernel/systemd.
+Внешняя защита PR требует метку «сайты: инфраструктура»; по прямому запрету Влада метки не ставились и guard не менялся. PR518 переведён из draft в ready. Финальные head/цифры/короткая команда будут в комментарии №178 после CI окончательной версии. Независимая приёмка Claude и установка на сервере отсутствуют и не заявляются.

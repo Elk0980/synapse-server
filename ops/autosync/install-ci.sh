@@ -20,7 +20,20 @@ sudo systemctl stop synapse-autosync.timer
 echo 'eaa509393766bb1f20acb23595d616844111a37a733f5af04bb3eae300aa0a5f  /opt/synapse/sites/avokado3/index.html' | sha256sum -c -
 sudo grep 'BASELINE' /var/log/synapse-autosync/autosync.log
 sudo systemctl is-enabled synapse-autosync.timer
+sudo cp /var/lib/synapse-autosync/state.json /tmp/state-before-reinstall.json
+sudo bash ops/autosync/install.sh "$REV" http://127.0.0.1:18788 > /tmp/reinstall-result.log
+sudo systemctl stop synapse-autosync.timer
+grep 'BASELINE сохранён' /tmp/reinstall-result.log
+grep 'BOOTSTRAP уже установлен' /tmp/reinstall-result.log
+sudo cmp /tmp/state-before-reinstall.json /var/lib/synapse-autosync/state.json
 # Exercise real runtime through the installed sandbox, not a mocked subprocess.
 sudo bash /usr/local/lib/synapse-autosync/sandbox-run.sh --backups /var/backups/synapse-autosync/operations --rollback
 echo 'a7ff72162e9568d0fd6330a4b32bd1c6bbe20f071e11785c6d2f4eb3e4721b07  /opt/synapse/sites/avokado3/index.html' | sha256sum -c -
-echo 'INSTALL CI: 6/6 — baseline, install, exact site hash, timer, disk report, rollback'
+printf 'local edit' | sudo tee /opt/synapse/sites/avokado3/index.html >/dev/null
+if sudo bash ops/autosync/install.sh "$REV" http://127.0.0.1:18788 > /tmp/rejected-install.log 2>&1; then
+  echo 'ожидался отказ при локальной правке'; exit 1
+fi
+grep 'ОШИБКА:' /tmp/rejected-install.log
+test "$(cat /opt/synapse/sites/avokado3/index.html)" = 'local edit'
+if sudo systemctl is-active --quiet synapse-autosync.timer; then exit 1; fi
+echo 'INSTALL CI: 8/8 — baseline, install, exact site hash, timer, disk report, rollback, reinstall, local-edit refusal'
