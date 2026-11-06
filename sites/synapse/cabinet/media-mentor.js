@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  /* Бриф компании и контент-план на 7–14 дней. Публикация не выполняется. Согласование конкретной
+  /* Бриф компании и ручной контент-план на 1–31 день. Публикация не выполняется. Согласование конкретной
      версии плана — решение по тексту, а не разрешение публиковать. Всё, что приходит с сервера,
      выводится как текст.
      Подсказка плана: модель предлагает позиции, человек подставляет их в форму и сохраняет сам.
@@ -617,6 +617,7 @@
     const formatLabel = vocabulary.formats.find((row) => row.id === item.format)?.label || item.format || 'Формат';
     return `<article class="mentor-row mentor-day" data-row data-day-index="${index}"
       data-idea-id="${esc(item.ideaId || '')}"
+      data-reel-fields="${['script','filmingBy','productionStatus','broll','style','props'].filter(key=>Object.hasOwn(item,key)).join(',')}"
       ${index >= 0 ? `data-source-order="${index}"` : ''} data-plan-date="${esc(item.date)}"
       data-plan-platform="${esc(item.platform)}" data-plan-platforms="${esc(rowPlatforms(item).join(' '))}"
       data-card-status="${status}" data-card-ids="${esc(cards.map((card) => card.postId).join(' '))}">
@@ -645,6 +646,12 @@
           <label>Задача материала<select data-field="role">${options(vocabulary.roles, item.role)}</select></label>
         </div>
         <label>Тема<input data-field="topic" maxlength="300" required value="${esc(item.topic)}"></label>
+        <label>Сценарий<textarea data-field="script" data-script-source="${esc(JSON.stringify(item.script || ''))}" maxlength="20000" rows="4">\n${esc(item.script || '')}</textarea></label>
+        <label>Вставки (B-roll)<textarea data-field="broll" maxlength="4000" rows="2">${esc(item.broll || '')}</textarea></label>
+        <label>Стиль<input data-field="style" maxlength="1000" value="${esc(item.style || '')}"></label>
+        <label>Реквизит<textarea data-field="props" maxlength="2000" rows="2">${esc(item.props || '')}</textarea></label>
+        <label>Кто снимает<input data-field="filmingBy" maxlength="200" value="${esc(item.filmingBy || '')}"></label>
+        <label>Статус подготовки<select data-field="productionStatus">${options([{id:'planned',label:'Запланировано'},{id:'shot',label:'Отснято'},{id:'editing',label:'В монтаже'},{id:'draft',label:'Черновик'}],item.productionStatus || 'planned')}</select></label>
         ${variantsMarkup(item, data, index)}
         <div class="mentor-day-order">
           <button type="button" class="plain-button" data-move="up" aria-label="Выше в плане">↑ Выше</button>
@@ -667,6 +674,9 @@
         </div>` : '<p class="mentor-note">Сначала сохраните материал, затем можно оставить предложение по нему.</p>'}
         <button class="plain-button" type="button" data-remove>Убрать материал</button>
       </div>` : `${variantsMarkup(item, data, index)}<dl class="mentor-brief-view"><div><dt>Задача материала</dt><dd>${esc(vocabulary.roles.find((role) => role.id === item.role)?.label || item.role)}</dd></div>
+        ${item.script ? `<div><dt>Сценарий</dt><dd class="mentor-reel-script">${esc(item.script)}</dd></div>` : ''}
+        ${item.filmingBy ? `<div><dt>Кто снимает</dt><dd>${esc(item.filmingBy)}</dd></div>` : ''}
+        ${item.productionStatus ? `<div><dt>Статус подготовки</dt><dd>${esc({planned:'Запланировано',shot:'Отснято',editing:'В монтаже',draft:'Черновик'}[item.productionStatus] || item.productionStatus)}</dd></div>` : ''}
         ${item.hook ? `<div><dt>Зацепка</dt><dd>${esc(item.hook)}</dd></div>` : ''}
         <div><dt>Что уже есть</dt><dd>${esc(assets.find((asset) => asset.id === item.assetId)?.label || 'Не указано')}</dd></div>
         ${item.mentorNote ? `<div><dt>Задание</dt><dd>${esc(item.mentorNote)}</dd></div>` : ''}</dl>`}</details></article>`;
@@ -742,9 +752,9 @@
       <p class="mentor-note">Модель предложит позиции по брифу. Ничего не сохранится и не уйдёт
         на согласование: предложение нужно подставить в форму и проверить самому.</p>
       <label>Начало<input data-suggest-start type="date"></label>
-      <label>Дней<select data-suggest-days>${Array.from({length: vocabulary.maxDays - vocabulary.minDays + 1},
-  (unused, index) => vocabulary.minDays + index).map((value) =>
-  `<option value="${value}"${value === vocabulary.minDays ? ' selected' : ''}>${value}</option>`).join('')}</select></label>
+      <label>Дней<select data-suggest-days>${Array.from({length: 8},
+  (unused, index) => 7 + index).map((value) =>
+  `<option value="${value}"${value === 7 ? ' selected' : ''}>${value}</option>`).join('')}</select></label>
       <button class="plain-button" type="button" data-suggest-run>Предложить план</button>
       <span data-suggest-state role="status"></span>
       <div data-suggest-result></div>
@@ -963,8 +973,12 @@
         ${journeyMarkup(data)}${propertyExampleMarkup(ctx)}</details>`;
   }
 
+  const scriptValue = field => {
+    const source=JSON.parse(field.dataset.scriptSource || '""');
+    return source.replace(/\r\n?/g,'\n')===field.value ? source : field.value;
+  };
   const rowValues = (row) => Object.fromEntries([...row.querySelectorAll('[data-field]')]
-    .map((field) => [field.dataset.field, field.value.trim()]));
+    .map((field) => [field.dataset.field, field.dataset.field === 'script' ? scriptValue(field) : field.value.trim()]));
   // Полностью пустую строку, которую добавили и бросили, убираем до проверки полей:
   // иначе обязательное поле пустой строки не даст сохранить весь бриф.
   const pruneEmptyRows = (form) => form.querySelectorAll('[data-rows="facts"] [data-row],[data-rows="assets"] [data-row]')
@@ -1000,9 +1014,12 @@
   const collectDays = (form) => [...form.querySelectorAll('[data-rows="days"] [data-row]')]
     .sort((a, b) => a.querySelector('[data-field="date"]').value.localeCompare(b.querySelector('[data-field="date"]').value)
       || Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder))
-    .map((row) => ({...rowValues(row), ideaId: row.dataset.ideaId || '', variants: rowVariants(row)}))
+    .map((row) => ({...rowValues(row), ideaId: row.dataset.ideaId || '', variants: rowVariants(row),reelFields:row.dataset.reelFields || ''}))
     .map((row) => ({date: row.date, platform: row.platform, format: row.format, role: row.role,
       topic: row.topic, hook: row.hook, assetId: row.assetId, mentorNote: row.mentorNote,
+      ...Object.fromEntries(Object.entries({script:'',filmingBy:'',productionStatus:'planned',broll:'',style:'',props:''})
+        .filter(([key,fallback])=>row.reelFields.split(',').includes(key)||(row[key] ?? fallback)!==fallback)
+        .map(([key,fallback])=>[key,row[key] ?? fallback])),
       // Пустой ideaId не передаётся: сервер выдаёт его сам при первом сохранении идеи.
       ...(row.ideaId ? {ideaId: row.ideaId} : {}),
       ...(Object.keys(row.variants).length ? {variants: row.variants} : {})}));
@@ -1510,6 +1527,18 @@
       });
     }
     node.querySelectorAll('[data-move]').forEach(wireMove);
+    sb.reelPlanImport?.install({node,data,ctx,code,form:planForm,collectDays,isCurrent,appendDays(items) {
+      const body = planForm.querySelector('[data-rows-body]');
+      for (const item of items) {
+        body.insertAdjacentHTML('beforeend',dayRow(item,data));
+        const added = body.lastElementChild;
+        added.querySelector('[data-remove]').onclick = () => {added.remove();applyPlanView();};
+        added.querySelectorAll('[data-variants]').forEach(wireVariants);
+        added.querySelectorAll('[data-move]').forEach(wireMove);
+        syncDayPreview(added);
+      }
+      resetFilters(); planForm.dispatchEvent(new Event('input',{bubbles:true}));
+    }});
     node.querySelector('#mentor-plan-form')?.addEventListener('submit', (event) => {
       event.preventDefault();
       const form = event.currentTarget;

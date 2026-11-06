@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script src="/cabinet/view-as.js?v=20261105-1"></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Редактор прайса ALVI — кабинет Synapse</title>
@@ -440,6 +441,9 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   const statusEl = $('#ed-status');
   const subEl = $('#ed-sub');
   const saveBtn = $('#ed-save');
+  function passwordRequired(response, body) { if (response.status !== 403 || !body?.details?.mustChangePassword) return;
+    if (!$('#ed-password-change')) statusEl.after(Object.assign(document.createElement('a'), { id: 'ed-password-change', href: '/cabinet/people.html', target: '_blank', rel: 'noopener', textContent: 'Нужно сменить пароль' }));
+    setStatus('Нужно сменить пароль', 'error'); throw new Error('Нужно сменить пароль'); }
 
   function setStatus(text, kind) {
     statusEl.textContent = text;
@@ -648,6 +652,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
       }, true);
       const r = await fetch(ASSETS, { method: 'POST', headers, credentials: 'same-origin', body: prepared });
       const j = await r.json().catch(() => ({}));
+      passwordRequired(r, j);
       if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
       // The shared Avokado price uploads to /content/avokado/assets, while
       // avokado3's /api/assets belongs to its separate site document.
@@ -657,7 +662,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   }
   document.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; uploadPhoto(t.dataset.photoUpload, f); t.value = ''; }
+    if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; void uploadPhoto(t.dataset.photoUpload, f).then(() => { if (!$('#ed-password-change')) t.value = ''; }); }
   });
 
   function newId(cat) {
@@ -818,6 +823,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
     const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null;
     try { body = await r.json(); } catch (e) {}
+    passwordRequired(r, body);
     if (!r.ok) {
       const msg = body?.error || `HTTP ${r.status}`;
       const details = Array.isArray(body?.details) ? '\n— ' + body.details.join('\n— ') : '';
@@ -833,6 +839,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
     }
     if (w.status !== 401) {
       const body = await w.json().catch(() => ({}));
+      passwordRequired(w, body);
       throw new Error(body.error || `HTTP ${w.status}`);
     }
     getKey(false);

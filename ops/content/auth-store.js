@@ -1,6 +1,7 @@
 'use strict';
 
-const { isPasswordHash } = require('./passwords');
+const { isPasswordHash, hashPassword, verifyPassword } = require('./passwords');
+const crypto = require('node:crypto');
 
 const COMPANIES = Object.freeze({
   'synapse-business': { name: 'Synapse Бизнес', contentSiteId: null },
@@ -59,6 +60,7 @@ function transaction(db, callback) {
 }
 
 function createAuthStore(db, authUsers = '') {
+  require('./auth-password-migration').migratePasswordState(db);
   db.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS auth_users (
@@ -68,6 +70,8 @@ function createAuthStore(db, authUsers = '') {
       role TEXT NOT NULL CHECK (role IN ('owner','editor')),
       password_hash TEXT NOT NULL,
       session_version INTEGER NOT NULL DEFAULT 1,
+      must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1)),
+      temp_password_expires_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -145,6 +149,8 @@ function createAuthStore(db, authUsers = '') {
       role: row.role,
       passwordHash: row.password_hash,
       sessionVersion: row.session_version,
+      mustChangePassword: row.must_change_password === 1,
+      tempPasswordExpiresAt: row.temp_password_expires_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       companyCodes,
@@ -238,6 +244,31 @@ function createAuthStore(db, authUsers = '') {
         if (String(error.message).includes('UNIQUE')) fail(409, 'Этот login уже занят');
         throw error;
       }
+    },
+    issueTemporary(actorId, id) {
+      const current = decorate(getUser(id));
+      if (getUser(actorId)?.role !== 'owner' || !current || current.role !== 'editor') fail(403, 'Временный пароль выдаёт владелец редактору');
+      const temporaryPassword = crypto.randomBytes(18).toString('base64url');
+      const expiresAt = new Date(Date.now() + 72 * 3600000).toISOString();
+      return transaction(db, () => {
+        db.prepare(`UPDATE auth_users SET password_hash=?,must_change_password=1,temp_password_expires_at=?,
+          session_version=session_version+1,updated_at=? WHERE id=?`).run(hashPassword(temporaryPassword), expiresAt, now(), id);
+        audit(actorId, id, 'TEMP_PASSWORD_ISSUED');
+        return { temporaryPassword, expiresAt };
+      });
+    },
+    setOwnPassword(id, sessionVersion, password) {
+      return transaction(db, () => {
+        const current = decorate(getUser(id));
+        if (!current || current.sessionVersion !== sessionVersion) fail(401, 'Сессия изменилась. Войдите заново');
+        if (!current.mustChangePassword) fail(409, 'Личный пароль уже установлен');
+        if (!(Date.parse(current.tempPasswordExpiresAt) > Date.now())) fail(401, 'Срок временного пароля истёк');
+        if (verifyPassword(password, current.passwordHash)) fail(400, 'Придумайте пароль, отличный от временного');
+        db.prepare(`UPDATE auth_users SET password_hash=?,must_change_password=0,temp_password_expires_at=NULL,
+          session_version=session_version+1,updated_at=? WHERE id=?`).run(hashPassword(password, 10), now(), id);
+        audit(id, id, 'PASSWORD_SET_BY_USER');
+        return decorate(getUser(id));
+      });
     },
     updatePassword(actorId, id, passwordHash) {
       const current = decorate(getUser(id));

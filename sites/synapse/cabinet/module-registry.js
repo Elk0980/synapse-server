@@ -34,8 +34,8 @@
       });
       return `/content/${path}?${query}`;
     };
-    const write = (method) => (path, body, params) => shell.apiJson(url(path, params), {
-      method, signal, headers: { 'X-CSRF-Token': currentUser()?.csrfToken || '' },
+    const write = (method) => (path, body, params, options = {}) => shell.apiJson(url(path, params), {
+      method, signal, headers: { 'X-CSRF-Token': Object.hasOwn(options, 'csrfToken') ? options.csrfToken : currentUser()?.csrfToken || '' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     // Сырые байты (загрузка частями): Response как есть, CSRF добавляется для записи, cookie same-origin.
@@ -69,6 +69,7 @@
       moduleId, companyCode, companyName: company?.name || '',
       user: Object.freeze({ id: user?.userId ?? null, login: user?.login || '', name: user?.displayName || user?.login || '', role: user?.role || '' }),
       permissions: Object.freeze([...(user?.permissions || [])]),
+      viewAs: user?.viewAs || null,
       can, signal,
       get csrfToken() { return currentUser()?.csrfToken || ''; },
       route: Object.freeze({ path: route?.path || '', params: new URLSearchParams(route?.query || '') }),

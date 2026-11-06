@@ -2,6 +2,7 @@
 
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const stages=['code','connected','verified','accepted'];
+const {assigneeMatches}=require('./people-assignee');
 function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}) {
   function access(request,code,permission) {
     const actor=identity(request);
@@ -18,7 +19,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     const seen=new Set();
     while(row&&!seen.has(row.id)&&String(row.company_code).toLowerCase()===code) {
       seen.add(row.id);
-      if(row.assignee_name)return row.assignee_name===`person:${actor.userId}`;
+      if(row.assignee_name)return assigneeMatches(row.assignee_name,actor);
       row=map.get(row.parent_task_id);
     }
     return false;
@@ -30,20 +31,37 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     return {...Object.fromEntries(fields.map(key=>[key,row[key]])),subtask_count:children.total,subtask_done:children.done,
       coordination:{revision:stored?.revision||0,milestones:Object.fromEntries(stages.map(key=>[key,data.milestones?.[key]||{state:'pending'}]))}};
   }
+  const board=require('./people-board').createPeopleBoard({db,view});
   const integer=(value,fallback,max)=>{const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<0||n>max)fail(400,'Некорректная страница');return n;};
   return async function handle(request,response,url,cors={}) {
     if(!url.pathname.startsWith('/internal/people/'))return false;
     const values=url.searchParams.getAll('companyCode'),code=values[0];
-    if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset'].includes(key)))fail(400,'Укажите один проект');
+    if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset',...(url.pathname.endsWith('/ownerDecisionEvents')?['taskId']:[])].includes(key)))fail(400,'Укажите один проект');
     const action=url.pathname.slice('/internal/people/'.length),method=request.method;
     const plan=action==='mediaMentor'||action==='planVariantsDecision';
-    const actor=access(request,code,plan?'content-plan.approve':['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
+    const write=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'].includes(action);
+    const actor=access(request,code,plan?'content-plan.approve':write?'tasks.self.edit':'tasks.self.view');
     let result;
-    if(action==='teamChatTask'&&method==='POST') {
+    if(action==='teamChatContext'&&method==='GET') {
+      const all=projectRows(code),map=new Map(all.map(row=>[row.id,row]));
+      const snapshot=actor.role==='owner'||actor.permissions.has('content-plan.approve')?mentor.get(code):null;
+      if(snapshot&&snapshot.companyCode!==code)fail(502,'Источник другого проекта');
+      result={companyCode:code,tasks:all.filter(row=>visible(row,map,actor,code)).map(row=>({id:row.id,title:row.title,status:row.status,due_date:row.due_date})),
+        plan:(snapshot?.plan?.days||[]).map(day=>({date:day.date,topic:day.topic,scripts:Object.values(day.variants||{}).map(v=>v.text||'')}))};
+    } else if(action==='ownerDecisionEvents'&&method==='GET') {
+      if(actor.role!=='owner')fail(403,'Только владелец');
+      result=require('./owner-decision-events').listOwnerDecisionEvents(db,code,{offset:integer(url.searchParams.get('offset')??undefined,0,1e9),taskId:url.searchParams.has('taskId')?integer(url.searchParams.get('taskId'),0,1e9):undefined});
+    } else if(action==='teamChatTask'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
       result=require('./team-chat-task').createTeamChatTask(db,code,fresh,body);
-    } else if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
+    } else if(['hughTask','myBoardAction','taskChatComment'].includes(action)&&method==='POST') {
+      const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
+      if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
+      result=action==='hughTask'?require('./team-chat-task').createTeamChatTask(db,code,fresh,body,'hugh'):
+        action==='myBoardAction'?board.action(code,fresh,body):board.comment(code,fresh,body);
+    } else if(action==='myBoard'&&method==='GET')result=board.board(code,actor);
+    else if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
     else if(action==='planVariantsDecision'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'content-plan.approve');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
@@ -52,7 +70,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
       result=mentor.decideVariants(code,body,{userId:fresh.userId,userName:fresh.userName});
     } else if(['tasks_list','task_get','task_update'].includes(action)&&method==='POST'||action==='taskRecords'&&method==='GET') {
       const body=method==='POST'?await readJson(request):{};
-      const fresh=access(request,code,['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
+      const fresh=access(request,code,write?'tasks.self.edit':'tasks.self.view');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
       const allowed=action==='tasks_list'?['project','limit','offset']:action==='task_get'?['task_id','subtasks_limit','subtasks_offset','comments_limit','comments_offset']:action==='task_update'?['task_id','status','revision']:[];
       if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'Переданы лишние параметры');

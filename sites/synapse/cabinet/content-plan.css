@@ -1,0 +1,96 @@
+/* №98 Б «Контент → Контент-план». 390 px — одна колонка без горизонтальной прокрутки. */
+.cp { display:grid; gap:14px; min-width:0; max-width:1200px; }
+.cp * { box-sizing:border-box; min-width:0; }
+.cp-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:10px; }
+.cp-head h2 { margin:0; }
+.cp-stage { margin:4px 0 0; color:var(--muted,#b9afa7); }
+.cp-stage[data-stage="smm"] { color:var(--green,#79dcb6); font-weight:600; }
+.cp-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.cp button, .cp .plain-button { min-height:44px; max-width:100%; white-space:normal; }
+.cp-card { border:1px solid var(--line,rgba(244,240,235,.12)); border-radius:12px; padding:12px 14px; background:var(--surface,#12100f); }
+.cp-card > summary { cursor:pointer; font-weight:600; min-height:32px; }
+.cp-card h3 { margin:0 0 8px; font-size:1rem; }
+.cp-q-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:10px; margin-top:10px; }
+.cp-q-form label, .cp-gen label, .cp-edit label { display:grid; gap:4px; }
+.cp textarea, .cp input[type="date"], .cp select { width:100%; max-width:100%; font:inherit; }
+.cp fieldset { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px 14px; border:1px solid var(--line,#333); border-radius:10px; }
+.cp-check { display:inline-flex !important; grid-auto-flow:column; align-items:center; gap:8px; min-height:32px; }
+.cp-check input { width:20px; height:20px; }
+/* №141: «Начало» и «Дней» — ровная сетка: подписи в одной строке, поля одной высоты, кнопка — отдельной строкой.
+   Поле даты на iOS без appearance:none держит собственную ширину и высоту и наезжает на соседнее. */
+.cp-gen { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; gap:10px; margin-top:10px; }
+.cp-gen label { grid-template-rows:auto 44px; align-content:end; }
+.cp-gen label > span { line-height:1.3; }
+.cp-gen input[type="date"], .cp-gen select { display:block; width:100%; min-width:0; height:44px; min-height:44px; margin:0;
+  padding:0 10px; line-height:normal; box-sizing:border-box; }
+.cp-gen input[type="date"] { -webkit-appearance:none; appearance:none; text-align:left; }
+.cp-gen input[type="date"]::-webkit-date-and-time-value { text-align:left; margin:0; }
+.cp-gen > button { grid-column:1/-1; justify-self:start; }
+.cp-plan { display:grid; gap:10px; min-width:0; }
+.cp-note { color:var(--muted,#b9afa7); margin:6px 0; font-size:.92rem; overflow-wrap:anywhere; }
+.cp-warn { color:#ffd58a; margin:6px 0; }
+.cp-error { color:var(--red,#ff9c9c); }
+.cp-approvers { list-style:none; padding:0; margin:0; display:grid; gap:6px; }
+.cp-approvers li { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; }
+.cp-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.cp-row { border:1px solid var(--line,#333); border-radius:12px; background:var(--surface,#12100f); overflow:hidden; }
+.cp-line { width:100%; display:grid; grid-template-columns:52px 96px minmax(90px,160px) 1fr auto; gap:10px; align-items:center;
+  text-align:left; padding:10px 12px; background:none; border:0; color:inherit; font:inherit; cursor:pointer; }
+.cp-line:focus-visible { outline:2px solid var(--accent,#9fd4ff); outline-offset:-2px; }
+.cp-n { color:var(--muted,#b9afa7); }
+.cp-topic { font-weight:600; overflow-wrap:anywhere; }
+.cp-st { font-size:.88rem; padding:2px 8px; border-radius:999px; border:1px solid var(--line,#333); justify-self:end; }
+.cp-st[data-status="approved"] { color:var(--green,#79dcb6); border-color:currentColor; }
+.cp-st[data-status="empty"], .cp-st[data-status="rejected"] { color:#ffd58a; border-color:currentColor; }
+.cp-full { padding:0 12px 12px; border-top:1px solid var(--line,#333); }
+.cp-full dl { display:grid; gap:10px; margin:12px 0; }
+.cp-full dt { color:var(--muted,#b9afa7); font-size:.88rem; }
+.cp-full dd { margin:2px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.cp-script { width:100%; border-collapse:collapse; }
+.cp-script th { text-align:left; vertical-align:top; padding:4px 10px 4px 0; width:28%; color:var(--accent,#9fd4ff); font-weight:600; }
+.cp-script td { padding:4px 0; overflow-wrap:anywhere; }
+.cp-edit form { display:grid; gap:8px; margin-top:8px; }
+.cp-suggest { padding-left:20px; }
+.cp-small { min-height:32px !important; padding:2px 10px; margin-left:6px; }
+.cp-views { display:flex; flex-wrap:wrap; gap:8px; }
+.cp-views [aria-pressed="true"] { border-color:var(--accent,#9fd4ff); color:var(--accent,#9fd4ff); }
+/* Полный план как таблица: прокручивается только сама таблица, страница — нет. */
+.cp-sheet-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--line,#333); border-radius:12px; }
+.cp-sheet { border-collapse:collapse; min-width:1100px; width:100%; font-size:.9rem; }
+.cp-sheet > thead > tr > th, .cp-sheet > tbody > tr > td { border-bottom:1px solid var(--line,#333); padding:8px; text-align:left; vertical-align:top; overflow-wrap:break-word; }
+.cp-sheet > tbody > tr > td:nth-child(-n+3) { white-space:nowrap; }
+.cp-sheet td[data-label="Тема"] { min-width:150px; }
+.cp-sheet thead th { position:sticky; top:0; background:var(--surface,#12100f); color:var(--muted,#b9afa7); font-weight:600; }
+.cp-sheet td[data-label="Сценарий по ролям"] { min-width:280px; }
+.cp-sheet .cp-script th { width:auto; white-space:nowrap; }
+.cp-sheet .cp-script td { overflow-wrap:break-word; }
+.cp-link { background:none; border:0; color:var(--accent,#9fd4ff); font:inherit; cursor:pointer; padding:0; min-height:32px !important; text-decoration:underline; }
+@media (min-width: 641px) {
+  .cp-gen { grid-template-columns:minmax(160px,220px) minmax(96px,140px) auto; justify-content:start; }
+  .cp-gen > button { grid-column:auto; height:44px; min-height:44px; padding-block:0; }
+}
+@media (max-width: 640px) {
+  /* №143: площадки не делят колонку с номером — иначе колонка «auto» растягивается до их ширины,
+     дата переносится и обрезается, а статус налезает на площадки. Статус — отдельной строкой. */
+  .cp-line { grid-template-columns:max-content minmax(0,1fr); grid-template-areas:"n date" "topic topic" "pl pl" "st st"; gap:4px 10px; align-items:start; }
+  .cp-n { grid-area:n; } .cp-date { grid-area:date; white-space:nowrap; } .cp-topic { grid-area:topic; }
+  .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; justify-self:start; max-width:100%; white-space:normal; }
+  .cp-actions { width:100%; } .cp-actions button { flex:1 1 140px; }
+  .cp-script th { width:34%; }
+  .cp-sheet-wrap { overflow:visible; border:0; }
+  .cp-sheet { min-width:0; display:block; }
+  .cp-sheet thead { display:none; }
+  .cp-sheet > tbody, .cp-sheet > tbody > tr, .cp-sheet > tbody > tr > td { display:block; width:100%; white-space:normal; }
+  .cp-sheet > tbody > tr { border:1px solid var(--line,#333); border-radius:12px; margin-bottom:8px; padding:6px 10px; background:var(--surface,#12100f); }
+  .cp-sheet > tbody > tr > td { border:0; padding:4px 0; }
+  .cp-sheet > tbody > tr > td:empty { display:none; }
+  .cp-sheet > tbody > tr > td::before { content:attr(data-label); display:block; color:var(--muted,#b9afa7); font-size:.8rem; }
+  .cp-sheet td[data-label="Тема"], .cp-sheet td[data-label="Сценарий по ролям"] { min-width:0; }
+  .cp-sheet .cp-script th { white-space:normal; width:34%; }
+}
+
+/* №181: вкладки и сортировка общего списка. */
+.cp-tabs{align-items:center;border-bottom:1px solid var(--line);gap:4px;flex-wrap:nowrap}.cp-tabs>[role=tablist]{display:flex;flex-wrap:wrap;gap:2px;flex:1;min-width:0}.cp-tabs button{border:0;border-radius:8px 8px 0 0;padding:8px 10px;color:var(--muted);background:transparent;word-break:normal;hyphens:none;overflow-wrap:normal}.cp-tabs [aria-selected=true]{color:var(--text);background:var(--surface-soft);box-shadow:inset 0 -3px var(--accent)}.cp-sheet-link{display:grid;place-items:center;min-width:44px;min-height:44px;color:var(--accent)}.cp-list-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.cp-list-head h3{margin:0}.cp-sort{position:relative}.cp-sort [data-cp-sort-toggle]{font-size:24px;min-width:44px}.cp-sort [role=group]{position:absolute;right:0;top:100%;z-index:2;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 12px #0003;width:185px}.cp-sort [hidden]{display:none}.cp-sort [data-cp-sort]{display:block;width:100%;text-align:left;word-break:normal;hyphens:none}.cp-tabs button:focus-visible,.cp-sheet-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:430px){.cp-tabs button{padding:7px 6px;font-size:13px}}
+
+.cp-sort button{color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px}

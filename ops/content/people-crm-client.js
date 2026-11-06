@@ -1,19 +1,28 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
-  const actions=new Set(['tasks_list','task_get','task_update','teamChatTask','mediaMentor','taskRecords','planVariantsDecision']);
+const {personAliases}=require('./people-aliases');
+function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch,authStore=null}) {
+  const actions=new Set(['ownerDecisionEvents','tasks_list','task_get','task_update','teamChatTask','teamChatContext','mediaMentor','taskRecords','planVariantsDecision',
+    'hughTask','myBoard','myBoardAction','taskChatComment']);
+  const writes=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'];
   return async function call(action,args,user,companyCode) {
     if(!actions.has(action)||!apiKey)fail(503,'Источник задач не настроен');
     const permission=['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':
-      ['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view';
+      writes.includes(action)?'tasks.self.edit':'tasks.self.view';
     if(!user||!['owner','editor'].includes(user.role)||!Number.isSafeInteger(user.id)||user.id<1||
       typeof companyCode!=='string'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(companyCode)||
       !user.companyCodes?.includes(companyCode)||user.role!=='owner'&&!user.permissions?.includes(permission))fail(403,'Недостаточно прав в выбранной компании');
     // Реальная роль и одна нужная операция; CRM повторно проверяет эти права,
     // компанию и назначение. Человек никогда не представляется владельцем.
-    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions:[permission],companyCodes:[companyCode]};
-    const readOnly=action==='mediaMentor'||action==='taskRecords';
+    const permissions=[permission];
+    if(action==='teamChatContext'&&user.permissions?.includes('content-plan.approve'))permissions.push('content-plan.approve');
+    // Однозначные в компании имена человека: исполнитель на доске часто записан именем.
+    const userAliases=authStore?personAliases(authStore.list(),user,companyCode):[];
+    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode],
+      ...(userAliases.length?{userAliases}:{})};
+    const readOnly=['ownerDecisionEvents','mediaMentor','taskRecords','teamChatContext','myBoard'].includes(action);
     const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
+      (action==='ownerDecisionEvents'?`&offset=${Number(args.offset)||0}${args.taskId?`&taskId=${Number(args.taskId)}`:''}`:'')+
       (action==='taskRecords'?`&offset=${Number(args.offset)||0}`:'');
     let response;
     try {response=await fetchImpl(`${crmUrl}${route}`,{method:readOnly?'GET':'POST',

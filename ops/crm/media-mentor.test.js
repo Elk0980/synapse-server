@@ -203,7 +203,7 @@ test('строгая проверка брифа и состава плана',t
 
   f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
   const base={planRevision:0,briefRevision:1};
-  for(const days of [daysFor(6),daysFor(15),[],
+  for(const days of [daysFor(32),[],
     Array.from({length:9},(_,index)=>dayAt('2026-09-21',index%3)),
     [...daysFor(7),dayAt('2026-09-21',0),dayAt('2026-09-21',0),dayAt('2026-09-21',0)],
     daysFor(7).map(day=>({...day,platform:'instagram'})),

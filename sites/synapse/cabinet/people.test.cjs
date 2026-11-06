@@ -9,8 +9,8 @@ const sw=fs.readFileSync(path.join(__dirname,'people-sw.js'),'utf8');
 const flush=async()=>{for(let i=0;i<8;i++)await new Promise(setImmediate);};
 const response=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
 const task=(extra={})=>({id:35,title:'Контент проекта',description:'ЦКП: 7 публикаций\nОписание',company_code:'alvi',status:'in_progress',subtask_count:4,subtask_done:2,canEdit:true,coordination:{revision:3,milestones:{}},...extra});
-function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],contextStatus=200}={}) {
-  const dom=new JSDOM(html,{url:'https://synapse.synapsebusiness.ru/cabinet/people.html',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,calls=[];
+function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],contextStatus=200,url='https://synapse.synapsebusiness.ru/cabinet/people.html'}={}) {
+  const dom=new JSDOM(html,{url,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,calls=[];
   t.after(()=>w.close());
   w.fetch=async(route,options={})=>{
     calls.push({route,options});const parsed=new URL(route,w.location.href);
@@ -24,7 +24,7 @@ function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],cont
     if(parsed.pathname==='/content/people/friday-rule')return response({rule:{enabled:false,userId:7,timezone:'Asia/Irkutsk',metric:'pendingIdeas',weekStart:'2026-11-09',morningHour:9,eveningHour:18}});
     return response({});
   };
-  setup?.(w);w.eval(script);return {w,dom,calls,byId:id=>w.document.getElementById(id)};
+  setup?.(w);w.eval(fs.readFileSync(path.join(__dirname,'permission-help.js'),'utf8'));w.eval(script);return {w,dom,calls,byId:id=>w.document.getElementById(id)};
 }
 test('обычный вход показывает назначенные задачи и не запускает подписки или отправки',async t=>{
   const f=fixture(t);await flush();
@@ -127,11 +127,52 @@ test('401 открывает вход, пароль при ошибке сохр
   assert.equal(form.elements.password.value,'private-input');assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
 });
 test('owner создаёт human_executor только по явной форме, без отправки приглашения',async t=>{
-  const f=fixture(t,{owner:true});await flush();assert.equal(f.byId('tab-owner').hidden,false);
-  const form=f.byId('member-create-form');form.elements.displayName.value='Новый исполнитель';form.elements.login.value='worker_new';form.elements.password.value='long-enough-password';
+  const f=fixture(t,{owner:true,handler:async(route,options)=>route==='/content/people/members'&&options.method==='POST'?response({member:{id:8},temporaryPassword:'one-time-secret',expiresAt:'2026-11-07T12:00:00Z'}):undefined});await flush();assert.equal(f.byId('tab-owner').hidden,false);
+  const form=f.byId('member-create-form');form.elements.displayName.value='Новый исполнитель';form.elements.login.value='worker_new';assert.equal(form.elements.password,undefined);
   form.dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();const call=f.calls.find(call=>call.options.method==='POST');
-  assert.equal(call.route,'/content/people/members');assert.deepEqual(JSON.parse(call.options.body),{companyCode:'alvi',displayName:'Новый исполнитель',login:'worker_new',password:'long-enough-password',staffRole:'human_executor'});
-  assert.equal(form.elements.password.value,'');assert.equal(f.calls.some(call=>/invite|send/.test(call.route)),false);
+  assert.equal(call.route,'/content/people/members');assert.deepEqual(JSON.parse(call.options.body),{companyCode:'alvi',displayName:'Новый исполнитель',login:'worker_new',staffRole:'human_executor'});
+  assert.equal(f.byId('temporary-password').querySelectorAll('output').length,1);assert.match(f.byId('temporary-password').textContent,/one-time-secret/);assert.match(f.byId('temporary-password').textContent,/Действует до/);
+  f.byId('temporary-password').querySelector('button').click();assert.equal(f.byId('temporary-password').textContent,'');
+  assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);assert.equal(f.calls.some(call=>/invite|send/.test(call.route)),false);
+});
+test('новый временный пароль очищается при смене проекта, выходе и уходе со страницы',async t=>{
+  const f=fixture(t,{owner:true,handler:async route=>route.endsWith('/temp-password')?response({temporaryPassword:'reset-secret',expiresAt:'2026-11-07T12:00:00Z'}):undefined});await flush();
+  const reset=()=>[...f.byId('member-list').querySelectorAll('button')].find(button=>button.textContent==='Новый временный пароль').click();
+  reset();await flush();const call=f.calls.find(call=>call.route.endsWith('/temp-password'));
+  assert.deepEqual(JSON.parse(call.options.body),{companyCode:'alvi'});assert.equal(call.options.headers['x-csrf-token'],'csrf-test');assert.match(f.byId('temporary-password').textContent,/reset-secret/);
+  f.byId('company').value='avokado';f.byId('company').dispatchEvent(new f.w.Event('change'));assert.equal(f.byId('temporary-password').textContent,'');await flush();
+  reset();await flush();f.w.dispatchEvent(new f.w.PageTransitionEvent('pagehide'));assert.equal(f.byId('temporary-password').textContent,'');
+  reset();await flush();f.byId('logout').click();await flush();assert.equal(f.byId('temporary-password').textContent,'');assert.equal(f.byId('workspace').hidden,true);
+});
+test('поздний сброс пароля не заменяет результат последней операции',async t=>{
+  let release;const delayed=new Promise(resolve=>{release=resolve;});
+  const f=fixture(t,{owner:true,handler:async(route,options)=>{
+    if(route==='/content/people/members?companyCode=alvi')return response({members:[{id:7,displayName:'Первый',login:'one',staffRole:'human_executor'},{id:8,displayName:'Второй',login:'two',staffRole:'human_executor'},{id:9,displayName:'Администратор',login:'admin',staffRole:'administrator'}]});
+    if(route.endsWith('/7/temp-password'))return delayed;
+    if(route.endsWith('/8/temp-password'))return response({temporaryPassword:'current-secret'});
+  }});await flush();const buttons=[...f.byId('member-list').querySelectorAll('button')].filter(button=>button.textContent==='Новый временный пароль');
+  assert.equal(buttons.length,2);buttons[0].click();buttons[1].click();await flush();release(response({temporaryPassword:'outdated-secret'}));await flush();
+  assert.equal(f.byId('temporary-password').querySelector('output').textContent,'current-secret');assert.equal(f.byId('temporary-password').textContent.includes('outdated-secret'),false);
+});
+const restricted=()=>response({error:'Нужно сменить пароль',details:{mustChangePassword:true,csrfToken:'restricted-csrf'}},403);
+test('первый вход и повторное открытие требуют личный пароль; проверка и смена используют CSRF',async t=>{
+  let changed=false,rejectPassword=false;const f=fixture(t,{handler:async(route,options)=>{
+    if(route==='/content/people/context'&&!changed)return restricted();
+    if(route==='/content/password'){if(rejectPassword)return response({error:'Новый пароль должен отличаться от временного.'},400);changed=true;return response({ok:true});}
+  }});await flush();assert.equal(f.byId('password-panel').hidden,false);assert.equal(f.byId('workspace').hidden,true);assert.equal(f.byId('logout').hidden,false);
+  await f.w.SynapsePeople.initialize();assert.equal(f.byId('password-panel').hidden,false);assert.equal(f.calls.some(call=>call.route.startsWith('/content/people/tasks')),false);
+  const form=f.byId('password-form'),submit=async()=>{form.dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();};
+  form.elements.password.value='short';form.elements.confirmation.value='short';await submit();assert.match(f.byId('password-error').textContent,/10 символов/);
+  form.elements.password.value='personal-password';form.elements.confirmation.value='different-password';await submit();assert.match(f.byId('password-error').textContent,/не совпадают/);assert.equal(f.calls.some(call=>call.route==='/content/password'),false);
+  form.elements.confirmation.value='personal-password';rejectPassword=true;await submit();assert.match(f.byId('password-error').textContent,/отличаться/);assert.equal(form.elements.password.value,'personal-password');
+  rejectPassword=false;await submit();const call=f.calls.find(call=>call.route==='/content/password');assert.equal(call.options.headers['x-csrf-token'],'restricted-csrf');assert.deepEqual(JSON.parse(call.options.body),{password:'personal-password'});
+  assert.equal(f.byId('password-panel').hidden,true);assert.equal(f.byId('workspace').hidden,false);assert.equal(form.elements.password.value,'');assert.equal(form.elements.confirmation.value,'');assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
+});
+test('любой restricted 403 скрывает открытый кабинет, выход обходит операции push и очищает поля',async t=>{
+  let restrictedNow=false,pushLookups=0;const f=fixture(t,{setup:w=>Object.defineProperty(w.navigator,'serviceWorker',{value:{getRegistration:async()=>{pushLookups++;}}}),handler:async route=>restrictedNow&&route.startsWith('/content/people/tasks/')?restricted():undefined});await flush();
+  restrictedNow=true;f.byId('task-list').querySelector('button').click();await flush();assert.equal(f.byId('workspace').hidden,true);assert.equal(f.byId('password-panel').hidden,false);assert.equal(f.byId('task-list').textContent,'');
+  f.byId('password-form').elements.password.value='private-draft';f.byId('password-form').elements.confirmation.value='private-draft';f.byId('logout').click();await flush();
+  assert.equal(pushLookups,0);const call=f.calls.find(call=>call.route==='/content/logout');assert.equal(call.options.headers['x-csrf-token'],'restricted-csrf');assert.equal(f.byId('password-panel').hidden,true);assert.equal(f.byId('login-panel').hidden,false);assert.equal(f.byId('password-form').elements.password.value,'');assert.equal(f.byId('password-form').elements.confirmation.value,'');
 });
 test('push подключается только явной кнопкой, отказ разрешения не создаёт подписку',async t=>{
   let permissions=0,registrations=0;
@@ -153,7 +194,7 @@ function serviceWorker({context,contextStatus=200,data}={}) {
   const handlers={},shown=[],opened=[],calls=[];
   const self={location:{origin:'https://synapse.synapsebusiness.ru'},registration:{showNotification:async(title,options)=>shown.push({title,options})},clients:{matchAll:async()=>[],openWindow:async url=>opened.push(url)},addEventListener:(type,handler)=>{handlers[type]=handler;}};
   vm.runInNewContext(sw,{self,URL,fetch:async(route,options)=>{calls.push({route,options});return response(context,contextStatus);}});
-  return {shown,opened,calls,async push(){let pending;handlers.push({data:{json:()=>data},waitUntil:p=>{pending=p;}});await pending;},async click(){let pending;handlers.notificationclick({notification:{close(){},data:{url:'https://attacker.invalid'}},waitUntil:p=>{pending=p;}});await pending;}};
+  return {shown,opened,calls,async push(){let pending;handlers.push({data:{json:()=>data},waitUntil:p=>{pending=p;}});await pending;},async click(url='https://attacker.invalid'){let pending;handlers.notificationclick({notification:{close(){},data:{url}},waitUntil:p=>{pending=p;}});await pending;}};
 }
 test('SW не показывает личный текст другому пользователю или после выхода',async()=>{
   const data={audienceUserId:7,companyCode:'alvi',title:'Личная задача',body:'Закрытые сведения'};
@@ -168,4 +209,30 @@ test('SW для текущего адресата показывает текс�
 test('manifest устанавливает точку входа людей, worker не перехватывает страницы',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'people.webmanifest'),'utf8'));
   assert.equal(manifest.start_url,'/cabinet/people.html');assert.equal(manifest.scope,'/cabinet/');assert.equal(sw.includes("addEventListener('fetch'"),false);
+});
+test('права участника выводятся по фактическим правам аккаунта, а не по роли',async t=>{
+  const f=fixture(t,{owner:true,handler:async route=>route.startsWith('/content/people/members')?response({members:[
+    {id:7,displayName:'Исполнитель',login:'one',staffRole:'human_executor',permissions:['tasks.self.view']},
+    {id:8,displayName:'Администратор',login:'two',staffRole:'administrator',permissions:['crm.view','crm.edit']},
+    {id:9,displayName:'Без прав',login:'three',staffRole:'human_executor',permissions:[]}]}):undefined});
+  await flush();const rows=[...f.byId('member-list').querySelectorAll('.member-row')];
+  const codes=row=>[...row.querySelectorAll('.permission-code')].map(node=>node.textContent).filter(code=>code!=='content-plan.approve');
+  assert.deepEqual(codes(rows[0]),['tasks.self.view'],'исполнитель без права менять статус не показывает tasks.self.edit');
+  assert.deepEqual(codes(rows[1]),['crm.view','crm.edit'],'администратор показывает свои права');
+  assert.deepEqual(codes(rows[2]),[]);assert.match(rows[2].textContent,/Права не назначены/);
+});
+
+test('push deep link chooses company then opens the task card; bad IDs never open',async t=>{
+ const f=fixture(t,{owner:true,url:'https://synapse.synapsebusiness.ru/cabinet/people.html?company=avokado&task=35'});await flush();
+ assert.equal(f.byId('company').value,'avokado');assert.equal(f.byId('task-overlay').hidden,false);
+ assert.ok(f.calls.some(c=>c.route.includes('/content/people/tasks/35')&&c.route.includes('avokado')));
+ const bad=fixture(t,{url:'https://synapse.synapsebusiness.ru/cabinet/people.html?company=alvi&task=javascript:1'});await flush();assert.equal(bad.byId('task-overlay').hidden,true);
+});
+
+test('SW preserves safe task link for current audience and strips hostile target',async()=>{
+ const safe='/cabinet/people.html?company=alvi&task=106';
+ const f=serviceWorker({context:{user:{id:7},companies:[{id:'alvi'}]},data:{audienceUserId:7,companyCode:'alvi',title:'Решение',body:'Ответ',eventKey:'owner-decision:106:created',url:safe}});
+ await f.push();assert.equal(f.shown[0].options.data.url,safe);assert.equal(f.shown[0].options.tag,'owner-decision:106:created');
+ await f.click(f.shown[0].options.data.url);assert.deepEqual(f.opened,['https://synapse.synapsebusiness.ru'+safe]);
+ await f.click('/cabinet/people.html?company=alvi&task=javascript:1');assert.equal(f.opened.at(-1),'https://synapse.synapsebusiness.ru/cabinet/people.html');
 });

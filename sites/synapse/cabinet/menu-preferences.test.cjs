@@ -55,3 +55,49 @@ test('folding, pinning and expand-all controls preserve independent state',()=>{
   d.querySelector('[data-menu-collapse]').click();assert.ok([...d.querySelectorAll('.subnav')].every(el=>el.hidden));
   dom.window.close();
 });
+// №139: «Ещё» — старые и служебные разделы переносятся, не удаляются; возврат одним переключателем.
+const navOrder=d=>[...d.querySelectorAll('.nav a.nav-link')].map(a=>a.dataset.viewLink||'editor:'+a.dataset.editorLink);
+const pristine=()=>{const d=new JSDOM(fs.readFileSync(require.resolve('../cabinet.html'),'utf8')).window.document;return navOrder(d);};
+test('more: listed sections move into «Ещё», emptied groups disappear, nothing is deleted',()=>{
+  const {dom,w,d}=setup();const more=d.querySelector('#more-menu');
+  assert.equal(w.SbCabinet.MENU_MORE_ITEMS.length,19);
+  const inMore=[...more.querySelectorAll('a.nav-link')].map(a=>a.dataset.viewLink||'editor:'+a.dataset.editorLink);
+  assert.deepEqual(inMore,[...w.SbCabinet.MENU_MORE_ITEMS].filter(id=>pristine().includes(id)));
+  assert.equal(navOrder(d).length,pristine().length);
+  assert.equal(new Set([...d.querySelectorAll('[id]')].map(e=>e.id)).size,d.querySelectorAll('[id]').length);
+  const marketing=d.querySelector('[aria-controls="marketing-menu"]');
+  assert.ok(marketing.classList.contains('nav-empty'));
+  assert.deepEqual([...d.querySelectorAll('#analytics-menu a')].map(a=>a.dataset.viewLink),['analytics-through','ad-platforms']);
+  assert.deepEqual([...d.querySelectorAll('#management-menu a')].map(a=>a.dataset.viewLink),['company-team']);
+  assert.ok(more.contains(d.getElementById('editor-link-notice')));
+  dom.window.close();
+});
+test('more: one switch returns every section to its old place and back',()=>{
+  const {dom,w,d}=setup();
+  d.querySelector('[data-menu-settings]').click();const box=d.querySelector('[data-menu-show-all]');assert.equal(box.checked,false);
+  box.click();
+  assert.equal(d.querySelectorAll('#more-menu a.nav-link').length,0);assert.equal(d.querySelector('#more-category').hidden,true);
+  assert.deepEqual(navOrder(d).filter(id=>id!=='hugh'),pristine().filter(id=>id!=='hugh'));
+  assert.ok(!d.querySelector('.nav-empty'));
+  assert.equal(JSON.parse(w.localStorage.getItem('sb-menu-v1:owner')).showAll,true);
+  assert.equal(d.querySelector('[data-menu-show-all]').checked,true);
+  d.querySelector('[data-menu-show-all]').click();
+  assert.equal(d.querySelectorAll('#more-menu a.nav-link').length,18);
+  assert.equal(d.querySelectorAll('[data-menu-show-all]').length,1);
+  dom.window.close();
+});
+test('more: permissions still hide moved links; active moved link opens «Ещё»; live-only «Формы проектов» moves too',async()=>{
+  const shell=fs.readFileSync(require.resolve('../cabinet.html'),'utf8').replace('<a class="nav-link" id="hugh-link"','<a class="nav-link" id="project-forms-link" href="#project-forms" data-view-link="project-forms" hidden>Формы проектов</a>\n      <a class="nav-link" id="hugh-link"');
+  const dom=new JSDOM(shell,{url:'https://example.test',runScripts:'outside-only'});const w=dom.window,d=w.document;w.matchMedia=()=>({matches:false});
+  w.eval(fs.readFileSync(require.resolve('./menu-preferences.js'),'utf8'));
+  w.SbCabinet.initMenuPreferences({identity:{login:'owner'},setDrawer(){}});
+  const forms=d.getElementById('project-forms-link');assert.equal(forms.parentElement.id,'more-menu');assert.equal(d.querySelectorAll('#more-menu a.nav-link').length,19);
+  [...d.querySelectorAll('#more-menu a.nav-link')].forEach(a=>{a.hidden=true;});
+  await new Promise(r=>w.setTimeout(r,0));assert.equal(d.querySelector('#more-category').hidden,true);
+  const reviews=d.getElementById('reviews-link');reviews.hidden=false;reviews.setAttribute('aria-current','page');
+  await new Promise(r=>w.setTimeout(r,0));
+  assert.equal(d.querySelector('#more-category').hidden,false);assert.equal(d.querySelector('#more-menu').hidden,false);
+  w.localStorage.setItem('sb-menu-v1:owner',JSON.stringify({showAll:true}));w.SbCabinet.initMenuPreferences({identity:{login:'owner'},setDrawer(){}});
+  assert.equal(forms.parentElement.className,'nav');assert.equal(forms.nextElementSibling.id,'hugh-link');
+  dom.window.close();
+});

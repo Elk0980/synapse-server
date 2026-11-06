@@ -4,13 +4,15 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
   return async function handle(request,response,url) {
     if(!/^\/content\/people(?:\/|$)/.test(url.pathname))return false;
     const session=requireSession(request),path=url.pathname.slice('/content/people'.length),method=request.method;
-    const reply=(status,body)=>{sendJson(response,status,body,{'cache-control':'private, no-store'});return true;};
+    const reply=(status,body)=>{fresh(null);sendJson(response,status,body,{'cache-control':'private, no-store'});return true;};
     const company=()=>{const values=url.searchParams.getAll('companyCode');if(values.length!==1||!session.user.companyCodes.includes(values[0]))fail(403,'Выберите доступную компанию');return values[0];};
+    // «Чаты» (№127): участник — исполнитель или аккаунт с доступом к компании; проверка в chat.access.
+    const chatRoute=path==='/team-chat'||path==='/team-chat/rooms';
     const fresh=(code,owner=false)=>{
       const current=requireSession(request);
       if(current.user.id!==session.user.id||current.user.sessionVersion!==session.user.sessionVersion)fail(401,'Сессия изменилась. Войдите заново');
       if(owner){if(current.user.role!=='owner'||!current.user.companyCodes.includes(code))fail(403,'Доступно владельцу');}
-      else if(code)tasks.access(current.user.id,code);
+      else if(code)(chatRoute&&chat?.access?chat.access:tasks.access)(current.user.id,code);
       return current;
     };
     const read=async(code,owner=false)=>{requireCsrf(request,session);const body=await readJson(request);const current=fresh(code,owner);requireCsrf(request,current);return body;};
@@ -22,6 +24,15 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
     }
     const member=/^\/members\/(\d+)$/.exec(path);
     const approval=/^\/members\/(\d+)\/approval$/.exec(path);
+    const reset=/^\/members\/(\d+)\/temp-password$/.exec(path);
+    if(reset&&method==='POST') {
+      if(session.user.role!=='owner')fail(403,'Пароль выдаёт владелец');
+      const body=await read(null);fresh(body.companyCode,true);
+      if(Object.keys(body).join(',')!=='companyCode')fail(400,'Переданы лишние поля');
+      const id=Number(reset[1]);
+      if(!team.list(session.user.id,body.companyCode).some(m=>m.id===id&&m.staffRole==='human_executor'))fail(403,'Выберите исполнителя этой команды');
+      return reply(200,authStore.issueTemporary(session.user.id,id));
+    }
     if(approval&&method==='PUT') {
       if(session.user.role!=='owner')fail(403,'Право назначает владелец');
       const body=await read(null);fresh(body.companyCode,true);
@@ -36,18 +47,22 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
         const body=await read(null,false);code=body.companyCode;fresh(code,true);
         if(path==='/members'&&method==='POST') {
           if(body.staffRole!=='human_executor')fail(400,'Выберите роль исполнителя');
-          return reply(201,{member:team.create(session.user.id,body)});
+          const {temporaryPassword,expiresAt,...member}=team.create(session.user.id,body,true);
+          return reply(201,{member,temporaryPassword,expiresAt});
         }
         if(member&&method==='PUT') {
           if(Object.keys(body).sort().join(',')!=='companyCode,staffRole'||body.staffRole!=='human_executor')fail(400,'Переданы лишние поля');
           return reply(200,{member:team.assignHuman(session.user.id,Number(member[1]),code)});
         }
       }
-      if(path==='/members'&&method==='GET') {code=company();fresh(code,true);return reply(200,{members:team.list(session.user.id,code).map(m=>({...m,canApprovePlan:authStore.getById(m.id)?.permissions.includes('content-plan.approve')===true})),roles:['human_executor']});}
+      if(path==='/members'&&method==='GET') {code=company();fresh(code,true);return reply(200,{members:team.list(session.user.id,code).map(m=>{const permissions=authStore.getById(m.id)?.permissions||[];return {...m,permissions:[...permissions],canApprovePlan:permissions.includes('content-plan.approve')};}),roles:['human_executor']});}
       fail(405,'Метод не поддерживается');
     }
     const code=company();fresh(code);
-    if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before')));
+    if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before'),url.searchParams.get('room')||'common'));
+    if(path==='/team-chat/rooms'&&method==='GET')return reply(200,chat.members(session.user.id,code));
+    if(path==='/my-board'&&method==='GET')return reply(200,await tasks.board(session.user.id,code));
+    if(path==='/my-board/action'&&method==='POST')return reply(200,await tasks.boardAction(session.user.id,code,await read(code)));
     if(path==='/team-chat'&&method==='POST')return reply(200,await chat.send(session.user.id,code,await read(code)));
     if(path==='/plan'&&method==='GET')return reply(200,await plan.get(session.user.id,code));
     if(path==='/plan/decision'&&method==='POST')return reply(200,await plan.decide(session.user.id,code,await read(code)));

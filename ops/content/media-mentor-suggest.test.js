@@ -55,6 +55,29 @@ test('формат и роль вне словаря не принимаются
   assert.equal(out.items.length, 0);
 });
 
+test('№121: на Instagram / Reels, TikTok и Shorts Хью получает формат reel, остальные площадки не трогаются', async () => {
+  // Как на боевом 05.11: площадка только «Instagram / Reels», модель вернула post/reel/story/post/story.
+  const brief = { ...BRIEF, platforms: ['instagram', 'tiktok', 'youtube_shorts', 'vk'] };
+  const formats = ['post', 'reel', 'story', 'post', 'story'];
+  const rows = formats.map((format, i) => row({ date: `2026-11-${String(6 + i).padStart(2, '0')}`, platform: 'instagram', format, topic: `Тема ${i + 1}` }));
+  rows.push(row({ date: '2026-11-06', platform: 'tiktok', format: 'carousel', topic: 'ТТ' }),
+    row({ date: '2026-11-07', platform: 'youtube_shorts', format: 'story', topic: 'YT' }),
+    row({ date: '2026-11-08', platform: 'vk', format: 'post', topic: 'ВК пост' }),
+    row({ date: '2026-11-09', platform: 'vk', format: 'story', topic: 'ВК сторис' }));
+  const prompts = [];
+  const s = createMediaMentorSuggest({ ask: async (payload) => { prompts.push(JSON.parse(payload).system); return { text: JSON.stringify(rows) }; } });
+  const out = await s.suggest(brief, { startDate: '2026-11-06', days: 7 });
+  assert.equal(out.status, 'ok');
+  const byTopic = Object.fromEntries(out.items.map((item) => [item.topic, item.format]));
+  for (let i = 1; i <= 5; i += 1) assert.equal(byTopic[`Тема ${i}`], 'reel', `Instagram / Reels №${i}`);
+  assert.equal(byTopic['ТТ'], 'reel'); assert.equal(byTopic['YT'], 'reel');
+  assert.equal(byTopic['ВК пост'], 'post', 'фото-пост ВК остаётся постом');
+  assert.equal(byTopic['ВК сторис'], 'story');
+  assert.equal(out.adjusted.length, 6, 'каждая замена видна с причиной');
+  assert.ok(out.adjusted.every((line) => /заменён на «reel»/.test(line)));
+  assert.match(prompts[0], /instagram.*tiktok.*youtube_shorts формат только reel/);
+});
+
 test('выдуманный материал стирается, позиция остаётся', async () => {
   const s = createMediaMentorSuggest({ ask: fake(JSON.stringify([row({ assetId: 'a999' })])) });
   const out = await s.suggest(BRIEF, { startDate: '2026-09-21', days: 7 });
@@ -389,4 +412,39 @@ test('маршрут разбора статистики зовёт статис
   await r.handle(req(), {}, link('/content/media-mentor-review'));
   assert.equal(which, 'review');
   assert.equal(briefAsked, false);
+});
+
+test('анкета контент-плана №98 попадает в задание Хью, пустые поля — нет', () => {
+  const s = createMediaMentorSuggest({ ask: fake('[]') });
+  const content = s.buildPrompt({ ...BRIEF, questionnaire: { goals: 'SAMPLE цель', tone: '', rubrics: 'SAMPLE рубрика',
+    frequency: '7 рилсов в неделю', platforms: ['vk'] } }, { startDate: '2026-09-21', days: 7 }).messages[0].content;
+  assert.ok(content.includes('Анкета контент-плана:'));
+  assert.ok(content.includes('Цели контента: SAMPLE цель.') && content.includes('Рубрики: SAMPLE рубрика.'));
+  assert.ok(content.includes('7 рилсов в неделю') && !content.includes('Тон:'));
+  assert.ok(!s.buildPrompt(BRIEF, { startDate: '2026-09-21', days: 7 }).messages[0].content.includes('Анкета'));
+});
+
+test('№136: площадки из тела только сужают бриф сервера; чужую площадку добавить нельзя', async () => {
+  const seen = [];
+  const r = createMediaMentorSuggestRoute(routeDeps({
+    suggester: { ...routeDeps().suggester, suggest: async (brief) => { seen.push(brief.platforms); return { status: 'ok', items: [], dropped: [], notice: 'n' }; } },
+    readBody: async (request) => ({ startDate: '2026-09-21', days: 7, platforms: request.platforms }),
+  }));
+  for (const platforms of [['telegram'], ['telegram', 'instagram'], [], undefined]) await r.handle({ ...req(), platforms }, {}, link());
+  assert.deepEqual(seen, [['telegram'], ['telegram'], [], ['vk', 'telegram']]);
+  assert.deepEqual(BRIEF.platforms, ['vk', 'telegram'], 'бриф не изменён');
+});
+
+test('№136: пустой список площадок — brief_incomplete без обращения к модели', async () => {
+  let asked = false;
+  const s = createMediaMentorSuggest({ ask: async () => { asked = true; return { text: '[]' }; } });
+  let sent;
+  const r2 = createMediaMentorSuggestRoute(routeDeps({ suggester: s, sendJson: (_res, _status, body) => { sent = body; }, readBody: async () => ({ startDate: '2026-09-21', days: 7, platforms: [] }) }));
+  await r2.handle(req(), {}, link());
+  assert.equal(sent.status, 'brief_incomplete'); assert.equal(asked, false);
+});
+
+test('№136: площадки не списком — 400', async () => {
+  const r = createMediaMentorSuggestRoute(routeDeps({ readBody: async () => ({ startDate: '2026-09-21', days: 7, platforms: 'vk' }) }));
+  await assert.rejects(() => r.handle(req(), {}, link()), /списком/);
 });

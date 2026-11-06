@@ -127,10 +127,10 @@ function createPeopleNotifications({db, authStore, now = Date.now, enabled = fal
     db.prepare('DELETE FROM people_push_subscriptions WHERE user_id=? AND company_code=? AND endpoint_hash=?').run(userId,companyCode,key);
     return getPreferences(userId,companyCode);
   }
-  function enqueue({userId,companyCode,eventKey,title,body,url = '/people.html'}) {
+  function enqueue({userId,companyCode,eventKey,title,body,url = '/people.html',pushOnly=false}) {
     user(userId,companyCode);
     text(eventKey,300,'Некорректное событие');
-    const payload = JSON.stringify({audienceUserId:userId,companyCode,title:text(title,120,'Некорректный заголовок'),body:text(body,2000,'Некорректный текст'),url:localUrl(url)});
+    const payload = JSON.stringify({audienceUserId:userId,companyCode,eventKey,title:text(title,120,'Некорректный заголовок'),body:text(body,2000,'Некорректный текст'),url:localUrl(url)});
     if (Buffer.byteLength(payload,'utf8') > 3072) fail(400, 'Текст уведомления слишком длинный');
     const preference = prefs(userId,companyCode);
     if (preference?.enabled !== 1) return {queued:0};
@@ -138,7 +138,7 @@ function createPeopleNotifications({db, authStore, now = Date.now, enabled = fal
     if (preference.push === 1) for (const subscription of db.prepare('SELECT id,endpoint_hash FROM people_push_subscriptions WHERE user_id=? AND company_code=?').all(userId,companyCode)) {
       targets.push({channel:'push',key:subscription.endpoint_hash,subscriptionId:subscription.id});
     }
-    if (preference.telegram === 1) targets.push({channel:'telegram',key:'linked-user',subscriptionId:null});
+    if (!pushOnly && preference.telegram === 1) targets.push({channel:'telegram',key:'linked-user',subscriptionId:null});
     let queued = 0;
     // These two failures occurred before any provider call. A fresh scheduler
     // snapshot can safely replace their stale payload without creating another

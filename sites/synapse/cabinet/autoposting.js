@@ -146,6 +146,10 @@ const isVideo = url => /\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(url);
 const mediaPreview = urls => (urls||[]).map(url=>{const safe=safeUrl(url);if(!safe)return "<li>Некорректная ссылка на материал</li>";
   const player=isVideo(safe)?`<video class="autoposting-video" controls preload="metadata" playsinline src="${esc(safe)}"></video>`:cabinet.companyAssets?.imageUrl?.(url)||/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(safe)?`<img class="autoposting-thumbnail" src="${esc(safe)}" alt="Материал публикации" loading="lazy">`:"";
   return `<li>${player}<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></li>`;}).join("");
+/* «Постинг»: готовый рилс в маске каждой выбранной площадки (маски — модуль «Материалы», cabinet.reelMask). */
+const maskPreviews = post => {const video=(post.mediaUrls||[]).map(safeUrl).find(url=>url&&isVideo(url)),mask=cabinet.reelMask;
+  const ids=(post.platformIds||[]).filter(id=>mask?.PLATFORMS.some(item=>item.id===id));if(!video||!ids.length)return "";
+  return `<div class="ap-mask-previews" data-mask-previews>${ids.map(id=>`<figure><div class="mt-screen"><video muted playsinline preload="metadata" src="${esc(video)}#t=0.5"></video>${mask.html(id)}</div><figcaption>${esc(mask.label(id))}</figcaption></figure>`).join("")}</div>`;};
 const isQueueCard = item => Boolean(item?.dayKey||Object.keys(item?.captions||{}).length);
 // Сторис с материалом и без подписи — законный формат (текст на кадре, стикеры ставятся нативно):
 // сторис по плану (формат) или по публикуемому режиму Instagram. Формат плана сам ничего не отправляет.
@@ -236,7 +240,7 @@ function create(container, context) {
   let pendingLink=null,handledLink='',linkEpoch=0,trashPosts=[],deleteArmed="";
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
-  container.innerHTML=`<h2 class="autoposting-sr-only">Контент-план</h2>
+  container.innerHTML=`<h2 class="autoposting-sr-only">Постинг</h2>
     <p id="autoposting-status" role="status" aria-live="polite"></p>
     <section class="card autoposting-calendar-section ap-board-section" aria-label="Доска публикаций">
     <div class="ap-board-nav"><button class="plain-button" id="autoposting-prev-week" type="button" aria-label="Предыдущая неделя">←</button><strong id="autoposting-week-label" class="ap-week-label" aria-live="polite"></strong><button class="plain-button" id="autoposting-next-week" type="button" aria-label="Следующая неделя">→</button>
@@ -417,6 +421,9 @@ function create(container, context) {
       else if(!channelText&&!storyOnly)result.push(`${channel.name||id}: нет ни общего текста, ни подписи площадки.`);
       if(channelText.length>maxText)result.push(`${channel.name||id}: текст до ${maxText} символов${data.mediaUrls.length&&channel.platform==="telegram"?" с изображениями":""}.`);
       if(data.mediaUrls.length>maxMedia)result.push(`${channel.name||id}: материалов не больше ${maxMedia}.`);
+      // «Фото или одно видео» (Telegram через Onlypult): рилс — ровно один видеофайл без фото в довесок.
+      if(channel.caps?.mediaMode==="photos_or_video"&&data.mediaUrls.some(isVideo)&&data.mediaUrls.length!==1)
+        result.push(`${channel.name||id}: видео публикуется одно, без фото и других файлов.`);
     }
     return result;
   };
@@ -1156,7 +1163,7 @@ function create(container, context) {
     get('autoposting-day-strip').innerHTML=days.map(date=>{const total=dayItems(date).length;return `<button type="button" class="plain-button" data-strip-date="${date}" aria-pressed="${selectedDate===date}" aria-label="${dayLabel(date)}: публикаций ${total}"><span>${WEEKDAYS[weekdayOf(date)]}</span><b>${Number(date.slice(8))}</b>${total?`<em>${total}</em>`:''}</button>`;}).join('');
     const weekTotal=days.reduce((sum,date)=>sum+dayItems(date).length,0),weekAll=all.filter(item=>days.includes(item.effectiveDate)).length;
     const undated=items.filter(item=>!item.effectiveDate).sort(byTime);
-    const invite=!all.length&&!calendarPending?`<div class="ap-empty-board"><p><strong>На доске пока пусто.</strong> Заполните вводные в «Настройках модуля», затем нажмите «Составить план» — или «Создать публикацию» вручную.</p><p><a href="#content-factory/settings">Перейти в «Настройки модуля»</a></p></div>`:'';
+    const invite=!all.length&&!calendarPending?`<div class="ap-empty-board"><p><strong>На доске пока пусто.</strong> Здесь появятся готовые рилсы с предпросмотром по площадкам. План составляется в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся из <a href="#content/materials">«Материалов»</a>.</p><p><a href="#content-factory/settings">Перейти в «Настройки модуля»</a></p></div>`:'';
     const filtered=!weekTotal&&weekAll?`<p class="ap-filter-empty">По выбранным фильтрам на этой неделе публикаций нет. <button type="button" class="plain-button" data-filter-reset>Сбросить фильтры</button></p>`:'';
     const board=`<div class="ap-board" style="--ap-days:${days.length}" aria-label="Неделя: ${esc(weekLabel(days))}">${days.map(date=>{const list=dayItems(date);
       return `<section class="ap-day${date===today()?' is-today':''}${selectedDate===date?' is-selected':''}" data-board-day="${date}" aria-labelledby="ap-day-${date}"><h3 class="ap-day-head" id="ap-day-${date}">${esc(dayLabel(date))}${date===today()?' <span class="ap-today">Сегодня</span>':''}<span class="ap-day-count" aria-label="публикаций ${list.length}">${list.length||''}</span></h3>
@@ -1330,8 +1337,8 @@ function create(container, context) {
     // Кабинет уже выбрал компанию запроса, а вкладка ещё не перешла на неё — ждём её загрузки.
     if(!same&&lower(ctx.selectedProjectId)===lower(req.companyCode))return;
     pendingOpen=null;const slot=cabinet.pendingMaterialOpen;if(slot&&slot.companyCode===req.companyCode&&Number(slot.postId)===Number(req.postId))cabinet.pendingMaterialOpen=null;
-    const id=Number(req.postId),source=req.source==='stats'||req.source==='sources'?req.source:'proposal';
-    const FROM={stats:'из статистики',sources:'из «Исходников»'};
+    const id=Number(req.postId),source=['stats','sources','materials'].includes(req.source)?req.source:'proposal';
+    const FROM={stats:'из статистики',sources:'из «Исходников»',materials:'из «Материалов»'};
     if(!same||!Number.isSafeInteger(id)||id<1){if(FROM[source])message(`Материал ${FROM[source]} не открыт: выбрана другая компания.`);return;}
     const version=epoch;busy=true;controls();
     void (async()=>{try{const item=await request('/autoposting/posts/'+id);if(version!==epoch)return;
@@ -1420,7 +1427,7 @@ function create(container, context) {
     if(busy||!post||dirty())return;const issues=problems();reviewed=post.revision;
     get("autoposting-preview-content").innerHTML=`<h4>${esc(post.title)}</h4>${(post.platformIds||[]).includes("youtube_shorts")?`<p class="autoposting-note" data-youtube-title>Публичный заголовок YouTube Shorts: «${esc(post.title)}» · ${esc(String(post.title||"").length)} / 100 · публичный доступ</p>`:""}<pre>${esc(post.text)}</pre><p>${post.scheduledAt?esc(time.toLocal(post.scheduledAt,post.timezone).replace("T"," ")+" · "+post.timezone):"Дата не задана"}</p>
       <p>Площадки: ${post.platformIds.map(id=>esc(channels().find(item=>item.id===id)?.name||platformLabel(id))).join(", ")||"не выбраны"}</p>
-      ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`:post.readiness?.textOnly?"<p>Текстовая публикация в Telegram / ВКонтакте: изображение не требуется.</p>":"<p>Материал не прикреплён.</p>"}
+      ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`+maskPreviews(post):post.readiness?.textOnly?"<p>Текстовая публикация в Telegram / ВКонтакте: изображение не требуется.</p>":"<p>Материал не прикреплён.</p>"}
       ${Object.keys(post?.platformOptions||{}).length?`<div class="autoposting-platform-options-preview"><h4>Как это выйдет на площадках</h4>${Object.entries(post.platformOptions).map(([platform,options])=>`<p><strong>${esc(CAPTIONS.find(item=>item[0]===platform)?.[1]||platform)}</strong>: ${esc(optionWords(platform,options).join("; ")||"без особых настроек")}</p>`).join("")}<p class="autoposting-note">Эти настройки утверждаются вместе с текстом: их правка снимает согласование.</p></div>`:""}${isQueueCard(post)?`<p>Версия ${esc(post.revision)}${post.dayKey?" · день "+esc(post.dayKey):""}${post.origin?" · "+esc(post.origin):""}</p><div class="autoposting-platform-previews">${CAPTIONS.map(([id,label,limit,,source])=>{const caption=post.captions?.[id]||post.text||"";
         /* То же пояснение, что у поля подписи и у счётчика: у 2ГИС 2000 — внутренний предел
            нашего поля, а не подтверждённый лимит площадки. Иначе предпросмотр обещает знание
@@ -1648,6 +1655,6 @@ function create(container, context) {
   const code=companies.find(item=>item.code===ctx.selectedProjectId)?.code||companies[0]?.code||"";
   return {ready:load(code),leave(){closeEditor(true);},update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);return (async()=>{await openLinkedPost();consumeOpen();})();}};
 }
-cabinet.registerView("autoposting",{title:"Контент-план",onLeave(){controller?.leave?.();},render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
+cabinet.registerView("autoposting",{title:"Постинг",onLeave(){controller?.leave?.();},render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
   onProjectChange(context){if(permitted(context,"view"))return controller?.change(context);}});
 })();

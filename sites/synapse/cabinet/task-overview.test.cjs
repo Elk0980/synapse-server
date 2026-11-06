@@ -2,7 +2,8 @@
 const {test} = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const context = {window:{}};vm.runInNewContext(fs.readFileSync(__dirname+'/task-overview.js','utf8'),context);
 const api=context.window.SbTaskOverview;
-const task=(id,extra={})=>({id,title:`Задача ${id}`,company_code:'sample',status:'planned',coordination:{milestones:{}},...extra});
+const questionFields={owner_question:'Разрешить следующий шаг?',if_yes:'Работа продолжится.',if_no:'Работу отложим.',owner_minutes:2};
+const task=(id,extra={})=>({id,title:`Задача ${id}`,company_code:'sample',status:'planned',coordination:{milestones:{}},...extra,coordination:{milestones:{},...questionFields,...extra.coordination}});
 const stages=n=>({milestones:Object.fromEntries(['code','connected','verified','accepted'].map((key,index)=>[key,{state:index<n?'confirmed':'pending'}]))});
 test('waiting uses prefixes rather than a mention and does not infer a date',()=>{
   for(const value of ['ждёт Влада: решение','  ЖДЕТ ВЛАДА — решение','ВОПРОС → Влад: да или нет']) assert.equal(api.isWaiting(task(1,{coordination:{blocker:value}})),true);
@@ -73,4 +74,20 @@ test('waiting prefix removal preserves the next action body and ignores ordinary
   assert.equal(api.stripWaitingPrefix('ВОПРОС → Влад: Первая строка\n  Вторая строка  '),'Первая строка\n  Вторая строка  ');assert.equal(api.stripWaitingPrefix('Ждёт Влада'),'');
   for(const value of ['ВОПРОС → Владимир: другое','Действие ждёт Влада','  Обычный шаг  ']) assert.equal(api.stripWaitingPrefix(value),value);
   assert.equal(api.hasWaitingNextStep(task(1,{coordination:{nextAction:'ВОПРОС → Влад: действие'}})),true);assert.equal(api.hasWaitingNextStep(task(1,{coordination:{nextAction:'Обычный шаг'}})),false);
+});
+
+test('waiting today excludes completed, cancelled, future and next-step-only tasks in Bangkok',()=>{
+ const now=Date.parse('2026-11-05T00:00:00Z');
+ const base=task(1,{assignee_name:'Влад',due_date:'2026-11-05'});assert.equal(api.actionableWaiting(base,now),true);
+ for(const status of ['done','cancelled'])assert.equal(api.actionableWaiting({...base,status},now),false);
+ assert.equal(api.actionableWaiting({...base,due_date:'2026-11-06'},now),false);assert.equal(api.actionableWaiting({...base,due_date:''},now),true);
+ assert.equal(api.actionableWaiting(task(2,{coordination:{nextAction:'ждёт Влада: потом'}}),now),false);
+ assert.equal(api.actionableWaiting(task(2,{coordination:{blocker:'ждёт Влада: сейчас'}}),now),true);
+});
+test('owner decision needs four plain fields and accepts product names without exposing technical details',()=>{
+  const ready=task(900,{assignee_name:'Влад'});assert.equal(api.build([ready]).waiting.length,1);
+  for(const key of ['owner_question','if_yes','if_no','owner_minutes']) {const old=task(900,{assignee_name:'Влад',coordination:{[key]:key==='owner_minutes'?null:''}}),model=api.build([old]);assert.equal(model.waiting.length,0);assert.equal(model.unprepared.length,1);}
+  for(const value of ['Согласовать 3517116?','🙂','12345','αβγ','Начать αβγ','Résumé prêt','PR 123','CI пройден','head abcdef1234567890','Путь /opt/private','Первая строка\nВторая']) assert.equal(api.decision(task(900,{coordination:{if_yes:value}})),null);
+  const product=task(900,{coordination:{owner_question:'Продолжить работу в Synapse?'}});assert.equal(api.decision(product),null);assert.equal(api.decision(product,['Synapse']).question,'Продолжить работу в Synapse?');
+  assert.equal(api.decision(task(900,{coordination:{owner_question:'Выбрать вариант 123?'}})).question,'Выбрать вариант 123?');assert.equal(api.decision(task(900,{coordination:{owner_minutes:0}})).minutes,0);assert.equal(api.decision(task(900,{coordination:{owner_minutes:'2'}})),null);assert.equal(api.decision(task(900,{coordination:{owner_question:'я'.repeat(121)}})),null);
 });

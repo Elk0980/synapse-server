@@ -8,6 +8,7 @@
 <title>Кабинет — Synapse Business</title>
 <link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
 <link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
+<script src="cabinet/view-as.js?v=20261105-2"></script>
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -565,10 +566,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 
 <link rel="stylesheet" href="brand/living-logo.css?v=20260911-projects-1">
 <script defer src="brand/living-logo.js?v=20260911-1"></script>
-<link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="brand/synapse-icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="brand/synapse-icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="apple-mobile-web-app-title" content="Synapse Business">
+<meta name="apple-mobile-web-app-title" content="Синапс" data-palitra-content="Synapse Business">
+<script src="brand/app-identity.js?v=20261105-1"></script>
 </head>
 <body>
 <div class="auth" id="auth">
@@ -589,7 +591,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 <div class="shell" id="app" hidden>
   <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
-    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы контента">Контент</button><a href="#crm" data-view-link="crm">Заявки</a>
+    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы Контент завода">Контент завод</button><a href="#crm" data-view-link="crm">Заявки</a>
     <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
   </nav>
   <div class="mobile-bar">
@@ -618,8 +620,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
         Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
       </a>
-      <!-- №98: меню «Контент» и «Настройки»; оболочка ставит «Контент» после «Главной», а «Хью» превращает в «Чаты». -->
-      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент</button>
+      <!-- №98: меню «Контент завод» (№140: было «Контент») и «Настройки»; оболочка ставит его после «Главной», а «Хью» превращает в «Чаты». -->
+      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент завод</button>
       <div class="subnav" id="content-menu" hidden>
         <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
         <a class="nav-link" href="#content/shooting" data-view-link="content-shooting">Съёмка</a>
@@ -682,19 +684,20 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div class="sidebar-footer">
       <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
         <div><strong id="account-name"></strong><span id="account-role"></span></div></div>
+      <button class="logout" id="view-as-start" type="button" hidden>Посмотреть как…</button>
       <button class="logout" id="logout" type="button">Выйти</button>
     </div>
   </aside>
   <button class="backdrop" id="backdrop" type="button" aria-label="Закрыть меню" hidden></button>
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
-    <div class="workspace-scope" id="workspace-scope"><strong></strong><button type="button" id="workspace-change-company">Сменить компанию</button></div>
+    <!-- №140: плашки «Компания: … / Сменить компанию» нет — компания меняется только в блоке «Проект» левого меню. -->
     <div id="content-factory-header" hidden>
-      <div class="content-header"><h1>Контент завод</h1></div>
-      <nav class="factory-tabs" aria-label="Контент завод">
-        <a class="plain-button" href="#content-factory/plan" data-factory-view="autoposting" data-factory-also="media-mentor">Контент-план</a>
+      <!-- №122: «Постинг» — готовые публикации; «Контент-план» и «Статистика» — отдельные пункты меню «Контент». -->
+      <div class="content-header"><h1>Постинг</h1></div>
+      <nav class="factory-tabs" aria-label="Постинг">
+        <a class="plain-button" href="#content-factory/plan" data-factory-view="autoposting">Публикации</a>
         <a class="plain-button" href="#content-factory/sources" data-factory-view="telegram-sources">Исходники</a>
-        <a class="plain-button" href="#content-factory/stats" data-factory-view="content-factory-stats" data-factory-also="media-mentor-rollout">Статистика</a>
         <a class="plain-button" href="#content-factory/settings" data-factory-view="content-factory-settings">Настройки модуля</a>
       </nav>
       <div class="factory-plan-bar" id="content-factory-plan-bar" hidden>
@@ -1081,7 +1084,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20261104-waiting-vlad-43-r2";
+  window.SB_CABINET_ASSET_VERSION = "20261105-night98-expenses-board-links-108-permission-help-110-menu-140";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1090,8 +1093,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
-  const cabinetAssets = ["platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetAssets = ["platform-links", "home", "task-overview", "task-text", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "permission-help", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
   const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
@@ -1101,8 +1104,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   ).join(""));
   // №98, контракт А (specs/098-content-shell): реестр модулей и экраны раздела «Контент».
   // Новые модули добавляются только в эти два списка; module-registry всегда первым.
-  const shellAssets = ["module-registry", "content-settings"];
-  const shellStyles = ["shell", "content-settings"];
+  const shellAssets = ["module-registry", "content-settings", "reel-plan-import", "content-plan", "shooting-script", "shooting-upload", "shooting-prompter", "shooting-board", "shooting", "materials", "reel-editor", "chats", "my-tasks", "content-connections", "content-stats"];
+  const shellStyles = ["shell", "content-settings", "content-plan", "shooting", "materials", "reel-editor", "chats", "content-connections"];
   document.write(shellStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join("") + shellAssets.map((asset) =>
@@ -1157,9 +1160,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     };
     return { signal, rethrow, json };
   };
+  const passwordChangeNotice = (response, body) => {
+    if (response.status !== 403 || !body?.details?.mustChangePassword) return false;
+    for (const id of ["auth-error", "startup-error"]) { const el = byId(id); el.replaceChildren("Нужно сменить пароль. ", Object.assign(document.createElement("a"), { href: "/cabinet/people.html", target: "_blank", rel: "noopener", textContent: "Сменить пароль" })); el.hidden = false; }
+    return true;
+  };
   const responseError = (response, body) => {
-    const error = new Error(response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
-    error.status = response.status;
+    const mustChangePassword = response.status === 403 && body?.details?.mustChangePassword; if (mustChangePassword) passwordChangeNotice(response, body);
+    const error = new Error(mustChangePassword ? "Нужно сменить пароль" : response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
+    error.status = response.status; error.mustChangePassword = Boolean(mustChangePassword);
     // CRM кладёт код отказа в details.code; верхний code (сервис контента) имеет приоритет.
     const validCode = (value) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value);
     if (validCode(body?.code)) error.code = body.code;
@@ -1202,7 +1211,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     competitors: "Конкуренты",
     calltracking: "Колтрекинг",
     sites: "Сайты",
-    autoposting: "Контент-план",
+    autoposting: "Постинг",
     "media-mentor": "Предложения плана",
     "content-factory-settings": "Настройки модуля",
     "content-factory-stats": "Статистика контента",
@@ -1213,7 +1222,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "company-information": "Актуальность",
     "vk-community": "ВКонтакте",
     "reviews": "Отзывы",
-    "content-factory": "Контент завод",
+    "content-factory": "Постинг",
     settings: "Настройки компании",
     "site-orders": "Заявки с сайта",
     "system-settings": "Настройки системы",
@@ -1250,10 +1259,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
 
   const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
+  // №137: «Посмотреть как» хранит выбор компании отдельно и не трогает сохранённый выбор владельца.
+  const viewAsProjects = () => window.SynapseViewAs?.projectStore?.(identity) || null;
   const readSelectedProject = () => {
     let saved = null;
     try {
-      saved = localStorage.getItem(projectStorageKey());
+      const viewAs = viewAsProjects();
+      saved = viewAs ? viewAs.get() : localStorage.getItem(projectStorageKey());
     } catch (error) {
       saved = null;
     }
@@ -1262,7 +1274,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const saveSelectedProject = () => {
     if (!selectedProjectId) return;
     try {
-      localStorage.setItem(projectStorageKey(), selectedProjectId);
+      const viewAs = viewAsProjects();
+      if (viewAs) viewAs.set(selectedProjectId); else localStorage.setItem(projectStorageKey(), selectedProjectId);
     } catch (error) {
       // The selected project remains available in memory for this session.
     }
@@ -1277,17 +1290,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const projectContext = () => selectedProject()?.name || "Проект не определён";
   const SYSTEM_VIEWS = new Set(['system-settings','accounts','trademarks']);
+  // №140: плашка компании над разделами убрана; остаётся только заголовок вкладки браузера.
   const renderScopeBanner = () => {
-    const el=byId('workspace-scope');
-    el.dataset.scope=SYSTEM_VIEWS.has(currentView)?'system':currentView==='account'?'personal':'company';
     const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
-    const caption=ownerBoard?'Все проекты · Synapse Задачи':currentView==='trademarks'?'Общая справочная инструкция Synapse'
-      : SYSTEM_VIEWS.has(currentView)?'Управление всей системой · все компании'
-      : currentView==='account'?'Личный аккаунт · '+(identity?.displayName||identity?.login||'')
-      : 'Компания: '+projectContext();
-    el.querySelector('strong').textContent=caption;
-    el.querySelector('button').hidden=ownerBoard||SYSTEM_VIEWS.has(currentView)||currentView==='account';
-    document.title=(factoryViews.includes(currentView)?'Контент завод':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
+    document.title=(postingView(currentView)?'Постинг':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
     if (ownerBoard) document.title = 'Synapse Задачи';
   };
   const renderProjectContexts = () => {
@@ -1366,13 +1372,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     renderScopeBanner();
   };
 
-  byId('workspace-change-company').addEventListener('click',event=>{
-    event.stopPropagation();
-    if(window.matchMedia('(max-width: 760px)').matches)setDrawer(true);
-    else if(document.body.classList.contains('menu-collapsed'))document.querySelector('[data-menu-fold]')?.click();
-    byId('sidebar').scrollTop=0;
-    openProjectMenu();
-  });
   const closeProjectMenu = (restoreFocus = false) => {
     const trigger = byId("project-trigger");
     byId("project-menu").hidden = true;
@@ -1615,6 +1614,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "telegram-sources": "content-factory/sources", "content-factory-stats": "content-factory/stats",
     "media-mentor-rollout": "content-factory/progress", "content-factory-settings": "content-factory/settings"};
   const factoryViews = ["content-factory", ...Object.keys(factoryRoutes)];
+  /* №122: виды, которые меню «Контент» показывает как «Контент-план» или «Статистика» (data-view-also),
+     открываются без шапки «Постинга» — второго «Контент-плана» и второй «Статистики» нет. */
+  const contentClaimed = (view) => [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(view));
+  const postingView = (view) => factoryViews.includes(view) && !contentClaimed(view);
   const factoryParts = {plan: "autoposting", materials: "autoposting", "plan/proposals": "media-mentor", sources: "telegram-sources",
     stats: "content-factory-stats", progress: "media-mentor-rollout", settings: "content-factory-settings"};
   const viewFromHash = () => {
@@ -1724,32 +1727,38 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     document.body.classList.toggle('owner-task-board', ownerBoard);
     document.body.classList.toggle('owner-task-navigation', identity?.role === 'owner');
     document.querySelector('link[rel="manifest"]').href = ownerBoard ? 'board.webmanifest' : 'manifest.webmanifest';
-    const factory = factoryViews.includes(currentView);
-    byId("content-factory-header").hidden = !factory;
+    const factory = factoryViews.includes(currentView), posting = postingView(currentView);
+    const factoryHeader = byId("content-factory-header");
+    factoryHeader.querySelector(".content-header").hidden = !posting;
+    factoryHeader.querySelector(".factory-tabs").hidden = !posting;
     byId("content-factory-header").querySelectorAll("[data-factory-view]").forEach(link => {
       link.hidden = !permittedView(link.dataset.factoryView);
       const views = [link.dataset.factoryView, ...(link.dataset.factoryAlso || "").split(" ").filter(Boolean)];
       if (views.includes(currentView)) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
-    // Строка действий только на вкладке «Контент-план»; вводные живут в «Настройках модуля», не над доской.
+    /* №122: «Составить план» — только у предложений плана (часть «Контент-плана»); «Создать публикацию» —
+       в «Постинге», пока нет модуля «Материалы». Пустая строка действий не показывается. */
     const planBar = byId("content-factory-plan-bar");
-    planBar.hidden = !["autoposting", "media-mentor"].includes(currentView) || !permittedView(currentView);
+    const contentMaterials = !!window.SynapseModules?.has("content-materials");
+    const composeAction = currentView === "media-mentor", createAction = currentView === "autoposting" && !contentMaterials;
+    planBar.querySelector('[data-factory-action="compose"]').hidden = !composeAction;
+    planBar.querySelector('[data-factory-action="create"]').hidden = !createAction;
+    planBar.hidden = !(composeAction || createAction) || !permittedView(currentView);
+    factoryHeader.hidden = !factory || (!posting && planBar.hidden);
     if (planBar.hidden) byId("content-factory-compose").hidden = true;
     else SbCabinet.contentFactory?.bindPlanBar?.(planBar, cabinetContext());
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
     document.body.dataset.cabinetView = currentView;
-    const claimed = [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(currentView));
+    const claimed = contentClaimed(currentView);
     const settingsView = ["settings", "settings-content"].includes(currentView);
     byId("settings-tabs").hidden = !settingsView;
     byId("settings-tabs").querySelectorAll("[data-settings-tab]").forEach(tab => {
       tab.hidden = !permittedView(tab.dataset.settingsTab);
       if (tab.dataset.settingsTab === currentView) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
     });
-    const contentMaterials = !!window.SynapseModules?.has("content-materials");
-    byId("content-factory-plan-bar").querySelector('[data-factory-action="create"]').hidden = contentMaterials;
     document.querySelectorAll("[data-view-link]").forEach((link) => {
       const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
       const also = (link.dataset.viewAlso || "").split(" ").includes(currentView) || link.dataset.viewLink === routeView;
@@ -1766,7 +1775,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       target.insertAdjacentElement("afterend", byId("client-tabs"));
     }
     setCategoryForView(currentView);
-    const title = factory ? "Контент завод" : VIEW_TITLES[currentView];
+    const title = posting ? "Постинг" : VIEW_TITLES[currentView];
     byId("mobile-title").textContent = title;
     renderScopeBanner();
     const active = document.querySelector(`[data-view="${currentView}"]`);
@@ -1874,6 +1883,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         throw new Error("INVALID_IDENTITY");
       }
       identity = profile;
+      window.SynapseViewAs?.render(profile);
       identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
       allowedProjects = allowedProjectsFor(identity);
       selectedProjectId = readSelectedProject();
@@ -2083,6 +2093,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
+        if (passwordChangeNotice(response, body)) return;
         const disabled = response.status === 403 && /отключ/i.test(body.error || "");
         showAuthError(response.status === 401 ? "Неверный логин или пароль" : disabled
           ? "Учётная запись отключена" : response.status === 429
@@ -2092,7 +2103,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       await response.json();
       enterCabinet(await apiJson("/content/whoami"));
     } catch (error) {
-      showAuthError("Ошибка сервера, попробуйте позже");
+      if (!error.mustChangePassword) showAuthError("Ошибка сервера, попробуйте позже");
     }
   });
 
@@ -2104,6 +2115,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         enterCabinet(await response.json());
         return;
       }
+      if (passwordChangeNotice(response, await response.json().catch(() => ({})))) return;
       if (response.status !== 401) showAuthError("Сервер входа недоступен");
     } catch (error) {
       showAuthError("Сервер входа недоступен");
