@@ -69,13 +69,6 @@ test('№148·1: «Ждут Влада» первым экраном — все 
     assert.deepEqual(order, ['waiting', 'goal', 'modules'], 'цель и модули ниже');
     await f.controller.render({view:'board'});
     assert.equal(f.d.querySelector('.tb-board').firstElementChild.dataset.waiting, '', 'и на виде «Доска» блок первый');
-    // Да/Нет уходят комментарием «ОТВЕТ: …» от Влада; повторное нажатие во время отправки не дублирует.
-    let finish; f.ctx.crmQuery = (orig => async (route, q, o) => { if (route.endsWith('/task_comment')) { f.sent.push(o.body); return new Promise(resolve => { finish = resolve; }); } return orig(route, q, o); })(f.ctx.crmQuery);
-    const yes = f.d.querySelector('[data-wait-row="151"] [data-wait-quick-choice="Да"]');
-    yes.click(); yes.click(); await settle();
-    assert.deepEqual(JSON.parse(JSON.stringify(f.sent)), [{task_id:151, author:'Влад', text:'ОТВЕТ: Да'}]);
-    assert.equal(yes.disabled, true);
-    finish({comment:{id:9}}); await settle();
     // Карточка задачи с латиницей в вопросе не прячет вопрос и инструкцию («Вопрос пока не оформлен» — дефект).
     await f.controller.openTask(151); await settle();
     const card = f.d.querySelector('.tb-sheet [data-owner-waiting]');
@@ -85,6 +78,15 @@ test('№148·1: «Ждут Влада» первым экраном — все 
     assert.deepEqual([...card.querySelectorAll('[data-wait-quick-choice]')].map(b => b.textContent), ['Да', 'Нет']);
     assert.doesNotMatch(f.d.querySelector('.tb-sheet').textContent, /Вопрос пока не оформлен/);
     f.d.querySelector('[data-sheet-close]').click();
+    // Да/Нет уходят комментарием «ОТВЕТ: …» от Влада; повторное нажатие во время отправки не дублирует.
+    let finish; f.ctx.crmQuery = (orig => async (route, q, o) => { if (route.endsWith('/task_comment')) { f.sent.push(o.body); return new Promise(resolve => { finish = resolve; }); } return orig(route, q, o); })(f.ctx.crmQuery);
+    const yes = f.d.querySelector('[data-wait-row="151"] [data-wait-quick-choice="Да"]');
+    yes.click(); yes.click(); await settle();
+    assert.deepEqual(JSON.parse(JSON.stringify(f.sent)), [{task_id:151, author:'Влад', text:'ОТВЕТ: Да'}]);
+    assert.equal(yes.disabled, true);
+    finish({comment:{id:9}}); await settle();
+    assert.equal(f.d.querySelector('[data-wait-row="151"]'), null, 'ответ сразу убирает строку ожидания');
+
     // Заголовок открывает ту же карточку, что и общая доска.
     f.d.querySelector('[data-wait-row="202"] [data-task-open]').click(); await settle();
     assert.match(f.d.querySelector('.tb-sheet .tb-task-title').textContent, /Вход для Гули/);
@@ -154,4 +156,17 @@ test('№148·3: в «Мои задачи» заголовок — кнопка:
     assert.deepEqual(navigated, ['tasks/131']);
     assert.equal(mounts.length, 0, 'сотруднику доска владельца не поднимается');
   } finally { w.close(); }
+});
+
+test('№177: ответ владельца скрывает прежний запрос после восстановления; новый запрос и чужой ответ остаются', async () => {
+  const f = board([
+    record(1, {waiting_since:'2026-11-06T01:00:00Z', coordination:question, comments:[{author:'Влад',text:'ОТВЕТ: Да',created_at:'2026-11-06T02:00:00Z'}]}),
+    record(2, {waiting_since:'2026-11-06T03:00:00Z', coordination:question, comments:[{author:'Влад',text:'ОТВЕТ: Да',created_at:'2026-11-06T02:00:00Z'}]}),
+    record(3, {coordination:question, comments:[{author:'Claude',text:'ОТВЕТ: Да'}]}),
+    record(4, {status:'cancelled',coordination:question}),
+    record(5, {coordination:{blocker:''}})
+  ]);
+  try { await settle(); assert.deepEqual([...f.d.querySelectorAll('[data-wait-row]')].map(n=>n.dataset.waitRow), ['2','3']);
+    assert.match(f.d.querySelector('[data-wait-row="2"] .tb-owner-minutes').textContent,/2 мин/);
+  } finally { f.close(); }
 });

@@ -31,3 +31,7 @@
 @media(max-width:700px){.tb-board .tb-waiting-row{grid-template-areas:"open" "links" "text" "quick" "time"}.tb-mine-all{margin-left:0;flex-basis:100%}}
 @media(max-width:600px){.tb-board .tb-waiting-row{grid-template-areas:"open" "links" "text" "quick" "time"}}
 .tb-owner-waiting{display:grid;gap:8px;border:1px solid color-mix(in srgb,#d39b32 45%,var(--tb-line));padding:12px;border-radius:10px;margin:12px 0}.tb-owner-waiting h3{font-size:16px;line-height:1.35;margin:0;overflow-wrap:anywhere}.tb-owner-waiting .tb-waiting-task{margin:0}.tb-owner-waiting .tb-waiting-links{margin:0}.tb-owner-waiting .tb-waiting-links:empty{display:none}
+
+/* №177: время видно и без пары вариантов ответа. */
+.tb-owner-minutes{grid-column:1/-1;font-size:13px;color:var(--tb-muted)}
+.tb-board button,.tb-sheet button,.tb-waiting-links a{word-break:normal;hyphens:none;overflow-wrap:normal}

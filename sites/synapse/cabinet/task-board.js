@@ -92,7 +92,10 @@
     // №148 (Влад 05.11 13:07): «все задачи должны быть у меня в задачах». Ждут Влада = незакрытые задачи,
     // где есть хотя бы одно: owner_question не пустой, blocker/следующий шаг «ждёт Влада», исполнитель «Влад».
     const PRIORITY_RANK = {urgent:0,high:1,normal:2,low:3};
-    const waitsOwner = task => !['done','cancelled'].includes(task.status) && !task.product_placeholder && (String(task.coordination?.owner_question || '').trim() !== '' || window.SbTaskOverview?.isWaiting(task) === true);
+    const answered = new Map();
+    const requestSignature = task => JSON.stringify([task.waiting_since, task.coordination?.owner_question, task.coordination?.blocker, task.coordination?.nextAction]);
+    const hasAnswer = task => answered.get(task.id) === requestSignature(task) || (task.comments || []).some(comment => /^ОТВЕТ:/iu.test(String(comment.text || '').trim()) && String(comment.author || '').trim() === 'Влад' && (!task.waiting_since || Date.parse(comment.created_at) >= Date.parse(task.waiting_since)));
+    const waitsOwner = task => !hasAnswer(task) && !['done','cancelled'].includes(task.status) && !task.product_placeholder && (String(task.coordination?.owner_question || '').trim() !== '' || window.SbTaskOverview?.isWaiting(task) === true);
     const waitingOrder = (a,b) => (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) || (a.due_date || '9999').localeCompare(b.due_date || '9999') || a.id - b.id;
     const ownerQuestion = task => String(task.coordination?.owner_question || '').trim();
     const quickAnswer = task => {
@@ -109,7 +112,7 @@
     const waitingRow = task => {
       const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
       const question = ownerQuestion(task);
-      return `<article class="tb-waiting-row" data-wait-row="${task.id}" data-priority="${esc(task.priority || 'normal')}"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))} · ${esc(STATUS[task.status] || task.status)}${task.priority && task.priority !== 'normal' ? ` · ${esc(PRIORITY[task.priority] || task.priority)}` : ''}${task.due_date ? ` · срок ${esc(task.due_date)}` : ''}</span><strong>${esc(question || displayTitle(task))}</strong>${question ? `<span class="tb-waiting-task">${esc(displayTitle(task))}</span>` : ''}</button>${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}${linksMarkup(task)}${ownerInstructions(task)}${quickAnswer(task)}</article>`;
+      return `<article class="tb-waiting-row" data-wait-row="${task.id}" data-priority="${esc(task.priority || 'normal')}"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))} · ${esc(STATUS[task.status] || task.status)}${task.priority && task.priority !== 'normal' ? ` · ${esc(PRIORITY[task.priority] || task.priority)}` : ''}${task.due_date ? ` · срок ${esc(task.due_date)}` : ''}</span><strong>${esc(question || displayTitle(task))}</strong>${question ? `<span class="tb-waiting-task">${esc(displayTitle(task))}</span>` : ''}</button>${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}${Number.isInteger(task.coordination?.owner_minutes) ? `<span class="tb-owner-minutes">Ваше время: ${task.coordination.owner_minutes} мин.</span>` : ''}${linksMarkup(task)}${ownerInstructions(task)}${quickAnswer(task)}</article>`;
     };
     const bindQuickAnswers = (root = container) => root.querySelectorAll('[data-wait-quick]').forEach(form => {
       const id = Number(form.dataset.waitQuick), result = form.querySelector('[data-wait-quick-result]');
@@ -120,7 +123,7 @@
         if (waitingInflight.has(id)) return;
         const text = `ОТВЕТ: ${button.dataset.waitQuickChoice}`, marker = `quick:${Date.now()}`;
         waitingInflight.set(id,marker); sync(); result.textContent = 'Ответ отправляется…';
-        try { await tool('task_comment',{task_id:id,author:'Влад',text}); result.textContent = 'Ответ добавлен в ход работы.'; if (alive) await render(); }
+        try { await tool('task_comment',{task_id:id,author:'Влад',text}); answered.set(id, requestSignature(tasks.find(task => task.id === id) || {})); result.textContent = 'Ответ добавлен в ход работы.'; if (alive) await render(); }
         catch (error) { result.textContent = `${ownerText(error.message,200) || 'Не удалось отправить ответ.'} Откройте карточку задачи и проверьте ход работы перед повтором.`; }
         finally { if (waitingInflight.get(id) === marker) waitingInflight.delete(id); if (form.isConnected) sync(); }
       });
@@ -144,17 +147,17 @@
     };
     async function hydrateOverview(records) {
       if (!window.SbTaskOverview) return records;
-      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction') || !Object.hasOwn(task.coordination || {},'owner_question') || (window.SbTaskOverview.isWaiting(task) && !Array.isArray(task.coordination?.links))));
+      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (waitsOwner(task) || task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction') || !Object.hasOwn(task.coordination || {},'owner_question') || (window.SbTaskOverview.isWaiting(task) && !Array.isArray(task.coordination?.links))));
       let cursor = 0;
       await Promise.all(Array.from({length:Math.min(3,pending.length)},async () => {
         while (cursor < pending.length && alive) {
           const {task,index} = pending[cursor++], signature = JSON.stringify([task.coordination?.revision,task.updated_at,...['blocker','nextAction','owner_question','if_yes','if_no','owner_minutes'].map(key => task.coordination?.[key])]);
           const cached = overviewCache.get(task.id);
-          if (cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
+          if (!waitsOwner(task) && cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
           try {
-            const data = await tool('task_get',{task_id:task.id,comments_limit:1,subtasks_limit:1}), full = data.task || data;
+            const data = await tool('task_get',{task_id:task.id,comments_limit:20,subtasks_limit:1}), full = data.task || data;
             if (full.id !== task.id || full.company_code !== task.company_code) throw Error('Область карточки изменилась');
-            const value = {description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
+            const value = {comments:full.comments,description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
             result[index] = {...task,...value}; overviewCache.set(task.id,{signature,value});
           } catch { result[index] = {...task,_overview_incomplete:true}; }
         }
@@ -324,7 +327,7 @@
         const pending = {id:`reply:${Date.now()}:${Math.random().toString(36).slice(2)}`,text:`ОТВЕТ: ${String(text).trim()}`,inputAtSend:form.elements.text.value,fromField,baselineId:Math.max(0,...(task.comments || []).map(item => Number(item.id) || 0))};
         waitingInflight.set(id,pending.id); write(draftKey,{...(read(draftKey) || {}),pending}); sync(); result.textContent = 'Ответ отправляется…';
         try {
-          await tool('task_comment',{task_id:id,author:'Влад',text:pending.text}); finish(pending);
+          await tool('task_comment',{task_id:id,author:'Влад',text:pending.text}); answered.set(id,requestSignature(task)); finish(pending);
           if (alive) await render();
           if (taskSheet === own) { await openTask(id); taskSheet?.body.querySelector('[data-wait-result]')?.append('Ответ добавлен в ход работы.'); }
         } catch (error) {
