@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Контент завод — референс экранов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Макет: вкладки разделов сверху; в каждой — телефон 390 и ПК 1440 рядом, справа список «что где» и статус. Цвета кабинета Synapse (тёмная тема основная). */
+:root{
+  --bg:#eef1f6; --panel:#ffffff; --panel2:#f3f5f9; --line:#d8dee8; --fg:#141a24; --muted:#5d6a80;
+  --accent:#3d63e0; --accent-ink:#ffffff; --soft:rgba(61,99,224,.10); --good:#1f8a57; --warn:#a96d00; --bad:#c2410c;
+  --scr:#0f141d; --scr2:#171e2a; --scr-line:#283143; --scr-fg:#e8edf5; --scr-mut:#8c97ab; --scr-acc:#7d9bff;
+  --f-ui:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0b0f16; --panel:#141a24; --panel2:#1b2230; --line:#283143; --fg:#e8edf5; --muted:#8c97ab;
+  --accent:#7d9bff; --accent-ink:#0b0f16; --soft:rgba(125,155,255,.16); --good:#4cc38a; --warn:#e8b14c; --bad:#f08a5d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b0f16; --panel:#141a24; --panel2:#1b2230; --line:#283143; --fg:#e8edf5; --muted:#8c97ab;
+  --accent:#7d9bff; --accent-ink:#0b0f16; --soft:rgba(125,155,255,.16); --good:#4cc38a; --warn:#e8b14c; --bad:#f08a5d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:15px;line-height:1.45;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+h1{font-size:26px;font-weight:800;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lead{color:var(--muted);margin:4px 0 0;max-width:75ch}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.tabs button{font:600 14px var(--f-ui);white-space:nowrap;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--f-ui);padding:3px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.c-live{color:var(--good)} .c-part{color:var(--warn)} .c-no{color:var(--bad)}
+.view{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:1000px){.view{grid-template-columns:minmax(0,1fr)}}
+.shots{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;min-width:0}
+.shots>*{min-width:0;max-width:100%}
+.cap{font:600 12px var(--f-mono);color:var(--muted);margin:0 0 6px;letter-spacing:.04em;text-transform:uppercase}
+/* телефон */
+.phone{width:272px;max-width:100%;background:var(--scr);color:var(--scr-fg);border-radius:28px;border:6px solid #000;overflow:hidden;font-size:11px;line-height:1.35;display:flex;flex-direction:column;min-height:520px}
+.ph-top{display:flex;align-items:center;gap:8px;padding:10px 10px 8px;border-bottom:1px solid var(--scr-line)}
+.ph-burger{width:26px;height:26px;border-radius:8px;background:var(--scr2);display:grid;place-items:center;font-size:13px}
+.ph-title b{display:block;font-size:12.5px} .ph-title span{color:var(--scr-mut);font-size:10px}
+.ph-body{flex:1;padding:10px;display:grid;gap:7px;align-content:start}
+.ph-nav{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--scr-line);font-size:9px;color:var(--scr-mut);text-align:center}
+.ph-nav span{padding:8px 2px} .ph-nav .on{color:var(--scr-fg);font-weight:700}
+/* ПК */
+.pc{width:560px;max-width:100%;background:var(--scr);color:var(--scr-fg);border-radius:10px;border:1px solid #000;overflow:hidden;font-size:10.5px;line-height:1.35;display:grid;grid-template-columns:120px minmax(0,1fr);min-height:360px}
+.pc-side{background:#0b1018;border-right:1px solid var(--scr-line);padding:8px;display:grid;gap:4px;align-content:start;font-size:10px;color:var(--scr-mut)}
+.pc-side .proj{background:var(--scr2);border-radius:8px;padding:6px;color:var(--scr-fg);font-weight:700;margin-bottom:6px}
+.pc-side .on{background:rgba(125,155,255,.18);color:var(--scr-fg);border-radius:6px;padding:3px 6px}
+.pc-side span{padding:3px 6px} .pc-side .sub{padding-left:14px}
+.pc-main{padding:12px;display:grid;gap:8px;align-content:start;min-width:0}
+/* общие элементы экранов */
+.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sp{flex:1}
+.t{font-weight:800;font-size:13px}
+.mut{color:var(--scr-mut)}
+.btn{border:1px solid var(--scr-line);border-radius:7px;padding:4px 8px;background:transparent;color:var(--scr-fg);font:inherit;white-space:nowrap}
+.btn.go{background:var(--scr-acc);border-color:var(--scr-acc);color:#0b0f16;font-weight:700}
+.ico{width:24px;height:24px;border:1px solid var(--scr-line);border-radius:7px;display:inline-grid;place-items:center}
+.stab{border:1px solid var(--scr-line);border-bottom:none;border-radius:7px 7px 0 0;padding:4px 8px;color:var(--scr-mut)}
+.stab.on{background:var(--scr2);color:var(--scr-fg);font-weight:700}
+.card{background:var(--scr2);border:1px solid var(--scr-line);border-radius:9px;padding:7px;display:grid;gap:4px}
+.st{font-size:9px;border:1px solid var(--scr-line);border-radius:999px;padding:1px 6px;color:var(--scr-mut);white-space:nowrap}
+.st.ok{color:#4cc38a;border-color:#4cc38a} .st.wait{color:#e8b14c;border-color:#e8b14c}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.thumb{aspect-ratio:9/16;border-radius:8px;background:linear-gradient(160deg,#3a4b6b,#1a2233);position:relative;max-width:100%}
+.thumb i{position:absolute;left:4px;top:4px;font-style:normal;font-size:8.5px;background:#0009;border-radius:6px;padding:0 4px}
+.field{border:1px solid var(--scr-line);border-radius:7px;padding:5px 7px;color:var(--scr-mut)}
+.tbl{width:100%;border-collapse:collapse;font-size:9.5px}
+.tbl td,.tbl th{border-bottom:1px solid var(--scr-line);padding:3px 4px;text-align:left}
+.tbl th{color:var(--scr-mut);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.g{background:#4cc38a}.y{background:#e8b14c}.r{background:#f08a5d}
+.fab{align-self:end;justify-self:end;width:34px;height:34px;border-radius:50%;background:#bcd0ff;display:grid;place-items:center;color:#0b0f16;font-weight:800}
+.modal{border:1px dashed var(--scr-acc);border-radius:9px;padding:7px;display:grid;gap:5px;background:#0b1220}
+/* пояснения */
+.notes{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:grid;gap:12px;min-width:0}
+.notes h2{margin:0;font-size:19px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.notes ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.notes li{max-width:70ch}
+.src{font-size:13px;color:var(--muted)}
+.mine{color:var(--warn);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.tabs button{transition:background .15s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Контент завод: как должен выглядеть каждый экран</h1>
+    <p class="lead">Так я понял ваши решения 04–06.11. Слева телефон (390) и ПК (1440), справа что где стоит. Статус показывает, есть ли это уже в живом кабинете. Пункты, помеченные «мой вывод», вы прямо не называли — поправьте, если не так.</p>
+  </header>
+  <div class="legend"><span class="chip c-live">● есть в кабинете</span><span class="chip c-part">● частично</span><span class="chip c-no">● ещё нет</span></div>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <main id="view"></main>
+</div>
+
+<script>
+const NAVP = on => `<div class="ph-nav">${['Главная','Контент<br>завод','Задачи','Чаты','Меню'].map((n,i)=>`<span class="${i===on?'on':''}">${n}</span>`).join('')}</div>`;
+const SIDE = sub => `<div class="pc-side"><div class="proj">● Авокадо</div><span>Главная</span><span class="on">Контент завод</span>${['Контент-план','Съёмка','Материалы','Постинг','Подключения','Статистика'].map(s=>`<span class="sub ${s===sub?'on':''}">${s}</span>`).join('')}<span>Задачи</span><span>Чаты</span><span>Настройки</span></div>`;
+const phone = (title, body) => `<div><p class="cap">Телефон 390</p><div class="phone"><div class="ph-top"><div class="ph-burger">☰</div><div class="ph-title"><b>${title}</b><span>Авокадо</span></div></div><div class="ph-body">${body}<div class="fab">Х</div></div>${NAVP(1)}</div></div>`;
+const pc = (sub, body) => `<div><p class="cap">ПК 1440</p><div class="pc">${SIDE(sub)}<div class="pc-main">${body}</div></div></div>`;
+
+const reels = [['№1','вс 01.11','Массаж сжигает жир?','ok','Опубликовано'],['№2','пн 02.11','Первый визит в «Авокадо»','ok','Опубликовано'],['№3','вт 03.11','Сколько стоит первый визит?','wait','На согласовании']];
+const MENU = `<div class="modal" style="border-style:solid"><span class="btn" style="text-align:left">Согласовать</span><span class="btn" style="text-align:left">Внести правку</span><div class="field">Что исправить: заменить хук…</div><span class="btn go" style="justify-self:start">Отправить на доработку</span></div>`;
+
+const S = {
+'plan':{name:'Контент-план',status:['part','частично'],
+ phone:()=>phone('Контент-план',`
+   <div class="row"><span class="stab on">Контент-план</span><span class="stab">Черновики</span><span class="stab">+ Новый</span><span class="sp"></span><span class="ico" title="Google Таблица">▦</span></div>
+   <div class="row"><span class="t">Публикации</span><span class="sp"></span><span class="ico">⚙</span><span class="ico">⇅</span></div>
+   ${reels.map((r,i)=>`<div class="card"><div class="row"><span class="mut">${r[1]}</span><span class="sp"></span><span class="st ${r[3]}">${r[4]}</span></div><div>${r[2]}</div><div class="row"><span class="btn">Действия ▾</span></div>${i===2?MENU:''}</div>`).join('')}`),
+ pc:()=>pc('Контент-план',`
+   <div class="row"><span class="stab on">Контент-план</span><span class="stab">Черновики</span><span class="stab">+ Новый</span><span class="sp"></span><span class="ico">▦</span></div>
+   <div class="row"><span class="t">Публикации</span><span class="sp"></span><span class="ico">⚙</span><span class="ico">⇅</span></div>
+   <table class="tbl"><tr><th>Дата</th><th>Тема</th><th>Площадки</th><th>Статус</th><th></th></tr>
+   ${reels.map(r=>`<tr><td>${r[1]}</td><td>${r[2]}</td><td class="mut">IG · TT · YT · VK · TG</td><td><span class="st ${r[3]}">${r[4]}</span></td><td><span class="btn">Действия ▾</span></td></tr>`).join('')}</table>
+   ${MENU}
+   <div class="modal"><b>⚙ Настройка контент-плана · анкета 0 из 8</b><span class="mut">Окно поверх. На телефоне — во весь экран, шапка «← … ✕» закреплена, нижнее меню прячется при вводе.</span><span class="btn go" style="justify-self:start">Сформировать план через Хью</span></div>`),
+ notes:[
+  ['live','Сверху вкладки как в Google Таблицах: «Контент-план», «Черновики», «+ Новый». Справа значок Google Таблицы — переход в общую таблицу (дублируем туда, обратно не тянем).','05.11 23:32'],
+  ['live','Убраны лишняя шапка и четыре старые кнопки; «На согласовании» отдельным блоком не висит.','05.11'],
+  ['live','Над списком — «Публикации», справа ⚙ (выбор и настройка плана = анкета) и ⇅ сортировка: по дате (по умолчанию), площадке, статусу.','05.11–06.11'],
+  ['live','Анкета только по ⚙ или «+ Новый», окном поверх; на телефоне во весь экран, шапка не уезжает при клавиатуре.','06.11'],
+  ['part','У строки нет номера и один статус (без «Согласовано · …»): до согласования — статус согласования, после — ход работы.','06.11 19:16 комментарии'],
+  ['part','Одна кнопка «Действия ▾» открывает список: «Согласовать» и «Внести правку»; поле «Что исправить» и «Отправить на доработку» — в этом же списке.','06.11 19:17 комментарии (в кабинете сейчас две отдельные кнопки)'],
+  ['no','Статус по ходу работы: Запланировано → Отснято → В монтаже → Опубликовано, отмечается в один клик; «Опубликовано» — со ссылками на посты.','06.11 («первый я снял — не отмечен»), код готов, ждёт выпуска сервера'],
+  ['part','Полный вид (по нажатию на строку) как таблица «КОНТЕНТ ПЛАН АВОКАДО»: хук 1–2 с, вставки, стиль, сценарий по ролям, реквизит, кто снимает.','04.11 бриф'],
+ ]},
+'shoot':{name:'Съёмка',status:['part','частично'],
+ phone:()=>phone('Съёмка',`
+   <div class="t">Согласованные рилсы</div>
+   ${reels.slice(0,2).map((r,i)=>`<div class="card"><div class="row"><b>${r[0]}</b><span>${r[2]}</span></div><div class="row mut">Снять до ${i?'чт 05.11':'ср 04.11'}<span class="sp"></span><span class="st">Отснято</span></div></div>`).join('')}
+   <div class="card"><b>№3 Сколько стоит первый визит?</b><div class="row"><span class="btn">Общий план</span><span class="btn">Суфлёр</span><span class="btn">Раскадровка</span></div><div class="row"><span class="btn go">Загрузить материал</span><span class="mut">к кадру или «Другое»</span></div></div>
+   <div class="modal"><b>Суфлёр</b><span class="mut">Весь сценарий или реплики одного актёра · скорость · старт/пауза · зеркало · ↗ Поделиться</span></div>`),
+ pc:()=>pc('Съёмка',`
+   <div class="row"><span class="t">Съёмка</span><span class="mut">· рилсы по порядку из согласованного плана</span></div>
+   <div class="grid2"><div class="card">${reels.map(r=>`<div class="row"><b>${r[0]}</b><span>${r[2]}</span></div>`).join('')}</div>
+   <div class="card"><b>№3 · Общий план</b><table class="tbl"><tr><th>Кадр</th><th>Что снять</th><th></th></tr><tr><td>1</td><td>Мастер встречает гостью у стойки</td><td><span class="btn">Загрузить</span></td></tr><tr><td>2</td><td>Вопрос про цену, крупно</td><td><span class="btn">Загрузить</span></td></tr><tr><td>+</td><td class="mut">Другое / дополнительно</td><td><span class="btn">Загрузить</span></td></tr></table><div class="row"><span class="btn">Суфлёр</span><span class="btn">Раскадровка · тест</span></div></div></div>`),
+ notes:[
+  ['live','Список согласованных рилсов по порядку плана (№1 → последний) с днём недели и сроком съёмки из Настройки → Контент.','04.11 бриф'],
+  ['live','Рилс → «Общий план» (кадр за кадром: реплики, вставки, реквизит), «Суфлёр», «Раскадровка» (тестовая, с пометкой).','04.11 бриф'],
+  ['live','Суфлёр: весь сценарий или реплики одного актёра, скорость, старт/пауза/стоп/назад, зеркало; «Поделиться» — на телефоне системное меню, на ПК Telegram/WhatsApp/VK и «Скопировать» для MAX.','04.11 бриф'],
+  ['live','«Загрузить материал» напротив каждого кадра + «Другое»; большие MOV частями с продолжением.','04.11 бриф'],
+  ['part','Статус ролика одной цепочкой слов — те же слова, что в Контент-плане, Материалах и Постинге.','05.11 решение 10'],
+  ['part','Эскиз кадра в раскадровке рисует модель — нужен ключ OpenAI (задача №129 на вас).','05.11'],
+ ]},
+'mat':{name:'Материалы',status:['part','частично'],
+ phone:()=>phone('Материалы',`
+   <span class="btn go" style="justify-self:start">Загрузить ролик</span>
+   <div class="grid2"><div class="field">Выход с</div><div class="field">по</div></div>
+   <div class="row"><div class="field" style="flex:1">Все площадки ▾</div><span class="btn">Сбросить</span></div>
+   <div class="grid2">${['v4 · №2','v4 · №1','v1 · №3','v1 · №4'].map(t=>`<div class="thumb"><i>${t}</i></div>`).join('')}</div>`),
+ pc:()=>pc('Материалы',`
+   <div class="row"><span class="t">Материалы</span><span class="sp"></span><span class="btn go">Загрузить ролик</span></div>
+   <div class="row"><span class="field">Выход с</span><span class="field">по</span><span class="field">Все площадки ▾</span><span class="btn">Сбросить</span></div>
+   <div class="grid2"><div class="grid3">${['v4 · №2','v4 · №1','v1 · №3','v1 · №4','v1 · №8','v1'].map(t=>`<div class="thumb"><i>${t}</i></div>`).join('')}</div>
+   <div class="card"><b>№2 «Первый визит» v4</b><div class="row"><span class="btn">Instagram</span><span class="btn">TikTok</span><span class="btn">YouTube</span><span class="btn">VK</span><span class="btn">TG</span></div><span class="mut">Предпросмотр в маске выбранной площадки</span><div class="row"><span class="btn">Скачать</span><span class="btn">Редактировать</span><span class="btn go">Создать публикацию</span></div></div></div>`),
+ notes:[
+  ['live','Сетка смонтированных рилсов, фильтры «Выход с / по» и «Площадка» (один и тот же фильтр, что в Постинге), «Загрузить ролик».','04.11 бриф, 05.11 решение 9'],
+  ['live','Поля дат на телефоне ровно, не вылезают за край.','06.11 17:08'],
+  ['live','Рилс → предпросмотр в маске площадки, «Скачать», «Создать публикацию». Куда публиковать рилс выбирается только здесь.','04.11 бриф, 05.11 решение 7'],
+  ['part','«Редактировать» → упрощённый монтаж: дорожки, «отметить от … до …» → «Хью, измени…», новая версия приходит в чат.','04.11 бриф'],
+  ['no','Публикация рилса в один шаг и выбор пункта плана, к которому относится ролик.','№168, код готов, ждёт выпуска сервера'],
+ ]},
+'post':{name:'Постинг',status:['part','частично'],
+ phone:()=>phone('Постинг',`
+   <div class="row"><div class="field" style="flex:1">Все площадки ▾</div></div>
+   ${[['№2 Первый визит','пт 06.11 18:49','ok','Опубликовано'],['№3 Сколько стоит','сб 07.11 12:00','wait','Запланировано']].map(p=>`<div class="card"><div class="row"><div class="thumb" style="width:40px"></div><div style="flex:1;min-width:0"><b>${p[0]}</b><div class="mut">${p[1]}</div></div></div><div class="row"><span class="st ${p[2]}">${p[3]}</span><span class="mut">IG · TT · YT · VK · TG</span></div></div>`).join('')}`),
+ pc:()=>pc('Постинг',`
+   <div class="row"><span class="t">Постинг</span><span class="mut">· что и куда уходит</span><span class="sp"></span><span class="field">Все площадки ▾</span></div>
+   <table class="tbl"><tr><th>Рилс</th><th>Выход</th><th>Instagram</th><th>TikTok</th><th>YouTube</th><th>VK</th><th>Telegram</th></tr>
+   <tr><td>№2 Первый визит</td><td>06.11 18:49</td>${'<td><span class="st ok">вышло ↗</span></td>'.repeat(5)}</tr>
+   <tr><td>№3 Сколько стоит</td><td>07.11 12:00</td>${'<td><span class="st wait">ждёт</span></td>'.repeat(5)}</tr></table>`),
+ notes:[
+  ['part','Только готовые рилсы с датами выхода и предпросмотром по каждой площадке: что и куда уходит.','04.11 бриф, 05.11 решение 5'],
+  ['part','«Создать публикацию» здесь нет — она в Материалах. Недельный календарь черновиков и «Обзор месяца» убираются (план по дням только в Контент-плане).','05.11 решения 5 и 7'],
+  ['no','У опубликованного — ссылки на посты по каждой площадке.','мой вывод из 05.11 «ссылки Лене после публикации»'],
+ ]},
+'conn':{name:'Подключения',status:['part','частично'],
+ phone:()=>phone('Подключения',`
+   ${[['Instagram','y','частично','Подключить'],['TikTok','g','подключено',''],['YouTube','g','подключено',''],['ВКонтакте','g','подключено',''],['Telegram','g','подключено',''],['MAX','r','нет','Подключить']].map(p=>`<div class="card"><div class="row"><span class="dot ${p[1]}"></span><b>${p[0]}</b><span class="mut">${p[2]}</span><span class="sp"></span>${p[3]?`<span class="btn go">${p[3]}</span>`:'<span class="mut">↗ ссылка</span>'}</div></div>`).join('')}`),
+ pc:()=>pc('Подключения',`
+   <div class="t">Подключения</div>
+   <div class="grid3">${[['Instagram','y','Частично: публикуем вручную, нужен вход в вашем проекте'],['TikTok','g','Подключено'],['YouTube','g','Подключено'],['ВКонтакте','g','Подключено'],['Telegram','g','Подключено'],['MAX','r','Не подключено']].map(p=>`<div class="card"><div class="row"><span class="dot ${p[1]}"></span><b>${p[0]}</b></div><span class="mut">${p[2]}</span><span class="btn ${p[1]==='g'?'':'go'}" style="justify-self:start">${p[1]==='g'?'Проверить':'Подключить'}</span></div>`).join('')}</div>`),
+ notes:[
+  ['live','Все площадки компании: 🟢 подключено / 🟡 частично / 🔴 нет + ссылки на страницы (из карточки компании).','04.11 бриф'],
+  ['part','Подключать площадки можно только здесь; в карточке каждой площадки кнопка «Подключить», которая ведёт прямо к вводу ключа. Экран статусов без действий бесполезен.','05.11 №149, код готов (PR 557), не выпущен'],
+  ['part','Instagram Авокадо сейчас «частично»: подключён у администратора, из кабинета не публикуется.','06.11'],
+ ]},
+'stat':{name:'Статистика',status:['part','частично'],
+ phone:()=>phone('Статистика',`
+   <div class="row"><span class="stab on">Все</span><span class="stab">IG</span><span class="stab">TT</span><span class="stab">YT</span><span class="stab">VK</span></div>
+   <div class="card"><div class="row"><b>Просмотры за 7 дней</b><span class="sp"></span><b>—</b></div><div class="mut">Пример вида, без цифр: числа только из подключённых площадок</div></div>
+   <table class="tbl"><tr><th>Рилс</th><th>Просм.</th><th>Лайки</th></tr><tr><td>№2</td><td>—</td><td>—</td></tr><tr><td>№1</td><td>—</td><td>—</td></tr></table>`),
+ pc:()=>pc('Статистика',`
+   <div class="row"><span class="t">Статистика</span><span class="sp"></span><span class="stab on">Сводная</span><span class="stab">Instagram</span><span class="stab">TikTok</span><span class="stab">YouTube</span><span class="stab">ВК</span><span class="stab">Telegram</span></div>
+   <table class="tbl"><tr><th>Рилс</th><th>Instagram</th><th>TikTok</th><th>YouTube</th><th>VK</th><th>Telegram</th><th>Всего</th></tr><tr><td>№2 Первый визит</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>№1 Массаж</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr></table>
+   <span class="mut">Прочерк = данных с площадки ещё нет. Выдуманных чисел не показываем.</span>`),
+ notes:[
+  ['part','Сводная таблица по всем соцсетям + вкладки по площадкам.','04.11 бриф'],
+  ['part','Статистика только здесь; полезное из старой «По публикациям» перенести, старую убрать.','05.11 решение 6'],
+  ['part','Числа только реальные с площадок; где нет доступа — прочерк и пометка.','правило проекта (LIVE / нет данных)'],
+ ]},
+'common':{name:'Везде',status:['part','частично'],
+ phone:()=>phone('Любой экран',`
+   <div class="card"><b>Проект</b><div class="mut">выбор только в левом меню (☰): последний, с которым работали, первым; дальше по частоте</div></div>
+   <div class="card"><b>Нижнее меню</b><div class="mut">прячется, пока печатаете в поле</div></div>
+   <div class="card"><b>Х — личный чат с Хью</b><div class="mut">справа внизу на всех экранах</div></div>
+   <div class="card" style="border-color:#7d9bff"><div class="row"><span>Вышло обновление кабинета</span><span class="sp"></span><span class="btn go">Обновить</span></div></div>`),
+ pc:()=>pc('',`
+   <div class="card"><b>Левое меню</b><span class="mut">Главная → Контент завод (6 пунктов) → Задачи → Чаты → Настройки. «Сменить компанию» — только здесь, в блоке «Проект».</span></div>
+   <div class="card"><b>Настройки → Контент</b><span class="mut">Площадки компании, кто согласует, дни и сроки съёмки, стиль. Больше нигде эти настройки не дублируются.</span></div>
+   <div class="card"><b>Одинаково везде</b><span class="mut">Один фильтр площадок с одними названиями; одна цепочка статусов ролика; все входы в Хью открывают один и тот же чат.</span></div>`),
+ notes:[
+  ['live','Выбор компании только в левом меню; по умолчанию — последняя, с которой работали, дальше по частоте (пока запоминается на устройстве; общий выбор на всех устройствах — после выпуска сервера).','05.11 утро, 06.11'],
+  ['live','Плашка «Вышло обновление кабинета · Обновить».','05.11 21:07'],
+  ['live','Плавающая кнопка личного чата с Хью справа внизу на всех экранах.','04.11 бриф'],
+  ['part','Одна функция — одно место: площадки, согласующие и стиль только в Настройки → Контент; вводные о бизнесе только в анкете контент-плана.','05.11 решения 2–4'],
+  ['live','На телефоне без горизонтальной прокрутки; нижнее меню не перекрывает поле ввода.','04.11, 06.11'],
+ ]},
+};
+const ORDER=['plan','shoot','mat','post','conn','stat','common'];
+const CHIP={live:'c-live',part:'c-part',no:'c-no'},WORD={live:'есть',part:'частично',no:'ещё нет'};
+function show(key){
+  if(!S[key])key='plan';const s=S[key];
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===key));
+  document.getElementById('view').innerHTML=`<section class="view"><div class="shots">${s.phone()}${s.pc()}</div>
+  <div class="notes"><h2>${s.name}</h2><ul>${s.notes.map(([st,t,src])=>`<li><span class="chip ${CHIP[st]}">${WORD[st]}</span> ${t} <span class="src">— ${/мой вывод/.test(src)?`<span class="mine">${src}</span>`:src}</span></li>`).join('')}</ul></div></section>`;
+}
+document.getElementById('tabs').innerHTML=ORDER.map(k=>`<button type="button" role="tab" data-k="${k}" aria-selected="false">${S[k].name}</button>`).join('');
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;try{history.replaceState(null,'','#'+b.dataset.k)}catch{}show(b.dataset.k)});
+window.addEventListener('hashchange',()=>show(location.hash.slice(1)));
+show(location.hash.slice(1));
+</script>
+
+</body>
+</html>
