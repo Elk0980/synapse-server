@@ -1,0 +1,1186 @@
+[
+  {
+    "width": 390,
+    "theme": "dark",
+    "screen": "board",
+    "file": "390-dark-board.png",
+    "errors": [],
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 390,
+    "theme": "dark",
+    "screen": "card",
+    "file": "390-dark-card.png",
+    "errors": [],
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "×",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Расширенная карточка · вложения и работа помощников",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "Входящие",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Запланировано",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "В работе",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Готово",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Отменено",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "+ Подзадача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Сохранить план",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Добавить комментарий",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Снять ожидание",
+          "lines": 1,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 390,
+    "theme": "light",
+    "screen": "board",
+    "file": "390-light-board.png",
+    "errors": [],
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 390,
+    "theme": "light",
+    "screen": "card",
+    "file": "390-light-card.png",
+    "errors": [],
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "×",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Расширенная карточка · вложения и работа помощников",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "Входящие",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Запланировано",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "В работе",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Готово",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Отменено",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "+ Подзадача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Сохранить план",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Добавить комментарий",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Снять ожидание",
+          "lines": 1,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "screen": "board",
+    "file": "1440-dark-board.png",
+    "errors": [],
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "screen": "card",
+    "file": "1440-dark-card.png",
+    "errors": [],
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "×",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Расширенная карточка · вложения и работа помощников",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "Входящие",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Запланировано",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "В работе",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Готово",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Отменено",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "+ Подзадача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Сохранить план",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Добавить комментарий",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Снять ожидание",
+          "lines": 1,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "screen": "board",
+    "file": "1440-light-board.png",
+    "errors": [],
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        }
+      ]
+    }
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "screen": "card",
+    "file": "1440-light-card.png",
+    "errors": [],
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttons": [
+        {
+          "text": "Мои задачи · порядок и пауза",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "№1 · Synapse · В работе · ВысокийСогласовать план?SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Вне цели№1 SAMPLE · Подтвердить планКод: ожидаетПодключено: ожидаетПроверено: ожидаетПринято: ожидаеткод",
+          "lines": 7,
+          "hyphens": "none"
+        },
+        {
+          "text": "+ Задача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Все проекты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Synapse",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Доска",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "План дня",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Обзор",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Агенты",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "↻",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "SynapseВ работе 1 · План 0 · Входящие 0Сейчас: SAMPLE · Подтвердить план",
+          "lines": 3,
+          "hyphens": "none"
+        },
+        {
+          "text": "×",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план ↗",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Да",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Нет",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Свой вариант",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Расширенная карточка · вложения и работа помощников",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "Входящие",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Запланировано",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "В работе",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Готово",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Отменено",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Подтвердить этап",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Открыть план",
+          "lines": 1,
+          "hyphens": "manual"
+        },
+        {
+          "text": "+ Подзадача",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Сохранить план",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Добавить комментарий",
+          "lines": 1,
+          "hyphens": "none"
+        },
+        {
+          "text": "Снять ожидание",
+          "lines": 1,
+          "hyphens": "none"
+        }
+      ]
+    }
+  }
+]

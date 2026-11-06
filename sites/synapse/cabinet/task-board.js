@@ -56,17 +56,8 @@
       try { if (sessionStorage.getItem(origin.key) === origin.snapshot) sessionStorage.removeItem(origin.key); } catch { /* Старый черновик остаётся доступным. */ }
     };
     const persistComment = (id,value) => write(`comment:${id}`,{...(read(`comment:${id}`) || {}),text:value});
-    const mediaTheme = window.matchMedia?.('(prefers-color-scheme: dark)');
-    let themeMode;
-    try { themeMode = localStorage.getItem(`${key}:theme`); } catch {}
-    if (!['system','light','dark'].includes(themeMode)) themeMode = 'system';
-    const theme = () => themeMode === 'system' ? (mediaTheme?.matches ? 'dark' : 'light') : themeMode;
-    const applyTheme = () => {
-      const active = theme(); container.dataset.tbTheme = active;
-      document.body.classList.toggle('tb-owner-theme-light',active === 'light'); document.body.classList.toggle('tb-owner-theme-dark',active === 'dark');
-      document.querySelectorAll('.tb-sheet').forEach(node => { node.dataset.tbTheme = active; });
-      const button = container.querySelector('[data-board-theme]'); if (button) button.textContent = {system:'Тема: система',light:'Светлая тема',dark:'Тёмная тема'}[themeMode];
-    };
+    // №148: у доски нет своей темы — цвета берутся из переменных кабинета (workspace.css).
+    try { localStorage.removeItem(`${key}:theme`); } catch { /* прежняя настройка темы больше не используется */ }
     const saved = read('filters') || {};
     const state = {view:initial.view || saved.view || 'board', project:initial.project ?? saved.project ?? '', product:initial.product ?? saved.product ?? '', search:'', ...initial};
     const tool = (name, args = {}) => ctx.crmQuery(`/coordination/mcp/${name}`, {}, ctx.csrfOptions('POST', args));
@@ -98,14 +89,52 @@
       const node = container.querySelector('[data-board-notice]'); if (node) { node.textContent = text; node.setAttribute('role', error ? 'alert' : 'status'); }
     };
     const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Готовность"></progress>`;
+    // №148 (Влад 05.11 13:07): «все задачи должны быть у меня в задачах». Ждут Влада = незакрытые задачи,
+    // где есть хотя бы одно: owner_question не пустой, blocker/следующий шаг «ждёт Влада», исполнитель «Влад».
+    const PRIORITY_RANK = {urgent:0,high:1,normal:2,low:3};
+    const answered = new Map();
+    const requestSignature = task => JSON.stringify([task.waiting_since, task.coordination?.owner_question, task.coordination?.blocker, task.coordination?.nextAction]);
+    const hasAnswer = task => answered.get(task.id) === requestSignature(task) || (task.comments || []).some(comment => /^ОТВЕТ:/iu.test(String(comment.text || '').trim()) && String(comment.author || '').trim() === 'Влад' && (!task.waiting_since || Date.parse(comment.created_at) >= Date.parse(task.waiting_since)));
+    const waitsOwner = task => !hasAnswer(task) && !['done','cancelled'].includes(task.status) && !task.product_placeholder && (String(task.coordination?.owner_question || '').trim() !== '' || window.SbTaskOverview?.isWaiting(task) === true);
+    const waitingOrder = (a,b) => (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) || (a.due_date || '9999').localeCompare(b.due_date || '9999') || a.id - b.id;
+    const ownerQuestion = task => String(task.coordination?.owner_question || '').trim();
+    const quickAnswer = task => {
+      const yes = String(task.coordination?.if_yes || '').trim(), no = String(task.coordination?.if_no || '').trim();
+      if (!ownerQuestion(task) || !yes || !no) return '';
+      const minutes = task.coordination?.owner_minutes;
+      return `<form class="tb-wait-quick" data-wait-quick="${task.id}"><p>Да → ${esc(yes)}</p><p>Нет → ${esc(no)}</p>${Number.isInteger(minutes) ? `<p>Ваше время: ${minutes === 0 ? 'меньше минуты' : `${minutes} мин.`}</p>` : ''}<div class="tb-wait-buttons"><button type="button" data-wait-quick-choice="Да">Да</button><button type="button" data-wait-quick-choice="Нет">Нет</button><button type="button" data-task-open="${task.id}">Свой вариант</button></div><p data-wait-quick-result role="status"></p></form>`;
+    };
+    const ownerInstructions = task => {
+      const blocker = String(task.coordination?.blocker || ''), next = String(task.coordination?.nextAction || '');
+      if (!blocker.trim() && !next.trim()) return '';
+      return `<details class="tb-waiting-instructions" data-waiting-instructions open><summary>${ownerQuestion(task) ? 'Полный текст ожидания' : 'Инструкция'}</summary>${blocker ? `<p class="tb-waiting-text">${esc(blocker)}</p>` : ''}${next ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(next)}</p>` : ''}</details>`;
+    };
+    const waitingRow = task => {
+      const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
+      const question = ownerQuestion(task);
+      return `<article class="tb-waiting-row" data-wait-row="${task.id}" data-priority="${esc(task.priority || 'normal')}"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))} · ${esc(STATUS[task.status] || task.status)}${task.priority && task.priority !== 'normal' ? ` · ${esc(PRIORITY[task.priority] || task.priority)}` : ''}${task.due_date ? ` · срок ${esc(task.due_date)}` : ''}</span><strong>${esc(question || displayTitle(task))}</strong>${question ? `<span class="tb-waiting-task">${esc(displayTitle(task))}</span>` : ''}</button>${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}${Number.isInteger(task.coordination?.owner_minutes) ? `<span class="tb-owner-minutes">Ваше время: ${task.coordination.owner_minutes} мин.</span>` : ''}${linksMarkup(task)}${ownerInstructions(task)}${quickAnswer(task)}</article>`;
+    };
+    const bindQuickAnswers = (root = container) => root.querySelectorAll('[data-wait-quick]').forEach(form => {
+      const id = Number(form.dataset.waitQuick), result = form.querySelector('[data-wait-quick-result]');
+      const buttons = [...form.querySelectorAll('[data-wait-quick-choice]')];
+      const sync = () => buttons.forEach(button => { button.disabled = waitingInflight.has(id); });
+      sync();
+      buttons.forEach(button => button.onclick = async () => {
+        if (waitingInflight.has(id)) return;
+        const text = `ОТВЕТ: ${button.dataset.waitQuickChoice}`, marker = `quick:${Date.now()}`;
+        waitingInflight.set(id,marker); sync(); result.textContent = 'Ответ отправляется…';
+        try { await tool('task_comment',{task_id:id,author:'Влад',text}); answered.set(id, requestSignature(tasks.find(task => task.id === id) || {})); result.textContent = 'Ответ добавлен в ход работы.'; if (alive) await render(); }
+        catch (error) { result.textContent = `${ownerText(error.message,200) || 'Не удалось отправить ответ.'} Откройте карточку задачи и проверьте ход работы перед повтором.`; }
+        finally { if (waitingInflight.get(id) === marker) waitingInflight.delete(id); if (form.isConnected) sync(); }
+      });
+    });
     const overviewMarkup = () => {
       const helper = window.SbTaskOverview; if (!helper) return '';
       const model = helper.build(tasks.filter(task => matchesProject(task)),productNames());
-      const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
-        const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
-        return `<article class="tb-waiting-row"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(ownerDecision(task).question)}</strong></button>${linksMarkup(task)}${waitingInstructions(task)}${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}</article>`;
-      }).join('')}</div></section>` : '';
-      if (state.view !== 'projects') return waiting;
+      const rows = tasks.filter(task => matchesProject(task) && waitsOwner(task)).sort(waitingOrder);
+      const waiting = rows.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${rows.length}</span><a href="#tasks/mine" class="tb-mine-all">Мои задачи · порядок и пауза</a></h2><div>${rows.map(waitingRow).join('')}</div></section>` : '';
+      const first = waiting;
+      if (state.view !== 'projects') return first;
       const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
       const goals = model.goals.map(goal => `<article class="tb-goal" data-goal="${goal.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${goal.task.id}"><span>Цель</span><strong>${esc(goal.title)}</strong></button>${percentage(goal.progress)}</div>${goal.current.length || goal.next.length ? `<p>Сейчас строим: ${esc(goal.current.map(module => module.title).join(', ') || 'модуль ещё не начат')}${goal.next.length ? ` → потом: ${esc(goal.next.map(module => module.title).join(', '))}` : ''}</p>` : ''}</article>`).join('');
       const modules = model.modules || model.directions;
@@ -114,21 +143,29 @@
       const next = modules.filter(module => !module.started);
       const upcoming = next.length ? `<section class="tb-upcoming"><h2>Дальше по плану</h2><div>${next.map(direction => `<button type="button" data-task-open="${direction.task.id}">${esc(direction.title)} · ${direction.progress}%</button>`).join('')}</div></section>` : '';
       const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(displayTitle(item.task))}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
-      return `<div class="tb-overview">${waiting}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
+      return `<div class="tb-overview">${first}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
     };
     async function hydrateOverview(records) {
       if (!window.SbTaskOverview) return records;
-      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction') || !Object.hasOwn(task.coordination || {},'owner_question') || (window.SbTaskOverview.isWaiting(task) && !Array.isArray(task.coordination?.links))));
+      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (waitsOwner(task) || task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction') || !Object.hasOwn(task.coordination || {},'owner_question') || (window.SbTaskOverview.isWaiting(task) && !Array.isArray(task.coordination?.links))));
       let cursor = 0;
       await Promise.all(Array.from({length:Math.min(3,pending.length)},async () => {
         while (cursor < pending.length && alive) {
           const {task,index} = pending[cursor++], signature = JSON.stringify([task.coordination?.revision,task.updated_at,...['blocker','nextAction','owner_question','if_yes','if_no','owner_minutes'].map(key => task.coordination?.[key])]);
           const cached = overviewCache.get(task.id);
-          if (cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
+          if (!waitsOwner(task) && cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
           try {
-            const data = await tool('task_get',{task_id:task.id,comments_limit:1,subtasks_limit:1}), full = data.task || data;
+            const data = await tool('task_get',{task_id:task.id,comments_limit:20,subtasks_limit:1}), full = data.task || data;
             if (full.id !== task.id || full.company_code !== task.company_code) throw Error('Область карточки изменилась');
-            const value = {description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
+            // Ответ мог оказаться за пределами первой страницы журнала старой задачи.
+            const comments = [...(full.comments || [])];
+            while (comments.length < (full.comments_pagination?.total || 0) && !hasAnswer({...full,comments})) {
+              const page = await tool('task_get',{task_id:task.id,comments_limit:20,comments_offset:comments.length,subtasks_limit:1});
+              const more = page.task || page;
+              if (more.id !== task.id || more.company_code !== task.company_code || !more.comments?.length) break;
+              comments.push(...more.comments);
+            }
+            const value = {comments,description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
             result[index] = {...task,...value}; overviewCache.set(task.id,{signature,value});
           } catch { result[index] = {...task,_overview_incomplete:true}; }
         }
@@ -198,14 +235,11 @@
       }
       const legacy = tasks.filter(task => task.product_placeholder && task.status !== 'cancelled' && matchesProject(task));
       container.innerHTML = `<div class="tb-board"><header class="tb-toolbar"><div class="tb-heading"><h2>Задачи</h2><button type="button" class="tb-primary" data-create-task>+ Задача</button></div><nav class="tb-project-tabs" aria-label="Проекты"><button type="button" data-project="" aria-pressed="${!state.project}">Все проекты</button>${projects().map(code => `<button type="button" data-project="${esc(code)}" aria-pressed="${state.project === code}">${esc(name(code))}</button>`).join('')}</nav><div class="tb-controls"><nav class="tb-view-tabs" aria-label="Вид задач">${Object.entries({board:'Доска',plan:'План',today:'План дня',projects:'Обзор',agents:'Агенты'}).map(([view,label]) => `<button type="button" data-board-view="${view}" aria-pressed="${state.view === view}">${label}</button>`).join('')}</nav><button type="button" data-board-refresh aria-label="Обновить доску">↻</button><input type="search" data-board-search aria-label="Поиск задач" placeholder="Поиск задач" value="${esc(state.search)}"></div>${visibleProducts.length ? `<nav class="tb-product-chips" aria-label="Продукты"><button type="button" data-product="" aria-pressed="${!state.product}">Все продукты</button>${visibleProducts.map(product => `<button type="button" data-product="${product.id}" aria-pressed="${String(state.product) === String(product.id)}">${esc(product.name)}</button>`).join('')}</nav>` : ''}</header><p class="tb-notice" data-board-notice role="status"></p>${state.project && !['agents','projects'].includes(state.view) ? '<form class="tb-quick" data-quick-task><input name="title" required maxlength="300" aria-label="Новая задача" placeholder="Что сделать?"><button type="submit">+ Задача</button></form>' : ''}${body}${legacy.length ? `<details class="tb-cancelled"><summary>Прежние продукты · ${legacy.length}</summary><div class="tb-cancelled-list">${legacy.map(card).join('')}</div></details>` : ''}</div>`;
-      container.querySelector('.tb-board').insertAdjacentHTML('afterbegin',overviewMarkup());
+      container.querySelector('.tb-board').insertAdjacentHTML('afterbegin',overviewMarkup()); bindQuickAnswers();
       container.querySelectorAll('[data-project]').forEach(button => button.onclick = () => { state.project = button.dataset.project; state.product = ''; if (state.view === 'projects') state.view = 'plan'; draw(); });
       container.querySelectorAll('[data-product]').forEach(button => button.onclick = () => { state.product = button.dataset.product; draw(); });
       container.querySelectorAll('[data-board-view]').forEach(button => button.onclick = () => { state.view = button.dataset.boardView; draw(); });
       container.querySelector('[data-board-refresh]').onclick = () => render();
-      const themeButton = document.createElement('button'); themeButton.type = 'button'; themeButton.dataset.boardTheme = '';
-      themeButton.onclick = () => { themeMode = {system:'light',light:'dark',dark:'system'}[themeMode]; try { localStorage.setItem(`${key}:theme`,themeMode); } catch {} applyTheme(); };
-      container.querySelector('.tb-controls').append(themeButton); applyTheme();
       container.querySelector('[data-create-task]').onclick = () => openCreate();
       container.querySelector('[data-board-search]').oninput = event => {
         state.search = event.target.value;
@@ -231,7 +265,6 @@
     function sheet(title, className, onClose, beforeClose) {
       const overlay = document.createElement('div'); overlay.className = 'tb-overlay';
       overlay.innerHTML = `<section class="tb-sheet ${className}" role="dialog" aria-modal="true" aria-label="${esc(title)}" tabindex="-1"><header class="tb-sheet-header"><h2>${esc(title)}</h2><button type="button" data-sheet-close aria-label="Закрыть">×</button></header><div data-sheet-body></div></section>`;
-      overlay.querySelector('.tb-sheet').dataset.tbTheme = theme();
       document.body.append(overlay); focusBeforeSheet = document.activeElement;
       const previousFocus = focusBeforeSheet;
       const close = () => { if (!overlay.isConnected) return; beforeClose?.(); overlay.remove(); onClose?.(); if (previousFocus?.isConnected) previousFocus.focus(); };
@@ -302,7 +335,7 @@
         const pending = {id:`reply:${Date.now()}:${Math.random().toString(36).slice(2)}`,text:`ОТВЕТ: ${String(text).trim()}`,inputAtSend:form.elements.text.value,fromField,baselineId:Math.max(0,...(task.comments || []).map(item => Number(item.id) || 0))};
         waitingInflight.set(id,pending.id); write(draftKey,{...(read(draftKey) || {}),pending}); sync(); result.textContent = 'Ответ отправляется…';
         try {
-          await tool('task_comment',{task_id:id,author:'Влад',text:pending.text}); finish(pending);
+          await tool('task_comment',{task_id:id,author:'Влад',text:pending.text}); answered.set(id,requestSignature(task)); finish(pending);
           if (alive) await render();
           if (taskSheet === own) { await openTask(id); taskSheet?.body.querySelector('[data-wait-result]')?.append('Ответ добавлен в ход работы.'); }
         } catch (error) {
@@ -360,8 +393,17 @@
       details.append(...own.body.childNodes); own.body.append(details);
       const panel=details.querySelector('[data-waiting-actions]');
       if (panel) { own.body.prepend(panel); const full=details.querySelector('[data-waiting-instructions]'); if (full) panel.after(full); for (const node of panel.querySelectorAll('[data-wait-clear],.tb-waiting-hint,[data-wait-edit-plan]')) details.append(node); }
+      else if (waitsOwner(task) && (ownerQuestion(task) || ownerInstructions(task))) {
+        // №148: задача ждёт Влада — вопрос, ссылки, инструкция и «Да/Нет» видны сразу, как в строке «Ждут Влада».
+        const summary=document.createElement('section'); summary.dataset.taskSimple=''; summary.dataset.ownerWaiting=''; summary.className='tb-owner-waiting';
+        summary.innerHTML=`<h3>${esc(ownerQuestion(task) || displayTitle(task))}</h3>${ownerQuestion(task) ? `<p class="tb-waiting-task">${esc(displayTitle(task))}</p>` : ''}${linksMarkup(task)}${ownerInstructions(task)}${quickAnswer(task)}`;
+        own.body.prepend(summary); bindQuickAnswers(summary);
+        summary.querySelectorAll('[data-wait-quick] [data-task-open]').forEach(button => { button.removeAttribute('data-task-open'); button.onclick = () => { details.open = true; own.body.querySelector('[data-comment-form] textarea')?.focus(); }; });
+      }
       else { const summary=document.createElement('section'); summary.dataset.taskSimple=''; summary.innerHTML=`<h3>${esc(window.SbTaskOverview?.isWaiting(task) ? 'Вопрос пока не оформлен' : displayTitle(task))}</h3>`; own.body.prepend(summary); }
-      const next=window.SbTaskOverview?.hasWaitingNextStep(task) ? '' : ownerText(task.coordination?.nextAction);
+      // №148: если вопрос и инструкция уже показаны целиком, обрезанная строка «Следующий шаг» не дублирует их.
+      const shownFull = panel || own.body.querySelector('[data-owner-waiting] [data-waiting-instructions]');
+      const next=window.SbTaskOverview?.hasWaitingNextStep(task) || shownFull ? '' : ownerText(task.coordination?.nextAction);
       if (next) { const line=document.createElement('p'); line.className='tb-simple-next'; line.textContent=`Следующий шаг: ${next}`; line.title=next; details.before(line); }
       details.open=read(`details:${task.id}`)===true;
       details.ontoggle=()=>write(`details:${task.id}`,details.open);
@@ -447,6 +489,7 @@
             const list = own.body.querySelector('[data-comments]');
             if (!list.querySelector(`[data-comment-id="${Number(response.comment.id)}"]`)) { list.insertAdjacentHTML('afterbegin',listComment(response.comment)); commentsOffset++; }
             comment.querySelector('[data-comment-result]').textContent = 'Комментарий добавлен';
+            if (/^ОТВЕТ:/iu.test(submittedText.trim())) { answered.set(id,requestSignature(task)); if (alive) await render(); }
           }
           catch (error) { comment.querySelector('[data-comment-result]').textContent = `${error.message}. Проверьте ход работы перед повторной отправкой.`; }
           finally { button.disabled = false; }
@@ -599,8 +642,7 @@
     const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
     window.addEventListener('pageshow',pageShow);window.addEventListener('focus',focus); document.addEventListener('visibilitychange',visibility);
     window.addEventListener('sb-waiting-reply-settled',replySettled);
-    mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel);container.removeEventListener('focusout',focusOut); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel);container.removeEventListener('focusout',focusOut); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});
