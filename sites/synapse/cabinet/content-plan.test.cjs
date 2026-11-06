@@ -74,19 +74,26 @@ test('registers through SynapseModules; without registry it waits in SynapseModu
   assert.equal(typeof b.window.SynapseModulesQueue[0][1].mount, 'function');
 });
 
-test('short view lists №, date, platform, topic, status; row opens hook, B-roll, style, roles and props as text', async () => {
+test('макет 07.11: карточка — дата, статус, тема со стрелкой, значки площадок; без №; полный вид — поля идеи и детали', async () => {
   const a = api(); await a.mount();
   const rows = [...a.root.querySelectorAll('.cp-row')];
   assert.equal(rows.length, 2);
-  assert.match(rows[0].textContent, /№1/); assert.match(rows[0].textContent, /ВКонтакте/); assert.match(rows[0].textContent, /SAMPLE тема 1/);
+  assert.doesNotMatch(rows[0].textContent, /№/); assert.match(rows[0].textContent, /SAMPLE тема 1/);
+  assert.equal(rows[0].querySelector('.cp-nets').getAttribute('aria-label'), 'Площадки: ВКонтакте');
+  assert.deepEqual([...rows[0].querySelectorAll('.cp-nb')].map((n) => n.textContent), ['VK']);
   assert.match(rows[0].querySelector('.cp-st').textContent, /Согласовано/); assert.match(rows[1].querySelector('.cp-st').textContent, /На согласовании/);
-  assert.equal(rows[0].querySelector('.cp-full'), null);
+  assert.equal(rows[0].querySelector('.cp-chev').textContent, '▾'); assert.equal(rows[0].querySelector('.cp-full'), null);
   rows[0].querySelector('[data-toggle]').click();
   const full = a.root.querySelector('.cp-full');
+  assert.equal(a.root.querySelector('[data-idea="s-1"] .cp-chev').textContent, '▴');
+  const fields = Object.fromEntries([...full.querySelectorAll('.cp-fgrid > div')].map((d) => [d.querySelector('dt').textContent, d.querySelector('dd').textContent]));
+  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Съёмка', 'Статус'], 'комментариев и исходников в данных нет — не показываются');
+  assert.equal(fields['Формат'], 'Рилс'); assert.equal(fields['Съёмка'], 'SAMPLE оператор');
   for (const text of ['Хук — первые 1–2 с', 'SAMPLE хук', 'SAMPLE руки', 'SAMPLE тёплый свет', 'SAMPLE халат', 'SAMPLE подпись']) assert.ok(full.textContent.includes(text), text);
-  const script = [...full.querySelectorAll('.cp-script tr')].map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td').textContent]);
-  assert.deepEqual(script, [['Мастер', 'Здравствуйте!'], ['Клиент', '<b>Привет</b>'], ['—', 'Пауза, смех']]);
-  assert.equal(full.querySelector('b'), null, 'server text is escaped');
+  assert.deepEqual([...full.querySelectorAll('.cp-sec th')].map((th) => th.textContent), ['Кто говорит', 'Реплика', 'Действие / монтаж'], 'пустые колонки скрыты');
+  const script = [...full.querySelectorAll('.cp-sec tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent));
+  assert.deepEqual(script, [['Мастер', 'Здравствуйте!', ''], ['Клиент', '<b>Привет</b>', ''], ['', '', 'Пауза, смех']]);
+  assert.ok(![...full.querySelectorAll('b')].some((b) => b.textContent === 'Привет'), 'server text is escaped');
   assert.equal(a.root.querySelector('.cp-stage'), null, 'статус уже в шапке кабинета');
 });
 
@@ -343,20 +350,38 @@ test('№141: «Начало» and «Дней» are an even grid — caption spa
   assert.match(css, /\.cp-gen input\[type="date"\] \{ -webkit-appearance:none; appearance:none;/);
 });
 
-test('№143: on 390 the row is four lines — «№ дата» / тема / площадки / статус; platforms never share the auto column with №', async () => {
+test('макет 07.11: телефон — карточка в колонку, ПК ≥1100 — таблица Дата · Тема · Площадки · Статус · «Сменить статус ▾»', async () => {
   const a = api(); await a.mount();
-  const line = a.root.querySelector('.cp-line');
-  assert.deepEqual([...line.children].map((el) => el.className), ['cp-n', 'cp-date', 'cp-pl', 'cp-topic', 'cp-st']);
+  const row = a.root.querySelector('.cp-row');
+  assert.deepEqual([...row.children].map((el) => el.className), ['cp-top', 'cp-line', 'cp-acts']);
+  assert.deepEqual([...a.root.querySelectorAll('.cp-thead span')].map((s) => s.textContent), ['Дата', 'Тема', 'Площадки', 'Статус', '']);
+  assert.equal(row.querySelector('.cp-act').textContent, 'Сменить статус ▾');
   const css = fs.readFileSync(path.join(__dirname, 'content-plan.css'), 'utf8');
-  const mobile = css.slice(css.indexOf('@media (max-width: 640px)'));
-  const rule = mobile.match(/\.cp-line \{([^}]*)\}/)[1];
-  // Колонка «auto» растягивалась под площадки и отнимала ширину у даты; теперь первая колонка — только под номер.
-  assert.match(rule, /grid-template-columns:max-content minmax\(0,1fr\)/);
-  assert.match(rule, /grid-template-areas:"n date" "topic topic" "pl pl" "st st"/);
-  assert.match(mobile, /\.cp-date \{ grid-area:date; white-space:nowrap; \}/);
-  assert.match(mobile, /\.cp-st \{ grid-area:st; justify-self:start; max-width:100%; white-space:normal; \}/);
-  // Широкая раскладка 641+ не тронута: пять колонок в одну строку.
-  assert.match(css, /\.cp-line \{ width:100%; display:grid; grid-template-columns:52px 96px minmax\(90px,160px\) 1fr auto;/);
+  const wide = css.slice(css.indexOf('@media (min-width: 1100px)'));
+  assert.match(wide, /grid-template-areas:"date line nets st act" "full full full full full" "pop pop pop pop pop"/);
+  assert.match(wide, /\.cp-top, \.cp-acts \{ display:contents; \}/);
+  assert.match(css, /\.cp-thead \{ display:none; \}/);
+});
+
+test('макет 07.11: клик по любому месту карточки раскрывает, по кнопке — нет; «Внести правки» показывает поле', async () => {
+  const a = api({ plan: [idea(1), idea(2, { script: '0–2 с | Гостья | «Сколько стоит?» | Гостья у стойки | Хук | Сколько стоит?\n2–6 с Мастер: Первый визит — …' })] }); await a.mount();
+  const row = () => a.root.querySelector('[data-idea="s-2"]');
+  row().querySelector('.cp-date').click();
+  assert.ok(row().querySelector('.cp-full'), 'клик по дате раскрывает');
+  assert.deepEqual([...row().querySelectorAll('.cp-sec thead th')].map((th) => th.textContent), ['Время', 'Кто говорит', 'Реплика', 'В кадре', 'Действие / монтаж', 'Титр']);
+  assert.deepEqual([...row().querySelectorAll('.cp-sec tbody tr')[1].children].map((td) => td.textContent), ['2–6 с', 'Мастер', 'Первый визит — …', '', '', '']);
+  row().querySelector('.cp-full dd').click(); assert.ok(row().querySelector('.cp-full'), 'клик внутри полного вида не сворачивает');
+  row().querySelector('.cp-top').click(); assert.equal(row().querySelector('.cp-full'), null, 'повторный клик сворачивает');
+  row().querySelector('[data-cp-menu]').click();
+  assert.equal(row().querySelector('.cp-full'), null, 'кнопка не раскрывает');
+  assert.deepEqual([...row().querySelectorAll('.cp-stg')].map((b) => [b.textContent, b.dataset.stg]), [['На согласовании', 'wait'], ['Согласовано', 'ok'], ['Внести правки', 'fix']]);
+  assert.equal(row().querySelector('[data-cp-fix-form]'), null, 'поле правки только после «Внести правки»');
+  assert.doesNotMatch(row().textContent, /открывается только/);
+  row().querySelector('[data-cp-fix]').click();
+  const box = row().querySelector('[data-cp-fix-form] textarea');
+  assert.equal(box.placeholder, 'Напишите правку: что изменить в сценарии...');
+  assert.deepEqual([...row().querySelectorAll('.cp-fix-btns button')].map((b) => b.textContent), ['Отправить', 'Закрыть']);
+  row().querySelector('[data-cp-fix-cancel]').click(); assert.equal(row().querySelector('.cp-pop'), null);
 });
 
 test('№181: вкладки фильтруют существующие строки; новые используют анкету; сортировка запоминается у пользователя', async () => {
@@ -404,16 +429,20 @@ test('Влад 06.11: у публикации «Согласовать» и «В
   assert.equal(row1.querySelector('.cp-n'), null, 'номер у строки убран');
   assert.equal(row2.querySelector('[data-cp-decide]'), null, 'действия спрятаны в списке');
   row2.querySelector('[data-cp-menu]').click();
+  assert.equal(a.root.querySelector('[data-idea="s-2"] [data-cp-decide="withdrawn"]').disabled, true, 'уже на согласовании');
   a.root.querySelector('[data-idea="s-2"] [data-cp-decide="approved"]').click(); await tick(); await tick();
   assert.deepEqual(a.calls.find((c) => c.path.endsWith('/variants/decision')).body,
     { planRevision: 4, briefRevision: 2, scope: 'idea', ideaId: 's-2', decision: 'approved', comment: '' });
+  a.root.querySelector('[data-idea="s-1"] [data-cp-menu]').click();
+  a.root.querySelector('[data-idea="s-1"] [data-cp-decide="withdrawn"]').click(); await tick(); await tick();
+  assert.equal(a.calls.filter((c) => c.path.endsWith('/variants/decision'))[1].body.decision, 'withdrawn', '«На согласовании» отменяет согласование');
   a.root.querySelector('[data-idea="s-2"] [data-cp-menu]').click();
   a.root.querySelector('[data-idea="s-2"] [data-cp-fix]').click();
   const form = a.root.querySelector('[data-idea="s-2"] [data-cp-fix-form]');
   form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick();
-  assert.equal(a.calls.filter((c) => c.path.endsWith('/variants/decision')).length, 1, 'пустая правка не уходит');
+  assert.equal(a.calls.filter((c) => c.path.endsWith('/variants/decision')).length, 2, 'пустая правка не уходит');
   form.querySelector('textarea').value = 'Заменить хук'; form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick(); await tick();
-  const fix = a.calls.filter((c) => c.path.endsWith('/variants/decision'))[1].body;
+  const fix = a.calls.filter((c) => c.path.endsWith('/variants/decision'))[2].body;
   assert.equal(fix.decision, 'rejected'); assert.equal(fix.comment, 'Заменить хук'); assert.equal(fix.ideaId, 's-2');
 });
 

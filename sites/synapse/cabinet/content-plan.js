@@ -30,6 +30,32 @@
   });
   const caption = (idea) => idea.variants?.[idea.platform]?.text || Object.values(idea.variants || {}).find((v) => v.text)?.text || '';
   const rolesTable = (lines) => `<table class="cp-script"><tbody>${lines.map((l) => `<tr><th scope="row">${esc(l.actor || '—')}</th><td>${esc(l.line)}</td></tr>`).join('')}</tbody></table>`;
+  /* Макет Влада 07.11: значки площадок — цветные кружки с подписью, без логотипов. */
+  const NET = {telegram: ['TG', '#229ed9'], vk: ['VK', '#0077ff'], youtube_shorts: ['YT', '#e62117'], youtube: ['YT', '#e62117'],
+    tiktok: ['TT', '#111'], instagram: ['IG', '#d6249f'], max: ['MAX', '#6b4eff'], two_gis: ['2Г', '#2f9e44']};
+  /* «Сценарий по секундам» строится только из сценария плана. Строка «0–2 с | Кто | Реплика | В кадре | Действие | Титр»
+     (копия из Google Таблицы) раскладывается по колонкам; иначе — время в начале строки (если есть) и «Имя: реплика»,
+     «Кадр:»/«В кадре:», «Титр:», «Вставка:»/«[…]»/«Действие:». Пустые колонки не показываются. */
+  const SEC = ['Время', 'Кто говорит', 'Реплика', 'В кадре', 'Действие / монтаж', 'Титр'];
+  const TIME = /^(\d+(?:[.,]\d+)?(?:\s*[–—-]\s*\d+(?:[.,]\d+)?)?\s*с(?:ек)?\.?)(?:\s*[·|:—–-]\s*|\s+)/i;
+  const seconds = (script) => String(script || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((raw) => {
+    if (raw.includes('|')) { const c = raw.split('|').map((x) => x.trim()); if (!TIME.test(c[0] + ' ')) c.unshift(''); return SEC.map((_, i) => c[i] || ''); }
+    const row = ['', '', '', '', '', '']; let rest = raw; const t = TIME.exec(rest);
+    if (t) { row[0] = t[1]; rest = rest.slice(t[0].length).trim(); }
+    let m;
+    if ((m = /^(?:в кадре|кадр|план)\s*[:—-]\s*(.+)$/i.exec(rest))) row[3] = m[1];
+    else if ((m = /^(?:титр|текст на экране)\s*[:—-]\s*(.+)$/i.exec(rest))) row[5] = m[1];
+    else if ((m = /^(?:вставка|b-?roll|перебивка|действие|монтаж)\s*[:—-]\s*(.+)$/i.exec(rest)) || (m = /^\[(.+)\]$/.exec(rest))) row[4] = m[1];
+    else if ((m = /^([^:]{1,40}):\s*(.+)$/.exec(rest))) { row[1] = m[1].trim(); row[2] = m[2]; }
+    else row[4] = rest;
+    return row;
+  });
+  function secondsTable(script) {
+    const rows = seconds(script); if (!rows.length) return '';
+    const cols = SEC.map((_, i) => i).filter((i) => rows.some((r) => r[i]));
+    return `<div class="cp-secs"><b>Сценарий по секундам</b><table class="cp-sec"><thead><tr>${cols.map((i) => `<th scope="col">${SEC[i]}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${cols.map((i) => `<td data-label="${SEC[i]}">${esc(r[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
 
   /* Доступ к API только через ctx контракта А: компания, CSRF и сессия добавляются оболочкой. */
   const io = (ctx) => ({
@@ -105,7 +131,7 @@
       <button type="button" role="tab" data-cp-tab="plan" aria-selected="${state.tab === 'plan'}" aria-controls="cp-publications">Контент-план</button>
       <button type="button" role="tab" data-cp-tab="drafts" aria-selected="${state.tab === 'drafts'}" aria-controls="cp-publications">Черновики</button>
       ${edit ? '<button type="button" class="cp-new" data-cp="questionnaire">+ Новый</button>' : ''}</div>
-      ${sheetUrl ? `<a class="cp-sheet-link" href="${esc(sheetUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть Google Таблицу" title="Google Таблица"><svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true"><path fill="currentColor" d="M3 0h11l7 7v15a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm2 10v10h12V10H5zm2 2h3v2H7v-2zm5 0h3v2h-3v-2zm-5 4h3v2H7v-2zm5 0h3v2h-3v-2z"/></svg></a>` : ''}</nav>`;
+      </nav>`;
     /* №186: анкеты нет на вкладке. Окно поверх открывают «+ Новый» (новый план) и ⚙ (настройка текущего). На телефоне — на весь экран:
        «←» и крестик сверху, главная кнопка закреплена внизу. Поля сохраняются сами, как раньше. */
     const questionnaire = !state.qOpen ? '' : `<div class="cp-modal" data-cp-modal role="dialog" aria-modal="true" aria-labelledby="cp-q-title">
@@ -130,16 +156,20 @@
         ${approversNote()}<p class="cp-note">Согласовано материалов: ${s.approvedIdeas} из ${s.ideas}. Когда отметят все — план уходит к СММ и в «Съёмку».</p></section>`;
     const plan = `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}"><div class="cp-list-head"><h3>Публикации</h3>
       <div class="cp-tools"><button type="button" class="cp-gear" data-cp="settings-plan" aria-label="Выбор и настройка контент-плана" title="Выбор и настройка контент-плана" aria-haspopup="dialog">⚙</button>
+      ${sheetUrl ? `<a class="cp-sheet-link" href="${esc(sheetUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть Google Таблицу" title="Google Таблица">▦</a>` : ''}
       <div class="cp-sort"><button type="button" data-cp-sort-toggle aria-label="Сортировать публикации" aria-expanded="${state.sortOpen}" aria-controls="cp-sort-menu">⇅</button>
       <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${[['date','По дате'],['platform','По площадке'],['status','По статусу']].map(([value,label])=>`<button type="button" data-cp-sort="${value}" aria-pressed="${state.sort === value}">${state.sort === value ? '✓ ' : ''}${label}</button>`).join('')}</div></div></div></div>
       ${!days.length ? `<p class="cp-note">${allDays.length ? 'В этом списке пока нет публикаций.' : 'Плана пока нет. Нажмите «+ Новый», чтобы заполнить анкету и сформировать план.'}</p>` : ''}
-      ${state.view === 'full' ? sheet(days, platforms, status) : `<ol class="cp-list">${days.map((idea, index) => {
-        const open = state.open.has(idea.ideaId);
-        return `<li class="cp-row" data-idea="${esc(idea.ideaId)}"><button type="button" class="cp-line" data-toggle aria-expanded="${open}">
-          <span class="cp-date">${esc(day(idea.date))}</span>
-          <span class="cp-pl">${esc(platforms(idea))}</span><span class="cp-topic">${esc(idea.topic)}</span>${status(idea)}</button>
-          ${owner && mentor.plan?.revision ? rowActions(idea, statusOf(idea)) : ''}
-          ${open ? full(idea, edit) : ''}</li>`; }).join('')}</ol>`}</section>`;
+      ${state.view === 'full' ? sheet(days, platforms, status) : `${days.length ? '<div class="cp-thead" aria-hidden="true"><span>Дата</span><span>Тема</span><span>Площадки</span><span>Статус</span><span></span></div>' : ''}
+      <ol class="cp-list">${days.map((idea) => {
+        /* Макет Влада 07.11: дата и статус; тема со стрелкой ▾/▴ (не кнопка-стрелка — раскрывает вся карточка, кроме кнопок);
+           ниже «Сменить статус ▾» и значки площадок. На ПК те же элементы стоят колонками таблицы. */
+        const open = state.open.has(idea.ideaId), st = statusOf(idea);
+        return `<li class="cp-row" data-idea="${esc(idea.ideaId)}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea)}</div>
+          <button type="button" class="cp-line" data-toggle aria-expanded="${open}"><span class="cp-topic">${esc(idea.topic)}</span><span class="cp-chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
+          ${open ? full(idea, edit, st, status) : ''}
+          <div class="cp-acts">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${nets(idea, platformLabel)}</div>
+          ${owner && state.menuOpen === idea.ideaId ? rowMenu(idea, st) : ''}</li>`; }).join('')}</ol>`}</section>`;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
       ${plan}${approve}
       <p class="cp-error" data-cp-error role="alert" hidden></p>${questionnaire}</section>`;
@@ -164,20 +194,28 @@
       </tbody></table></div>`;
   }
 
-  /* Влад 06.11: в списке у каждой публикации — «Согласовать» и «Внести правку».
-     Решение по одной идее (scope: idea) через существующий media-mentor decideVariants;
-     правка требует комментария и возвращает строку «На доработку». Согласовывает владелец. */
-  function rowActions(idea, st) {
-    if (st === 'empty' || st === 'excluded') return '';
-    /* Влад 06.11: одна кнопка открывает список действий; правка вводится в этом же списке. */
-    const id = idea.ideaId, open = state.menuOpen === id, fixing = open && state.fixOpen === id, busy = state.rowBusy === id;
-    const items = st === 'approved'
-      ? `<button type="button" role="menuitem" data-cp-decide="withdrawn" ${busy ? 'disabled' : ''}>Отменить согласование</button>`
-      : `<button type="button" role="menuitem" data-cp-decide="approved" ${busy ? 'disabled' : ''}>Согласовать</button>`;
-    return `<div class="cp-acts"><button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${open}">Действия ▾</button>
-      ${open ? `<div class="cp-menu" role="menu">${items}<button type="button" role="menuitem" data-cp-fix aria-expanded="${fixing}" ${busy ? 'disabled' : ''}>Внести правку</button>
-        ${fixing ? `<form class="cp-fix" data-cp-fix-form><label>Что исправить<textarea name="comment" rows="3" required placeholder="Например: заменить хук, убрать цену, другой финал"></textarea></label>
-          <div class="cp-fix-btns"><button type="submit" class="plain-button">Отправить на доработку</button><button type="button" class="cp-act" data-cp-fix-cancel>Отмена</button></div></form>` : ''}</div>` : ''}</div>`;
+  /* Площадки, на которые запланирован рилс: версии идеи без исключённых. Нет площадок — нет значков. */
+  function nets(idea, label) {
+    const ids = Object.keys(idea.variants || {}).filter((id) => !idea.variants[id]?.excluded);
+    if (!ids.length) return '';
+    return `<span class="cp-nets" role="img" aria-label="Площадки: ${esc(ids.map(label).join(', '))}">${ids.map((id) => {
+      const [abbr, color] = NET[id] || [String(id).slice(0, 3).toUpperCase(), '#667085'];
+      return `<span class="cp-nb" style="background:${color}" title="${esc(label(id))}">${esc(abbr)}</span>`; }).join('')}</span>`;
+  }
+
+  /* Макет Влада 06–07.11: «Сменить статус ▾» → этапы с неяркими цветами. Решение по одной идее (scope: idea) через
+     существующий media-mentor decideVariants: «Согласовано» = approved (дальше рилс идёт в «Съёмку»),
+     «На согласовании» = withdrawn (отмена согласования), «Внести правки» → поле и «Отправить» = rejected с комментарием.
+     Согласует владелец; остальным кнопка не показывается, сервер проверяет право сам. */
+  function rowMenu(idea, st) {
+    const busy = state.rowBusy === idea.ideaId ? ' disabled' : '', fixing = state.fixOpen === idea.ideaId;
+    const item = (stg, attr, label, current, off) => `<button type="button" role="menuitemradio" class="cp-stg" data-stg="${stg}" ${attr} aria-checked="${current}"${off || busy}>${label}</button>`;
+    return `<div class="cp-pop"><div class="cp-menu" role="menu" aria-label="Сменить статус">
+        ${item('wait', 'data-cp-decide="withdrawn"', 'На согласовании', st === 'pending', st === 'approved' ? '' : ' disabled')}
+        ${item('ok', 'data-cp-decide="approved"', 'Согласовано', st === 'approved', st === 'approved' ? ' disabled' : '')}
+        ${item('fix', 'data-cp-fix aria-expanded="' + fixing + '"', 'Внести правки', st === 'rejected', '')}</div>
+      ${fixing ? `<form class="cp-fix" data-cp-fix-form><b>Внести правки</b><textarea name="comment" rows="3" required aria-label="Правка" placeholder="Напишите правку: что изменить в сценарии..."></textarea>
+        <div class="cp-fix-btns"><button type="submit" class="plain-button"${busy}>Отправить</button><button type="button" class="cp-act" data-cp-fix-cancel>Закрыть</button></div></form>` : ''}</div>`;
   }
 
   async function decide(ideaId, decision, comment) {
@@ -189,13 +227,20 @@
     } catch (err) { state.rowBusy = null; draw(); error(err.status === 403 ? 'Согласовывать и возвращать на доработку может владелец кабинета.' : err.message); }
   }
 
-  function full(idea, edit) {
-    const lines = roles(idea.script), actors = [...new Set(lines.map((l) => l.actor).filter(Boolean))];
+  /* Полный вид: поля идеи, которые есть в плане (чего нет — не показываем), затем «Сценарий по секундам» и детали рилса. */
+  function full(idea, edit, st, status) {
+    const {mentor} = state, vocab = mentor.vocabulary || {};
     const block = (key, value) => value ? `<div><dt>${LABEL[key]}</dt><dd>${esc(value)}</dd></div>` : '';
-    return `<div class="cp-full"><dl>
+    const comments = [...new Set((mentor.variants || []).filter((v) => v.ideaId === idea.ideaId && v.comment)
+      .map((v) => (v.actorName ? v.actorName + ': ' : '') + v.comment))];
+    const asset = idea.assetId && (mentor.brief?.fields?.assets || []).find((a) => a.id === idea.assetId);
+    const fields = [['Дата', esc(day(idea.date))], ['Формат', esc((vocab.formats || []).find((f) => f.id === idea.format)?.label || idea.format || '')],
+      ['Съёмка', esc(idea.filmingBy || '')], ['Статус', status(idea)], ['Комментарии', comments.map(esc).join('<br>')],
+      ['Исходники', asset ? esc(asset.title) : '']].filter(([, v]) => v);
+    return `<div class="cp-full"><dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      ${secondsTable(idea.script)}<dl>
       ${block('hook', idea.hook)}${block('broll', idea.broll)}${block('style', idea.style)}
-      <div><dt>Сценарий по ролям${actors.length ? ` · ${esc(actors.join(', '))}` : ''}</dt><dd>${lines.length ? rolesTable(lines) : '<span class="cp-note">Сценарий не заполнен</span>'}</dd></div>
-      ${block('props', idea.props)}${block('filmingBy', idea.filmingBy)}${block('caption', caption(idea))}
+      ${block('props', idea.props)}${block('caption', caption(idea))}
       ${idea.mentorNote ? `<div><dt>Задание Хью</dt><dd>${esc(idea.mentorNote)}</dd></div>` : ''}</dl>
       ${edit ? `<details class="cp-edit"><summary>Изменить</summary><form data-edit="${esc(idea.ideaId)}">
         ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
@@ -364,9 +409,13 @@
     root.querySelectorAll('[data-q]').forEach((field) => field.addEventListener('input', () => queueSave({[field.dataset.q]: field.value})));
     root.querySelectorAll('[data-q-platform]').forEach((box) => box.addEventListener('change', () =>
       queueSave({platforms: [...root.querySelectorAll('[data-q-platform]:checked')].map((b) => b.dataset.qPlatform)})));
-    root.querySelectorAll('[data-toggle]').forEach((button) => button.addEventListener('click', () => {
-      const id = button.closest('[data-idea]').dataset.idea;
-      state.open.has(id) ? state.open.delete(id) : state.open.add(id); draw();
+    /* Макет 07.11: раскрывает нажатие на любое место карточки, кроме кнопок, ссылок, полей и уже открытого полного вида. */
+    root.querySelectorAll('.cp-row').forEach((row) => row.addEventListener('click', (event) => {
+      const t = event.target;
+      if (!t.closest('[data-toggle]') && t.closest('button, a, input, textarea, select, label, summary, form, .cp-full, .cp-pop')) return;
+      if (!t.closest('[data-toggle]') && String(window.getSelection?.() || '')) return;
+      const id = row.dataset.idea; state.open.has(id) ? state.open.delete(id) : state.open.add(id); draw();
+      root.querySelector(`[data-idea="${id}"] [data-toggle]`)?.focus();
     }));
     root.querySelectorAll('[data-open-row]').forEach((button) => button.addEventListener('click', () => {
       state.open.add(button.closest('[data-idea]').dataset.idea); state.view = 'short'; draw();
@@ -376,7 +425,7 @@
     root.querySelectorAll('[data-signoff]').forEach((input) => input.addEventListener('change', () => void signoff(input)));
     root.querySelectorAll('[data-cp-menu]').forEach((button) => button.addEventListener('click', () => {
       const id = button.closest('[data-idea]').dataset.idea; state.menuOpen = state.menuOpen === id ? null : id; state.fixOpen = null; draw();
-      root.querySelector('.cp-menu [role="menuitem"]')?.focus(); }));
+      root.querySelector('.cp-menu [role="menuitemradio"]:not([disabled])')?.focus(); }));
     root.querySelectorAll('[data-cp-decide]').forEach((button) => button.addEventListener('click', () =>
       void decide(button.closest('[data-idea]').dataset.idea, button.dataset.cpDecide)));
     root.querySelectorAll('[data-cp-fix]').forEach((button) => button.addEventListener('click', () => {
@@ -397,6 +446,8 @@
       state.sort = button.dataset.cpSort; state.sortOpen = false; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
     });
     root.onkeydown = event => { if (event.key === 'Escape' && state?.qOpen) { event.preventDefault(); closeQuestionnaire(); return; }
+      if (event.key === 'Escape' && state?.menuOpen) { const id = state.menuOpen; state.menuOpen = null; state.fixOpen = null; draw();
+        root.querySelector(`[data-idea="${id}"] [data-cp-menu]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.sortOpen) { state.sortOpen = false; draw(); root.querySelector('[data-cp-sort-toggle]')?.focus(); } };
   }
 
