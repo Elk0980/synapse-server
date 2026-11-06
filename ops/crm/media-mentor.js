@@ -167,6 +167,11 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
   for(const old of (priorPlan?.days||[]))if(old&&old.ideaId)before.set(old.ideaId,old);
   let previous=-Infinity,generated=0;
   const days=value.map((row,index)=>{
+    /* №168: reelId и publication вычисляются при чтении плана (reel-plan-status) и не хранятся.
+       Клиент, вернувший прочитанный план целиком, не получает отказ «лишние поля». */
+    if(row&&typeof row==='object'&&!Array.isArray(row)&&(Object.hasOwn(row,'reelId')||Object.hasOwn(row,'publication'))){
+      row={...row};delete row.reelId;delete row.publication;
+    }
     object(row,DAY_FIELDS);
     const date=calendarDate(row.date);
     if(date.time<previous)fail(400,'Дни плана должны идти по возрастанию даты');
@@ -493,6 +498,14 @@ function createMediaMentor(db,{now=Date.now}={}) {
       db.prepare(`INSERT INTO media_mentor_plans(company_id,revision,brief_revision,plan,updated_at) VALUES(?,?,?,?,?)
         ON CONFLICT(company_id) DO UPDATE SET revision=excluded.revision,brief_revision=excluded.brief_revision,
         plan=excluded.plan,updated_at=excluded.updated_at`).run(owner.id,next,brief.revision,payload,time);
+      /* №168: смена только статуса подготовки («Отснято», «В монтаже») не меняет содержание плана —
+         отметки согласующих переносятся на новую ревизию, план не возвращается на согласование. */
+      const statusOnly=current&&current.briefRevision===brief.revision&&current.days.length===normalized.days.length
+        &&JSON.stringify(current.days.map(({productionStatus,...rest})=>rest))===JSON.stringify(normalized.days.map(({productionStatus,...rest})=>rest));
+      if(statusOnly&&db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='content_plan_signoffs'").get())
+        db.prepare(`INSERT OR IGNORE INTO content_plan_signoffs(company_id,plan_revision,brief_revision,slot,actor_id,actor_name,checked_at)
+          SELECT company_id,?,brief_revision,slot,actor_id,actor_name,checked_at FROM content_plan_signoffs
+          WHERE company_id=? AND plan_revision=? AND brief_revision=?`).run(next,owner.id,current.revision,brief.revision);
       return snapshot(owner);
     });
   }

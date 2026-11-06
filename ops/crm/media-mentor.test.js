@@ -625,3 +625,26 @@ test('№168: входной published без доставки не сохран
  const fresh=fixture(t);fresh.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);const newPlan=fresh.api.savePlan('alvi',{planRevision:0,briefRevision:1,days:daysFor().map(d=>({...d,productionStatus:'published'}))},ACTOR);
  assert.ok(newPlan.plan.days.every(d=>d.productionStatus!=='published'));
 });
+
+test('№168: вычисляемые reelId/publication из чтения не мешают сохранению и не хранятся',t=>{
+  const f=fixture(t),first=f.ready();
+  const rows=first.plan.days.map((d,i)=>i?d:{...d,reelId:5,publication:{postId:9,items:[]},productionStatus:'shot'});
+  const saved=f.api.savePlan('alvi',{planRevision:first.plan.revision,briefRevision:first.brief.revision,days:rows},ACTOR);
+  assert.equal(saved.plan.days[0].productionStatus,'shot');
+  const stored=JSON.parse(f.db.prepare('SELECT plan FROM media_mentor_plans WHERE company_id=1').get().plan).days[0];
+  assert.equal('reelId' in stored||'publication' in stored,false);
+});
+
+test('№168: смена только статуса подготовки переносит отметки согласующих; правка содержания — нет',t=>{
+  const f=fixture(t),first=f.ready();
+  f.db.exec(`CREATE TABLE content_plan_signoffs(company_id INTEGER NOT NULL,plan_revision INTEGER NOT NULL,brief_revision INTEGER NOT NULL,
+    slot TEXT NOT NULL,actor_id INTEGER,actor_name TEXT NOT NULL,checked_at TEXT NOT NULL,PRIMARY KEY(company_id,plan_revision,brief_revision,slot))`);
+  f.db.prepare('INSERT INTO content_plan_signoffs VALUES(1,?,?,?,7,?,?)').run(first.plan.revision,first.brief.revision,'owner','Влад','2026-09-19T05:00:00Z');
+  const marked=f.api.savePlan('alvi',{planRevision:first.plan.revision,briefRevision:first.brief.revision,
+    days:first.plan.days.map((d,i)=>i?d:{...d,productionStatus:'shot'})},ACTOR);
+  const count=rev=>f.db.prepare('SELECT COUNT(*) n FROM content_plan_signoffs WHERE company_id=1 AND plan_revision=?').get(rev).n;
+  assert.equal(marked.plan.revision,first.plan.revision+1);assert.equal(count(marked.plan.revision),1);
+  const edited=f.api.savePlan('alvi',{planRevision:marked.plan.revision,briefRevision:first.brief.revision,
+    days:marked.plan.days.map((d,i)=>i?d:{...d,topic:'Новая тема'})},ACTOR);
+  assert.equal(count(edited.plan.revision),0);
+});

@@ -106,7 +106,6 @@ function create(el, ctx) {
   const currentVersion = () => (state.open.versions || []).find(v => v.version === state.version) || state.open.currentVersion;
   function renderDetail() {
     queueMicrotask(oneClickControls);
-    queueMicrotask(planLinkControls);
     const reel = state.open, version = currentVersion(), media = safeUrl(version?.mediaUrl), node = $("[data-detail]");
     $("[data-grid]").hidden = true;$("[data-filters]").hidden = true;node.hidden = false;
     if (!state.busy) toggleUpload(false);const opener = $("[data-upload-open]");if (opener) opener.hidden = true;
@@ -148,15 +147,21 @@ function create(el, ctx) {
       const plan=await ctx.api.get('crm/media-mentor');if(ctx.signal.aborted||state.open!==reel)return;
       const days=plan.plan?.days||[];if(!days.length)return;
       const label=document.createElement('label');label.textContent='Пункт контент-плана';const select=document.createElement('select');
-      select.append(new Option('Выберите пункт',''));for(const day of days)select.append(new Option(day.topic,day.ideaId));
+      select.append(new Option('Выберите пункт',''));for(const day of days)select.append(new Option(day.topic,day.ideaId));select.value=days.find(day=>day.reelId===reel.id)?.ideaId||'';
       select.onchange=async()=>{if(!select.value)return;select.disabled=true;try{await ctx.api.patch(`crm/autoposting/reels/${reel.id}`,{ideaId:select.value});detailStatus('Рилс связан с контент-планом.');}catch(e){detailStatus(e.message);}finally{select.disabled=false;}};
       label.append(select);el.querySelector('[data-detail-status]')?.before(label);
     }catch(error){/* Нет права чтения плана — связь остаётся доступной через штатный API. */}
   }
+  function hideNewApi(){const button=el.querySelector('[data-chat-open]');if(button)button.hidden=true;}
   async function oneClickControls() {
-    const reel=state.open,version=state.version;if(!reel?.id||!canEdit)return;
+    const reel=state.open,version=state.version;if(!canEdit)return;
+    /* Сервер до №166/№168 не знает chat-approvals: после первого 404 кнопки нового API скрываются без повторных запросов. */
+    if(sb.reelChatApi===false){hideNewApi();return;}
+    if(!reel?.id)return;
     try{
       const {approval:a}=await ctx.api.get(`crm/autoposting/reels/${reel.id}/chat-approvals`);
+      sb.reelChatApi=true;
+      if(!ctx.signal.aborted&&state.open===reel)void planLinkControls();
       if(ctx.signal.aborted||state.open!==reel||state.version!==version||!a||a.version!==version||a.status!=='approved')return;
       const old=el.querySelector('[data-publish]');if(!old)return;old.textContent='Опубликовать сейчас';old.dataset.oneClick=String(a.id);
       const date=document.createElement('input');date.type='datetime-local';date.setAttribute('aria-label','Дата и время публикации');
@@ -168,7 +173,10 @@ function create(el, ctx) {
         finally{state.busy=false;}
       };
       old.onclick=()=>send();later.onclick=()=>{if(date.value)send(new Date(date.value).toISOString());else date.focus();};
-    }catch(error){/* Обычная карточка остаётся доступной; согласованной её не считаем. */}
+    }catch(error){
+      /* Обычная карточка остаётся доступной; согласованной её не считаем. */
+      if(error?.status===404||error?.status===405){sb.reelChatApi=false;hideNewApi();}
+    }
   }
   async function ensureReel() {
     if (state.open.id) return state.open;

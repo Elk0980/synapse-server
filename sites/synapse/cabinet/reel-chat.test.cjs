@@ -150,3 +150,23 @@ test('«Материалы»: «Отправить на согласование
   await f.mount();await flush();const b=[...f.host.querySelectorAll('button')].find(b=>b.textContent==='Опубликовать сейчас');assert.ok(b);b.click();b.click();await flush();
   assert.equal(f.calls.filter(c=>c[0]==='POST'&&c[1].endsWith('/publish')).length,1);resolve();await flush();assert.match(f.host.textContent,/В плане/);
  });
+
+test('«Материалы» на старом сервере: 404 chat-approvals — кнопка согласования в чате скрыта, связь с планом не предлагается, консоль чистая',async t=>{
+  const dom=new JSDOM('<main id="view"></main>',{url:'https://cabinet.test/#content/materials',runScripts:'outside-only'});t.after(()=>dom.window.close());
+  const w=dom.window,el=w.document.getElementById('view'),calls=[],errors=[];w.console.error=(...x)=>errors.push(x);w.console.warn=(...x)=>errors.push(x);
+  w.SynapseModulesQueue=[];w.eval(fs.readFileSync(path.join(__dirname,'materials.js'),'utf8'));
+  const reel={id:4,key:'reel:4',source:'materials',companyCode:'avokado',title:'Рилс №1',releaseDate:'',platforms:['vk'],postId:40,
+    currentVersion:{version:1,mediaUrl:media},versionCount:1,openEdits:0,versions:[{version:1,mediaUrl:media}],edits:[],log:[]};
+  const answer=async(method,p)=>{calls.push({method,p});
+    if(p==='crm/autoposting/reels'&&method==='GET')return {companyCode:'avokado',reels:[reel]};
+    if(p==='crm/autoposting/reels/4')return reel;
+    throw Object.assign(Error('Не найдено'),{status:404});};
+  const ctx={moduleId:'content-materials',companyCode:'avokado',can:p=>['autoposting.view','autoposting.edit'].includes(p),signal:new w.AbortController().signal,route:{path:''},
+    api:{get:p=>answer('GET',p),post:p=>answer('POST',p)},navigate:()=>{}};
+  const [,definition]=w.SynapseModulesQueue[0];await definition.mount(el,ctx);
+  el.querySelector('[data-open="reel:4"]').click();await flush();
+  assert.equal(el.querySelector('[data-chat-open]').hidden,true);
+  assert.equal(el.querySelector('[data-one-click]'),null);
+  assert.equal(calls.some(c=>c.p==='crm/media-mentor'),false);
+  assert.deepEqual(errors,[]);
+});
