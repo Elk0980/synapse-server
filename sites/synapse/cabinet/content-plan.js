@@ -16,7 +16,13 @@
     ['constraints', 'Ограничения', 'Чего нельзя показывать и говорить']];
   const STAGE = {none: 'Плана ещё нет', approval: 'На согласовании', smm: 'Согласовано — к СММ, в «Съёмке»'};
   const VSTATUS = {approved: 'Согласовано', pending: 'На согласовании', rejected: 'На доработке', empty: 'Нет подписи', excluded: 'Исключено'};
-  const PROD = {planned: 'Запланировано', shot: 'Отснято', editing: 'В монтаже', draft: 'Черновик'};
+  const PROD = {planned: 'Запланировано', shot: 'Отснято', editing: 'В монтаже', draft: 'Черновик', published: 'Опубликовано'};
+  /* №168: порядок «По статусу» — по ходу работы; «Опубликовано» ставит только сервер по итогам автопостинга. */
+  const PROD_ORDER = ['planned', 'shot', 'editing', 'published', 'draft'];
+  const MARKABLE = ['planned', 'shot', 'editing'];
+  const safeUrl = (v) => { try { const u = new URL(v); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
+  /* reelId и publication вычисляет новый сервер при чтении; в сохранение не отправляются (старый сервер их не знает). */
+  const stored = (idea) => { const {reelId, publication, ...rest} = idea; return rest; };
   const REEL = ['topic', 'hook', 'script', 'broll', 'style', 'props', 'filmingBy'];
   const LABEL = {topic: 'Тема', hook: 'Хук — первые 1–2 с', script: 'Сценарий (строка «Имя: реплика»)', broll: 'Вставки (B-roll)',
     style: 'Стиль', props: 'Реквизит', filmingBy: 'Кто снимает', caption: 'Подпись к публикации'};
@@ -94,7 +100,8 @@
     /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
        Плана нет — порядок прежний: анкета сверху и открыта, пока не заполнена. */
     const days = allDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
-      const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru') : state.sort === 'status' ? statusOf(a).localeCompare(statusOf(b),'ru') : 0;
+      const prod = (idea) => { const i = PROD_ORDER.indexOf(idea.productionStatus || 'planned'); return i < 0 ? PROD_ORDER.length : i; };
+      const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru') : state.sort === 'status' ? (prod(a) - prod(b) || statusOf(a).localeCompare(statusOf(b),'ru')) : 0;
       return primary || String(a.date || '').localeCompare(String(b.date || '')) || String(a.ideaId).localeCompare(String(b.ideaId));
     });
     const sheetUrl = sheetLink(state.settings?.settings?.contentPlanSheetUrl);
@@ -167,10 +174,36 @@
       ${block('hook', idea.hook)}${block('broll', idea.broll)}${block('style', idea.style)}
       <div><dt>Сценарий по ролям${actors.length ? ` · ${esc(actors.join(', '))}` : ''}</dt><dd>${lines.length ? rolesTable(lines) : '<span class="cp-note">Сценарий не заполнен</span>'}</dd></div>
       ${block('props', idea.props)}${block('filmingBy', idea.filmingBy)}${block('caption', caption(idea))}
+      ${publication(idea)}
       ${idea.mentorNote ? `<div><dt>Задание Хью</dt><dd>${esc(idea.mentorNote)}</dd></div>` : ''}</dl>
+      ${edit ? mark(idea) : ''}
       ${edit ? `<details class="cp-edit"><summary>Изменить</summary><form data-edit="${esc(idea.ideaId)}">
         ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
         <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}</div>`;
+  }
+
+  /* №168: отметка хода работы в один шаг. «Опубликовано» вручную не ставится — его выводит сервер. */
+  function mark(idea) {
+    if (idea.productionStatus === 'published') return '<p class="cp-note" data-cp-mark>Статус: Опубликовано — по итогам публикации.</p>';
+    const now = idea.productionStatus || 'planned';
+    return `<div class="cp-mark" data-cp-mark role="group" aria-label="Статус подготовки"><span>Статус:</span>${MARKABLE.map((id) =>
+      `<button type="button" class="plain-button cp-small" data-cp-status="${id}" aria-pressed="${now === id}">${now === id ? '✓ ' : ''}${esc(PROD[id])}</button>`).join('')}</div>`;
+  }
+  function publication(idea) {
+    const p = idea.publication;
+    if (!p || !Array.isArray(p.items)) return '';
+    const items = p.items.map((i) => { const url = i.published && safeUrl(i.url);
+      return `<li>${esc(i.platform)}: ${i.published ? (url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Опубликовано</a>` : 'Опубликовано, ссылка недоступна') : 'Ожидает публикации'}</li>`; }).join('');
+    return `<div><dt>Публикация${p.version ? ` · версия ${esc(p.version)}` : ''}</dt><dd>${p.approved ? `<p>Согласовано${p.approvedBy ? ' · ' + esc(p.approvedBy) : ''}</p>` : ''}${items ? `<ul class="cp-pub">${items}</ul>` : '<span class="cp-note">Ещё не запланирована</span>'}</dd></div>`;
+  }
+  async function setStatus(button) {
+    const id = button.closest('[data-idea]')?.dataset.idea, value = button.dataset.cpStatus;
+    if (!id || !MARKABLE.includes(value) || state.saving) return;
+    const idea = state.mentor.plan?.days?.find((d) => d.ideaId === id);
+    if (!idea || idea.productionStatus === 'published' || (idea.productionStatus || 'planned') === value) return;
+    button.closest('[data-cp-mark]')?.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    try { await savePlan(state.mentor.plan.days.map((d) => d.ideaId === id ? {...d, productionStatus: value} : d), `Статус подготовки: ${PROD[value]}`); }
+    catch (err) { error(err.message); button.closest('[data-cp-mark]')?.querySelectorAll('button').forEach((b) => { b.disabled = false; }); }
   }
 
   const error = (message) => { const node = state.container.querySelector('[data-cp-error]'); if (node) { node.hidden = !message; node.textContent = message || ''; } };
@@ -203,7 +236,7 @@
 
   async function savePlan(days, reason) {
     const {mentor, api, ctx, container} = state;
-    days = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    days = [...days].map(stored).sort((a, b) => a.date.localeCompare(b.date));
     await api.put('/plan', {planRevision: mentor.plan?.revision || 0, briefRevision: mentor.brief.revision, days, reason});
     await mount(container, ctx);
   }
@@ -343,6 +376,7 @@
       state.open.add(button.closest('[data-idea]').dataset.idea); state.view = 'short'; draw();
     }));
     root.querySelectorAll('[data-cp-view]').forEach((button) => button.addEventListener('click', () => { state.view = button.dataset.cpView; draw(); }));
+    root.querySelectorAll('[data-cp-status]').forEach((button) => button.addEventListener('click', () => void setStatus(button)));
     root.querySelectorAll('[data-edit]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void saveRow(form); }));
     root.querySelectorAll('[data-signoff]').forEach((input) => input.addEventListener('change', () => void signoff(input)));
     root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', (event) => openQuestionnaire('new', event.currentTarget));

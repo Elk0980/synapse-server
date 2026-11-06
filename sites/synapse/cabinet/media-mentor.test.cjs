@@ -715,3 +715,10 @@ test('текст замечания выводится как текст, а н�
     assert.equal(f.node.querySelector('[data-rules] img'), null);
   } finally { f.close(); }
 });
+
+test('№168: опубликованный пункт — подпись, без ручной опции published в select',async t=>{
+ const data=payload();data.plan.days[0].productionStatus='published';const f=fixture({query:()=>data});t.after(()=>f.close());f.view.render(f.node,f.ctx);await tick();
+ assert.ok([...f.node.querySelectorAll('p')].some(n=>n.textContent==='Статус подготовки: Опубликовано'));
+ assert.equal(f.node.querySelector('select[data-field="productionStatus"] option[value="published"]'),null);
+ const first=f.node.querySelector('[data-field="productionStatus"]');assert.equal(first.type,'hidden');assert.equal(first.value,'published');
+});

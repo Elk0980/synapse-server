@@ -395,3 +395,41 @@ test('№181: сортировка по площадке/статусу меня
   assert.equal(a.root.querySelector('[data-edit="s-1"] [name="topic"]').value,'Несохранённый текст');
   assert.ok(!a.root.textContent.includes('Полный план (таблица)'));
 });
+
+test('№168: отснятый рилс отмечается в один шаг; computed reelId/publication не уходят в сохранение', async () => {
+  const pub = { postId: 9, version: 2, approved: true, approvedBy: 'SAMPLE Влад', approvedAt: '2026-11-05',
+    items: [{ platform: 'vk', published: true, url: 'https://vk.com/wall-1_2' }, { platform: 'telegram', published: true, url: 'javascript:alert(1)' }] };
+  const a = api({ plan: [idea(1, { reelId: 5, publication: pub }), idea(2)] }); await a.mount();
+  a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  const row = a.root.querySelector('[data-idea="s-1"]');
+  assert.match(row.textContent, /Согласовано · SAMPLE Влад/);
+  assert.equal(row.querySelector('.cp-pub a').getAttribute('href'), 'https://vk.com/wall-1_2');
+  assert.match(row.textContent, /telegram: Опубликовано, ссылка недоступна/);
+  assert.equal(row.querySelector('[data-cp-status="shot"]').getAttribute('aria-pressed'), 'false');
+  row.querySelector('[data-cp-status="shot"]').click(); await tick(); await tick();
+  const put = a.calls.find((c) => c.method === 'PUT' && c.path === 'crm/media-mentor/plan');
+  assert.ok(put, 'план сохранён');
+  assert.equal(put.body.days.find((d) => d.ideaId === 's-1').productionStatus, 'shot');
+  assert.ok(put.body.days.every((d) => !('reelId' in d) && !('publication' in d)));
+  assert.equal(put.body.reason, 'Статус подготовки: Отснято');
+});
+
+test('№168: «Опубликовано» показывается статусом без ручной отметки; сортировка по статусу идёт по ходу работы', async () => {
+  const a = api({ plan: [idea(1, { productionStatus: 'published' }), idea(2, { productionStatus: 'shot' }), idea(3)] });
+  await a.mount();
+  assert.match(a.root.querySelector('[data-idea="s-1"] .cp-st').textContent, /Опубликовано/);
+  a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  assert.equal(a.root.querySelector('[data-idea="s-1"] [data-cp-status]'), null);
+  a.root.querySelector('[data-cp-sort-toggle]').click();
+  a.root.querySelector('[data-cp-sort="status"]').click();
+  assert.deepEqual([...a.root.querySelectorAll('.cp-row')].map((r) => r.dataset.idea), ['s-3', 's-2', 's-1']);
+});
+
+test('№168: старый сервер без publication — строка открывается без блока публикации и ошибок', async () => {
+  const a = api(); const errors = []; a.window.console.error = (...x) => errors.push(x);
+  await a.mount();
+  a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  assert.equal(a.root.querySelector('[data-idea="s-1"] .cp-pub'), null);
+  assert.ok(a.root.querySelector('[data-idea="s-1"] [data-cp-status="planned"][aria-pressed="true"]'));
+  assert.deepEqual(errors, []);
+});

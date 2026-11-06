@@ -108,3 +108,7 @@ body.cp-modal-open{overflow:hidden}
 .cp-modal-foot .cp-gen{margin-top:0}
 @media(max-width:760px){.cp-modal{inset:auto 0 auto 0;top:var(--cp-vvt,0px);width:100%;height:var(--cp-vvh,100dvh);max-height:none;border:0;border-radius:0;margin:0;box-shadow:none}
 .cp-modal-bar{flex:none;padding-top:max(8px,env(safe-area-inset-top));background:var(--surface)}}
+/* №168: отметка статуса подготовки и итоги публикации в строке плана. */
+.cp-mark { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:8px 0; }
+.cp-mark [aria-pressed="true"] { font-weight:600; }
+.cp-pub { margin:4px 0 0; padding-left:18px; }

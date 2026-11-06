@@ -669,6 +669,8 @@ function create(container, context) {
     const version=epoch,code=companyCode,target=Number(id);
     if(!Number.isSafeInteger(target)||target<1)return false;
     try{
+      const freshSettings=await request("/autoposting/settings");
+      if(version!==epoch)return false;settings=freshSettings;renderChannels();
       const item=await request("/autoposting/posts/"+target);
       if(version!==epoch)return false;
       if(item?.companyCode!==code||item.id!==target)throw Error("Wrong material scope");
@@ -862,14 +864,14 @@ function create(container, context) {
       <p class="autoposting-note">Отметка фиксирует уже вышедшую запись: кабинет ничего не отправляет, согласование не меняется. Отмеченную площадку нельзя отправить из плана повторно.</p>
       <p class="autoposting-note">Отметка не отменяет отправку, уже переданную площадке: если доставка началась, отсутствие дубля не гарантировано — проверьте её результат ниже.</p>
       ${rows?`<ul class="autoposting-receipt-list">${rows}</ul>`:"<p>Публикаций вне кабинета не отмечено.</p>"}
-      ${owner?`<form id="autoposting-receipt-form" class="autoposting-receipt-form">
+      ${owner?`<details><summary>Ещё</summary><form id="autoposting-receipt-form" class="autoposting-receipt-form">
         <p class="autoposting-note">Ссылка — только обычный https-адрес самой записи: без логина, пароля, порта, части после «#» и лишних параметров. Короткие ссылки (vm.tiktok.com, youtu.be) не принимаются.</p>
         <p class="autoposting-issues" data-receipt-warning>Перед сохранением: отметка навсегда заблокирует повторную отправку этой площадки для карточки и в текущем интерфейсе не отзывается.</p>
         ${field("autoposting-receipt-platform","Площадка",`<select id="autoposting-receipt-platform">${RECEIPT_PLATFORMS.map(id=>`<option value="${esc(id)}">${esc(CAPTIONS.find(item=>item[0]===id)[1])}</option>`).join("")}</select>`,"Где материал уже вышел без кабинета. Для MAX и 2ГИС формат ссылки ещё не подтверждён, поэтому отметка по ним не принимается. Например: Telegram.")}
         ${field("autoposting-receipt-url","Ссылка на публикацию",'<input id="autoposting-receipt-url" maxlength="500" placeholder="https://t.me/channel/123" required>',"Адрес самой записи, а не профиля. Например: https://t.me/channel/123.")}
         ${field("autoposting-receipt-date",`Когда опубликовано · ${esc(timezone)}`,'<input id="autoposting-receipt-date" type="datetime-local" required>',"Дата и время выхода по указанному поясу; будущее время не принимается. Например: 01.10.2026, 12:30.")}
         ${field("autoposting-receipt-note","Примечание (необязательно)",'<input id="autoposting-receipt-note" maxlength="500">',"Для команды, на площадку не уходит. Например: «вышло вручную из телефона».")}
-        <button class="plain-button" type="submit">Отметить как опубликованное вне ЛК (содержимое v${esc(post.contentRevision||"")})</button></form>`
+        <button class="plain-button" type="submit">Отметить как опубликованное вне ЛК (содержимое v${esc(post.contentRevision||"")})</button></form></details>`
         :'<p class="autoposting-note">Отмечает публикацию вне кабинета владелец.</p>'}`;
     get("autoposting-receipt-form")?.addEventListener("submit",event=>{
       event.preventDefault();if(busy||!post||ctx.identity?.role!=="owner")return;
@@ -880,6 +882,7 @@ function create(container, context) {
       try{if(when)publishedAt=time.toUTC(when,timezone);}catch(_){publishedAt=null;}
       if(!publishedAt){message("Укажите существующее местное время публикации.");return;}
       if(Date.parse(publishedAt)>Date.now()){message("Дата публикации в будущем: запланированная запись ещё не опубликована.");return;}
+      if(!window.confirm("Отметить публикацию вне ЛК? Повторная отправка на эту площадку будет заблокирована."))return;
       void run(async current=>{
         const result=await request("/autoposting/posts/"+encodeURIComponent(card.id)+"/receipts","POST",{platform,url,publishedAt,contentRevision:card.contentRevision,note});
         if(!current())return;
