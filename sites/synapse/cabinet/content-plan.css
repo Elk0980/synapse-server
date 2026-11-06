@@ -34,7 +34,7 @@
 .cp-approvers li { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; }
 .cp-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 .cp-row { border:1px solid var(--line,#333); border-radius:12px; background:var(--surface,#12100f); overflow:hidden; }
-.cp-line { width:100%; display:grid; grid-template-columns:52px 96px minmax(90px,160px) 1fr auto; gap:10px; align-items:center;
+.cp-line { width:100%; display:grid; grid-template-columns:96px minmax(90px,160px) 1fr auto; gap:10px; align-items:center;
   text-align:left; padding:10px 12px; background:none; border:0; color:inherit; font:inherit; cursor:pointer; }
 .cp-line:focus-visible { outline:2px solid var(--accent,#9fd4ff); outline-offset:-2px; }
 .cp-n { color:var(--muted,#b9afa7); }
@@ -72,7 +72,7 @@
 @media (max-width: 640px) {
   /* №143: площадки не делят колонку с номером — иначе колонка «auto» растягивается до их ширины,
      дата переносится и обрезается, а статус налезает на площадки. Статус — отдельной строкой. */
-  .cp-line { grid-template-columns:max-content minmax(0,1fr); grid-template-areas:"n date" "topic topic" "pl pl" "st st"; gap:4px 10px; align-items:start; }
+  .cp-line { grid-template-columns:max-content minmax(0,1fr); grid-template-areas:"date date" "topic topic" "pl pl" "st st"; gap:4px 10px; align-items:start; }
   .cp-n { grid-area:n; } .cp-date { grid-area:date; white-space:nowrap; } .cp-topic { grid-area:topic; }
   .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; justify-self:start; max-width:100%; white-space:normal; }
   .cp-actions { width:100%; } .cp-actions button { flex:1 1 140px; }
@@ -119,3 +119,11 @@ body.cp-modal-open{overflow:hidden}
 .cp-fix label { display:grid; gap:4px; font-size:.9rem; }
 .cp-fix textarea { width:100%; min-width:0; box-sizing:border-box; font:inherit; font-size:16px; padding:8px 10px; border-radius:10px; border:1px solid var(--line,#333); background:var(--surface,#12100f); color:var(--text,#eee); }
 .cp-fix-btns { display:flex; flex-wrap:wrap; gap:8px; }
+
+/* Влад 06.11: одна кнопка «Действия ▾», список действий и поле правки внутри него */
+.cp-menu { display:grid; gap:4px; margin-top:6px; padding:6px; border:1px solid var(--line,#333); border-radius:12px; background:var(--surface,#12100f); max-width:420px; }
+.cp-menu [role="menuitem"] { min-height:44px; text-align:left; padding:0 12px; border:0; border-radius:8px; background:transparent; color:var(--text,#eee); font:inherit; cursor:pointer; }
+.cp-menu [role="menuitem"]:hover, .cp-menu [role="menuitem"]:focus-visible { background:rgba(127,127,127,.15); outline:none; }
+.cp-menu [role="menuitem"]:disabled { opacity:.5; cursor:default; }
+.cp-menu .cp-fix { padding:4px 6px 6px; }
+.cp-acts { display:block; }

@@ -400,10 +400,14 @@ test('№181: сортировка по площадке/статусу меня
 test('Влад 06.11: у публикации «Согласовать» и «Внести правку» — решение по одной идее; правка требует комментария', async () => {
   const a = api(); await a.mount();
   const row2 = a.root.querySelector('[data-idea="s-2"]'), row1 = a.root.querySelector('[data-idea="s-1"]');
-  assert.match(row1.querySelector('.cp-acts').textContent, /Согласовано/);
-  row2.querySelector('[data-cp-decide="approved"]').click(); await tick(); await tick();
+  assert.equal(row1.querySelector('.cp-st').textContent, 'Согласовано', 'один статус без «·»');
+  assert.equal(row1.querySelector('.cp-n'), null, 'номер у строки убран');
+  assert.equal(row2.querySelector('[data-cp-decide]'), null, 'действия спрятаны в списке');
+  row2.querySelector('[data-cp-menu]').click();
+  a.root.querySelector('[data-idea="s-2"] [data-cp-decide="approved"]').click(); await tick(); await tick();
   assert.deepEqual(a.calls.find((c) => c.path.endsWith('/variants/decision')).body,
     { planRevision: 4, briefRevision: 2, scope: 'idea', ideaId: 's-2', decision: 'approved', comment: '' });
+  a.root.querySelector('[data-idea="s-2"] [data-cp-menu]').click();
   a.root.querySelector('[data-idea="s-2"] [data-cp-fix]').click();
   const form = a.root.querySelector('[data-idea="s-2"] [data-cp-fix-form]');
   form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick();
@@ -415,5 +419,5 @@ test('Влад 06.11: у публикации «Согласовать» и «В
 
 test('Влад 06.11: без роли владельца кнопок решения в списке нет', async () => {
   const a = api({ role: 'smm', permissions: ['autoposting.edit'] }); await a.mount();
-  assert.equal(a.root.querySelector('[data-cp-decide]'), null);
+  assert.equal(a.root.querySelector('[data-cp-menu]'), null);
 });
