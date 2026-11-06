@@ -1,146 +1,35 @@
-# Автовыпуск статики кабинета (`synapse-autosync`)
+# Автовыпуск статики сайтов и кабинета
 
-Таймер раз в минуту забирает публичный `main` по https (без ключей) в отдельный
-bare-клон `/opt/synapse-autosync/repo` и выкладывает на боевой только статику
-из белого списка:
+Единственный путь установки — `install.sh` из принятого точного Git SHA. Готовая короткая команда с ведущим пробелом, raw.githubusercontent.com, полным SHA и обязательной проверкой SHA256 опубликована в [PR518](https://github.com/Elk0980/synapse-server/pull/518) и итоговом комментарии задачи №178. Запускать её от root только после отдельной приёмки версии. Прежние ручные инструкции установки заменены этим установщиком.
 
-- `sites/synapse/cabinet/**` и `sites/synapse/brand/**`;
-- кроме `sites/synapse/cabinet.html`, тестов (`*.test.js`, `*.test.cjs`) и скрытых файлов.
+Установщик требует существующего пользователя `synapse-autosync` и установленных git/python3/node/curl/systemd. Он не создаёт пользователей и не меняет права существующих каталогов сайтов. Перед установкой файлов службы печатает для каждого разрешённого корня: «ЗАПИСЬ ДОСТУПНА», «НЕТ ЗАПИСИ» либо «КОРЕНЬ ОТСУТСТВУЕТ». Недоступная на запись папка avokado3 останавливает установку; права автоматически не выдаются.
 
-`cabinet.html`, `ops/**`, Docker, Compose, Caddy, ключи и legacy sync
-(`MANAGED_RELEASE_BLOCKS_LEGACY_SYNC`) скрипт не трогает. Удаления из `main` на боевом
-не повторяются.
+После остановки timer/service сохраняются затрагиваемые script/unit/state и avokado3/index.html, устанавливается служба, проверяется systemd sandbox с Node из apt Ubuntu. Новый запуск фиксирует BASELINE без публикации; переустановка сохраняет существующее состояние. Затем адресно обрабатывается avokado3/index.html из daca87ad71cf220dfddd56392186f4cec7dbe9b9: текущий SHA256 должен быть a7ff72162e9568d0fd6330a4b32bd1c6bbe20f071e11785c6d2f4eb3e4721b07, новый — eaa509393766bb1f20acb23595d616844111a37a733f5af04bb3eae300aa0a5f. Уже установленная версия повторно не заменяется. После успеха включается таймер раз в минуту.
 
-## Трёхсторонняя защита
+В конце выводятся «ОТЧЁТ О ДИСКЕ» (`df -h /`, `du -xh --max-depth=2 /opt /var /root`, `docker system df`) и «ГОТОВО» либо «ОШИБКА». Отчёт только читает данные. Автоматического удаления копий или увеличения диска нет.
 
-База — последний выложенный коммит (`/var/lib/synapse-autosync/state.json`).
-Для каждого изменённого файла белого списка:
+## Файлы и защита
 
-| На боевом | Действие |
-|---|---|
-| равен версии из базы (не правился на сервере) | заменить версией из нового `main` |
-| файла нет ни на боевом, ни в базе | добавить |
-| уже равен новому `main` | ничего |
-| отличается от базы (локальная правка) | пропустить, «локальная правка, не трогаю» |
+Таймер получает публичный main без ключей в bare-клон `/var/lib/synapse-autosync/repo`. База и состояние — `/var/lib/synapse-autosync/state.json`, журнал — `/var/log/synapse-autosync/autosync.log`. Копии операций с manifest/hash/mode/state — `/var/backups/synapse-autosync/operations/`; снимки установки — `/var/backups/synapse-autosync/install-*/before.tar`. Копии автоматически не очищаются; очистка требует отдельного решения. Lock — `/run/synapse-autosync/lock`: этот временный каталог создаёт и удаляет systemd при запуске службы.
 
-Поэтому локальные правки сервера не перезаписываются.
+Разрешены `sites/synapse/cabinet/**`, `sites/synapse/brand/**` и статические папки avokado, avokado2, avokado3, alvi, palitra-love, taisabai, drafts, vhod, chat из Caddyfile. Обрабатывается только diff последнего обработанного коммита и нового main. Удаления не переносятся. Симлинки, подмодули, скрытые пути, `*.test.*`, `analytics-tests/`, `*.md`, `*.bundle`, служебные `*.cjs`, cabinet.html, shell-version.json из Git, Caddy/compose и базы исключены без учёта регистра. CJS исключены целиком; браузерный JS/MJS остаётся разрешённым.
 
-## Проверка и откат
+Файл заменяется только при совпадении live с базой либо при отсутствии файла и в базе, и на назначении. Локальная правка пропускается и журналируется. До любых замен весь допустимый изменённый JS проходит настоящий `node --check`: ошибка, отсутствие checker или слишком большой JS отклоняет весь набор. Запись атомарная через временный файл в том же каталоге; прежняя версия сохраняется. Существующим каталогам права не меняются; новые вложенные публичные каталоги создаются кодом с режимом2775.
 
-До замены прежние файлы копируются в `/var/backups/synapse-autosync/<время>-<commit>/`
-(`manifest.json` — что было и чего не было). После замены каждый файл запрашивается
-по `https://synapse.synapsebusiness.ru/...`: нужен ответ 200 и те же байты; затем
-200 на `cabinet.html`. Любая ошибка — автоматический откат из копии, запись `ROLLBACK`
-в журнал и `lastError` в state; этот коммит повторно не выкладывается до следующего merge.
+Проверяются HTTP200 и точные байты на домене соответствующего сайта; для cabinet/brand также проверяется cabinet.html и обновляется shell-version.json. При сбое автоматически восстанавливаются выполненные замены; ошибочный head не повторяется. Fast-path CI требует равенства дерева merge с проверенным head PR и успешных check-runs до merge; иначе ожидаются проверки main. Повтор ожидания CI — раз в2мин. Защита main и MANAGED_RELEASE_BLOCKS_LEGACY_SYNC не изменяются.
 
-Проверка синтаксиса JS выполняется для всего набора до первой замены. Если хотя бы
-один разрешённый JS не прошёл проверку (ошибка синтаксиса, нет node или превышен
-лимит 5 МиБ), коммит целиком отклоняется: CSS/JSON,
-остальные JS и `shell-version.json` не активируются, выложенный commit в state не
-меняется. Сохраняется только отказ `lastError`; этот HEAD повторно не проверяется
-до следующего merge. Локальные правки и остальные ограничения сохраняются.
-Размер нового файла проверяется по метаданным Git до чтения содержимого. Слишком
-большой JS блокирует весь набор; слишком большой файл другого типа пропускается.
-Расширения `.js`, `.cjs`, `.mjs` проверяются без учёта регистра, включая `.JS` и `.MJS`.
-Публичные корни `cabinet`/`brand` готовятся при установке. Новые вложенные каталоги
-создаются по одному с явными правами `2775`, независимо от UMask службы; существующим
-и приватным каталогам скрипт права не меняет.
+Ограничение: SB_CABINET_ASSET_VERSION в cabinet.html не изменяется автоматически; обновление уже закэшированного браузером ресурса может потребовать обновления страницы.
 
-Журнал: `/var/log/synapse-autosync/autosync.log`. Статус: `state.json` (commit, время,
-выложенные файлы, пропуски, путь копии).
+## Откат последней операции
 
-Ограничение: версия ассетов (`SB_CABINET_ASSET_VERSION` в `cabinet.html`) скриптом не
-меняется. Если изменился уже загруженный браузером файл, без новой версии он может
-подхватиться не сразу (кэш браузера). Новые файлы видны сразу.
-
-## Установка (root). Таймер включать только после защиты main (№57)
-
-На хосте обязателен `node` для `node --check`. Node ставится только из штатного
-репозитория Ubuntu (`apt-get install nodejs`, 24.04 → 18.19.1; решение Влада 05.11.2026);
-внешние репозитории и ключи не добавлять. Перед включением таймера обязателен
-`sandbox-smoke.sh`: он запускает `node --check` и `git` по https с ограничениями юнита.
-Без него запрет системного вызова (например, `pkey_alloc` у V8 без `@pkey`) проявился бы
-только на первом настоящем PR: каждый коммит с JS отклонялся бы как `js-preflight`.
-
-Пока `main` не защищён (№57: обязательные проверки, без прямых push), любой, кто может
-писать в `main`, сможет выложить статику кабинета. Поэтому до №57 ставится всё, кроме
-`enable --now` таймера.
+Выполнить от root ровно напечатанную установщиком строку:
 
 ```sh
-apt-get install -y --no-install-recommends nodejs
-command -v node >/dev/null && node --version || { echo 'STOP: требуется node для проверки JS'; exit 1; }
-SHA=<принятый merge-коммит>; RAW=https://raw.githubusercontent.com/Elk0980/synapse-server/$SHA/ops/autosync
-useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin synapse-autosync
-install -d -o root -g root -m 755 /usr/local/lib/synapse-autosync
-install -d -o synapse-autosync -g synapse-autosync -m 700 /var/backups/synapse-autosync
-curl -fsSL $RAW/synapse-autosync.py -o /usr/local/lib/synapse-autosync/synapse-autosync.py
-chown root:root /usr/local/lib/synapse-autosync/synapse-autosync.py && chmod 755 /usr/local/lib/synapse-autosync/synapse-autosync.py
-curl -fsSL $RAW/synapse-autosync.service -o /etc/systemd/system/synapse-autosync.service
-curl -fsSL $RAW/synapse-autosync.timer -o /etc/systemd/system/synapse-autosync.timer
-curl -fsSL $RAW/synapse-autosync.logrotate -o /etc/logrotate.d/synapse-autosync
-curl -fsSL $RAW/sandbox-smoke.sh -o /usr/local/lib/synapse-autosync/sandbox-smoke.sh
-# запись в каталоги статики через группу (ACL на сервере не установлен); файлы остаются root:root 644
-for d in /opt/synapse/sites/synapse/cabinet /opt/synapse/sites/synapse/brand; do
-  find "$d" -type d -exec chgrp synapse-autosync {} + -exec chmod 2775 {} +; done
-systemctl daemon-reload
-systemd-analyze security synapse-autosync.service | tail -1     # цель ≤ 3.5
-sh /usr/local/lib/synapse-autosync/sandbox-smoke.sh              # нужна строка SANDBOX OK
-systemctl start synapse-autosync.service                         # первый запуск = база (--init не нужен)
-# ТОЛЬКО после №57:
-systemctl enable --now synapse-autosync.timer
+systemctl stop synapse-autosync.timer synapse-autosync.service; bash /usr/local/lib/synapse-autosync/sandbox-run.sh --backups /var/backups/synapse-autosync/operations --rollback; systemctl start synapse-autosync.timer
 ```
 
-Сверить sha256 скачанных файлов с файлами этого коммита. Пользователь не входит в группу
-docker и не видит сокет Docker и `.env`; скрипт в `/usr/local/lib` принадлежит root,
-автовыпуск переписать его не может. Состояние и bare-клон — `/var/lib/synapse-autosync`,
-журнал — `/var/log/synapse-autosync/autosync.log` (logrotate, 8 недель), блокировка —
-`/run/synapse-autosync/lock`.
+Она останавливает автоматического писателя, создаёт RuntimeDirectory через systemd, выполняет откат в sandbox и возобновляет таймер. Перед восстановлением проверяются все текущие файлы и копии: локальная правка после выпуска или повреждённый backup останавливает восстановление до записи. При ошибке отката исходная проблема остаётся видна в выводе; не считать строку «откат выполнен» доказательством без успешного сообщения ROLLBACK. Эта строка по поручению ревью возобновляет таймер последней командой. Для остановки автоматической работы — `systemctl stop synapse-autosync.timer synapse-autosync.service`.
 
-Проверки перед выкладкой (запросы без токена, только для нового коммита; ожидающий
-перепроверяется не чаще раза в 2 минуты):
+## Проверки
 
-- быстрый путь: коммит `main` — слияние PR (`/commits/<sha>/pulls`), дерево коммита побайтно
-  равно дереву head PR (`refs/pull/<N>/head`), и по каждому имени последний прогон check-run
-  head PR, начатый до слияния, завершён с success/neutral/skipped. Это то же содержимое,
-  которое уже проверил CI PR, поэтому повтор на `main` не ждём. Прогоны после слияния не
-  учитываются: охрана закрытого PR падает с «PR закрыт».
-- иначе (PR не был актуален с `main`, дерево отличается, проверки PR не зелёные): ждать, пока
-  все check-runs самого коммита `main` завершатся с success/neutral/skipped. На слиянии
-  статики кабинета это 5–7 минут (`project-chat-check`).
-
-Цель «слияние → боевой ≤3 минут» достижима только быстрым путём: PR должен быть актуален
-с `main` в момент слияния (иначе сначала «Update branch» и зелёный CI PR).
-
-симлинки и подмодули не выкладываются; путь проверяется через realpath; `node --check`
-для всех JS/CJS/MJS обязателен на хосте; отсутствие node отклоняет весь коммит.
-После выкладки пишется `cabinet/shell-version.json` `{"commit": "<sha>"}` — его читает оболочка
-кабинета (PR 519); из репозитория этот файл не выкладывается. Копий хранится 10 последних.
-
-## Остановить / откатить
-
-```sh
-systemctl disable --now synapse-autosync.timer          # выключить автовыпуск
-cat /var/lib/synapse-autosync/state.json                 # что выложено, где копия, состояние CI
-# ручной откат последнего выпуска: вернуть файлы из <копия>/files, удалить файлы с existed=false из manifest.json
-```
-
-## Тест
-
-`python3 -m unittest ops/autosync/test_autosync.py` — правила трёх сторон, пропуск
-локальной правки, белый список, откат при провале проверки, отсутствие повтора, shell-version.json,
-симлинки, ожидание и отказ CI, STOP только при смене состояния, отказ всего набора
-при ошибке JS и успешная активация валидного набора, однократная запись повторяющейся
-ошибки (symlink на пути) и `RECOVERED` после её устранения. Реальный `node --check`
-обязателен в Linux CI; в локальной среде без node соответствующие тесты пропускаются.
-CI-задача `sandbox` ставит Node из apt (как на хосте) и прогоняет `sandbox-smoke.sh` с юнитом,
-а также проверяет, что без `@pkey` проверка падает.
-
-## №178: сайты и установщик
-
-Список сайтов берётся из SITE_URLS в скрипте, исходная карта — caddy/Caddyfile; compose отдаёт ./sites только на чтение Caddy. В автоматическую выкладку входят только изменённые файлы явных корней, без удаления и локальных правок. Shell version обновляется только при изменениях cabinet/brand; для сайтов проверяются HTTP и точные байты на их собственных доменах.
-
-Установщик `bash install.sh <полный Git SHA>` требует существующего service account synapse-autosync, Node/git/python и доступной для службы папки avokado3. Не меняет права существующих каталогов. Отсутствие доступа — ОШИБКА до замены клиентского файла. Он сохраняет затронутые code/unit/state/site, устанавливает unit, проверяет sandbox, фиксирует BASELINE и адресно обновляет avokado3/index.html по согласованным двум SHA256, затем включает таймер. Повторная установка сохраняет baseline. Отчёт диска только читает; очистка backup автоматом выключена.
-
-Откат последней операции: `runuser -u synapse-autosync -- python3 /usr/local/lib/synapse-autosync/synapse-autosync.py --backups /var/backups/synapse-autosync/operations --rollback`. При локальной правке после выпуска откат останавливается до изменения файлов. Перед ручной работой остановить таймер/службу, после неё включить таймер; не запускать второго писателя одновременно.
-
-`install-ci.sh` запускается только в GITHUB_ACTIONS VM, использует loopback HTTP; не является командой для сервера. Проверяет настоящую установку и откат с точными историческими Git blobs. Короткая загрузочная команда с SHA256 выдаётся в №178 после прохождения CI, на сервере автором не выполняется.
+`python3 -m unittest discover -s ops/autosync -p 'test_*.py' -v` проверяет Git fixtures, ограничения файлов, локальные изменения, атомарную публикацию, JS-gate, CI и откат. В Linux CI используются настоящие Node/flock/symlink. `install-ci.sh` работает только в одноразовой Ubuntu24.04 Actions VM: pinned raw-download и SHA256, установка/BASELINE, exact SHA сайта, таймер, отчёт диска, повторная установка, отказ при local-edit, диагностика прав. Команда отката извлекается из журнала установщика и выполняется буквально при отсутствующем RuntimeDirectory. HTTP, включая запуск таймера CI, направлен только в loopback. CI не устанавливает ничего на сервер.

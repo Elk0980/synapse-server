@@ -14,7 +14,7 @@
 4. Трёхсторонняя защита: файл на боевом заменяется, только если он побайтно равен
    версии из базы (локально не изменён) или его нет ни на боевом, ни в базе.
    Иначе — пропуск «локальная правка, не трогаю». Удаления не выполняются.
-5. Перед заменой — копия прежних файлов (хранятся 10 последних); после — HTTP 200 и
+5. Перед заменой — копия прежних файлов (без автоматического удаления); после — HTTP 200 и
    совпадение байтов на публичном адресе. Любая ошибка — автоматический откат из копии.
 6. После успешной выкладки пишет cabinet/shell-version.json {"commit": "<sha>"}.
 
@@ -47,11 +47,11 @@ ROOTS = ('sites/synapse/cabinet', 'sites/synapse/brand',
 ALLOW = re.compile(r'^(?:' + '|'.join(re.escape(r) for r in ROOTS) + r')/[A-Za-z0-9._/-]+$')
 DENY = re.compile(r'(^sites/synapse/cabinet\.html$|^sites/synapse/cabinet/shell-version\.json$'
                   r'|\.test\.|(^|/)\.|(^|/)(cabinet\.html|Caddyfile|docker-compose[^/]*|compose[^/]*)$'
+                  r'|(^|/)analytics-tests(/|$)|\.(md|bundle|cjs)$'
                   r'|\.(db|sqlite|sqlite3)(-wal|-shm|-journal)?$)', re.I)
 SHELL_VERSION = 'sites/synapse/cabinet/shell-version.json'
 GOOD = {'success', 'neutral', 'skipped'}
 CI_RECHECK = 120
-KEEP_BACKUPS = 10
 MAX_FILE = 5 * 1024 * 1024
 MAX_FILES = 200
 
@@ -325,15 +325,6 @@ def http_ok_page(ctx):
     req = urllib.request.Request(ctx.public + '/cabinet.html', headers={'User-Agent': 'synapse-autosync'})
     with urllib.request.urlopen(req, timeout=15) as r:
         return r.status == 200
-
-
-def prune_backups(ctx):
-    try:
-        dirs = sorted(d for d in os.listdir(ctx.backups) if re.match(r'^\d{8}T\d{6}Z-[0-9a-f]{8}$', d))
-    except FileNotFoundError:
-        return
-    for d in dirs[:-KEEP_BACKUPS]:
-        shutil.rmtree(os.path.join(ctx.backups, d), ignore_errors=True)
 
 
 def plan(ctx, base, head):

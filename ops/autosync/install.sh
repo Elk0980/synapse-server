@@ -56,7 +56,6 @@ if [[ ! -d $BACK/operations ]]; then
   install -d -o synapse-autosync -g synapse-autosync -m 700 "$BACK/operations"
 fi
 OPS=$BACK/operations
-runuser -u synapse-autosync -- test -w "$BASE/sites/avokado3" || fail 'папка avokado3 недоступна службе на запись; права не меняю'
 if [[ ! -e $STATE/repo/HEAD ]]; then
   runuser -u synapse-autosync -- git clone --quiet --bare --filter=blob:none https://github.com/Elk0980/synapse-server.git "$STATE/repo"
 fi
@@ -67,6 +66,22 @@ runuser -u synapse-autosync -- git -C "$STATE/repo" archive "$REV" ops/autosync 
 SRC=$PKG/ops/autosync
 # Bind downloaded installer to the same immutable Git revision as its payload.
 cmp "$0" "$SRC/install.sh"
+echo 'ПРАВА КОРНЕЙ САЙТОВ (только проверка, права не меняю)'
+python3 - "$SRC/synapse-autosync.py" "$BASE" <<'PY'
+import importlib.util, os, subprocess, sys
+spec = importlib.util.spec_from_file_location('autosync', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+for root in module.ROOTS:
+    path = os.path.join(sys.argv[2], root)
+    if not os.path.isdir(path):
+        print(f'КОРЕНЬ ОТСУТСТВУЕТ: {path}', flush=True)
+    elif subprocess.run(['runuser', '-u', 'synapse-autosync', '--', 'test', '-w', path, '-a', '-x', path]).returncode:
+        print(f'НЕТ ЗАПИСИ: {path}', flush=True)
+    else:
+        print(f'ЗАПИСЬ ДОСТУПНА: {path}', flush=True)
+PY
+runuser -u synapse-autosync -- test -w "$BASE/sites/avokado3" || fail 'папка avokado3 недоступна службе на запись; права не меняю'
 changed=1
 install -m 644 "$SRC/synapse-autosync.py" "$LIB/synapse-autosync.py"
 install -m 644 "$SRC/sandbox-smoke.sh" "$LIB/sandbox-smoke.sh"
@@ -88,4 +103,4 @@ systemctl enable --now synapse-autosync.timer
 trap - ERR
 report_disk
 echo "ГОТОВО; копия установки: $SNAP/before.tar"
-echo "Откат последней операции: runuser -u synapse-autosync -- python3 $LIB/synapse-autosync.py --backups $OPS --rollback"
+echo "Откат последней операции (root): systemctl stop synapse-autosync.timer synapse-autosync.service; bash $LIB/sandbox-run.sh --backups $OPS --rollback; systemctl start synapse-autosync.timer"

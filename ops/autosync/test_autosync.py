@@ -115,10 +115,24 @@ class AutosyncTest(unittest.TestCase):
         for name in autosync.SITE_URLS:
             for tail in ('.env', '.git/config', 'foo.test.css', 'x.TEST.html', 'data.sqlite',
                          'data.db-wal', 'data.sqlite3-shm', 'Caddyfile', 'compose.yaml',
-                         'docker-compose.yml', 'cabinet.html', '../escape'):
+                         'docker-compose.yml', 'cabinet.html', '../escape',
+                         'analytics-tests/fixture.js', 'nested/analytics-tests/fixture.html',
+                         'README.md', 'NOTES.MD', 'source.bundle', 'source.BUNDLE',
+                         'build-results-frames.cjs', 'helper.CJS'):
                 self.assertFalse(autosync.allowed(f'sites/{name}/{tail}'), tail)
         self.assertFalse(autosync.allowed('sites/unknown/index.html'))
         self.assertFalse(autosync.allowed('panel/index.html'))
+
+    def test_auxiliary_files_never_deploy(self):
+        for root in autosync.ROOTS:
+            (self.live / root).mkdir(parents=True, exist_ok=True)
+            for tail in ('analytics-tests/probe.js', 'README.md', 'repo.bundle', 'build-results-frames.cjs'):
+                self.put(f'{root}/{tail}', 'auxiliary')
+        self.commit('auxiliary files')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        for root in autosync.ROOTS:
+            for tail in ('analytics-tests/probe.js', 'README.md', 'repo.bundle', 'build-results-frames.cjs'):
+                self.assertFalse((self.live / root / tail).exists())
 
     def test_only_changed_and_preserve_site_local_edits_and_deletions(self):
         rel = 'sites/alvi/index.html'
