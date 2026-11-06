@@ -98,6 +98,88 @@ class AutosyncTest(unittest.TestCase):
         self.assertEqual(self.run_sync('--no-ci'), 0)
         self.assertFalse((self.tmp / 'bk').exists())
 
+    def test_static_sites_and_rollback(self):
+        for name in autosync.SITE_URLS:
+            (self.live / 'sites' / name).mkdir(parents=True)
+            self.put(f'sites/{name}/index.html', '<h1>new</h1>')
+        self.commit('sites')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        for name in autosync.SITE_URLS:
+            self.assertEqual((self.live / f'sites/{name}/index.html').read_text(), '<h1>new</h1>')
+        self.assertFalse((self.live / autosync.SHELL_VERSION).exists())
+        self.assertEqual(self.run_sync('--rollback'), 0)
+        for name in autosync.SITE_URLS:
+            self.assertFalse((self.live / f'sites/{name}/index.html').exists())
+
+    def test_all_exclusions(self):
+        for name in autosync.SITE_URLS:
+            for tail in ('.env', '.git/config', 'foo.test.css', 'x.TEST.html', 'data.sqlite',
+                         'data.db-wal', 'data.sqlite3-shm', 'Caddyfile', 'compose.yaml',
+                         'docker-compose.yml', 'cabinet.html', '../escape'):
+                self.assertFalse(autosync.allowed(f'sites/{name}/{tail}'), tail)
+        self.assertFalse(autosync.allowed('sites/unknown/index.html'))
+        self.assertFalse(autosync.allowed('panel/index.html'))
+
+    def test_only_changed_and_preserve_site_local_edits_and_deletions(self):
+        rel = 'sites/alvi/index.html'
+        self.put(rel, 'base')
+        self.commit('site baseline')
+        (self.live / 'sites/alvi').mkdir(parents=True)
+        (self.live / rel).write_text('local')
+        self.run_sync('--init', '--no-ci')
+        self.put(rel, 'next')
+        self.commit('site next')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        self.assertEqual((self.live / rel).read_text(), 'local')
+        self.assertIn('локальная правка', (self.tmp / 'log.txt').read_text())
+        (self.src / rel).unlink()
+        self.commit('delete')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        self.assertEqual((self.live / rel).read_text(), 'local')
+        self.assertFalse((self.live / 'sites/synapse/cabinet.html').read_text() != 'h1')
+
+    def test_manual_rollback_refuses_local_edit(self):
+        self.put('sites/synapse/cabinet/a.js', 'a2')
+        self.commit('next')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        (self.live / 'sites/synapse/cabinet/a.js').write_text('local-after')
+        self.assertEqual(self.run_sync('--rollback'), 1)
+        self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'local-after')
+
+    def test_bootstrap_exact_hash_and_reinstall_noop(self):
+        rel = autosync.AVOKADO
+        (self.live / 'sites/avokado3').mkdir(parents=True)
+        self.put(rel, 'old')
+        self.commit('avokado old')
+        (self.live / rel).write_text('old')
+        self.run_sync('--init', '--no-ci')
+        baseline = json.loads((self.tmp / 'st/state.json').read_text())['commit']
+        self.put(rel, 'new')
+        self.commit('avokado new')
+        head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=self.src).decode().strip()
+        import hashlib
+        with patch.object(autosync, 'BOOTSTRAP', head), patch.object(autosync, 'OLD_SHA', hashlib.sha256(b'old').hexdigest()), patch.object(autosync, 'NEW_SHA', hashlib.sha256(b'new').hexdigest()):
+            self.assertEqual(self.run_sync('--bootstrap-avokado'), 0)
+            self.assertEqual((self.live / rel).read_text(), 'new')
+            self.assertEqual(json.loads((self.tmp / 'st/state.json').read_text())['commit'], baseline)
+            self.assertEqual(self.run_sync('--bootstrap-avokado'), 0)
+            self.assertEqual(self.run_sync('--rollback'), 0)
+            self.assertEqual((self.live / rel).read_text(), 'old')
+            (self.live / rel).write_text('different')
+            self.assertEqual(self.run_sync('--bootstrap-avokado'), 1)
+
+    def test_site_http_origin_and_exact_bytes(self):
+        import argparse
+        ctx = autosync.Ctx(argparse.Namespace(live_root=str(self.live), state_dir=str(self.tmp/'st'), backups=str(self.tmp/'bk'), log=str(self.tmp/'log'), public=autosync.PUBLIC, repo_url=str(self.src), api=autosync.API, no_http=False, no_ci=True))
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.status, response.read.return_value = 200, b'body'
+        with patch.object(autosync.urllib.request, 'urlopen', return_value=response) as request:
+            self.assertTrue(autosync.http_ok(ctx, 'sites/alvi/index.html', b'body'))
+            self.assertTrue(request.call_args.args[0].full_url.startswith('https://spaalvi-38.ru/index.html?'))
+            self.assertFalse(autosync.http_ok(ctx, 'sites/alvi/index.html', b'other'))
+
 
     def test_linux_ci_has_real_node(self):
         if os.name == 'posix' and os.environ.get('CI'):

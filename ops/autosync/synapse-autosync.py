@@ -32,10 +32,22 @@ BACKUPS = '/var/backups/synapse-autosync'
 LOG = '/var/log/synapse-autosync/autosync.log'
 LOCK = '/run/synapse-autosync/lock'
 PUBLIC = 'https://synapse.synapsebusiness.ru'
-ROOTS = ('sites/synapse/cabinet', 'sites/synapse/brand')
-ALLOW = re.compile(r'^sites/synapse/(cabinet|brand)/[A-Za-z0-9._/-]+$')
+# Explicit roots from caddy/Caddyfile; ./sites is mounted read-only in Caddy.
+SITE_URLS = {
+    'avokado': 'https://avokado.synapsebusiness.ru',
+    'avokado2': 'https://avokado2.synapsebusiness.ru',
+    'avokado3': 'https://avokado38.ru', 'alvi': 'https://spaalvi-38.ru',
+    'palitra-love': 'https://palitra-love.ru',
+    'taisabai': 'https://taisabai.synapsebusiness.ru',
+    'drafts': 'https://drafts.synapsebusiness.ru',
+    'vhod': 'https://vhod.synapsebusiness.ru', 'chat': 'https://chat.synapsebusiness.ru',
+}
+ROOTS = ('sites/synapse/cabinet', 'sites/synapse/brand',
+         *(f'sites/{name}' for name in SITE_URLS))
+ALLOW = re.compile(r'^(?:' + '|'.join(re.escape(r) for r in ROOTS) + r')/[A-Za-z0-9._/-]+$')
 DENY = re.compile(r'(^sites/synapse/cabinet\.html$|^sites/synapse/cabinet/shell-version\.json$'
-                  r'|\.test\.(c?js|mjs)$|(^|/)\.)')
+                  r'|\.test\.|(^|/)\.|(^|/)(cabinet\.html|Caddyfile|docker-compose[^/]*|compose[^/]*)$'
+                  r'|\.(db|sqlite|sqlite3)(-wal|-shm|-journal)?$)', re.I)
 SHELL_VERSION = 'sites/synapse/cabinet/shell-version.json'
 GOOD = {'success', 'neutral', 'skipped'}
 CI_RECHECK = 120
@@ -56,6 +68,7 @@ class Ctx:
         self.state_dir, self.backups, self.log_path = a.state_dir, a.backups, a.log
         self.public, self.repo_url, self.api = a.public, a.repo_url, a.api
         self.check_http, self.check_ci = not a.no_http, not a.no_ci
+        self.site_public = getattr(a, 'site_public', None)
 
     def log(self, msg):
         line = f'{now()} {msg}'
@@ -258,13 +271,18 @@ def write_atomic(ctx, full, data, mode):
     for directory in reversed(missing):
         os.mkdir(directory, mode=0o2775)
         os.chmod(directory, 0o2775)  # Defeat UMask only for OUR new public dirs.
-    tmp = os.path.join(os.path.dirname(full), '.' + os.path.basename(full) + '.autosync-new')
-    with open(tmp, 'wb') as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    os.chmod(tmp, mode)
-    os.replace(tmp, full)
+    import tempfile
+    fd, tmp = tempfile.mkstemp(prefix='.autosync-', dir=os.path.dirname(full))
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, full)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def node_check(path, data):
@@ -288,7 +306,14 @@ def node_check(path, data):
 def http_ok(ctx, path, data):
     if not ctx.check_http:
         return True
-    url = ctx.public + '/' + path[len('sites/synapse/'):] + f'?autosync={int(time.time())}'
+    if path.startswith('sites/synapse/'):
+        origin, relative = ctx.public, path[len('sites/synapse/'):]
+    else:
+        _, site, relative = path.split('/', 2)
+        origin = ctx.site_public or SITE_URLS[site]
+        if not ctx.site_public and site == 'drafts' and relative.startswith('peptides/'):
+            origin, relative = 'https://peptides.synapsebusiness.ru', relative[len('peptides/'):]
+    url = origin + '/' + relative + f'?autosync={int(time.time())}'
     req = urllib.request.Request(url, headers={'Cache-Control': 'no-cache', 'User-Agent': 'synapse-autosync'})
     with urllib.request.urlopen(req, timeout=15) as r:
         return r.status == 200 and r.read() == data
@@ -316,27 +341,84 @@ def plan(ctx, base, head):
     return [tuple(line.split('\t', 1)) for line in names.splitlines() if line]
 
 
-def run_once(ctx, init=False):
+BOOTSTRAP = 'daca87ad71cf220dfddd56392186f4cec7dbe9b9'
+AVOKADO = 'sites/avokado3/index.html'
+OLD_SHA = 'a7ff72162e9568d0fd6330a4b32bd1c6bbe20f071e11785c6d2f4eb3e4721b07'
+NEW_SHA = 'eaa509393766bb1f20acb23595d616844111a37a733f5af04bb3eae300aa0a5f'
+
+
+def rollback_last(ctx):
+    state = load_state(ctx)
+    bdir = state.get('backup')
+    if not bdir or os.path.dirname(os.path.realpath(bdir)) != os.path.realpath(ctx.backups):
+        raise RuntimeError('нет последней операции для отката')
+    with open(os.path.join(bdir, 'manifest.json'), encoding='utf-8') as f:
+        manifest = json.load(f)
+    prepared = []
+    for entry in manifest['files']:
+        path = entry['path']
+        if not allowed(path) and path != SHELL_VERSION:
+            raise RuntimeError('недопустимый путь в backup')
+        current = read_live(ctx, path)
+        expected = entry.get('new_sha256')
+        if expected is None or current is None or hashlib.sha256(current).hexdigest() != expected:
+            raise RuntimeError(f'локальная правка после выпуска: {path}')
+        old = None
+        if entry['existed']:
+            with open(os.path.join(bdir, 'files', path), 'rb') as f:
+                old = f.read()
+            if hashlib.sha256(old).hexdigest() != entry['sha256']:
+                raise RuntimeError('повреждён backup')
+        prepared.append((path, old, entry.get('mode', 0o644)))
+    for path, old, mode in reversed(prepared):
+        full = live_path(ctx, path)
+        if old is None:
+            os.unlink(full)
+        else:
+            write_atomic(ctx, full, old, mode)
+    previous = manifest['state']
+    previous['lastError'] = {'head': manifest['head'], 'time': now(), 'reason': 'manual rollback'}
+    save_state(ctx, previous)
+    ctx.log(f'ROLLBACK manual restored={len(prepared)} backup={bdir}')
+    return 0
+
+
+def run_once(ctx, init=False, bootstrap=False):
     head = ensure_repo(ctx)
     state = load_state(ctx)
     base = state.get('commit')
+    if bootstrap:
+        if not base:
+            raise RuntimeError('сначала BASELINE')
+        head = BOOTSTRAP
+        ctx.git('fetch', '--quiet', 'origin', BOOTSTRAP)
+        new = blob(ctx, head, AVOKADO)
+        live = read_live(ctx, AVOKADO)
+        if new is None or hashlib.sha256(new).hexdigest() != NEW_SHA:
+            raise RuntimeError('неверный SHA256 новой версии Авокадо')
+        if live is not None and hashlib.sha256(live).hexdigest() == NEW_SHA:
+            ctx.log('BOOTSTRAP уже установлен')
+            return 0
+        if live is None or hashlib.sha256(live).hexdigest() != OLD_SHA:
+            raise RuntimeError('неверный SHA256 текущей версии Авокадо')
+        bootstrap_old = live
     if init or not base:
         state.update(commit=head, time=now(), deployed=[], skipped=[], note='baseline')
         state.pop('stop', None)
         save_state(ctx, state)
         ctx.log(f'BASELINE commit={head}')
         return 0
-    if base == head:
+    if base == head and not bootstrap:
         return 0
     if state.get('lastError', {}).get('head') == head:
         return 1  # коммит уже отклонён/откатывался; ждём следующего merge
-    if subprocess.run(['git', '-C', ctx.repo, 'merge-base', '--is-ancestor', base, head]).returncode != 0:
+    if not bootstrap and subprocess.run(['git', '-C', ctx.repo, 'merge-base', '--is-ancestor', base, head]).returncode != 0:
         stop(ctx, state, f'not-fast-forward base={base} head={head}')
         return 2
-    if not ci_gate(ctx, state, head):
+    if not bootstrap and not ci_gate(ctx, state, head):
         return 0
     actions, skipped, syntax_errors = [], [], []
-    for status, path in plan(ctx, base, head):
+    for status, path in ([('M', AVOKADO)] if bootstrap else plan(ctx, base, head)):
         if not allowed(path):
             skipped.append({'path': path, 'reason': 'вне белого списка'})
             continue
@@ -353,7 +435,7 @@ def run_once(ctx, init=False):
             else:
                 skipped.append({'path': path, 'reason': 'слишком большой'})
             continue
-        new, old = blob(ctx, head, path), blob(ctx, base, path)
+        new, old = blob(ctx, head, path), (bootstrap_old if bootstrap else blob(ctx, base, path))
         live = read_live(ctx, path)
         if new is None or len(new) > MAX_FILE:
             if is_js(path):
@@ -382,14 +464,21 @@ def run_once(ctx, init=False):
         stop(ctx, state, f'too-many-files {len(actions)} head={head}')
         return 2
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    bdir = os.path.join(ctx.backups, f'{stamp}-{head[:8]}')
+    import tempfile
+    bdir = None
+    version_actions = ([(SHELL_VERSION, read_live(ctx, SHELL_VERSION),
+                        json.dumps({'commit': head}).encode() + b'\n')]
+                       if any(p.startswith('sites/synapse/') for p, _, _ in actions) else [])
     done = []
     try:
         if actions:
-            os.makedirs(bdir, mode=0o700, exist_ok=True)
-            manifest = {'base': base, 'head': head, 'files': []}
-            for path, live, _ in actions + [(SHELL_VERSION, read_live(ctx, SHELL_VERSION), None)]:
-                entry = {'path': path, 'existed': live is not None}
+            os.makedirs(ctx.backups, mode=0o700, exist_ok=True)
+            bdir = tempfile.mkdtemp(prefix=f'{stamp}-{head[:8]}-', dir=ctx.backups)
+            manifest = {'base': base, 'head': head, 'state': dict(state), 'files': []}
+            for path, live, new in actions + version_actions:
+                entry = {'path': path, 'existed': live is not None,
+                         'mode': os.stat(live_path(ctx, path)).st_mode & 0o777 if live is not None else 0o644,
+                         'new_sha256': hashlib.sha256(new).hexdigest()}
                 if live is not None:
                     dst = os.path.join(bdir, 'files', path)
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -401,18 +490,19 @@ def run_once(ctx, init=False):
                 json.dump(manifest, f, ensure_ascii=False, indent=1)
         for path, live, new in actions:
             full = live_path(ctx, path)
+            if read_live(ctx, path) != live:
+                raise RuntimeError(f'локальная правка во время выпуска: {path}')
             mode = os.stat(full).st_mode & 0o777 if live is not None else 0o644
             write_atomic(ctx, full, new, mode)
             done.append((path, live))
         for path, _, new in actions:
             if not http_ok(ctx, path, new):
                 raise RuntimeError(f'health {path}')
-        if actions and not http_ok_page(ctx):
+        if version_actions and not http_ok_page(ctx):
             raise RuntimeError('health cabinet.html')
-        if actions:
-            previous = read_live(ctx, SHELL_VERSION)
-            write_atomic(ctx, live_path(ctx, SHELL_VERSION), json.dumps({'commit': head}).encode() + b'\n', 0o644)
-            done.append((SHELL_VERSION, previous))
+        for path, previous, new in version_actions:
+            write_atomic(ctx, live_path(ctx, path), new, 0o644)
+            done.append((path, previous))
     except Exception as error:  # откат всего, что успели заменить
         for path, live in reversed(done):
             full = live_path(ctx, path)
@@ -424,12 +514,12 @@ def run_once(ctx, init=False):
         state.update(lastError={'head': head, 'time': now(), 'reason': str(error)})
         save_state(ctx, state)
         return 1
-    state.update(commit=head, time=now(), deployed=[p for p, _, _ in actions], skipped=skipped,
+    state.update(commit=base if bootstrap else head, time=now(), deployed=[p for p, _, _ in actions], skipped=skipped,
                  backup=bdir if actions else None, note='ok')
     state.pop('lastError', None)
     state.pop('stop', None)
     save_state(ctx, state)
-    prune_backups(ctx)
+    # Backups are retained; disk cleanup requires a separate decision.
     ctx.log(f'DEPLOYED head={head} base={base} files={len(actions)} skipped={len(skipped)} backup={bdir if actions else "-"}')
     for item in skipped:
         ctx.log(f'SKIP {item["path"]}: {item["reason"]}')
@@ -439,17 +529,22 @@ def run_once(ctx, init=False):
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument('--init', action='store_true', help='принять текущий main базой без выкладки')
+    p.add_argument('--rollback', action='store_true', help='откатить последнюю операцию')
+    p.add_argument('--bootstrap-avokado', action='store_true', help='точная версия Авокадо по №178')
     p.add_argument('--live-root', default=LIVE_ROOT)
     p.add_argument('--state-dir', default=STATE_DIR)
     p.add_argument('--backups', default=BACKUPS)
     p.add_argument('--log', default=LOG)
     p.add_argument('--public', default=PUBLIC)
+    p.add_argument('--site-public', help='loopback HTTP origin, только для песочницы CI')
     p.add_argument('--repo-url', default=REPO_URL)
     p.add_argument('--api', default=API)
     p.add_argument('--lock', default=LOCK)
     p.add_argument('--no-http', action='store_true', help='только для тестов')
     p.add_argument('--no-ci', action='store_true', help='только для тестов')
     a = p.parse_args(argv)
+    if a.site_public and not re.fullmatch(r'http://127\.0\.0\.1:[0-9]+', a.site_public):
+        p.error('--site-public допускает только loopback CI')
     ctx = Ctx(a)
     os.makedirs(os.path.dirname(a.lock), exist_ok=True)
     with open(a.lock, 'w') as lock:
@@ -458,7 +553,9 @@ def main(argv=None):
         except BlockingIOError:
             return 0
         try:
-            rc = run_once(ctx, a.init)
+            if sum((a.init, a.rollback, a.bootstrap_avokado)) > 1:
+                raise RuntimeError('режимы несовместимы')
+            rc = rollback_last(ctx) if a.rollback else run_once(ctx, a.init, a.bootstrap_avokado)
         except Exception as error:
             # Одинаковая ошибка (например, symlink на пути) пишется в журнал один раз.
             message = f'ERROR {type(error).__name__}: {error}'

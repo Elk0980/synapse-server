@@ -1,7 +1,7 @@
-# План
+# План №178
 
-Один автор py/tests/README в отдельном worktree от518@693303e. Root владеет Spec Kit/CI/PR. Чужая ветка claude/autosync-static не перезаписывается; follow-up PR направляется в неё для явного ревью.
-
-Добавить предварительный синтаксический gate перед любыми backup/write/version действиями. Сохранить существующие сравнения live/base, CI и состояние отказа; не превращать отказ checker в успех. Node читает закрытый временный файл; timeout ограничен, свои временные файлы удаляются.
-
-Проверить реальные Git fixture, Node24, symlink/lock на Linux. Windows проверки отдельно указывают test-only shim flock и пропущенную проверку symlink. Приватные каталоги/production не используются. Установку и взаимное исключение с ручным static writer описывать отдельно: timer не работает одновременно с ручной выкладкой. Обязательная main protection не обходится.
+Рабочая ветка claude/autosync-static, PR518. PR560 уже включён в e1bf5edc, runtime/CI diff пуст: не cherry-pick повторно.
+Явная карта root→origin по read-only Caddyfile/compose, запреты до blob/read/write. Сохранить per-file CAS и batch JS gate. Отдельный строго pinned bootstrap Авокадо с сохранением исходного processed baseline.
+Backup manifest содержит before state, mode и sha256 обоих состояний. Manual rollback сначала проверяет все live/backup, затем восстанавливает; повтор откатанного head не выполняется.
+Установщик требует существующего service account и доступной папки сайта: не расширяет права. Копирует лишь затрагиваемые code/unit/state/site, без env и БД. Новые приватные служебные каталоги создаёт отдельно; public права не меняет.
+Проверки: unittest Linux с Git/Node/flock, systemd @pkey positive/negative, полная установка pinned revision в одноразовой Ubuntu24.04 VM Actions с loopback HTTP. Windows — только syntax и дополнительный unittest с явно обозначенным test-only fcntl shim, не kernel/systemd доказательство.

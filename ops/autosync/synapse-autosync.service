@@ -18,7 +18,7 @@ LogsDirectory=synapse-autosync
 LogsDirectoryMode=0750
 # Запись только в белый список статики и копии; скрипт (/usr/local/lib) — только чтение.
 ProtectSystem=strict
-ReadWritePaths=/opt/synapse/sites/synapse/cabinet -/opt/synapse/sites/synapse/brand /var/backups/synapse-autosync
+ReadWritePaths=/opt/synapse/sites/synapse/cabinet -/opt/synapse/sites/synapse/brand -/opt/synapse/sites/avokado -/opt/synapse/sites/avokado2 -/opt/synapse/sites/avokado3 -/opt/synapse/sites/alvi -/opt/synapse/sites/palitra-love -/opt/synapse/sites/taisabai -/opt/synapse/sites/drafts -/opt/synapse/sites/vhod -/opt/synapse/sites/chat /var/backups/synapse-autosync
 InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/opt/synapse/.env
 ProtectHome=yes
 PrivateTmp=yes

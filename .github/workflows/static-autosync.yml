@@ -10,6 +10,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -24,6 +26,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Node из apt, как на хосте
         run: |
           sudo rm -f /usr/local/bin/node
@@ -44,3 +48,5 @@ jobs:
           grep -v '^SystemCallFilter=@pkey$' ops/autosync/synapse-autosync.service > /tmp/no-pkey.service
           if sudo sh ops/autosync/sandbox-smoke.sh /tmp/no-pkey.service; then
             echo 'ожидался отказ без @pkey'; exit 1; fi
+      - name: Полная установка, BASELINE, сайт, откат (только VM CI)
+        run: bash ops/autosync/install-ci.sh '${{ github.event.pull_request.head.sha }}'
