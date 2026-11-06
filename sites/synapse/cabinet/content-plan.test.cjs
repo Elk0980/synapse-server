@@ -59,6 +59,8 @@ function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stag
 }
 // Объекты из окна jsdom приводятся к обычным, чтобы deepEqual сравнивал содержимое.
 const plain = (v) => v === undefined ? v : JSON.parse(JSON.stringify(v));
+// №186: анкета открывается окном поверх (⚙ или «+ Новый»), на вкладке её нет.
+const openQ = (a, sel = '[data-cp="settings-plan"]') => a.root.querySelector(sel).click();
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test('registers through SynapseModules; without registry it waits in SynapseModulesQueue for the shell', () => {
@@ -104,7 +106,7 @@ test('full plan is a sheet: one row per reel with hook, B-roll, style, roles, pr
 });
 
 test('questionnaire autosaves only the changed field with the last revision', async () => {
-  const a = api(); await a.mount();
+  const a = api(); await a.mount(); openQ(a);
   const tone = a.root.querySelector('[data-q="tone"]');
   tone.value = 'дружески'; tone.dispatchEvent(new a.window.Event('input'));
   await tick(800); await tick();
@@ -114,7 +116,7 @@ test('questionnaire autosaves only the changed field with the last revision', as
 });
 
 test('Hugh plan fills only empty brief fields, then saves sorted days with captions from hook and topic', async () => {
-  const a = api(); await a.mount();
+  const a = api(); await a.mount(); openQ(a);
   a.root.querySelector('[data-cp="generate"]').click();
   await tick(); await tick(); await tick();
   const brief = a.calls.find((c) => c.path === 'crm/media-mentor/brief');
@@ -129,7 +131,7 @@ test('Hugh plan fills only empty brief fields, then saves sorted days with capti
 });
 
 test('CSV/XLSX import from PR 496 runs inside the screen and saves hook, B-roll, style, props with a caption', async () => {
-  const a = api(); await a.mount();
+  const a = api(); await a.mount(); openQ(a);
   const panel = a.root.querySelector('[data-cp-import] .mentor-import');
   assert.ok(panel, 'import panel installed');
   const file = new a.window.File(['x'], 'plan.csv', { type: 'text/csv' });
@@ -177,7 +179,7 @@ test('approvers come from Настройки → Контент: names from cand
 });
 
 test('viewer without edit right sees the plan read-only and cannot tick another approver', async () => {
-  const a = api({ role: 'editor', permissions: ['autoposting.view'] }); await a.mount();
+  const a = api({ role: 'editor', permissions: ['autoposting.view'] }); await a.mount(); openQ(a);
   assert.equal(a.root.querySelector('[data-cp="generate"]'), null); assert.equal(a.root.querySelector('.mentor-import'), null);
   assert.ok(a.root.querySelector('[data-q="goals"]').readOnly); assert.ok(a.root.querySelector('[data-signoff="owner"]').disabled);
   assert.equal(a.root.querySelectorAll('.cp-row').length, 2);
@@ -193,29 +195,29 @@ test('403 from the server is shown as no access, unmount drops late answers', as
 });
 
 test('№128: header counter «заполнено N из 8» follows the save without reloading the module', async () => {
-  const a = api(); await a.mount();
-  const head = a.root.querySelector('.cp-q summary');
-  assert.match(head.textContent, /Анкета проекта · заполнено 1 из 8/);
+  const a = api(); await a.mount(); openQ(a);
+  const head = a.root.querySelector('#cp-q-title');
+  assert.match(head.textContent, /анкета заполнено 1 из 8/);
   const box = a.root.querySelector('[data-q-platform="telegram"]');
   box.checked = true; box.dispatchEvent(new a.window.Event('change'));
   await tick(800); await tick();
   assert.match(a.root.querySelector('[data-cp-saved]').textContent, /Сохранено · заполнено 2 из 8/);
-  assert.match(a.root.querySelector('.cp-q summary').textContent, /Анкета проекта · заполнено 2 из 8/);
+  assert.match(a.root.querySelector('#cp-q-title').textContent, /анкета заполнено 2 из 8/);
 });
 
 test('№128: no platforms — hint points to the questionnaire and focuses «Площадки», the model is not called', async () => {
-  const a = api({ qPlatforms: [], briefPlatforms: [] }); await a.mount();
+  const a = api({ qPlatforms: [], briefPlatforms: [] }); await a.mount(); openQ(a);
   a.root.querySelector('[data-cp="generate"]').click();
   await tick(); await tick(); await tick();
   const hint = a.root.querySelector('[data-cp-suggest]').textContent;
   assert.match(hint, /Отметьте площадки в анкете выше/); assert.doesNotMatch(hint, /бриф/i);
   assert.equal(a.calls.some((c) => c.path === 'media-mentor-suggest'), false);
   assert.equal(a.window.document.activeElement, a.root.querySelector('[data-cp-platforms] input'));
-  assert.equal(a.root.querySelector('.cp-q').open, true);
+  assert.equal(a.root.querySelector('[data-cp-modal]') !== null, true);
 });
 
 test('№128: server answer brief_incomplete is shown with the questionnaire wording, not «в брифе»', async () => {
-  const a = api({ suggest: { status: 'brief_incomplete', items: [], dropped: [], notice: 'Сначала укажите площадки компании в брифе.' } }); await a.mount();
+  const a = api({ suggest: { status: 'brief_incomplete', items: [], dropped: [], notice: 'Сначала укажите площадки компании в брифе.' } }); await a.mount(); openQ(a);
   a.root.querySelector('[data-cp="generate"]').click();
   await tick(); await tick(); await tick();
   const hint = a.root.querySelector('[data-cp-suggest]').textContent;
@@ -224,7 +226,7 @@ test('№128: server answer brief_incomplete is shown with the questionnaire wor
 });
 
 test('№136: empty questionnaire with a leftover platform in the hidden brief — hint, no model call, no brief write', async () => {
-  const a = api({ qPlatforms: [], briefPlatforms: ['instagram'] }); await a.mount();
+  const a = api({ qPlatforms: [], briefPlatforms: ['instagram'] }); await a.mount(); openQ(a);
   a.root.querySelector('[data-cp="generate"]').click();
   await tick(); await tick(); await tick();
   assert.match(a.root.querySelector('[data-cp-suggest]').textContent, /Отметьте площадки в анкете выше/);
@@ -234,7 +236,7 @@ test('№136: empty questionnaire with a leftover platform in the hidden brief �
 });
 
 test('№136: unticked platform counts as not chosen even before the autosave reaches the server', async () => {
-  const a = api({ qPlatforms: ['vk'], briefPlatforms: ['vk'] }); await a.mount();
+  const a = api({ qPlatforms: ['vk'], briefPlatforms: ['vk'] }); await a.mount(); openQ(a);
   const box = a.root.querySelector('[data-q-platform="vk"]');
   box.checked = false; box.dispatchEvent(new a.window.Event('change'));
   a.root.querySelector('[data-cp="generate"]').click();
@@ -247,7 +249,7 @@ test('№136: Hugh gets only questionnaire platforms; brief gains missing ones w
   const a = api({ qPlatforms: ['telegram'], briefPlatforms: ['vk'],
     suggest: { status: 'ok', notice: 'n', items: [{ date: '2026-11-20', platform: 'vk', format: 'reel', role: 'reach', topic: 'Старая площадка' },
       { date: '2026-11-21', platform: 'telegram', format: 'reel', role: 'reach', topic: 'Видимая площадка' }] } });
-  await a.mount();
+  await a.mount(); openQ(a);
   a.root.querySelector('[data-cp="generate"]').click();
   await tick(); await tick(); await tick();
   assert.deepEqual(a.calls.find((c) => c.path === 'crm/media-mentor/brief').body.brief.platforms, ['vk', 'telegram']);
@@ -257,7 +259,7 @@ test('№136: Hugh gets only questionnaire platforms; brief gains missing ones w
 });
 
 test('№136: server before the fix rejects the new field — one retry without it', async () => {
-  const a = api({ qPlatforms: ['vk'], briefPlatforms: ['vk'] }); await a.mount();
+  const a = api({ qPlatforms: ['vk'], briefPlatforms: ['vk'] }); await a.mount(); openQ(a);
   const post = a.ctx.api.post, bodies = [];
   a.ctx.api.post = async (p, b) => { if (p === 'media-mentor-suggest') { bodies.push(plain(b)); if (b.platforms) throw Object.assign(Error('Переданы лишние поля'), { status: 400 }); } return post(p, b); };
   a.root.querySelector('[data-cp="generate"]').click();
@@ -266,37 +268,69 @@ test('№136: server before the fix rejects the new field — one retry without 
   assert.ok(a.root.querySelector('[data-cp="accept"]'));
 });
 
-test('№141: plan exists — short plan is shown first, questionnaire collapsed to «Анкета проекта · заполнено N из 8»', async () => {
+test('№186: анкеты на вкладке нет; «+ Новый» и ⚙ открывают окно с анкетой, ← и ✕ закрывают и возвращают фокус', async () => {
   const a = api(); await a.mount();
   const order = [...a.root.querySelector('.cp').children].map((n) => n.classList[n.classList.length - 1]);
-  assert.deepEqual(order, ['cp-head', 'cp-plan', 'cp-approve', 'cp-q', 'cp-error']);
-  assert.equal(a.root.querySelector('.cp').dataset.cpLayout, 'plan');
-  assert.equal(a.root.querySelector('.cp-q').open, false, 'questionnaire is collapsed');
-  assert.equal(a.root.querySelector('.cp-q summary').textContent.trim(), 'Анкета проекта · заполнено 1 из 8');
-  assert.equal(a.root.querySelectorAll('.cp-plan .cp-row').length, 2, 'short plan rows are visible right away');
-  assert.equal(a.root.querySelector('[data-cp-tab="plan"]').getAttribute('aria-selected'), 'true');
-  // Кнопка «Написать контент-план» раскрывает свёрнутую анкету.
-  a.root.querySelector('[data-cp="questionnaire"]').click();
-  assert.equal(a.root.querySelector('.cp-q').open, true);
-  assert.equal(a.window.document.activeElement, a.root.querySelector('[data-q="goals"]'));
-  // Одной строки уже достаточно: план считается существующим.
-  const b = api({ plan: [idea(1)] }); await b.mount();
-  assert.equal(b.root.querySelector('.cp').firstElementChild.nextElementSibling.className, 'cp-plan');
-  assert.equal(b.root.querySelector('.cp-q').open, false);
+  assert.deepEqual(order, ['cp-head', 'cp-plan', 'cp-approve', 'cp-error']);
+  assert.equal(a.root.querySelector('[data-cp-modal]'), null); assert.equal(a.root.querySelector('[data-q]'), null);
+  assert.doesNotMatch(a.root.textContent, /Анкета проекта/);
+  assert.equal(a.root.querySelectorAll('.cp-plan .cp-row').length, 2);
+  const tools = [...a.root.querySelectorAll('.cp-tools > *')];
+  assert.deepEqual(tools.map((n) => n.matches('.cp-gear') ? 'gear' : n.matches('.cp-sort') ? 'sort' : '?'), ['gear', 'sort'], '⚙ и ⇅ в одном ряду справа от «Публикации»');
+  assert.equal(a.root.querySelector('.cp-list-head h3').textContent, 'Публикации');
+  assert.match(a.root.querySelector('.cp-gear').getAttribute('aria-label'), /настройка контент-плана/i);
+  for (const [sel, title] of [['[data-cp="questionnaire"]', /Новый контент-план/], ['[data-cp="settings-plan"]', /Настройка контент-плана/]]) {
+    const opener = a.root.querySelector(sel); opener.click();
+    const modal = a.root.querySelector('[data-cp-modal]');
+    assert.ok(modal && modal.getAttribute('role') === 'dialog' && modal.getAttribute('aria-modal') === 'true');
+    assert.match(a.root.querySelector('#cp-q-title').textContent, title);
+    assert.match(a.root.querySelector('#cp-q-title').textContent, /анкета заполнено 1 из 8/);
+    assert.equal(modal.querySelectorAll('[data-q]').length, 7); assert.ok(modal.querySelector('[data-cp-platforms]'));
+    assert.equal(a.window.document.activeElement, modal.querySelector('[data-q="goals"]'));
+    assert.ok(modal.querySelector('.cp-modal-foot [data-cp="generate"]'), 'главная кнопка в закреплённом низу окна');
+    assert.ok(a.window.document.body.classList.contains('cp-modal-open'));
+    a.root.querySelector('.cp-back').click();
+    assert.equal(a.root.querySelector('[data-cp-modal]'), null); assert.ok(!a.window.document.body.classList.contains('cp-modal-open'));
+    assert.equal(a.window.document.activeElement, a.root.querySelector(sel), 'фокус вернулся на кнопку, открывшую окно');
+  }
+  a.root.querySelector('.cp-new').click(); a.root.querySelector('.cp-x').click(); assert.equal(a.root.querySelector('[data-cp-modal]'), null);
+  a.root.querySelector('.cp-new').click(); a.root.dispatchEvent(new a.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); assert.equal(a.root.querySelector('[data-cp-modal]'), null);
 });
 
-test('№141: no plan — questionnaire stays on top and open, no empty plan block', async () => {
+test('№186: плана нет — на вкладке подсказка про «+ Новый», анкета закрыта; набранное до сохранения не теряется при закрытии', async () => {
   const a = api({ plan: [] }); await a.mount();
-  const order = [...a.root.querySelector('.cp').children].map((n) => n.classList[n.classList.length - 1]);
-  assert.deepEqual(order, ['cp-head', 'cp-q', 'cp-approve', 'cp-error']);
-  assert.equal(a.root.querySelector('.cp').dataset.cpLayout, 'questionnaire');
-  assert.equal(a.root.querySelector('.cp-q').open, true);
-  assert.equal(a.root.querySelector('.cp-plan'), null);
-  assert.equal(a.root.querySelector('[data-cp-view]'), null);
+  assert.equal(a.root.querySelector('[data-cp-modal]'), null);
+  assert.match(a.root.querySelector('.cp-plan').textContent, /Плана пока нет. Нажмите «\+ Новый»/);
+  openQ(a, '[data-cp="questionnaire"]');
+  const tone = a.root.querySelector('[data-q="tone"]'); tone.value = 'дружески'; tone.dispatchEvent(new a.window.Event('input'));
+  a.root.querySelector('.cp-back').click();
+  openQ(a); assert.equal(a.root.querySelector('[data-q="tone"]').value, 'дружески');
+  await tick(800); await tick();
+  assert.equal(a.calls.filter((c) => c.method === 'PUT' && c.path === 'crm/media-mentor/questionnaire').length, 1, 'автосохранение дошло до сервера');
+});
+
+test('№186: без права правки «+ Новый» нет, ⚙ показывает анкету только для чтения без кнопки формирования', async () => {
+  const a = api({ role: 'viewer' }); await a.mount();
+  assert.equal(a.root.querySelector('[data-cp="questionnaire"]'), null);
+  openQ(a);
+  assert.ok(a.root.querySelector('[data-q="goals"]').readOnly); assert.equal(a.root.querySelector('[data-cp="generate"]'), null);
+});
+
+test('№186: нижнее меню прячется, пока фокус в поле ввода, и возвращается после ухода фокуса (≤760 px — правило в workspace.css)', async () => {
+  const a = api(); await a.mount(); openQ(a);
+  const doc = a.window.document, body = doc.body;
+  const input = a.root.querySelector('[data-q="goals"]'), box = a.root.querySelector('[data-q-platform="vk"]');
+  assert.ok(body.classList.contains('kbd-open'), 'фокус в textarea — класс есть');
+  box.focus(); await tick(); assert.ok(!body.classList.contains('kbd-open'), 'чекбокс клавиатуру не открывает');
+  a.root.querySelector('[data-cp-start]').focus(); await tick(); assert.ok(body.classList.contains('kbd-open'));
+  doc.activeElement.blur(); await tick(); assert.ok(!body.classList.contains('kbd-open'), 'фокус ушёл — меню вернулось');
+  input.focus(); a.root.querySelector('[data-cp-days]').focus(); await tick(); assert.ok(body.classList.contains('kbd-open'), 'переход поле→поле не мигает');
+  const css = fs.readFileSync(path.join(__dirname, 'workspace.css'), 'utf8');
+  assert.match(css, /@media\(max-width:760px\)\{ body\.kbd-open \.mobile-shortcuts \{ display:none; \} \}/);
 });
 
 test('№141: «Начало» and «Дней» are an even grid — caption span + one control each, same height in CSS', async () => {
-  const a = api({ plan: [] }); await a.mount();
+  const a = api({ plan: [] }); await a.mount(); openQ(a);
   const labels = [...a.root.querySelectorAll('.cp-gen > label')];
   assert.deepEqual(labels.map((l) => l.querySelector('span').textContent), ['Начало', 'Дней']);
   assert.deepEqual(labels.map((l) => l.children.length), [2, 2]);
@@ -331,8 +365,8 @@ test('№181: вкладки фильтруют существующие стр�
   const ids=()=>[...a.root.querySelectorAll('.cp-row')].map(n=>n.dataset.idea);
   assert.deepEqual(ids(),['s-1','s-2']);
   a.root.querySelector('[data-cp-tab="drafts"]').click(); assert.deepEqual(ids(),['s-3']);
-  a.root.querySelector('[data-cp="questionnaire"]').click(); assert.ok(a.root.querySelector('.cp-q').open);
-  a.root.querySelector('[data-cp-tab="plan"]').click();
+  a.root.querySelector('[data-cp="questionnaire"]').click(); assert.ok(a.root.querySelector('[data-cp-modal]'));
+  a.root.querySelector('.cp-back').click(); a.root.querySelector('[data-cp-tab="plan"]').click();
   a.root.querySelector('[data-cp-sort-toggle]').click(); assert.equal(a.root.querySelector('#cp-sort-menu').hidden,false);
   assert.equal(a.root.querySelector('[data-cp-sort="date"]').getAttribute('aria-pressed'),'true');
   a.root.querySelector('[data-cp-sort="platform"]').click();
