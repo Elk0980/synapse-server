@@ -88,3 +88,9 @@
   .cp-sheet td[data-label="Тема"], .cp-sheet td[data-label="Сценарий по ролям"] { min-width:0; }
   .cp-sheet .cp-script th { white-space:normal; width:34%; }
 }
+
+/* №181: вкладки и сортировка общего списка. */
+.cp-tabs{align-items:center;border-bottom:1px solid var(--line);gap:4px;flex-wrap:nowrap}.cp-tabs>[role=tablist]{display:flex;flex-wrap:wrap;gap:2px;flex:1;min-width:0}.cp-tabs button{border:0;border-radius:8px 8px 0 0;padding:8px 10px;color:var(--muted);background:transparent;word-break:normal;hyphens:none;overflow-wrap:normal}.cp-tabs [aria-selected=true]{color:var(--text);background:var(--surface-soft);box-shadow:inset 0 -3px var(--accent)}.cp-sheet-link{display:grid;place-items:center;min-width:44px;min-height:44px;color:var(--accent)}.cp-list-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.cp-list-head h3{margin:0}.cp-sort{position:relative}.cp-sort [data-cp-sort-toggle]{font-size:24px;min-width:44px}.cp-sort [role=group]{position:absolute;right:0;top:100%;z-index:2;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 12px #0003;width:185px}.cp-sort [hidden]{display:none}.cp-sort [data-cp-sort]{display:block;width:100%;text-align:left;word-break:normal;hyphens:none}.cp-tabs button:focus-visible,.cp-sheet-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:430px){.cp-tabs button{padding:7px 6px;font-size:13px}}
+
+.cp-sort button{color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px}

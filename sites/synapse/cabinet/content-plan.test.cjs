@@ -84,7 +84,7 @@ test('short view lists №, date, platform, topic, status; row opens hook, B-rol
   const script = [...full.querySelectorAll('.cp-script tr')].map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td').textContent]);
   assert.deepEqual(script, [['Мастер', 'Здравствуйте!'], ['Клиент', '<b>Привет</b>'], ['—', 'Пауза, смех']]);
   assert.equal(full.querySelector('b'), null, 'server text is escaped');
-  assert.match(a.root.querySelector('.cp-stage').textContent, /На согласовании/);
+  assert.equal(a.root.querySelector('.cp-stage'), null, 'статус уже в шапке кабинета');
 });
 
 test('full plan is a sheet: one row per reel with hook, B-roll, style, roles, props; № opens the card', async () => {
@@ -96,12 +96,11 @@ test('full plan is a sheet: one row per reel with hook, B-roll, style, roles, pr
   const cells = Object.fromEntries([...rows[0].children].map((td) => [td.dataset.label, td.textContent.trim()]));
   assert.equal(cells['Хук (1–2 с)'], 'SAMPLE хук'); assert.equal(cells['Вставки (B-roll)'], 'SAMPLE руки'); assert.equal(cells['Реквизит'], 'SAMPLE халат');
   assert.equal(rows[0].querySelectorAll('.cp-script tr').length, 3);
-  assert.equal(a.root.querySelector('[data-cp-view="full"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(a.root.querySelector('[data-cp-view]'), null, 'переключатель вида убран');
   rows[1].querySelector('[data-open-row]').click();
   assert.equal(a.root.querySelector('.cp-sheet'), null);
   assert.equal(a.root.querySelector('.cp-row[data-idea="s-2"] .cp-full') !== null, true);
-  a.root.querySelector('[data-cp-view="full"]').click();
-  assert.ok(a.root.querySelector('.cp-sheet'));
+  assert.equal(a.root.querySelector('[data-cp-view]'), null);
 });
 
 test('questionnaire autosaves only the changed field with the last revision', async () => {
@@ -161,8 +160,7 @@ test('row edit keeps other fields and replaces caption; signoff posts own slot; 
   const box = a.root.querySelector('[data-signoff="owner"]');
   box.checked = true; box.dispatchEvent(new a.window.Event('change')); await tick(); await tick();
   assert.deepEqual(a.calls.find((c) => c.method === 'POST' && c.path.endsWith('/signoffs')).body, { planRevision: 4, briefRevision: 2, slot: 'owner', checked: true });
-  a.root.querySelector('[data-cp="chat"]').click();
-  assert.deepEqual(a.opened.at(-1), ['hugh']);
+  assert.equal(a.root.querySelector('[data-cp="chat"]'), null);
 });
 
 test('approvers come from Настройки → Контент: names from candidates, honest note when server fell back to the owner', async () => {
@@ -276,7 +274,7 @@ test('№141: plan exists — short plan is shown first, questionnaire collapsed
   assert.equal(a.root.querySelector('.cp-q').open, false, 'questionnaire is collapsed');
   assert.equal(a.root.querySelector('.cp-q summary').textContent.trim(), 'Анкета проекта · заполнено 1 из 8');
   assert.equal(a.root.querySelectorAll('.cp-plan .cp-row').length, 2, 'short plan rows are visible right away');
-  assert.equal(a.root.querySelector('[data-cp-view="short"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(a.root.querySelector('[data-cp-tab="plan"]').getAttribute('aria-selected'), 'true');
   // Кнопка «Написать контент-план» раскрывает свёрнутую анкету.
   a.root.querySelector('[data-cp="questionnaire"]').click();
   assert.equal(a.root.querySelector('.cp-q').open, true);
@@ -324,4 +322,42 @@ test('№143: on 390 the row is four lines — «№ дата» / тема / п�
   assert.match(mobile, /\.cp-st \{ grid-area:st; justify-self:start; max-width:100%; white-space:normal; \}/);
   // Широкая раскладка 641+ не тронута: пять колонок в одну строку.
   assert.match(css, /\.cp-line \{ width:100%; display:grid; grid-template-columns:52px 96px minmax\(90px,160px\) 1fr auto;/);
+});
+
+test('№181: вкладки фильтруют существующие строки; новые используют анкету; сортировка запоминается у пользователя', async () => {
+  const a = api({plan:[idea(2), idea(1), idea(3,{productionStatus:'draft'})]}); await a.mount();
+  assert.equal(a.root.querySelector('.cp-head h2'),null);
+  for (const text of ['Написать контент-план','Чат с Хью','Кратко','Полный план (таблица)']) assert.ok(![...a.root.querySelectorAll('button')].some(b=>b.textContent===text));
+  const ids=()=>[...a.root.querySelectorAll('.cp-row')].map(n=>n.dataset.idea);
+  assert.deepEqual(ids(),['s-1','s-2']);
+  a.root.querySelector('[data-cp-tab="drafts"]').click(); assert.deepEqual(ids(),['s-3']);
+  a.root.querySelector('[data-cp="questionnaire"]').click(); assert.ok(a.root.querySelector('.cp-q').open);
+  a.root.querySelector('[data-cp-tab="plan"]').click();
+  a.root.querySelector('[data-cp-sort-toggle]').click(); assert.equal(a.root.querySelector('#cp-sort-menu').hidden,false);
+  assert.equal(a.root.querySelector('[data-cp-sort="date"]').getAttribute('aria-pressed'),'true');
+  a.root.querySelector('[data-cp-sort="platform"]').click();
+  assert.equal(a.window.localStorage.getItem('sb-content-plan:7:alpha:sort'),'platform');
+  await a.mount(); assert.equal(a.root.querySelector('[data-cp-sort="platform"]').getAttribute('aria-pressed'),'true');
+  a.ctx.user.id=8; await a.mount(); assert.equal(a.root.querySelector('[data-cp-sort="date"]').getAttribute('aria-pressed'),'true');
+  assert.ok(a.calls.every(c=>c.method==='GET'),'вкладки/сортировка не пишут план');
+});
+test('№181: безопасная ссылка настройки открывается отдельно, пустая и опасная скрыты', async () => {
+  for (const url of ['', 'javascript:alert(1)', 'https://docs.google.com.evil.test/spreadsheets/d/test','https://docs.google.com/spreadsheets/d/sample/edit']) {
+    const a=api({settings:{settings:{approverUserIds:[],contentPlanSheetUrl:url},candidates:[]}}); await a.mount();
+    const link=a.root.querySelector('.cp-sheet-link');
+    if (url.endsWith('/sample/edit')) { assert.equal(link.target,'_blank'); assert.match(link.rel,/noopener/); }
+    else assert.equal(link,null);
+  }
+});
+
+test('№181: сортировка по площадке/статусу меняет порядок, черновик редактирования переживает вкладки', async () => {
+  const a=api({plan:[idea(1,{platform:'telegram',variants:{telegram:{text:'a'}}}),idea(2,{platform:'vk',variants:{vk:{text:'b'}}})]}); await a.mount();
+  const ids=()=>[...a.root.querySelectorAll('.cp-row')].map(n=>n.dataset.idea);
+  a.root.querySelector('[data-cp-sort-toggle]').click(); a.root.querySelector('[data-cp-sort="platform"]').click(); assert.deepEqual(ids(),['s-2','s-1']);
+  a.root.querySelector('[data-cp-sort-toggle]').click(); a.root.querySelector('[data-cp-sort="status"]').click(); assert.deepEqual(ids(),['s-1','s-2']);
+  a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  a.root.querySelector('[data-edit="s-1"] [name="topic"]').value='Несохранённый текст';
+  a.root.querySelector('[data-cp-tab="drafts"]').click(); a.root.querySelector('[data-cp-tab="plan"]').click();
+  assert.equal(a.root.querySelector('[data-edit="s-1"] [name="topic"]').value,'Несохранённый текст');
+  assert.ok(!a.root.textContent.includes('Полный план (таблица)'));
 });
