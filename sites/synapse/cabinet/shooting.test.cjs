@@ -58,20 +58,47 @@ test('загрузка продолжается с принятого байта
   assert.equal(result.status, 'stored'); assert.deepEqual(stored, [[0, 10], [10, 20], [20, 25]]); assert.equal(progress.at(-1), 25);
 });
 
-function page({companyCode = 'avokado', path: route = '', canEdit = true, settings = {deadlineDays: 3, shootingWeekdays: [2, 4]}} = {}) {
+test('«Сценарий по секундам»: строки таблицы, время, «В кадре»/«Титр» к сцене, «ДО СЪЁМКИ» — не сцена; этапы CfKit', () => {
+  const parsed = script.parse([
+    '0–3 с | Актёр | Пятьсот рублей — и курс? | Актёр у стойки | Наезд | 500 ₽',
+    '3–6 с | Администратор | Первый визит стоит пятьсот. | Администратор за стойкой | Склейка | Первый визит',
+    '6–8 с | — | | Прайс крупно | Перебивка | ',
+    '8 с · Лена: Ждём вас!',
+    'В кадре: Лена у двери',
+    'Титр: Запись в профиле',
+    'ДО СЪЁМКИ: сверить цену с мастером'].join('\n'));
+  assert.deepEqual(parsed.actors, ['Актёр', 'Администратор', 'Лена']);
+  assert.equal(parsed.frames.length, 4, '«В кадре» и «Титр» дополняют сцену, а не создают новую');
+  assert.deepEqual([parsed.frames[0].time, parsed.frames[0].shot, parsed.frames[0].action, parsed.frames[0].title], ['0–3 с', 'Актёр у стойки', 'Наезд', '500 ₽']);
+  assert.equal(parsed.frames[2].type, 'action'); assert.equal(parsed.frames[2].text, 'Прайс крупно');
+  assert.deepEqual([parsed.frames[3].time, parsed.frames[3].actor, parsed.frames[3].shot, parsed.frames[3].title], ['8 с', 'Лена', 'Лена у двери', 'Запись в профиле']);
+  assert.deepEqual(parsed.before, ['сверить цену с мастером']);
+  const reel = (status, extra = {}) => ({status, idea: {date: '2026-11-01', ...extra}});
+  assert.deepEqual(['approved', 'shot', 'editing', 'draft'].map((s) => script.stageOf(reel(s))), ['planned', 'shot', 'editing', 'edit_review']);
+  assert.equal(script.stageOf(reel('approved', {stage: 'published'})), 'published', 'этап из плана, когда сервер его отдаёт');
+  assert.equal(script.onShoot(reel('approved', {stage: 'published'}), '2026-11-07'), false, 'опубликованное не показывается');
+  assert.equal(script.onShoot(reel('approved', {stage: 'ready'}), '2026-11-07'), false, 'готовое с прошедшей датой не показывается');
+  assert.equal(script.onShoot(reel('approved', {stage: 'ready', date: '2026-11-20'}), '2026-11-07'), true);
+  assert.equal(script.onShoot(reel('draft'), '2026-11-07'), true, 'без признака публикации рилс остаётся');
+});
+
+function page({companyCode = 'avokado', path: route = '', canEdit = true, kit = true, settings = {deadlineDays: 3, shootingWeekdays: [2, 4]}} = {}) {
   const dom = new JSDOM('<main id="m"></main>', {url: 'https://cabinet.test/cabinet.html', runScripts: 'outside-only', pretendToBeVisual: true});
   const w = dom.window, registered = {}, calls = [], navigations = [];
   w.SynapseModules = {register: (id, def) => { registered[id] = def; }};
-  for (const file of ['shooting-script.js', 'shooting-upload.js', 'shooting.js']) w.eval(read(file));
+  w.HTMLElement.prototype.scrollIntoView = function () { w.__scrolled = this; };
+  for (const file of [...(kit ? ['cf-kit.js'] : []), 'shooting-script.js', 'shooting-upload.js', 'shooting-prompter.js', 'shooting-board.js', 'shooting.js']) w.eval(read(file));
   const ctx = {companyCode, route: {path: route}, csrfToken: 'csrf', navigate: (to) => navigations.push(to),
     crm: async (p, params) => { calls.push(['crm', p, params.companyCode]); return snapshot; },
     api: {get: async (p) => { calls.push(['get', p]); return p === 'shooting/reels'
       ? {canEdit, storage: {canUpload: true, usedBytes: 0, quotaBytes: 40 * 1024 ** 3}, reels: {}}
-      : {uploads: [{id: 5, kind: 'take', frame: 1, status: 'stored', name: 'take1.mov', size: 1e8, mime: 'video/quicktime', fileUrl: '/f/5'},
+      : {reel: {board: [], sketches: {}, sketchStatus: {available: false, reason: 'нет ключа'}},
+        uploads: [{id: 5, kind: 'take', frame: 1, status: 'stored', name: 'take1.mov', size: 1e8, mime: 'video/quicktime', fileUrl: '/f/5'},
         {id: 6, kind: 'draft', frame: null, status: 'stored', name: 'draft.mp4', size: 5e7, mime: 'video/mp4', fileUrl: '/f/6'}]}; }, put: async () => ({})},
-    settings: {content: {get: async () => ({settings})}}};
+    settings: {content: {get: async () => ({settings: {...settings, contentPlanSheetUrl: 'https://docs.google.com/spreadsheets/d/SAMPLE/edit'}})}}};
   return {w, d: w.document, registered, ctx, calls, navigations};
 }
+const card = (root, ideaId) => root.querySelector(`.shoot-row[data-idea="${ideaId}"]`);
 
 test('№121: Съёмка показывает все видео-позиции плана с номером строки плана, даже если Хью поставил post/story', async () => {
   // Как на боевом 05.11: площадка только «Instagram / Reels», Хью проставил форматы post/reel/story/post/story.
@@ -91,46 +118,125 @@ test('№121: Съёмка показывает все видео-позиции
     'все пять позиций Reels и видео-версии; фото-пост без сценария (№6) не снимается; номера как в плане');
   assert.equal(list.find((r) => r.idea.ideaId === 'idea-07').number, 2, '«Частый вопрос новичка» — №2, как в плане');
   assert.deepEqual(list.slice(0, 3).map((r) => r.kind), ['Видео', 'Рилс', 'Сторис']);
-  // Экран: строки по порядку, номер строки плана, подпись вида.
-  const p = page(), root = p.d.getElementById('m');
+  // Экран: карточки по порядку, номер строки плана в названии; вид — в полном виде.
+  const p = page({settings: {}}), root = p.d.getElementById('m');
   p.ctx.crm = async () => live;
   await p.registered['content-shooting'].mount(root, p.ctx);
-  const nums = [...root.querySelectorAll('.shoot-row__num')].map((node) => node.textContent);
+  const nums = [...root.querySelectorAll('.shoot-row__topic')].map((node) => node.textContent.split(' ')[0]);
   assert.deepEqual(nums, ['№1', '№2', '№3', '№4', '№5', '№7', '№8']);
-  assert.equal(root.querySelectorAll('.shoot-row__kind')[2].textContent, 'Сторис');
-  const card = page({path: 'idea-08'}), cardRoot = card.d.getElementById('m');
-  card.ctx.crm = async () => live;
-  await card.registered['content-shooting'].mount(cardRoot, card.ctx); await settle();
-  assert.equal(cardRoot.querySelector('h1').textContent, 'Сторис №3 · Три');
+  assert.deepEqual([...card(root, 'idea-14').querySelectorAll('.shoot-nb')].map((n) => n.textContent), ['VK'], 'значки площадок из версий плана');
+  assert.deepEqual([...card(root, 'idea-15').querySelectorAll('.shoot-nb')].map((n) => n.textContent), ['TT']);
+  const opened = page({path: 'idea-08', settings: {}}), openedRoot = opened.d.getElementById('m');
+  opened.ctx.crm = async () => live;
+  await opened.registered['content-shooting'].mount(openedRoot, opened.ctx); await settle();
+  assert.ok(card(openedRoot, 'idea-08').querySelector('.shoot-full'), 'подпуть раскрывает карточку');
+  assert.match(card(openedRoot, 'idea-08').querySelector('.shoot-full__grid').textContent, /Формат\s*Сторис/);
+  assert.equal(opened.w.__scrolled, card(openedRoot, 'idea-08'), 'и прокручивает к ней');
 });
 
-test('экран «Съёмка»: список по порядку с днём и дедлайном, карточка с кнопкой у каждого кадра', async () => {
+test('экран «Съёмка» по макету 07.11: шапка CfKit, карточка без «Сменить статус», две кнопки, загрузка и площадки', async () => {
   const p = page(), root = p.d.getElementById('m');
   assert.equal(typeof p.registered['content-shooting'].mount, 'function');
   await p.registered['content-shooting'].mount(root, p.ctx);
-  const rows = [...root.querySelectorAll('.shoot-row')].map((row) => row.textContent);
-  assert.equal(rows.length, 2); assert.match(rows[0], /№2.*Новое меню.*Рилс.*съёмка чт, 05.11.*дедлайн.*согласовано/);
   assert.deepEqual(p.calls[0], ['crm', '/media-mentor', 'avokado']);
-  root.querySelector('.shoot-row__open').click();
-  assert.deepEqual(p.navigations, ['content/shooting/r-first']);
-  p.registered['content-shooting'].unmount(root);
-  const card = page({path: 'r-first'}), cardRoot = card.d.getElementById('m');
-  await card.registered['content-shooting'].mount(cardRoot, card.ctx); await settle();
-  assert.equal(cardRoot.querySelectorAll('.shoot-frame').length, 5);
-  assert.equal(cardRoot.querySelectorAll('.shoot-frame .shoot-upload').length, 5, 'кнопка напротив каждого кадра');
-  assert.ok(cardRoot.querySelector('[data-frame=other] .shoot-upload'), '«Другое / дополнительно»');
-  assert.match(cardRoot.querySelector('[data-files="1"]').textContent, /take1\.mov/);
-  assert.ok(cardRoot.querySelector('[data-drafts] video'), 'черновик монтажа в карточке');
-  assert.match(cardRoot.textContent, /снимает: SAMPLE оператор/);
+  const head = root.querySelector('.cfk-head');
+  assert.equal(head.querySelector('.cfk-title').textContent, 'Согласованные рилсы');
+  assert.ok(head.querySelector('[data-cfk-act=calendar]') && head.querySelector('[data-cfk-act=sort]'));
+  assert.match(head.querySelector('a[data-cfk-act=sheet]').href, /^https:\/\/docs\.google\.com\/spreadsheets\/d\/SAMPLE/);
+  assert.ok(!root.textContent.includes('⚙'), 'шестерёнки на «Съёмке» нет');
+  const strip = root.querySelector('.cfk-dates');
+  assert.equal(strip.hidden, true, 'полоса дат скрыта, пока не нажат календарь');
+  head.querySelector('[data-cfk-act=calendar]').click();
+  assert.equal(strip.hidden, false);
+  assert.ok(strip.querySelector('[data-cfk-day="2026-11-05"].has'), 'точка в день съёмки');
+  const rows = [...root.querySelectorAll('.shoot-row')];
+  assert.deepEqual(rows.map((row) => row.dataset.idea), ['r-first', 'r-late'], 'по дате съёмки');
+  const first = rows[0];
+  assert.match(first.querySelector('.shoot-row__meta').textContent, /Съёмка чт, 05\.11 · выход чт, 12\.11/);
+  assert.equal(first.querySelector('[data-stage]').textContent, 'Запланировано', 'этап из общей цепочки, без «Снимается»');
+  assert.ok(first.querySelector('.cfk-chip'), 'чип CfKit');
+  assert.equal(first.querySelector('.shoot-row__topic').textContent, '№2 Новое меню');
+  assert.equal(first.querySelector('.shoot-row__chev').textContent, '▾');
+  assert.deepEqual([...first.querySelectorAll('.shoot-pair__btn')].map((b) => b.textContent), ['Суфлёр', 'Раскадровка']);
+  assert.equal(first.querySelector('.shoot-upload--main').textContent, 'Загрузить материал');
+  assert.ok(!/Сменить статус|Общий план|Снимается/.test(root.textContent));
+  assert.ok(!root.querySelector('select.shoot-status'), 'ручной смены статуса нет');
+  assert.deepEqual([...rows[1].querySelectorAll('.shoot-nb')].map((n) => n.textContent), [], 'без площадок — без значков');
+  // Нажатие на карточку раскрывает полный вид: сцены «Сцена №N», загрузка у каждой, «До съёмки» после сцен.
+  first.querySelector('.shoot-row__meta').click(); await settle();
+  const open = card(root, 'r-first');
+  assert.equal(open.querySelector('.shoot-row__chev').textContent, '▴');
+  assert.equal(open.querySelectorAll('.shoot-frame').length, 5);
+  assert.deepEqual([...open.querySelectorAll('.shoot-frame__head b')].slice(0, 2).map((b) => b.textContent), ['Сцена №1', 'Сцена №2']);
+  assert.equal(open.querySelectorAll('.shoot-frame .shoot-upload').length, 5, 'кнопка у каждой сцены');
+  assert.match(open.querySelector('[data-files="1"]').textContent, /take1\.mov/);
+  assert.ok(open.querySelector('[data-drafts] video'), 'черновик монтажа в полном виде');
+  assert.match(open.textContent, /СнимаетSAMPLE оператор/);
+  assert.ok(open.querySelector('.shoot-frames').compareDocumentPosition(open.querySelector('.shoot-pair')) & 4, 'кнопки — под полным видом');
+  // Кнопка внутри карточки не сворачивает её; нажатие в тексте полного вида — сворачивает.
+  open.querySelector('.shoot-frame .shoot-upload').click();
+  assert.ok(card(root, 'r-first').querySelector('.shoot-full'));
+  card(root, 'r-first').querySelector('.shoot-frame__say').click();
+  assert.equal(card(root, 'r-first').querySelector('.shoot-full'), null);
   const viewer = page({path: 'r-first', canEdit: false}), viewerRoot = viewer.d.getElementById('m');
   await viewer.registered['content-shooting'].mount(viewerRoot, viewer.ctx); await settle();
   assert.ok([...viewerRoot.querySelectorAll('.shoot-upload')].every((b) => b.disabled), 'без права правки загрузка недоступна');
+});
+
+test('сортировка ⇅: номер, сначала без материалов, статус; выбор запоминается; полоса дат перематывает к дню', async () => {
+  const p = page(), root = p.d.getElementById('m');
+  p.ctx.api.get = async (path) => path === 'shooting/reels'
+    ? {canEdit: true, storage: {canUpload: true}, reels: {'r-first': {status: 'shot', takes: 3}}} : {uploads: []};
+  await p.registered['content-shooting'].mount(root, p.ctx);
+  const order = () => [...root.querySelectorAll('.shoot-row')].map((row) => row.dataset.idea);
+  assert.deepEqual(order(), ['r-first', 'r-late']);
+  const pick = (id) => { root.querySelector('[data-cfk-act=sort]').click(); root.querySelector(`[data-cfk-sort="${id}"]`).click(); };
+  root.querySelector('[data-cfk-act=sort]').click();
+  assert.deepEqual([...root.querySelectorAll('[data-cfk-sort]')].map((b) => b.dataset.cfkSort), ['shoot', 'status', 'nomaterial', 'number']);
+  root.querySelector('[data-cfk-act=sort]').click();
+  pick('number'); assert.deepEqual(order(), ['r-late', 'r-first']);
+  pick('nomaterial'); assert.deepEqual(order(), ['r-late', 'r-first'], 'без материалов — первым');
+  pick('status'); assert.deepEqual(order(), ['r-first', 'r-late'], 'отснято → запланировано');
+  assert.equal(card(root, 'r-first').querySelector('[data-stage]').textContent, 'Отснято');
+  assert.equal(p.w.localStorage.getItem('cfkit.sort.content-shooting'), 'status');
+  pick('shoot');
+  root.querySelector('[data-cfk-act=calendar]').click();
+  root.querySelector('[data-cfk-day="2026-11-10"]').click();
+  assert.equal(p.w.__scrolled, card(root, 'r-late'), 'к первому рилсу этого дня или позже');
+});
+
+test('без CfKit — простая шапка и свой чип этапа; CfKit пришёл позже — шапка перерисована', async () => {
+  const p = page({kit: false}), root = p.d.getElementById('m');
+  await p.registered['content-shooting'].mount(root, p.ctx);
+  assert.equal(root.querySelector('h1').textContent, 'Согласованные рилсы');
+  assert.equal(root.querySelector('.shoot-chip').textContent, 'Запланировано');
+  p.w.eval(read('cf-kit.js'));
+  assert.ok(root.querySelector('.cfk-head'), 'событие cfkit:ready перерисовало шапку');
+});
+
+test('«Суфлёр» и «Раскадровка» открываются окнами с «← Съёмка»', async () => {
+  const p = page(), root = p.d.getElementById('m');
+  await p.registered['content-shooting'].mount(root, p.ctx); await settle();
+  card(root, 'r-first').querySelector('[data-prompter-open]').click();
+  const prompter = p.d.querySelector('.prompter');
+  assert.ok(prompter); assert.equal(prompter.querySelector('.prompter__back').textContent, '← Съёмка');
+  assert.match(prompter.querySelector('.prompter__title').textContent, /Суфлёр · №2/);
+  prompter.querySelector('.prompter__back').click();
+  assert.equal(p.d.querySelector('.prompter'), null);
+  card(root, 'r-first').querySelector('[data-board-open]').click(); await settle();
+  const board = p.d.querySelector('.shoot-win');
+  assert.equal(board.querySelector('.shoot-win__badge').textContent, 'Тестовая версия');
+  assert.equal(board.querySelectorAll('.shoot-board__frame').length, 5);
+  assert.match(board.querySelector('[data-board-frame="1"] [data-files="1"]').textContent, /take1\.mov/, 'загрузки кадра видны в окне');
+  board.querySelector('.shoot-win__back').click();
+  assert.equal(p.d.querySelector('.shoot-win'), null);
 });
 
 test('без настроек — честная подсказка; смена компании обрывает чужие загрузки', async () => {
   const p = page({settings: {}}), root = p.d.getElementById('m');
   await p.registered['content-shooting'].mount(root, p.ctx);
   assert.match(root.querySelector('.shoot-warning').textContent, /не заданы.*Настройки → Контент/);
+  assert.match(card(root, 'r-first').querySelector('.shoot-row__meta').textContent, /день съёмки не задан/);
   const job = {companyCode: 'avokado', controller: new p.w.AbortController()};
   p.w.SbShooting.view.active.set('x', job);
   await p.registered['content-shooting'].mount(root, {...p.ctx, companyCode: 'alvi'});
@@ -149,12 +255,12 @@ test('контракт А: без csrfToken байты идут через api.r
   };
   const def = p.registered['content-shooting'];
   await def.mount(root, p.ctx); await settle();
-  const button = root.querySelector('[data-slot="1"] .shoot-upload');
+  const button = card(root, 'r-first').querySelector('[data-slot="1"] .shoot-upload');
   assert.equal(button.disabled, false, 'api.raw оболочки включает загрузку');
   const view = root.__shooting, file = {name: 'A.MOV', size: 5, type: 'video/quicktime', lastModified: 2, slice: () => 'bytes'};
-  view.startUpload(file, 1); await settle();
-  assert.match(root.querySelector('[data-files="1"]').textContent, /Слишком большой кусок/);
-  view.startUpload(file, 1); await settle();
+  view.startUpload(file, 1, 'r-first'); await settle();
+  assert.match(card(root, 'r-first').querySelector('[data-files="1"]').textContent, /Слишком большой кусок/);
+  view.startUpload(file, 1, 'r-first'); await settle();
   assert.deepEqual(raws.map(([t, m]) => `${m} ${t}`), ['POST shooting/uploads', 'PATCH shooting/uploads/9', 'POST shooting/uploads', 'PATCH shooting/uploads/9']);
   assert.ok(raws.every(([, , csrf]) => csrf === undefined), 'CSRF добавляет оболочка, модуль его не подделывает');
   assert.equal(raws[1][3], '0', 'Upload-Offset передаётся оболочке');
@@ -162,8 +268,8 @@ test('контракт А: без csrfToken байты идут через api.r
   const crmCalls = p.calls.filter(([kind]) => kind === 'crm').length;
   def.onRoute({path: ''});
   assert.equal(root.querySelectorAll('.shoot-row').length, 2, 'список без повторной загрузки');
-  def.onRoute({path: 'r-first'}); await settle();
-  assert.equal(root.querySelectorAll('.shoot-frame').length, 5);
+  def.onRoute({path: 'r-late'}); await settle();
+  assert.ok(card(root, 'r-late').querySelector('.shoot-full'));
   assert.equal(p.calls.filter(([kind]) => kind === 'crm').length, crmCalls, 'план из CRM не перечитывается');
   def.unmount(root);
   const none = page({path: 'r-first'}), noneRoot = none.d.getElementById('m');
@@ -173,17 +279,18 @@ test('контракт А: без csrfToken байты идут через api.r
   assert.match(noneRoot.querySelector('.shoot-slot__reason').textContent, /Загрузка недоступна/);
 });
 
-test('№120: «Общий план» рилса без реквизита не выводит текст «null»', async () => {
-  const card = page({path: 'r-late'}), root = card.d.getElementById('m');
-  await card.registered['content-shooting'].mount(root, card.ctx); await settle();
-  const body = root.querySelector('.shoot-frames').parentElement;
-  assert.ok(!root.querySelector('.shoot-props'), 'у рилса нет реквизита');
+test('№120: полный вид рилса без реквизита не выводит «null»; «До съёмки» после сцен', async () => {
+  const p = page({path: 'r-late'}), root = p.d.getElementById('m');
+  await p.registered['content-shooting'].mount(root, p.ctx); await settle();
+  const open = card(root, 'r-late');
+  assert.doesNotMatch(open.querySelector('.shoot-full__grid').textContent, /Реквизит/);
   assert.doesNotMatch(root.textContent, /\bnull\b|\bundefined\b/);
-  assert.deepEqual([...body.childNodes].filter((node) => node.nodeType === 3).map((node) => node.textContent), [], 'в теле вкладки нет голых текстовых узлов');
-  assert.equal(body.firstElementChild.className, 'shoot-frames', 'список кадров идёт сразу под вкладками');
-  // С реквизитом строка «Реквизит» остаётся первой.
-  const full = page({path: 'r-first'}), fullRoot = full.d.getElementById('m');
-  await full.registered['content-shooting'].mount(fullRoot, full.ctx); await settle();
-  assert.equal(fullRoot.querySelector('.shoot-frames').parentElement.firstElementChild.className, 'shoot-props');
-  assert.doesNotMatch(fullRoot.textContent, /\bnull\b/);
+  snapshot.plan.days[0].script = 'Лена: Стоп!\nДО СЪЁМКИ: проверить свет';
+  const q = page({path: 'r-late'}), qRoot = q.d.getElementById('m');
+  await q.registered['content-shooting'].mount(qRoot, q.ctx); await settle();
+  const full = card(qRoot, 'r-late').querySelector('.shoot-full');
+  assert.equal(full.querySelectorAll('.shoot-frame').length, 1, '«ДО СЪЁМКИ» — не сцена');
+  assert.ok(full.querySelector('.shoot-frames').compareDocumentPosition(full.querySelector('.shoot-before')) & 4, '«До съёмки» после сцен');
+  assert.match(full.querySelector('.shoot-before').textContent, /До съёмки.*проверить свет/);
+  delete snapshot.plan.days[0].script;
 });
