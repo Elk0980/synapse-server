@@ -1060,3 +1060,35 @@ test('Telegram через Onlypult — «фото или одно видео»: 
     assert.equal(f.node('autoposting-schedule').disabled,false);
   }finally{f.close();}
 });
+test('spec 182: «Удалить с площадок» — подтверждение со списком, затем итог по площадкам; без права правки кнопки нет',async()=>{
+ const published={id:40,companyCode:'alvi',revision:5,status:'published',title:'Вышедший пост',text:'Текст',mediaUrls:[],platformIds:['telegram','instagram'],scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,
+  deliveries:[{channelId:'telegram',status:'published',url:'https://t.me/qa_channel/81'},{channelId:'instagram',status:'needs_review'}]};
+ const targets=[{key:'direct:telegram:81',label:'Telegram',mode:'auto',note:'Удалим сообщение ботом канала.',url:'https://t.me/qa_channel/81',outcome:null},
+  {key:'provider:instagram:op-1',label:'Instagram',mode:'manual',note:'Onlypult не удаляет уже опубликованное: удалите пост на площадке вручную.',url:null,outcome:null}];
+ const writes=[];
+ const f=await fixture({entries:[published],override:call=>{
+  if(!/\/posts\/40\/unpublish/.test(call.path))return undefined;
+  if(call.method==='GET')return {postId:40,revision:5,state:'published',targets};
+  const body=JSON.parse(call.options.body);writes.push({path:call.path,body});
+  if(call.path.endsWith('/manual'))return {postId:40,revision:5,state:'removed',targets:[{...targets[0],outcome:'removed'},{...targets[1],outcome:'manual_done'}]};
+  return {postId:40,revision:5,state:'manual_pending',targets:[{...targets[0],outcome:'removed'},{...targets[1],outcome:'manual'}],
+   results:[{key:targets[0].key,outcome:'removed'},{key:targets[1].key,outcome:'manual'}]};
+ }});
+ try{
+  f.set('autoposting-select','40','change');
+  const zone=()=>f.node('autoposting-unpublish-zone');
+  await f.click('autoposting-unpublish-open');await f.settle();
+  assert.equal(writes.length,0,'открытие окна ничего не удаляет');
+  const dialog=zone().querySelector('[role=dialog]');assert.ok(dialog);
+  assert.match(dialog.textContent,/Telegram · удалит Synapse автоматически/);assert.match(dialog.textContent,/Instagram · удалите вручную/);
+  assert.equal(dialog.querySelector('a').href,'https://t.me/qa_channel/81');
+  await f.click('autoposting-unpublish-yes');await f.settle();
+  assert.deepEqual(writes[0],{path:'/content/crm/autoposting/posts/40/unpublish',body:{revision:5,targets:['direct:telegram:81','provider:instagram:op-1']}});
+  assert.match(zone().textContent,/Итог по площадкам/);assert.match(zone().textContent,/Telegram · Удалено/);assert.match(zone().textContent,/Instagram · Удалите вручную/);
+  zone().querySelector('[data-unpublish-manual="provider:instagram:op-1"]').click();await f.settle();
+  assert.deepEqual(writes[1].body,{key:'provider:instagram:op-1'});assert.match(zone().textContent,/Удалено вручную/);
+  assert.ok(f.calls.every(call=>!/\/(schedule|approve|delete)$/.test(call.path)));
+ }finally{f.close();}
+ const viewer=await fixture({role:'editor',permissions:['autoposting.view'],entries:[published]});
+ try{viewer.set('autoposting-select','40','change');assert.equal(viewer.node('autoposting-unpublish-zone').innerHTML,'');}finally{viewer.close();}
+});

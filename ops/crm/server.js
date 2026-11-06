@@ -653,6 +653,8 @@ const handleContentFactoryCompletion=require('./content-factory-completion-http'
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
+const {createAutopostingUnpublish,createAutopostingUnpublishHandler}=require('./autoposting-unpublish');
+const handleAutopostingUnpublish=createAutopostingUnpublishHandler({unpublish:createAutopostingUnpublish(db,{transport:autopostingTransport}),companyModuleContext,readJson,send});
 const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation}),
   companyModuleContext,readJson,send,trustedService:request=>!request.headers[CRM_IDENTITY_HEADER]});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
@@ -2697,6 +2699,7 @@ async function route(request, response) {
     return send(response, 200, { companyCode: company.code.toLowerCase(), items }, { ...cors, 'cache-control': 'no-store' });
   }
   if(await handleContentFactoryCompletion(request,response,url,cors))return;
+  if(await handleAutopostingUnpublish(request,response,url,cors))return;
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
     const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
