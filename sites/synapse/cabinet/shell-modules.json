@@ -1,4 +1,11 @@
 {
-  "assets": ["content-settings"],
-  "styles": ["shell", "content-settings"]
+  "assets": [
+    "content-settings",
+    "update-banner"
+  ],
+  "styles": [
+    "shell",
+    "content-settings",
+    "update-banner"
+  ]
 }
