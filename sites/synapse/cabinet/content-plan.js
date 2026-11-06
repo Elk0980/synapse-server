@@ -83,6 +83,7 @@
   function draw() {
     const drafts = state.editDrafts; state.container.querySelectorAll('[data-edit] textarea').forEach(n => drafts.set(n.closest('[data-edit]').dataset.edit + ':' + n.name,n.value));
     const {mentor, questionnaire: q, signoffs: s, ctx, container} = state, edit = ctx.can('autoposting.edit');
+    const owner = ctx.identity?.role === 'owner' || ctx.user?.role === 'owner';
     const vocab = mentor.vocabulary || {platforms: []}, platformLabel = (id) => vocab.platforms.find((p) => p.id === id)?.label || id;
     const allDays = mentor.plan?.days || [], states = mentor.variants || [];
     const statusOf = (idea) => { const list = states.filter((v) => v.ideaId === idea.ideaId);
@@ -135,6 +136,7 @@
         return `<li class="cp-row" data-idea="${esc(idea.ideaId)}"><button type="button" class="cp-line" data-toggle aria-expanded="${open}">
           <span class="cp-n">№${index + 1}</span><span class="cp-date">${esc(day(idea.date))}</span>
           <span class="cp-pl">${esc(platforms(idea))}</span><span class="cp-topic">${esc(idea.topic)}</span>${status(idea)}</button>
+          ${owner && mentor.plan?.revision ? rowActions(idea, statusOf(idea)) : ''}
           ${open ? full(idea, edit) : ''}</li>`; }).join('')}</ol>`}</section>`;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
       ${plan}${approve}
@@ -158,6 +160,29 @@
         ${cell(2, esc(platforms(idea)))}${cell(3, `<b>${esc(idea.topic)}</b>`)}${cell(4, esc(idea.hook))}${cell(5, esc(idea.broll))}${cell(6, esc(idea.style))}
         ${cell(7, lines.length ? rolesTable(lines) : '')}${cell(8, esc(idea.props))}${cell(9, esc(idea.filmingBy))}${cell(10, status(idea))}</tr>`; }).join('')}
       </tbody></table></div>`;
+  }
+
+  /* Влад 06.11: в списке у каждой публикации — «Согласовать» и «Внести правку».
+     Решение по одной идее (scope: idea) через существующий media-mentor decideVariants;
+     правка требует комментария и возвращает строку «На доработку». Согласовывает владелец. */
+  function rowActions(idea, st) {
+    const id = esc(idea.ideaId), fixing = state.fixOpen === idea.ideaId, busy = state.rowBusy === idea.ideaId;
+    if (st === 'empty' || st === 'excluded') return '';
+    const main = st === 'approved'
+      ? `<span class="cp-ok">✓ Согласовано</span><button type="button" class="cp-act" data-cp-decide="withdrawn" ${busy ? 'disabled' : ''}>Отменить</button>`
+      : `<button type="button" class="cp-act cp-act-go" data-cp-decide="approved" ${busy ? 'disabled' : ''}>Согласовать</button>`;
+    return `<div class="cp-acts" data-acts="${id}">${main}<button type="button" class="cp-act" data-cp-fix aria-expanded="${fixing}" ${busy ? 'disabled' : ''}>Внести правку</button></div>
+      ${fixing ? `<form class="cp-fix" data-cp-fix-form><label>Что исправить<textarea name="comment" rows="3" required placeholder="Например: заменить хук, убрать цену, другой финал"></textarea></label>
+        <div class="cp-fix-btns"><button type="submit" class="plain-button">Отправить на доработку</button><button type="button" class="cp-act" data-cp-fix-cancel>Отмена</button></div></form>` : ''}`;
+  }
+
+  async function decide(ideaId, decision, comment) {
+    const {api, mentor} = state; state.rowBusy = ideaId; draw();
+    try {
+      await api.post('/plan/variants/decision', {planRevision: mentor.plan.revision, briefRevision: mentor.brief.revision,
+        scope: 'idea', ideaId, decision, comment: comment || ''});
+      state.fixOpen = null; state.rowBusy = null; await mount(state.container, state.ctx);
+    } catch (err) { state.rowBusy = null; draw(); error(err.status === 403 ? 'Согласовывать и возвращать на доработку может владелец кабинета.' : err.message); }
   }
 
   function full(idea, edit) {
@@ -345,6 +370,15 @@
     root.querySelectorAll('[data-cp-view]').forEach((button) => button.addEventListener('click', () => { state.view = button.dataset.cpView; draw(); }));
     root.querySelectorAll('[data-edit]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void saveRow(form); }));
     root.querySelectorAll('[data-signoff]').forEach((input) => input.addEventListener('change', () => void signoff(input)));
+    root.querySelectorAll('[data-cp-decide]').forEach((button) => button.addEventListener('click', () =>
+      void decide(button.closest('[data-idea]').dataset.idea, button.dataset.cpDecide)));
+    root.querySelectorAll('[data-cp-fix]').forEach((button) => button.addEventListener('click', () => {
+      const id = button.closest('[data-idea]').dataset.idea; state.fixOpen = state.fixOpen === id ? null : id; draw();
+      root.querySelector('[data-cp-fix-form] textarea')?.focus(); }));
+    root.querySelectorAll('[data-cp-fix-cancel]').forEach((button) => button.addEventListener('click', () => { state.fixOpen = null; draw(); }));
+    root.querySelectorAll('[data-cp-fix-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault();
+      const comment = form.querySelector('textarea').value.trim(); if (!comment) { form.querySelector('textarea').focus(); return; }
+      void decide(form.closest('[data-idea]').dataset.idea, 'rejected', comment); }));
     root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', (event) => openQuestionnaire('new', event.currentTarget));
     root.querySelector('[data-cp="settings-plan"]')?.addEventListener('click', (event) => openQuestionnaire('edit', event.currentTarget));
     root.querySelectorAll('[data-cp-close]').forEach((button) => button.addEventListener('click', closeQuestionnaire));
