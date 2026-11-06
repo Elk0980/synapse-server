@@ -170,3 +170,13 @@ test('№177: ответ владельца скрывает прежний за
     assert.match(f.d.querySelector('[data-wait-row="2"] .tb-owner-minutes').textContent,/2 мин/);
   } finally { f.close(); }
 });
+
+test('№177: ответ на второй странице журнала старой задачи не возвращается в ожидания',async()=>{
+  const f=board([record(9,{coordination:question})]);await settle();
+  const orig=f.ctx.crmQuery;let offsets=[];
+  f.ctx.crmQuery=async(route,q,o)=>{
+    if(route.endsWith('/task_get')){const offset=o.body.comments_offset||0;offsets.push(offset);return record(9,{coordination:question,comments_pagination:{total:21},comments:offset?[{author:'Влад',text:'ОТВЕТ: Да'}]:Array.from({length:20},()=>({author:'Codex',text:'Шаг'}))});}
+    return orig(route,q,o);
+  };
+  try{await f.controller.render();assert.equal(f.d.querySelector('[data-wait-row="9"]'),null);assert.deepEqual(offsets,[0,20]);}finally{f.close();}
+});

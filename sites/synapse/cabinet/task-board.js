@@ -157,7 +157,15 @@
           try {
             const data = await tool('task_get',{task_id:task.id,comments_limit:20,subtasks_limit:1}), full = data.task || data;
             if (full.id !== task.id || full.company_code !== task.company_code) throw Error('Область карточки изменилась');
-            const value = {comments:full.comments,description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
+            // Ответ мог оказаться за пределами первой страницы журнала старой задачи.
+            const comments = [...(full.comments || [])];
+            while (comments.length < (full.comments_pagination?.total || 0) && !hasAnswer({...full,comments})) {
+              const page = await tool('task_get',{task_id:task.id,comments_limit:20,comments_offset:comments.length,subtasks_limit:1});
+              const more = page.task || page;
+              if (more.id !== task.id || more.company_code !== task.company_code || !more.comments?.length) break;
+              comments.push(...more.comments);
+            }
+            const value = {comments,description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
             result[index] = {...task,...value}; overviewCache.set(task.id,{signature,value});
           } catch { result[index] = {...task,_overview_incomplete:true}; }
         }
@@ -481,6 +489,7 @@
             const list = own.body.querySelector('[data-comments]');
             if (!list.querySelector(`[data-comment-id="${Number(response.comment.id)}"]`)) { list.insertAdjacentHTML('afterbegin',listComment(response.comment)); commentsOffset++; }
             comment.querySelector('[data-comment-result]').textContent = 'Комментарий добавлен';
+            if (/^ОТВЕТ:/iu.test(submittedText.trim())) { answered.set(id,requestSignature(task)); if (alive) await render(); }
           }
           catch (error) { comment.querySelector('[data-comment-result]').textContent = `${error.message}. Проверьте ход работы перед повторной отправкой.`; }
           finally { button.disabled = false; }
