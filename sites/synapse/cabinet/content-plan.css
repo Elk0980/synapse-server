@@ -34,14 +34,11 @@
 .cp-approvers li { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; }
 .cp-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 .cp-row { border:1px solid var(--line,#333); border-radius:12px; background:var(--surface,#12100f); overflow:hidden; }
-.cp-line { width:100%; display:grid; grid-template-columns:52px 96px minmax(90px,160px) 1fr auto; gap:10px; align-items:center;
-  text-align:left; padding:10px 12px; background:none; border:0; color:inherit; font:inherit; cursor:pointer; }
-.cp-line:focus-visible { outline:2px solid var(--accent,#9fd4ff); outline-offset:-2px; }
-.cp-n { color:var(--muted,#b9afa7); }
 .cp-topic { font-weight:600; overflow-wrap:anywhere; }
 .cp-st { font-size:.88rem; padding:2px 8px; border-radius:999px; border:1px solid var(--line,#333); justify-self:end; }
-.cp-st[data-status="approved"] { color:var(--green,#79dcb6); border-color:currentColor; }
-.cp-st[data-status="empty"], .cp-st[data-status="rejected"] { color:#ffd58a; border-color:currentColor; }
+.cp-st:not(.cfk-chip)[data-status="approved"] { color:var(--green,#79dcb6); border-color:currentColor; }
+.cp-st:not(.cfk-chip)[data-status="empty"], .cp-st:not(.cfk-chip)[data-status="pending"] { color:color-mix(in srgb,#e8b14c 60%,var(--text,#eee)); border-color:color-mix(in srgb,#e8b14c 45%,transparent); }
+.cp-st:not(.cfk-chip)[data-status="rejected"] { color:color-mix(in srgb,#f08a5d 60%,var(--text,#eee)); border-color:color-mix(in srgb,#f08a5d 45%,transparent); }
 .cp-full { padding:0 12px 12px; border-top:1px solid var(--line,#333); }
 .cp-full dl { display:grid; gap:10px; margin:12px 0; }
 .cp-full dt { color:var(--muted,#b9afa7); font-size:.88rem; }
@@ -70,11 +67,6 @@
   .cp-gen > button { grid-column:auto; height:44px; min-height:44px; padding-block:0; }
 }
 @media (max-width: 640px) {
-  /* №143: площадки не делят колонку с номером — иначе колонка «auto» растягивается до их ширины,
-     дата переносится и обрезается, а статус налезает на площадки. Статус — отдельной строкой. */
-  .cp-line { grid-template-columns:max-content minmax(0,1fr); grid-template-areas:"n date" "topic topic" "pl pl" "st st"; gap:4px 10px; align-items:start; }
-  .cp-n { grid-area:n; } .cp-date { grid-area:date; white-space:nowrap; } .cp-topic { grid-area:topic; }
-  .cp-pl { grid-area:pl; color:var(--muted,#b9afa7); } .cp-st { grid-area:st; justify-self:start; max-width:100%; white-space:normal; }
   .cp-actions { width:100%; } .cp-actions button { flex:1 1 140px; }
   .cp-script th { width:34%; }
   .cp-sheet-wrap { overflow:visible; border:0; }
@@ -109,13 +101,86 @@ body.cp-modal-open{overflow:hidden}
 @media(max-width:760px){.cp-modal{inset:auto 0 auto 0;top:var(--cp-vvt,0px);width:100%;height:var(--cp-vvh,100dvh);max-height:none;border:0;border-radius:0;margin:0;box-shadow:none}
 .cp-modal-bar{flex:none;padding-top:max(8px,env(safe-area-inset-top));background:var(--surface)}}
 
-/* Влад 06.11: «Согласовать» / «Внести правку» у каждой публикации в списке */
-.cp-acts { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:0 12px 10px; }
-.cp-act { min-height:40px; padding:0 14px; border-radius:10px; border:1px solid var(--line,#333); background:transparent; color:var(--text,#eee); font:inherit; font-size:.92rem; cursor:pointer; }
-.cp-act-go { background:var(--accent,#9fd4ff); border-color:var(--accent,#9fd4ff); color:#0b0f16; font-weight:600; }
+/* Макет Влада 07.11: карточка рилса (телефон) и строка таблицы (ПК) из одной разметки. */
+.cp-row { display:grid; gap:6px; padding:10px 12px; cursor:pointer; }
+.cp-top, .cp-acts { display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+.cp-date { color:var(--muted,#b9afa7); white-space:nowrap; }
+.cp-st { white-space:nowrap; }
+.cp-line { display:flex; align-items:center; gap:8px; width:100%; min-height:32px !important; padding:0; text-align:left; background:none; border:0; color:inherit; font:inherit; cursor:pointer; }
+.cp-line:focus-visible { outline:2px solid var(--accent,#9fd4ff); outline-offset:2px; border-radius:6px; }
+.cp-chev { margin-left:auto; flex:none; color:var(--accent,#9fd4ff); font-size:22px; font-weight:800; line-height:1; }
+.cp-nets { display:inline-flex; flex-wrap:wrap; gap:4px; margin-left:auto; }
+.cp-nb { width:26px; height:26px; border-radius:50%; display:inline-grid; place-items:center; color:#fff; font:800 9px/1 system-ui,sans-serif; box-shadow:0 0 0 1px rgba(255,255,255,.18); }
+.cp-act { min-height:40px; padding:0 14px; border-radius:10px; border:1px solid var(--line,#333); background:transparent; color:var(--text,#eee); font:inherit; font-size:.92rem; cursor:pointer; white-space:nowrap; }
 .cp-act:disabled { opacity:.5; cursor:default; }
-.cp-ok { color:var(--green,#79dcb6); font-weight:600; font-size:.92rem; }
-.cp-fix { display:grid; gap:8px; padding:0 12px 12px; }
-.cp-fix label { display:grid; gap:4px; font-size:.9rem; }
-.cp-fix textarea { width:100%; min-width:0; box-sizing:border-box; font:inherit; font-size:16px; padding:8px 10px; border-radius:10px; border:1px solid var(--line,#333); background:var(--surface,#12100f); color:var(--text,#eee); }
+.cp-pop { display:grid; gap:8px; cursor:default; }
+.cp-menu { display:grid; gap:4px; padding:6px; border:1px solid var(--line,#333); border-radius:12px; background:var(--surface,#12100f); max-width:360px; }
+.cp-stg { min-height:44px; text-align:left; padding:0 12px; border:0; border-radius:8px; font:inherit; cursor:pointer; }
+.cp-stg::before { content:"● "; }
+.cp-stg[aria-checked="true"]::after { content:" ✓"; }
+.cp-stg[data-stg="wait"] { background:rgba(232,177,76,.14); color:color-mix(in srgb,#e8b14c 55%,var(--text,#eee)); }
+.cp-stg[data-stg="ok"] { background:rgba(76,195,138,.14); color:color-mix(in srgb,#4cc38a 55%,var(--text,#eee)); }
+.cp-stg[data-stg="fix"] { background:rgba(240,138,93,.14); color:color-mix(in srgb,#f08a5d 55%,var(--text,#eee)); }
+.cp-stg:disabled { opacity:.55; cursor:default; }
+.cp-stg:focus-visible { outline:2px solid var(--accent,#9fd4ff); outline-offset:1px; }
+.cp-fix { display:grid; gap:8px; padding:8px; border:1px solid rgba(240,138,93,.45); border-radius:12px; max-width:560px; }
+.cp-fix textarea { width:100%; font:inherit; font-size:16px; padding:8px 10px; border-radius:10px; border:1px solid var(--line,#333); background:var(--surface,#12100f); color:var(--text,#eee); }
 .cp-fix-btns { display:flex; flex-wrap:wrap; gap:8px; }
+.cp-row .cp-full { margin-top:4px; padding:10px; border:1px solid var(--line,#333); border-radius:10px; background:var(--surface-soft,rgba(127,127,127,.06)); cursor:default; }
+.cp-full .cp-fgrid { grid-template-columns:minmax(0,1fr); gap:4px; margin:0 0 10px; }
+.cp-fgrid > div { display:grid; grid-template-columns:110px minmax(0,1fr); gap:8px; align-items:center; }
+.cp-fgrid dd { margin:0; } .cp-fgrid .cp-st { justify-self:start; }
+@media (min-width: 1100px) { .cp-full .cp-fgrid { grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:24px; } }
+.cp-secs { display:grid; gap:6px; }
+.cp-sec { width:100%; border-collapse:collapse; font-size:.92rem; }
+.cp-sec th, .cp-sec td { border-bottom:1px solid var(--line,#333); padding:6px 8px 6px 0; text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+.cp-sec th { color:var(--muted,#b9afa7); font-weight:600; }
+.cp-thead { display:none; }
+@media (max-width: 1099px) {
+  .cp-sec thead { display:none; }
+  .cp-sec, .cp-sec tbody, .cp-sec tr, .cp-sec td { display:block; width:100%; }
+  .cp-sec tr { border-top:1px solid var(--line,#333); padding:4px 0; }
+  .cp-sec td { border:0; padding:1px 0; }
+  .cp-sec td:empty { display:none; }
+  .cp-sec td::before { content:attr(data-label) ": "; color:var(--muted,#b9afa7); }
+  /* Телефон: «Сцена №N · 0–3 с · Актёр», ниже реплика и остальное подписями. */
+  .cp-sec td[data-label="Сцена"], .cp-sec td[data-label="Время"], .cp-sec td[data-label="Кто говорит"] { display:inline; color:var(--muted,#b9afa7); }
+  .cp-sec td[data-label="Сцена"] b { color:var(--text,#eee); }
+  .cp-sec td[data-label="Сцена"]::before { content:none; }
+  .cp-sec td[data-label="Время"]:not(:empty)::before, .cp-sec td[data-label="Кто говорит"]:not(:empty)::before { content:" · "; }
+  .cp-sec td[data-label="Точная реплика"]::before { content:none; }
+  .cp-sec td[data-label="Точная реплика"]:not(:empty) { margin-top:2px; }
+}
+.cp-tools .cp-sheet-link { min-width:44px; min-height:44px; font-size:22px; line-height:1; text-decoration:none; background:var(--surface); border:1px solid var(--line); border-radius:8px; }
+/* ПК: Дата · Тема (со стрелкой) · Площадки · Статус · «Сменить статус ▾»; полный вид — строкой под строкой. */
+@media (min-width: 1100px) {
+  .cp-thead, .cp-row { display:grid; grid-template-columns:96px minmax(0,1fr) 170px 220px 170px; column-gap:12px; align-items:center; }
+  .cp-thead { padding:0 12px; color:var(--muted,#b9afa7); font-size:.88rem; }
+  .cp-row { grid-template-areas:"date line nets st act" "full full full full full" "pop pop pop pop pop"; row-gap:0; }
+  .cp-top, .cp-acts { display:contents; }
+  .cp-date { grid-area:date; } .cp-line { grid-area:line; } .cp-st { grid-area:st; justify-self:start; }
+  .cp-nets { grid-area:nets; margin-left:0; } .cp-act { grid-area:act; justify-self:start; }
+  .cp-full { grid-area:full; } .cp-pop { grid-area:pop; padding-top:8px; }
+}
+
+/* №205, макет 07.11: ⚙ на вкладке «Контент-план», синяя ▾, чип этапа CfKit, «До съёмки» после сцен, лента CfKit. */
+.cp { max-width:none; }
+.cp-tab-plan { display:inline-flex; align-items:center; gap:2px; }
+.cp-tabs .cp-tab-plan .cp-gear { min-height:28px !important; min-width:28px; padding:0 6px; font-size:14px; line-height:1; border:1px solid var(--line); border-radius:6px; color:var(--muted); background:transparent; }
+.cp-tabs .cp-tab-plan .cp-gear:hover { color:var(--text); border-color:var(--accent); }
+.cp-chev { color:#6f95ff; }
+.cp-row .cfk-chip { justify-self:end; }
+.cp-row.cp-open { border-color:rgba(111,149,255,.55); }
+.cp-sec td[data-label="Сцена"] { white-space:nowrap; }
+.cp-before { display:grid; gap:4px; margin-top:10px; padding-top:8px; border-top:1px dashed var(--line,#333); }
+.cp-before dl { margin:4px 0 0; }
+/* Лента прокручивается внутри себя: строки не сжимаются по высоте списка (overflow:hidden у карточки). */
+.cp-list.cfk-feed { --cfk-feed-h:calc(100dvh - 250px); align-content:start; grid-auto-rows:max-content; padding-right:2px; }
+.cp-list > .cfk-feed-sep { list-style:none; }
+@media (min-width: 1100px) {
+  .cp-list.cfk-feed { --cfk-feed-h:calc(100dvh - 230px); }
+  .cp-row .cfk-chip { grid-area:st; justify-self:start; }
+}
+.cp-sec th { white-space:nowrap; }
+.cp-sec td, .cp-sec th { overflow-wrap:break-word; }
+@media (min-width: 1100px) { .cp-sec td[data-label="Время"], .cp-sec td[data-label="Кто говорит"] { white-space:nowrap; } }
