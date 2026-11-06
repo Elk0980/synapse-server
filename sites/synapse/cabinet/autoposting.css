@@ -260,11 +260,6 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-archive-item[data-focus="true"] { border-style:solid; border-color:var(--accent); }
 .view-panel .ap-archive-item button { width:auto; }
 
-/* ---------- CF6: компактная история замечаний ---------- */
-.ap-review-history { display: grid; gap: 4px; }
-.ap-review-last { margin: 0; font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.ap-review-notes > summary { cursor: pointer; color: var(--muted); }
-
 /* ---------- №209 «Публикации»: шапка CfKit, лента готовых рилсов, окно публикации ---------- */
 .ap-head { min-width:0; }
 .ap-head-fallback { margin:4px 0 6px; font-size:18px; }
@@ -370,3 +365,8 @@ body.autoposting-modal-open { overflow:hidden; }
   .ap-feed-note { grid-column:1 / -1; }
   .ap-feed-title { -webkit-line-clamp:1; }
 }
+
+/* ---------- CF6: компактная история замечаний ---------- */
+.ap-review-history { display: grid; gap: 4px; }
+.ap-review-last { margin: 0; font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ap-review-notes > summary { cursor: pointer; color: var(--muted); }
