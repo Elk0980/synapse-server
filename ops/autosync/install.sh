@@ -23,7 +23,7 @@ mkdir -p "$BACK" "$LIB"
 SNAP=$(mktemp -d "$BACK/install-XXXXXXXX")
 # Stop the managed writer before taking the snapshot; do not copy secrets.
 paths=()
-for p in usr/local/lib/synapse-autosync var/lib/synapse-autosync/state.json etc/systemd/system/synapse-autosync.service etc/systemd/system/synapse-autosync.timer etc/systemd/system/synapse-autosync.service.d/paths.conf opt/synapse/sites/avokado3/index.html; do
+for p in usr/local/lib/synapse-autosync var/lib/synapse-autosync/state.json etc/systemd/system/synapse-autosync.service etc/systemd/system/synapse-autosync.timer opt/synapse/sites/avokado3/index.html; do
   [[ ! -e /$p ]] || paths+=("$p")
 done
 systemctl is-active synapse-autosync.timer > "$SNAP/timer-active" || true
@@ -73,8 +73,6 @@ install -m 644 "$SRC/sandbox-smoke.sh" "$LIB/sandbox-smoke.sh"
 install -m 644 "$SRC/sandbox-run.sh" "$LIB/sandbox-run.sh"
 install -m 644 "$SRC/synapse-autosync.service" /etc/systemd/system/
 install -m 644 "$SRC/synapse-autosync.timer" /etc/systemd/system/
-mkdir -p /etc/systemd/system/synapse-autosync.service.d
-printf '[Service]\nExecStart=\nExecStart=/usr/bin/python3 %s/synapse-autosync.py --backups %s\n' "$LIB" "$OPS" > /etc/systemd/system/synapse-autosync.service.d/paths.conf
 systemctl daemon-reload
 bash "$SRC/sandbox-smoke.sh"
 args=(--backups "$OPS")
