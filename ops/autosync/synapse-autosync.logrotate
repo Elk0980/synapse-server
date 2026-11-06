@@ -1,0 +1,9 @@
+/var/log/synapse-autosync/autosync.log {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    su synapse-autosync synapse-autosync
+    create 0640 synapse-autosync synapse-autosync
+}

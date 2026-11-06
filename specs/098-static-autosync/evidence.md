@@ -1,0 +1,43 @@
+# Свидетельства
+
+База518: 693303ea8ccd24ac1bdff212cfadd7e45b25a2b9; условия ревью25/544. Изменения только локальные, production/таймеры/ключи не менялись.
+
+Окончательная Windows проверка автора и отдельный повтор root:14 тестов,12PASS/2Linux-onlySKIP (настоящий symlink и UMask2775), настоящий Node24.18.1. fcntl заменён только в тестовом процессе для импортирования Linux-модуля; настоящий flock на Windows не заявлен. Обычный Windows unittest без этого shim не импортируется из-за отсутствия fcntl. Linux CI запускает неизменённый unittest и настоящий kernel flock.
+
+Проверены: valid JS/CSS/JSON активируются вместе; неверный JS (включая совпадающий с live), отсутствие Node и JS свыше лимита отклоняют весь коммит до backup/write/version. Размер проверяется метаданными Git до чтения большого blob. Повтор отказанного HEAD не запускается; успешная база не продвигается. Новые публичные вложенные каталоги создаются по одному с явным chmod2775; существующие и приватные каталоги не меняются. Ранее предусмотренные rollback/CI/CAS проверки сохранены.
+
+SHA256 runtime:b998d58b9b1c9bdc9dac66917fa2ab5cb86378a904cbe210d0844d7ae13641c8; tests:6b7a95cd695908a05de92b1fbbdc5ac7c1b658b174b75384312ea0bfb3f5b39d; README:b052d2f7e820c6e787c16a91e5e73176d915f4cb3ff3a1d77d3b419d667ae001.
+
+Linux CI ещё не выполнен; workflow подготовлен. Локальные проверки не заменяют независимую приёмку Claude, установленный механизм или фактический smoke merge→HTTP.
+
+Независимый Codex RO review обнаружил P2: .JS обходил регистрочувствительный gate. Исправлено единым is_js с lower() и нормализованным расширением временного файла; новая регрессия .JS + слишком большой .MJS проверяет общий отказ. Это внутреннее ревью, приёмка Claude ещё впереди.
+
+## 05.11.2026, Claude «Автовыпуск» (Бангкок)
+
+Ревью 528 @02691e90 — ПРИНЯТ, слит в ветку 518 (e10a4e92). Linux, Node 18.19.1 из apt Ubuntu 24.04: 14/14 OK; 71/71 JS `sites/synapse/{cabinet,brand}` main проходят `node --check`.
+
+Найдено: фильтр юнита `@system-service − @privileged − @resources` не содержит `pkey_alloc`, который V8 вызывает при старте. Эмуляция фильтра (libseccomp, действие KILL, как у systemd): `node --check` → SIGSYS («Bad system call»), из Python returncode −31, то есть каждый коммит с JS был бы отклонён `js-preflight`; с `@pkey` → 0. Остальные вызовы полного прогона тестов (python, git clone/fetch по https, node) в фильтр укладываются. Исправление: `SystemCallFilter=@pkey`, `sandbox-smoke.sh` для установки и CI-задача `sandbox` (проверка и с `@pkey`, и обязательный отказ без него). Локально 16/16 OK; новый тест однократной записи ошибки на прежнем скрипте падает.
+
+Быстрый путь CI (Claude, 05.11): на слиянии статики кабинета push-проверка `project-chat-check` идёт 5–6,5 мин (слияние PR 551 04:57:42Z → `checks` 05:04:19Z; «Тесты кабинета» 2 мин 17 с), поэтому ожидание всех check-runs коммита main несовместимо с целью ≤3 мин. Добавлен быстрый путь: слияние PR, дерево которого равно дереву head PR, и зелёные прогоны head PR до момента слияния. Иначе — прежнее ожидание CI main. Таймер 1 мин, повтор CI 2 мин. Проверка на настоящем GitHub (без токена) по 6 последним слияниям main: `ok` у 91ce4b37 и b8e88fd1, `no:tree` у 4 слияний не обновлённых PR (они идут прежним путём). Тесты 20/20 OK на Node 18.19.1.
+
+## №178, 06.11.2026 (Бангкок)
+PR560 уже находится в PR518@e1bf5edc; diff runtime/CI с PR560 пуст. Caddyfile и compose прочитаны, не изменены. Расширение только в разрешённых ops/autosync, workflow и specs/098.
+Локально Python compile и bash -n PASS. Linux unittest и полный Ubuntu24.04 systemd install/BASELINE/site/rollback: ожидается CI нового head, цифры будут добавлены после фактического результата. Production-доступов, merge и меток: 0.
+
+Проверенный промежуточный CI93cbf35e: https://github.com/Elk0980/synapse-server/actions/runs/42158177942 — unit26/26, systemd sandbox2/2 (с @pkey и отказ без него), install6/6 (реальная служба, BASELINE, exact SHA Авокадо, таймер, disk report, rollback1файл). Проверка производится на одноразовой Ubuntu24.04 VM с loopback HTTP, не на сервере. Дополнительно проверяются повторная установка без сброса baseline и отказ при локальной правке (8 сценариев итогового installer CI).
+SpecKit локально:48 файлов и5/5 unit PASS. Windows unittest:26 всего,23PASS/3Linux-onlySKIP с test-only fcntl shim — не доказательство kernel/systemd.
+Внешняя защита PR требует метку «сайты: инфраструктура»; по прямому запрету Влада метки не ставились и guard не менялся. PR518 переведён из draft в ready. Финальные head/цифры/короткая команда будут в комментарии №178 после CI окончательной версии. Независимая приёмка Claude и установка на сервере отсутствуют и не заявляются.
+
+Реальная sandbox-проверка053 выявила гонку: stop timer не гарантирует остановки уже запущенной service; maintenance мог вернуть0 при занятом flock без отката. Исправление: явные maintenance-режимы возвращают2 при занятом lock; install-ci останавливает timer+service перед ручными шагами. Регрессия busy maintenance добавлена. Это проверка CI, production не затронут.
+
+## Итоговая проверка кода №178
+41b0ae1d33e8526107da33fb028e141dc0011ec1: https://github.com/Elk0980/synapse-server/actions/runs/42158610351 — SUCCESS, Linux unit28/28 (0SKIP), реальный systemd @pkey positive/negative2/2, полный installer8/8: raw-download+SHA256, установка/BASELINE, новый exact Avokado SHA, timer, disk report, rollback к старому SHA, reinstall без сброса state, отказ при local-edit с сохранением файла и остановленным timer. Bootstrap/init/rollback проходят реальные ограничения установленной службы. Node18.19.1 apt, Ubuntu24.04.
+SpecKit42158610502:48 файлов+5/5 тестов PASS. Guard42158610394 отклоняет отсутствие метки «сайты: инфраструктура»; она не добавлялась по запрету пользователя, защиту не меняли. Полностью зелёный admission не заявляется.
+Установочный файл SHA256 bcc084facbd39ef886c7325a7eccaf43abb737a4e26cfa6d47691ba63a14beff. Короткая команда с точным окончательным head и ведущим пробелом — в итоговом комментарии №178. Последующее изменение этого evidence/tasks не меняет проверенный runtime/install/CI. PR ready/open, merge и server actions0, метки0, browser tabs0. Независимая приёмка Claude ещё нужна.
+
+## Возврат Claude1042 — исправления
+Предыдущая проверка8/8 относилась к sandbox-run, а не к напечатанной операторской команде: прежний runuser rollback признан непригодным после удаления RuntimeDirectory. Теперь установщик печатает root stop timer+service → sandbox-run --rollback → start timer. CI извлекает буквально эту строку из журнала, перед запуском подтверждает отсутствие RuntimeDirectory, после — восстановление старого SHA и активный timer.
+README полностью заменён единым маршрутом install.sh, правильными state/repo/operations путями и неограниченным хранением копий без очистки. Удалены неиспользуемый prune_backups/KEEP_BACKUPS и противоречащие ручные команды установки.
+Перед изменением script/unit установщик выводит доступность всех ROOTS для пользователя службы без изменения прав. CI проверяет отказ доступа к root-owned cabinet и отсутствие alvi, сохранение root:root:755. analytics-tests, MD/bundle/CJS исключены; Git-fixture регрессия проверяет отсутствие публикации по всем ROOTS. Проверки нового head ожидаются; production/main/метки0.
+
+Подтверждение исправлений1042: CI https://github.com/Elk0980/synapse-server/actions/runs/42160633029 @c3280d17080b1b3555d34a4f828ef4cf815e00e0 SUCCESS. Linux29/29 без SKIP; systemd sandbox2/2; installer10/10, включая буквальную строку root rollback из журнала при отсутствующем RuntimeDirectory, старый SHA после отката, активный timer, read-only отчёт ROOTS и сохранение root:root:755. SpecKit48+5/5 PASS. Installer SHA256=8d2db3cf814226e9d9a8d9bfbf60c4b617f33679a55306ca783c1330eb70a236. Следующее изменение только evidence/tasks; окончательные head/CI и команда — PR518 и комментарий №178. Независимая повторная приёмка Claude pending, guard без запрещённой метки остаётся красным. Сервер/main/метки0.

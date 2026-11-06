@@ -1,0 +1,21 @@
+# Задачи №178
+
+- [x] Прочитать №178 и комментарии Claude, PR518/560, Caddy/compose read-only.
+- [x] Сохранить изменения PR560, уже включённые в ветку PR518.
+- [x] Расширить явные статические roots/origins; защитить локальные правки/удаления/скрытые/тесты/БД.
+- [x] Добавить manifest-based rollback, атомарную запись и hash gate bootstrap.
+- [x] Добавить install.sh с snapshot, BASELINE, pinned Авокадо, отчётом диска без очистки.
+- [x] Подготовить Ubuntu24.04 systemd install CI и loopback HTTP.
+- [x] Проверенный runtime41b0ae1d: Linux unit28/28, sandbox2/2, install8/8; evidence содержит ссылки.
+- [x] Обновить evidence и перевести PR518 ready.
+- [x] Подготовить итоговые head/цифры/команду для комментария №178; финальная доставка фиксируется на доске.
+- [ ] Независимая приёмка Claude (отдельно от собственной проверки автора).
+
+Production, main merge и метки в этой задаче не выполняются.
+
+## Возврат1042
+- [x] Печатать root stop/service + sandbox-run rollback + start timer.
+- [x] CI выполняет именно строку журнала при отсутствующем RuntimeDirectory.
+- [x] README содержит единственный install.sh путь, текущие каталоги и отсутствие очистки.
+- [x] Диагностика прав всех корней без изменения прав; исключения analytics-tests/MD/bundle/CJS.
+- [x] CI c3280d17: Linux29/29, sandbox2/2, installer10/10; новая pinned команда публикуется в PR518 и №178 после подтверждения финального head.

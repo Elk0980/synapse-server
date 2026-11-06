@@ -1,0 +1,50 @@
+[Unit]
+Description=Synapse: автовыпуск статики кабинета из публичного main
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=synapse-autosync
+Group=synapse-autosync
+ExecStart=/usr/bin/python3 /usr/local/lib/synapse-autosync/synapse-autosync.py
+Nice=10
+UMask=0022
+StateDirectory=synapse-autosync
+StateDirectoryMode=0700
+RuntimeDirectory=synapse-autosync
+RuntimeDirectoryMode=0700
+LogsDirectory=synapse-autosync
+LogsDirectoryMode=0750
+# Запись только в белый список статики и копии; скрипт (/usr/local/lib) — только чтение.
+ProtectSystem=strict
+ReadWritePaths=/opt/synapse/sites/synapse/cabinet -/opt/synapse/sites/synapse/brand -/opt/synapse/sites/avokado -/opt/synapse/sites/avokado2 -/opt/synapse/sites/avokado3 -/opt/synapse/sites/alvi -/opt/synapse/sites/palitra-love -/opt/synapse/sites/taisabai -/opt/synapse/sites/drafts -/opt/synapse/sites/vhod -/opt/synapse/sites/chat /var/backups/synapse-autosync
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/opt/synapse/.env
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=yes
+KeyringMode=private
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# Node/V8 при старте вызывает pkey_alloc; без @pkey `node --check` убивается SIGSYS
+# и каждый коммит с JS отклоняется. Проверка: ops/autosync/sandbox-smoke.sh.
+SystemCallFilter=@pkey
