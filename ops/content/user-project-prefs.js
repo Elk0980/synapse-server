@@ -27,6 +27,7 @@ function createUserProjectPrefs({db,requireSession,requireCsrf,readJson,sendJson
   async function handle(req,res,url){
     if(url.pathname!=='/content/user-project-prefs')return false;
     const session=requireSession(req);
+    if(session.viewAs)fail(403,'Личные настройки недоступны в режиме просмотра сотрудника');
     if([...url.searchParams].length)fail(400,'Личные настройки доступны только текущему пользователю');
     let prefs;if(req.method==='GET')prefs=get(session.user);
     else if(req.method==='PUT'){requireCsrf(req,session);prefs=pick(session.user,await readJson(req));}

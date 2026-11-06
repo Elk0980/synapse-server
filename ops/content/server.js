@@ -1011,8 +1011,8 @@ const server = http.createServer(async (request, response) => {
     if (await userProjectPrefs.handle(request,response,url)) return;
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
       const session = requireSession(request);
-      const preferences=userProjectPrefs.get(session.user);
-      return reply(200, { ...publicIdentity(session.user), companies:userProjectPrefs.order(session.user.companies,preferences), projectPreferences:preferences, csrfToken: session.csrf });
+      const preferences=session.viewAs?null:userProjectPrefs.get(session.user);
+      return reply(200, { ...publicIdentity(session.user), companies:preferences?userProjectPrefs.order(session.user.companies,preferences):session.user.companies, projectPreferences:preferences, csrfToken: session.csrf });
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
