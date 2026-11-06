@@ -32,6 +32,7 @@ function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stag
     if (p === 'crm/media-mentor/plan/signoffs') return method === 'POST' ? { ...db.signoffs, stage: 'smm' } : db.signoffs;
     if (p === 'crm/media-mentor/brief') return { ...db.mentor, brief: { revision: 3, fields: { ...db.mentor.brief.fields, ...body.brief } } };
     if (p === 'crm/media-mentor/plan') return db.mentor;
+    if (p === 'crm/media-mentor/plan/variants/decision') return db.mentor;
     if (p === 'crm/media-mentor/plan/import-preview') return { companyCode: 'alpha', rows: [['Дата', 'Площадка', 'Тема', 'Формат', 'Хук', 'Вставки', 'Стиль', 'Реквизит'],
       ['05.12.2026', 'вк', 'Импорт SAMPLE', 'рилс', 'Импорт хук', 'Импорт вставки', 'Импорт стиль', 'Импорт реквизит']] };
     if (p === 'media-mentor-suggest' && suggest) return suggest;
@@ -394,4 +395,25 @@ test('№181: сортировка по площадке/статусу меня
   a.root.querySelector('[data-cp-tab="drafts"]').click(); a.root.querySelector('[data-cp-tab="plan"]').click();
   assert.equal(a.root.querySelector('[data-edit="s-1"] [name="topic"]').value,'Несохранённый текст');
   assert.ok(!a.root.textContent.includes('Полный план (таблица)'));
+});
+
+test('Влад 06.11: у публикации «Согласовать» и «Внести правку» — решение по одной идее; правка требует комментария', async () => {
+  const a = api(); await a.mount();
+  const row2 = a.root.querySelector('[data-idea="s-2"]'), row1 = a.root.querySelector('[data-idea="s-1"]');
+  assert.match(row1.querySelector('.cp-acts').textContent, /Согласовано/);
+  row2.querySelector('[data-cp-decide="approved"]').click(); await tick(); await tick();
+  assert.deepEqual(a.calls.find((c) => c.path.endsWith('/variants/decision')).body,
+    { planRevision: 4, briefRevision: 2, scope: 'idea', ideaId: 's-2', decision: 'approved', comment: '' });
+  a.root.querySelector('[data-idea="s-2"] [data-cp-fix]').click();
+  const form = a.root.querySelector('[data-idea="s-2"] [data-cp-fix-form]');
+  form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick();
+  assert.equal(a.calls.filter((c) => c.path.endsWith('/variants/decision')).length, 1, 'пустая правка не уходит');
+  form.querySelector('textarea').value = 'Заменить хук'; form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick(); await tick();
+  const fix = a.calls.filter((c) => c.path.endsWith('/variants/decision'))[1].body;
+  assert.equal(fix.decision, 'rejected'); assert.equal(fix.comment, 'Заменить хук'); assert.equal(fix.ideaId, 's-2');
+});
+
+test('Влад 06.11: без роли владельца кнопок решения в списке нет', async () => {
+  const a = api({ role: 'smm', permissions: ['autoposting.edit'] }); await a.mount();
+  assert.equal(a.root.querySelector('[data-cp-decide]'), null);
 });
