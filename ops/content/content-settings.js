@@ -44,8 +44,15 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
   }
 
   function validate(input, code) {
-    if (!input || typeof input !== 'object' || Array.isArray(input) || sortedKeys(input) !== SETTINGS_KEYS) {
+    if (!input || typeof input !== 'object' || Array.isArray(input) || ![SETTINGS_KEYS, SETTINGS_KEYS + ',contentPlanSheetUrl'].map(value => value.split(',').sort().join(',')).includes(sortedKeys(input))) {
       fail(400, 'Ожидались поля approverUserIds, shootingWeekdays, deadlineDays, platforms, caption');
+    }
+    if (Object.hasOwn(input,'contentPlanSheetUrl')) {
+      if (typeof input.contentPlanSheetUrl !== 'string' || input.contentPlanSheetUrl.length > 2048) fail(400,'Некорректная ссылка таблицы');
+      if (input.contentPlanSheetUrl) {
+        let url; try { url = new URL(input.contentPlanSheetUrl); } catch { fail(400,'Нужна ссылка Google Таблицы'); }
+        if (url.protocol !== 'https:' || url.hostname !== 'docs.google.com' || url.port || url.username || url.password || !/^\/spreadsheets\/d\/[\w-]+(?:\/|$)/.test(url.pathname)) fail(400,'Нужна ссылка Google Таблицы');
+      }
     }
     const allowed = new Set(candidates(code).map((item) => item.id));
     if (!uniqueInts(input.approverUserIds, (id) => allowed.has(id))) fail(400, 'Согласующим можно выбрать только человека компании с правом согласования');
@@ -60,6 +67,7 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
     if (typeof caption.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(caption.color)) fail(400, 'Цвет титров в формате #rrggbb');
     if (typeof caption.uppercase !== 'boolean') fail(400, 'uppercase должен быть true или false');
     return {
+      ...(Object.hasOwn(input,'contentPlanSheetUrl') ? {contentPlanSheetUrl:input.contentPlanSheetUrl} : {}),
       approverUserIds: [...input.approverUserIds].sort((a, b) => a - b),
       shootingWeekdays: [...input.shootingWeekdays].sort((a, b) => a - b),
       deadlineDays: input.deadlineDays,
@@ -94,6 +102,11 @@ function createContentSettings({ db, authStore, requireSession, requireCsrf, rea
     try {
       const current = selectRow.get(code);
       if ((current?.version || 0) !== body.version) fail(409, 'Настройки уже изменил другой пользователь. Обновите экран.', 'VERSION_CONFLICT');
+      // Старые открытые формы не знают поля ссылки: сохраняем его при старом PUT.
+      if (!Object.hasOwn(body.settings,'contentPlanSheetUrl') && current) {
+        const previous = JSON.parse(current.body);
+        if (Object.hasOwn(previous,'contentPlanSheetUrl')) settings.contentPlanSheetUrl = previous.contentPlanSheetUrl;
+      }
       const stamp = new Date().toISOString();
       db.prepare(`INSERT INTO content_settings(company_code, body, version, updated_at, updated_by) VALUES(?,?,?,?,?)
         ON CONFLICT(company_code) DO UPDATE SET body = excluded.body, version = excluded.version,
