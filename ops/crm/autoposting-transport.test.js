@@ -578,7 +578,7 @@ test('Instagram: профиль сверяется точно, Story и Reel в�
  await assert.rejects(f.publish({platformOptions:{instagram:{privacy:'PUBLIC_TO_EVERYONE'}}}),error=>error.code==='CONTENT_LIMIT');
 });
 
-test('TikTok: выбор режима обязателен, но и его одного мало — отправка стоит до подтверждения возможностей профиля',async t=>{
+test('TikTok: выбор режима обязателен, выбранный режим уходит в Onlypult без подмены',async t=>{
  const f=ttFixture(t);f.save();
  assert.equal((await f.api.checkChannel('alvi','tiktok')).ok,true);
  const posts=()=>f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length;
@@ -587,12 +587,13 @@ test('TikTok: выбор режима обязателен, но и его од�
  assert.equal(posts(),before,'без выбранного режима провайдер не вызывается');
  await assert.rejects(f.publish({platformOptions:{tiktok:{privacy:'FRIENDS'}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
    error=>error.code==='TIKTOK_PRIVACY_REQUIRED','неподтверждённое значение не принимается');
- /* Даже при выбранном и сохранённом режиме отправка останавливается: проверенный контракт
-    Onlypult не сообщает, какие режимы доступны конкретному профилю, а публиковать вслепую нельзя.
-    Это барьер, а не подключённый TikTok. */
- await assert.rejects(f.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY',disable_duet:true}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
-   error=>error.code==='TIKTOK_PRIVACY_UNCONFIRMED'&&error.ambiguous===false);
- assert.equal(posts(),before,'ни одна публикация в TikTok не ушла');
+ // Выбранный режим уходит в Onlypult как есть, вместе с одним видео.
+ await f.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY',disable_duet:true}},mediaUrls:['https://cdn.example.test/d1.mp4']});
+ const sent=f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST');
+ assert.equal(sent.length,before+1,'ровно одна отправка');
+ const body=JSON.parse(sent.at(-1).options.body);
+ assert.deepEqual(body.platform_options,{tiktok:{privacy:'SELF_ONLY',disable_duet:true}});
+ assert.deepEqual(body.media_urls,['https://cdn.example.test/d1.mp4']);
 });
 
 test('MAX: свои лимиты и своя опция, лимиты Telegram и YouTube на него не переносятся',async t=>{
@@ -687,6 +688,5 @@ test('настройки показывают реальные форматы н
  // Обещанный настройками формат backend не отклоняет: одно видео в TikTok доходит до проверки режима.
  const tt=ttFixture(t);tt.save();
  assert.equal((await tt.api.checkChannel('alvi','tiktok')).ok,true);
- await assert.rejects(tt.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY'}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
-   error=>error.code==='TIKTOK_PRIVACY_UNCONFIRMED','остановка именно на подтверждении режима, а не на формате');
+ await tt.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY'}},mediaUrls:['https://cdn.example.test/d1.mp4']});
 });
