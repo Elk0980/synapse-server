@@ -226,7 +226,7 @@ test('№209 окно публикации: маска IG/TT/YT/VK/TG, стат�
     pub.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(pub.hidden,true);
     f.d.querySelector('[data-feed-open="1"]').click();await f.settle();await f.click('[data-pub-edit]');
     assert.equal(pub.hidden,true);assert.equal(f.node('autoposting-editor').open,true,'«Открыть в редакторе» — прежний редактор со статусами доставки и ретраями');
-    assert.ok(f.calls.every(call=>call.method==='GET'));assert.ok(!f.calls.some(call=>/unpublish/.test(call.path)),'API снятия не запрашивается, пока его окна нет в кабинете');
+    assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.calls.some(call=>/unpublish/.test(call.path)),Boolean(f.node('autoposting-unpublish-zone')),'API снятия запрашивается (GET) только когда в кабинете есть его окно (PR 579)');
   }finally{f.close();}
 });
 test('№209 «Удалить публикацию» (PR 579) — только когда в кабинете есть его окно и сервер отвечает на …/unpublish',async()=>{
