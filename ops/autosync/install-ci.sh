@@ -13,6 +13,10 @@ sudo install -d -o synapse-autosync -g synapse-autosync -m 755 /opt/synapse/site
 git show "$TARGET^:sites/avokado3/index.html" | sudo tee /opt/synapse/sites/avokado3/index.html >/dev/null
 echo 'a7ff72162e9568d0fd6330a4b32bd1c6bbe20f071e11785c6d2f4eb3e4721b07  /opt/synapse/sites/avokado3/index.html' | sha256sum -c -
 git show "$TARGET:sites/avokado3/index.html" > /tmp/index.html
+# Even a timer firing during a concurrent main update must stay on loopback.
+# This override exists ONLY in the disposable Actions VM, never in install.sh.
+sudo mkdir -p /etc/systemd/system/synapse-autosync.service.d
+printf '[Service]\nExecStart=\nExecStart=/usr/bin/python3 /usr/local/lib/synapse-autosync/synapse-autosync.py --site-public http://127.0.0.1:18788 --public http://127.0.0.1:18788\n' | sudo tee /etc/systemd/system/synapse-autosync.service.d/ci.conf >/dev/null
 python3 -m http.server 18788 --bind 127.0.0.1 --directory /tmp >/tmp/autosync-http.log 2>&1 &
 HTTP_PID=$!
 trap 'kill "$HTTP_PID"; sudo systemctl stop synapse-autosync.timer' EXIT
