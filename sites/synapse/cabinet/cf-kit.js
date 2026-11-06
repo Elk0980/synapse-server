@@ -290,10 +290,11 @@
   function feedStart(listEl, opts = {}) {
     if (!listEl) return null;
     const doc = listEl.ownerDocument, win = doc.defaultView || root;
-    listEl.querySelectorAll(':scope .cfk-feed-sep, :scope .cfk-feed-ahead').forEach((node) => node.remove());
+    listEl.querySelectorAll(':scope .cfk-feed-sep, :scope .cfk-feed-ahead, :scope .cfk-feed-pad').forEach((node) => node.remove());
     const table = listEl.matches('table') ? listEl : listEl.querySelector(':scope > table');
     const host = table ? (table.tBodies[0] || table) : listEl;
     const items = [...host.children].filter((node) => node.tagName !== 'THEAD' && !(node.tagName === 'TR' && node.querySelector(':scope > th')));
+    const hostTag = table ? 'tr' : /^(OL|UL)$/.test(host.tagName) ? 'li' : 'div';
     const isAbove = typeof opts.isAbove === 'function' ? opts.isAbove : () => false;
     const target = items.find((item) => !isAbove(item)) || null;
     const columns = table ? Math.max(1, ...[...table.querySelectorAll('tr')].map((row) => row.children.length)) : 1;
@@ -321,14 +322,33 @@
     }
     listEl.classList.add('cfk-feed');
     const state = {target, separator, start: 0};
+    /* Короткая лента после стартовой точки всё равно встаёт наверх (замечание пакета D). Раньше добирали padding-bottom
+       по scrollHeight: у короткой ленты scrollHeight не меньше высоты окна, и отступа не хватало; а лента с max-height
+       растёт вместе с отступом (при content-box — тем более), и диапазон прокрутки не прибавлялся. Теперь последний
+       элемент ленты — невидимая распорка: сначала с запасом (лента упирается в max-height), затем ровно по факту
+       прокрутки. Лента без своей прокрутки (листается страница) распорку не получает. */
+    const padTo = (offset) => {
+      host.querySelector(':scope > .cfk-feed-pad')?.remove();
+      const range = () => listEl.scrollHeight - listEl.clientHeight;
+      if (!(offset > 0) || range() >= offset) return;
+      const overflow = win.getComputedStyle?.(listEl)?.overflowY || '';
+      if (!/auto|scroll/.test(overflow)) return;
+      const pad = doc.createElement(hostTag);
+      pad.className = 'cfk-feed-pad';
+      pad.setAttribute('aria-hidden', 'true');
+      if (table) pad.innerHTML = `<td colspan="${columns}"></td>`;
+      const big = Math.ceil(offset + Math.max(win.innerHeight || 0, listEl.clientHeight) + 1);
+      pad.style.height = `${big}px`;
+      host.append(pad);
+      const got = range();
+      if (got < offset) { pad.remove(); return; }
+      pad.style.height = `${Math.max(0, Math.ceil(big - (got - offset)))}px`;
+    };
     const scrollToStart = () => {
       if (!separator) { listEl.scrollTop = 0; state.start = 0; listEl.classList.remove('cfk-feed-up'); return; }
       const head = table?.tHead?.offsetHeight || 0;
       const offset = separator.getBoundingClientRect().top - listEl.getBoundingClientRect().top + listEl.scrollTop - head;
-      // Короткая лента после стартовой точки всё равно встаёт наверх: добираем отступ снизу.
-      listEl.style.paddingBottom = '';
-      const need = offset + listEl.clientHeight - listEl.scrollHeight;
-      if (need > 0) listEl.style.paddingBottom = `${need}px`;
+      padTo(offset);
       listEl.scrollTop = offset;
       state.start = offset;
       listEl.classList.remove('cfk-feed-up');
@@ -347,6 +367,7 @@
       if (!separator) { state.start = 0; listEl.classList.remove('cfk-feed-up'); return; }
       const head = table?.tHead?.offsetHeight || 0;
       state.start = separator.getBoundingClientRect().top - listEl.getBoundingClientRect().top + listEl.scrollTop - head;
+      padTo(state.start);
       listEl.classList.toggle('cfk-feed-up', listEl.scrollTop < state.start - 8);
     };
     const run = opts.scroll === false ? measure : scrollToStart;

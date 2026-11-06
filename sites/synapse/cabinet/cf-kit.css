@@ -89,6 +89,8 @@
 tr.cfk-feed-sep { border-top: 0; }
 .cfk-feed-sep span { display: block; max-height: 0; opacity: 0; overflow: hidden; transition: opacity .25s, max-height .25s; }
 .cfk-feed.cfk-feed-up .cfk-feed-sep span { max-height: 2.6em; opacity: 1; padding-top: 4px; }
+.cfk-feed-pad { grid-column: 1 / -1; flex: none; list-style: none; margin: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; box-shadow: none !important; pointer-events: none; }
+.cfk-feed-pad td { padding: 0 !important; border: 0 !important; }
 .cfk-feed-ahead { font-size: 12px; color: var(--muted, #8c97ab); text-align: center; padding: 4px 0; }
 .cfk-feed-ahead td { text-align: center; color: var(--muted, #8c97ab); }
 @media (prefers-reduced-motion: reduce) { .cfk-day, .cfk-feed-sep span { transition: none; } }

@@ -14,12 +14,12 @@ const idea = (n, extra = {}) => ({ ideaId: `s-${n}`, date: `2026-11-1${n}`, plat
   topic: `SAMPLE тема ${n}`, hook: 'SAMPLE хук', script: 'Мастер: Здравствуйте!\nКлиент: <b>Привет</b>\nПауза, смех',
   broll: 'SAMPLE руки', style: 'SAMPLE тёплый свет', props: 'SAMPLE халат', filmingBy: 'SAMPLE оператор', variants: { vk: { text: 'SAMPLE подпись', contentRevision: 1 } }, ...extra });
 
-function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null, withKit = false, variants = null } = {}) {
+function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null, withKit = false, variants = null, mentorExtra = {}, planExtra = {} } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://cabinet.test/', runScripts: 'outside-only' });
   const { window } = dom, calls = [], opened = [];
   const db = {
     mentor: { companyCode: 'alpha', brief: { revision: 2, fields: { goal: '', audience: 'есть', platforms: briefPlatforms } }, vocabulary: VOCAB,
-      plan: plan.length ? { revision: 4, briefRevision: 2, days: plan } : null,
+      plan: plan.length ? { revision: 4, briefRevision: 2, days: plan, ...planExtra } : null, ...mentorExtra,
       variants: variants || plan.map((p, i) => ({ ideaId: p.ideaId, platform: 'vk', status: i ? 'pending' : 'approved', approvable: true })) },
     questionnaire: { companyCode: 'alpha', revision: 3, filled: 1, total: 8, updatedAt: null, updatedBy: '', rules: ['Цены — только подтверждённые.'],
       fields: { goals: 'SAMPLE цель', audience: '', tone: '', rubrics: '', frequency: '', onCamera: '', constraints: '', platforms: qPlatforms } },
@@ -538,4 +538,45 @@ test('макет 07.11: строка «До съёмки: …» не стано�
   const full = a.root.querySelector('.cp-full');
   assert.equal(full.querySelectorAll('.cp-sec tbody tr').length, 1);
   assert.match(full.querySelector('.cp-before').textContent, /подготовить форму/);
+});
+
+/* Пакет H (specs/209-cf-stages): новый сервер отдаёт idea.stage, publications, plan.stageFacts и company.timeZone. */
+const NEW_FACTS = { stages: [], shooting: true, unpublished: false, note: '' };
+test('пакет H, новый сервер: этап из idea.stage, граница ленты — опубликованные, пояс компании из /media-mentor', async () => {
+  const plan = [idea(1, { date: '2026-01-04', stage: 'published', stageSource: 'publication', publications: [{ platform: 'vk', status: 'published', url: 'https://vk.com/wall-1_2', publishedAt: '2099-01-01T03:00:00Z' }] }),
+    idea(2, { date: '2026-01-06', stage: 'edit_review', stageSource: 'montage', publications: [] }), idea(3, { date: '2099-01-02', stage: 'scheduled', publications: [] })];
+  const variants = plan.map((p) => ({ ideaId: p.ideaId, platform: 'vk', status: 'approved', approvable: true }));
+  const a = api({ withKit: true, plan, variants, planExtra: { stageFacts: NEW_FACTS }, mentorExtra: { company: { code: 'alpha', timeZone: 'Asia/Irkutsk', timeZoneSource: 'company' } } });
+  await a.mount();
+  const chip = (id) => a.root.querySelector(`[data-idea="${id}"] .cp-top .cfk-chip`).dataset.stage;
+  assert.deepEqual(['s-1', 's-2', 's-3'].map(chip), ['published', 'edit_review', 'scheduled'], 'этап сервера, а не «Запланировано» по решению');
+  const list = a.root.querySelector('.cp-list');
+  const above = Object.fromEntries([...list.querySelectorAll('.cp-row')].map((r) => [r.dataset.idea, r.dataset.above]));
+  assert.deepEqual(above, { 's-1': '1', 's-2': '0', 's-3': '0' }, 'выше — опубликованное; прошедшая дата без публикации (в монтаже) — не выше');
+  assert.match(list.querySelector('.cfk-feed-sep').textContent, /выше — опубликованные/);
+  assert.equal(a.root.querySelector('.cfk-tz').textContent, 'Иркутское время');
+});
+
+test('пакет H, старый сервер: без stageFacts — прежний расчёт этапа и граница «прошедшие даты», подпись «Время устройства»', async () => {
+  const plan = [idea(1, { date: '2026-01-05' }), idea(2, { date: '2099-01-06' })];
+  const variants = plan.map((p) => ({ ideaId: p.ideaId, platform: 'vk', status: 'approved', approvable: true }));
+  const a = api({ withKit: true, plan, variants }); await a.mount();
+  assert.equal(a.root.querySelector('[data-idea="s-1"] .cp-top .cfk-chip').dataset.stage, 'planned');
+  assert.equal(a.root.querySelector('[data-idea="s-1"]').dataset.above, '1');
+  assert.match(a.root.querySelector('.cfk-feed-sep').textContent, /прошедшие даты/);
+  assert.equal(a.root.querySelector('.cfk-tz').textContent, 'Время устройства');
+});
+
+test('пакет H: при сохранении строки вычисленные сервером stage/stageSource/publications обратно не отправляются', async () => {
+  const plan = [idea(1, { stage: 'planned', stageSource: 'script', publications: [] }), idea(2, { stage: 'script_review', stageSource: 'script', publications: [] })];
+  const a = api({ withKit: true, plan, planExtra: { stageFacts: NEW_FACTS } }); await a.mount();
+  a.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  const form = a.root.querySelector('[data-edit="s-1"]');
+  form.querySelector('[name="hook"]').value = 'Новый хук';
+  form.dispatchEvent(new a.window.Event('submit', { cancelable: true }));
+  await tick(5);
+  const put = a.calls.find((c) => c.method === 'PUT' && c.path === 'crm/media-mentor/plan');
+  assert.ok(put, 'план сохранён');
+  assert.ok(put.body.days.every((d) => !('stage' in d) && !('stageSource' in d) && !('publications' in d)));
+  assert.equal(put.body.days.find((d) => d.ideaId === 's-1').hook, 'Новый хук');
 });

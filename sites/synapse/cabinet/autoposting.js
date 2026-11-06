@@ -1235,16 +1235,8 @@ function create(container, context) {
     const k=kit();
     // Встаём на стартовую точку один раз — когда список месяца уже пришёл; до этого и после — без сброса прокрутки.
     const place=!feedPlaced&&calendarSettled&&!calendarPending;
+    /* Короткую ленту до стартовой точки доводит сам CfKit (распорка в конце ленты, пакет H) — своего отступа здесь нет. */
     if(k)k.feedStart(feed,{isAbove:node=>feedSort==='time'&&node.dataset.stage==='published',aboveLabel:'↑ выше — опубликованные',...(place?{}:{scroll:false})});
-    if(place&&k){
-      /* CfKit добирает отступ по scrollHeight, а у короткой ленты он равен высоте окна — отступа не хватает,
-         и старт остаётся ниже верха. Доводим сами после его кадра; запись — только прокрутка. */
-      const settle=()=>{const state=feed._cfkFeed;if(!state?.separator||!feed.isConnected)return;
-        const max=feed.scrollHeight-feed.clientHeight;
-        if(max<state.start)feed.style.paddingBottom=`${(parseFloat(feed.style.paddingBottom)||0)+state.start-max}px`;
-        feed.scrollTop=state.start;feed.classList.remove('cfk-feed-up');};
-      if(window.requestAnimationFrame)window.requestAnimationFrame(settle);else settle();
-    }
     if(place)feedPlaced=true;
   };
   const scrollFeedTo=key=>{

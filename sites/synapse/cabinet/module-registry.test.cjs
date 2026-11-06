@@ -74,3 +74,11 @@ test('закреплённый токен не обходит перехватч
   assert.equal(f.calls[0].options.headers['X-CSRF-Token'], 'csrf-alice');
   assert.equal(f.directFetches(), 0);
 });
+
+test('ctx.company: код и название компании, часовой пояс только из оболочки (иначе null)', t => {
+  const f = fixture(t);
+  assert.equal(f.ctx.company.code, 'alvi');
+  assert.equal(f.ctx.company.name, 'ALVI');
+  assert.equal(f.ctx.company.timeZone, null, 'оболочка пояс не знает — не выдумываем');
+  assert.ok(Object.isFrozen(f.ctx.company));
+});

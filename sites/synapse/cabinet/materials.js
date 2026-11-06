@@ -147,10 +147,11 @@ function create(el, ctx) {
       head = K.header({title: "Монтаж", extraHtml: uploadButton, actions: ["calendar", "sheet", "sort"], sheetUrl, sortOptions: SORTS, sortKey: "materials",
         onSort: id => {state.sort = id;renderGrid();}, onCalendar: open => strip?.setOpen(open)});
       top.replaceChildren(head);
-      strip = K.dateStrip({tz: state.timeZone ? "Часовой пояс компании: " + state.timeZone : "", timeZone: state.timeZone || undefined, marked: markedDates(), onSelect: date => scrollToDate(K.dayKey(date))});
+      strip = K.dateStrip({tz: zoneLabel(state.timeZone), timeZone: state.timeZone || undefined, marked: markedDates(), onSelect: date => scrollToDate(K.dayKey(date))});
       $("[data-dates]").replaceChildren(strip);
     } else strip?.setMarked(markedDates());
   }
+  const zoneLabel = zone => zone === "Asia/Irkutsk" ? "Иркутское время" : zone ? "Часовой пояс компании: " + zone : "Время устройства";
   const markedDates = () => [...new Set(state.items.map(item => item.date).filter(Boolean))];
   function scrollToDate(key) {
     const list = $("[data-grid]"), rows = [...list.querySelectorAll(".mt-card[data-date]")];
@@ -175,7 +176,8 @@ function create(el, ctx) {
       state.shooting = sameCompany(shooting) && shooting?.reels && typeof shooting.reels === "object" ? shooting.reels : {};
       state.settings = settings || null;
       state.info = sameCompany(info) ? info : null;
-      state.timeZone = state.info?.profile?.timezone || state.settings?.settings?.timezone || "";
+      /* Пояс: кабинет (ctx.company) → /media-mentor нового сервера (company.timeZone) → сведения компании → настройки. */
+      state.timeZone = ctx.company?.timeZone || state.mentor?.company?.timeZone || state.info?.profile?.timezone || state.settings?.settings?.timezone || "";
       build();status("");renderHead();renderGrid();
     } catch (error) {if (!ctx.signal.aborted) {renderHead();fail(error);}}
   }
@@ -190,7 +192,8 @@ function create(el, ctx) {
     const reelsByIdea = new Map(), loose = [];
     const ideaIds = new Set(days.map(day => day.ideaId));
     for (const reel of state.reels) {
-      const ideaId = postById.get(reel.postId)?.planLink?.ideaId;
+      // Новый сервер хранит связь ролика с идеей сам (reel.ideaId / planLink, specs/209); старый — только через публикацию.
+      const ideaId = reel.ideaId || reel.planLink?.ideaId || postById.get(reel.postId)?.planLink?.ideaId;
       if (ideaId && ideaIds.has(ideaId)) (reelsByIdea.get(ideaId) || reelsByIdea.set(ideaId, []).get(ideaId)).push(reel);
       else loose.push(reel);
     }
@@ -201,14 +204,16 @@ function create(el, ctx) {
     };
     const items = [];
     days.forEach((idea, index) => {
-      if (!video(idea) || idea.productionStatus === "draft") return;
       const linked = reelsByIdea.get(idea.ideaId) || [];
+      // Черновик плана с роликом (загружен «вне плана») остаётся в Монтаже: иначе ролик пропал бы из ленты.
+      if (!linked.length && (!video(idea) || idea.productionStatus === "draft")) return;
       // Основной ролик рилса: свой ролик «Материалов» с наибольшим числом версий, иначе видео из карточки плана.
       const reel = linked.slice().sort((a, b) => (b.source === "materials") - (a.source === "materials") || (b.versionCount || 1) - (a.versionCount || 1))[0] || null;
       const posts = postsByIdea.get(idea.ideaId) || [];
       const shot = state.shooting[idea.ideaId] || {};
       const own = variants.filter(v => v.ideaId === idea.ideaId).map(v => v.status);
-      let stage = publicationStage(posts);
+      // Этап, вычисленный сервером по фактам (idea.stage), главнее клиентской догадки; без него — прежний расчёт.
+      let stage = STAGE_LABEL[idea.stage] ? idea.stage : publicationStage(posts);
       if (!stage && reel) stage = reel.openEdits ? "edit_rework" : "edit_review";
       if (!stage) {
         const production = shot.manualStatus || idea.productionStatus || shot.status;
@@ -217,7 +222,8 @@ function create(el, ctx) {
       }
       if (!stage) stage = own.includes("rejected") ? "script_rework" : own.includes("pending") ? "script_review" : own.includes("approved") || wholePlan ? "planned" : "script_review";
       items.push({key: reel ? reel.key : "idea:" + idea.ideaId, ideaId: idea.ideaId, number: index + 1, title: idea.topic || "Без темы", date: idea.date || "",
-        stage, reel, posts, platforms: platformList([...Object.keys(idea.variants || {}), idea.platform, ...(reel?.platforms || [])])});
+        stage, reel, posts, publications: Array.isArray(idea.publications) ? idea.publications : null,
+        platforms: platformList([...Object.keys(idea.variants || {}), idea.platform, ...(reel?.platforms || [])])});
     });
     for (const reel of loose) {
       const post = postById.get(reel.postId);const posts = post ? [post] : [];
@@ -295,8 +301,22 @@ function create(el, ctx) {
     for (const type of types) {const found = socials.find(item => item.type === type && httpsUrl(item.url));if (found) return httpsUrl(found.url);}
     return "";
   }
-  function publicationRow(platform, posts) {
-    const pub = platformPublication(posts, platform), tz = pub.post?.timezone || state.timeZone;
+  /* Публикация площадки из ответа нового сервера (idea.publications: platform, status, url, publishedAt). */
+  const SERVER_PUB = {published: "published", scheduled: "scheduled", publishing: "publishing", error: "error", draft: "draft"};
+  function serverPublication(list, platform) {
+    const own = (Array.isArray(list) ? list : []).filter(entry => normPlatform(entry?.platform) === platform);
+    const entry = own.find(item => item.status === "published" && httpsUrl(item.url)) || own.find(item => item.status === "published") || own[0];
+    const kind = entry && SERVER_PUB[entry.status];
+    return kind ? {state: kind, url: httpsUrl(entry.url), at: kind === "published" ? entry.publishedAt : null} : null;
+  }
+  function publicationRow(platform, posts, publications) {
+    let pub = platformPublication(posts, platform);
+    const server = serverPublication(publications, platform);
+    // Сервер видит и публикации ролика, связанные с идеей без переноса плана: берём его факт, если у кабинета своего нет
+    // или у кабинета нет ссылки на вышедший пост.
+    if (server && (pub.state === "none" || (server.state === "published" && (pub.state !== "published" || !pub.url))))
+      pub = {...pub, ...server, url: server.url || pub.url || "", at: server.at || pub.at};
+    const tz = pub.post?.timezone || state.timeZone;
     const label = `<b>${esc(platformOf(platform).short)}</b>`;
     if (pub.state === "published") {
       const at = pub.at ? ` · ${esc(timeIn(pub.at, tz))}` : "";
@@ -336,7 +356,7 @@ function create(el, ctx) {
         </div>
         <div class="mt-side">
           <h3>Публикация по площадкам</h3>
-          <ul class="mt-pubs" data-pubs>${targets.map(id => publicationRow(id, posts)).join("") || `<li class="muted">Площадки не выбраны</li>`}</ul>
+          <ul class="mt-pubs" data-pubs>${targets.map(id => publicationRow(id, posts, item?.publications)).join("") || `<li class="muted">Площадки не выбраны</li>`}</ul>
           <h3 data-caption-head>Текст публикации · ${esc(platformOf(state.platform).short)}</h3>
           <p class="mt-caption${caption ? "" : " muted"}" data-caption>${caption ? esc(caption) : "Текста публикации пока нет."}</p>
           ${versions.length > 1 ? `<label class="mt-version">Версия<select data-version>${versions.map(v => `<option value="${v.version}"${v.version === state.version ? " selected" : ""}>v${v.version}${v.editId ? " · правка №" + esc(v.editId) : ""}</option>`).join("")}</select></label>` : ""}
@@ -389,8 +409,14 @@ function create(el, ctx) {
   /* ---------- «Загрузить ролик» (№145): тот же путь, что у агента монтажа, но под сессией кабинета ----------
      1) POST publishing-assets — сырой файл, сервер проверяет формат и лимит 60 МБ, отдаёт {url, sha256};
      2) POST crm/autoposting/reels {title, releaseDate, platforms, mediaUrl, sha256, durationMs} — ролик v1.
-     Выбор «К какому рилсу из плана?» подставляет тему, дату и площадки рилса. Привязать файл к рилсу как следующую версию
-     той же карточки сервер из кабинета пока не умеет (версии добавляет только служебный API монтажа) — об этом сказано в окне. */
+     Выбор «К какому рилсу из плана?» подставляет тему, дату и площадки рилса.
+     Пакет H (specs/209-cf-stages): новый сервер принимает ideaId (следующая версия ролика этого рилса через addVersion)
+     и offPlan:true («Новый — вне плана» → черновик в Контент-плане, пока план на согласовании). Признак нового сервера —
+     plan.stageFacts (или company.timeZoneSource без плана) в ответе /media-mentor; старому эти поля не отправляются,
+     иначе он ответит 400 «лишние поля». */
+  const linksIdeas = () => Boolean(state.mentor?.plan?.stageFacts) || Boolean(state.mentor?.company && Object.hasOwn(state.mentor.company, "timeZoneSource"));
+  const OFF_PLAN = {PLAN_DECIDED: "план уже согласован целиком — черновик не добавлен, чтобы не сбросить решение", PLAN_ABSENT: "контент-плана ещё нет",
+    PLAN_REJECTED: "план отклонён", NO_PLATFORM: "в плане не выбрана площадка", NOT_CONFIGURED: "план на сервере не подключён"};
   const UPLOAD_TYPES = {"video/mp4": "MP4", "video/webm": "WebM"}, UPLOAD_LIMIT = 60 * 1024 * 1024;
   const uploadStatus = text => {const target = el.querySelector("[data-upload-status]");if (target) target.textContent = text || "";};
   const fileType = file => UPLOAD_TYPES[file.type] ? file.type : /\.mp4$/i.test(file.name) ? "video/mp4" : /\.webm$/i.test(file.name) ? "video/webm" : "";
@@ -436,10 +462,12 @@ function create(el, ctx) {
       form.elements.title.value = `№${item.number} ${item.title}`.slice(0, 200);
       form.elements.releaseDate.value = item.date || "";
       form.querySelectorAll("[name=platforms]").forEach(input => {input.checked = item.platforms.includes(input.value);});
-      note.textContent = "Ролик сохранится отдельной карточкой с темой, датой и площадками этого рилса. Следующей версией той же карточки он станет после обновления сервера.";
+      note.textContent = linksIdeas()
+        ? (item.reel ? `Ролик станет следующей версией (v${(item.reel.versionCount || item.reel.currentVersion?.version || 1) + 1}) ролика №${item.number}.` : `Ролик станет первой версией ролика №${item.number}.`)
+        : "Ролик сохранится отдельной карточкой с темой, датой и площадками этого рилса. Следующей версией той же карточки он станет после обновления сервера.";
     } else {
       if (state.uploadIdea) {form.elements.title.value = "";form.elements.releaseDate.value = "";form.querySelectorAll("[name=platforms]").forEach(input => {input.checked = false;});}
-      note.textContent = "Ролик вне плана появится в Монтаже отдельной карточкой.";
+      note.textContent = linksIdeas() ? "Ролик вне плана: в Контент-плане появится черновик рилса (если план ещё на согласовании)." : "Ролик вне плана появится в Монтаже отдельной карточкой.";
     }
     state.uploadIdea = item ? ideaId : null;
   }
@@ -474,14 +502,30 @@ function create(el, ctx) {
       uploadStatus("Файл принят, создаём карточку ролика…");
       const body = {title, releaseDate: fields.releaseDate.value || "", platforms, mediaUrl: asset.url, sha256: typeof asset.sha256 === "string" ? asset.sha256 : ""};
       if (durationMs) body.durationMs = durationMs;
+      const chosen = state.uploadIdea ? state.items.find(item => item.ideaId === state.uploadIdea) : null, linked = linksIdeas();
+      if (linked) {if (chosen) body.ideaId = chosen.ideaId;else body.offPlan = true;}
       const reel = await ctx.api.post("crm/autoposting/reels", body);if (ctx.signal.aborted) return;
       state.reels = [reel, ...state.reels.filter(item => item.key !== reel.key)];build();renderHead();renderGrid();
-      toggleUpload(false);status(`Ролик «${reel.title}» загружен как v${reel.currentVersion?.version ?? 1}.`);
+      toggleUpload(false);
+      const message = uploadResult(reel, chosen, linked);
+      // Связь с планом меняет этапы и может добавить черновик в план — перечитываем данные, затем показываем итог.
+      if (linked) await load();
+      if (!ctx.signal.aborted) status(message);
     } catch (error) {
       if (ctx.signal.aborted) return;
       uploadStatus(error?.status === 413 ? "Файл больше лимита 60 МБ: сервер его не принял." : error?.status === 403 ? "Нет права загружать ролики в эту компанию."
         : error?.status ? `Не удалось сохранить ролик: ${error.message || "ответ " + error.status}` : "Ошибка сети: файл не отправлен. Проверьте соединение и повторите.");
     } finally {state.busy = false;const submit = el.querySelector("[data-upload-submit]");if (submit) submit.disabled = false;}
+  }
+  function uploadResult(reel, chosen, linked) {
+    const version = reel.appended ? reel.appendedVersion ?? reel.currentVersion?.version : reel.currentVersion?.version ?? 1;
+    if (!linked) return `Ролик «${reel.title}» загружен как v${version}.`;
+    const number = chosen?.number ? `№${chosen.number}` : "рилсу плана";
+    if (reel.appended) return `Добавлено как v${version} к ${number}.`;
+    if (chosen && reel.ideaId) return `Загружено как v${version} — первая версия ролика ${number}.`;
+    if (reel.offPlan?.created) return `Ролик «${reel.title}» загружен как v${version}; черновик в Контент-плане.`;
+    if (reel.offPlan) return `Ролик «${reel.title}» загружен как v${version} без связи с планом: ${OFF_PLAN[reel.offPlan.reason] || reel.offPlan.message || "черновик не добавлен"}.`;
+    return `Ролик «${reel.title}» загружен как v${version}.`;
   }
   const uploadForm = el.querySelector("[data-upload]");
   if (uploadForm) {

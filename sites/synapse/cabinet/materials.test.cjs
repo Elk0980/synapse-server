@@ -404,3 +404,87 @@ test('Без CfKit экран не падает: простая шапка и л
   assert.equal(el.querySelectorAll('.mt-card').length, 2);
   assert.match(el.querySelector('.cfk-chip').textContent, /Монтаж на/);
 });
+
+/* Пакет H (specs/209-cf-stages): ответ нового сервера — idea.stage, publications, plan.stageFacts, company.timeZone; ролик знает ideaId. */
+const freshMentor = () => {
+  const data = mentor();
+  data.company = {code: 'avokado', timeZone: 'Asia/Irkutsk', timeZoneSource: 'company'};
+  data.plan.stageFacts = {stages: [], shooting: true, unpublished: false, note: ''};
+  data.plan.days = data.plan.days.map((d) => d.ideaId === 'idea-2'
+    ? {...d, stage: 'published', stageSource: 'publication', publications: [{platform: 'vk', status: 'published', url: 'https://vk.com/wall-1_7', publishedAt: '2026-11-03T04:00:00Z'}]}
+    : d.ideaId === 'idea-5' ? {...d, stage: 'edit_review', stageSource: 'montage', publications: []} : {...d, publications: []});
+  return data;
+};
+const freshReels = () => planReels().map((r) => r.id === 23 ? {...r, ideaId: 'idea-5', planLink: {ideaId: 'idea-5', source: 'materials'}} : r);
+const fresh = (respond) => fixture({plan: true, raw: async () => okResponse({url: asset('d'), sha256: 'e'.repeat(64)}), respond: async (call) => {
+  if (call.path === 'crm/media-mentor') return freshMentor();
+  if (call.path === 'crm/autoposting/reels' && call.method === 'GET') return {companyCode: 'avokado', reels: freshReels()};
+  return respond?.(call);
+}});
+
+test('пакет H, новый сервер: этап из idea.stage, ролик привязан по ideaId, «вышло ↗» из publications, «Иркутское время»', async () => {
+  const f = fresh();
+  await f.mount();
+  const card = (n) => [...f.el.querySelectorAll('.mt-card')].find((node) => node.querySelector('.mt-card__title').textContent.startsWith(`№${n} `));
+  assert.equal(card(2).dataset.stage, 'published', 'этап сервера, хотя публикация кабинета — черновик');
+  assert.equal(card(2).dataset.group, 'above');
+  assert.equal(card(5).dataset.stage, 'edit_review');
+  assert.ok(card(5).querySelector('[data-open="reel:23"]'), 'ролик «вне плана» с ideaId стоит у рилса №5');
+  assert.ok(!titles(f).includes('Вне плана'), 'и не висит отдельной карточкой');
+  assert.equal(f.el.querySelector('.cfk-tz').textContent, 'Иркутское время');
+  card(2).querySelector('[data-open]').click(); await settle();
+  const vk = f.el.querySelector('[data-pub="vk"]');
+  assert.equal(vk.dataset.pubState, 'post');
+  assert.equal(vk.querySelector('a').getAttribute('href'), 'https://vk.com/wall-1_7');
+  assert.match(vk.textContent, /вышло ↗/);
+});
+
+test('пакет H, новый сервер: «Загрузить ролик» к рилсу плана отправляет ideaId — «добавлено как v3 к №3»', async () => {
+  const f = fresh(({method, path, body}) => path === 'crm/autoposting/reels' && method === 'POST'
+    ? {id: 31, key: 'reel:31', source: 'materials', companyCode: 'avokado', title: body.title, releaseDate: body.releaseDate, platforms: body.platforms, postId: null,
+      ideaId: body.ideaId, planLink: {ideaId: body.ideaId, source: 'materials'}, currentVersion: {version: 3, mediaUrl: body.mediaUrl}, versionCount: 3, openEdits: 0, appended: true, appendedVersion: 3}
+    : undefined);
+  await f.mount();
+  f.el.querySelector('[data-upload-open]').click();
+  assert.equal(f.el.querySelector('[data-upload-idea]').value, 'idea-3');
+  assert.match(f.el.querySelector('[data-upload-link-note]').textContent, /первой версией ролика №3/);
+  const {submit} = fillUpload(f, {open: false, platforms: null});
+  await submit(); await settle();
+  const create = f.calls.find((c) => c.path === 'crm/autoposting/reels' && c.method === 'POST');
+  assert.equal(create.body.ideaId, 'idea-3');
+  assert.equal('offPlan' in create.body, false, 'ideaId и offPlan вместе не отправляются');
+  assert.match(f.el.querySelector('[data-status]').textContent, /Добавлено как v3 к №3\./);
+  assert.ok(f.calls.filter((c) => c.path === 'crm/media-mentor').length >= 2, 'после связи с планом данные перечитаны');
+});
+
+test('пакет H, новый сервер: «Новый — вне плана» отправляет offPlan:true — «черновик в Контент-плане» или причина отказа', async () => {
+  for (const [offPlan, expected] of [[{ideaId: 'draft-2026-11-08-01', created: true, reason: '', message: 'Черновик добавлен в план'}, /черновик в Контент-плане/],
+    [{ideaId: null, created: false, reason: 'PLAN_DECIDED', message: 'x'}, /без связи с планом: план уже согласован целиком/]]) {
+    const f = fresh(({method, path, body}) => path === 'crm/autoposting/reels' && method === 'POST'
+      ? {id: 32, key: 'reel:32', source: 'materials', companyCode: 'avokado', title: body.title, releaseDate: body.releaseDate, platforms: body.platforms, postId: null,
+        ideaId: offPlan.ideaId, currentVersion: {version: 1, mediaUrl: body.mediaUrl}, versionCount: 1, openEdits: 0, offPlan}
+      : undefined);
+    await f.mount();
+    f.el.querySelector('[data-upload-open]').click();
+    const select = f.el.querySelector('[data-upload-idea]');
+    select.value = ''; select.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+    assert.match(f.el.querySelector('[data-upload-link-note]').textContent, /черновик рилса/);
+    const {submit} = fillUpload(f, {open: false, title: 'Закулисье'});
+    await submit(); await settle();
+    const create = f.calls.find((c) => c.path === 'crm/autoposting/reels' && c.method === 'POST');
+    assert.equal(create.body.offPlan, true);
+    assert.equal('ideaId' in create.body, false);
+    assert.match(f.el.querySelector('[data-status]').textContent, expected);
+  }
+});
+
+test('пакет H, старый сервер: без plan.stageFacts загрузка идёт прежним запросом без ideaId/offPlan', async () => {
+  const f = fixture({plan: true, raw: async () => okResponse({url: asset('d'), sha256: 'e'.repeat(64)})});
+  await f.mount();
+  const {submit} = fillUpload(f, {platforms: null});
+  await submit();
+  const create = f.calls.find((c) => c.path === 'crm/autoposting/reels' && c.method === 'POST');
+  assert.equal('ideaId' in create.body, false);
+  assert.equal('offPlan' in create.body, false);
+  assert.match(f.el.querySelector('[data-status]').textContent, /загружен как v1/);
+});

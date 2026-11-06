@@ -91,7 +91,11 @@
   const STATUS_RANK = {pending: 0, rejected: 1, empty: 2, approved: 3, excluded: 4};
   /* Этап цепочки CfKit по тому, что сервер реально знает: решение по версии и productionStatus (planned/shot/editing/draft).
      Этапов монтажа, выхода и публикации в плане пока нет — их здесь не показываем. */
-  const stageOf = (idea, st) => idea.productionStatus === 'draft' || st === 'empty' ? 'draft' : st === 'pending' ? 'script_review'
+  /* Пакет H (specs/209-cf-stages): новый сервер сам вычисляет этап по фактам (публикация → монтаж → съёмка → план →
+     сценарий) и отдаёт idea.stage. Есть известный CfKit этап — берём его; нет (старый сервер) — прежний расчёт ниже. */
+  const serverStage = (idea) => (idea?.stage && kit()?.stage?.(idea.stage) ? idea.stage : '');
+  const stageOf = (idea, st) => serverStage(idea) || clientStage(idea, st);
+  const clientStage = (idea, st) => idea.productionStatus === 'draft' || st === 'empty' ? 'draft' : st === 'pending' ? 'script_review'
     : st === 'rejected' ? 'script_rework' : st === 'approved' ? ({shot: 'shot', editing: 'editing'}[idea.productionStatus] || 'planned') : '';
   const sheetLink = value => { try { const u = new URL(value); return u.protocol === 'https:' && u.hostname === 'docs.google.com' && !u.port && !u.username && !u.password && /^\/spreadsheets\/d\/[\w-]+(?:\/|$)/.test(u.pathname) ? u.href : ''; } catch { return ''; } };
 
@@ -156,8 +160,12 @@
     state.sheetUrl = sheetUrl; state.shown = days;
     /* Лента: прошедшие даты, по которым работа уже пошла дальше согласования, — выше стартовой точки.
        Публикаций план не знает, поэтому граница — по дате и этапу, а не «вышло на площадке». */
-    const todayKey = kit() ? kit().dayKey(new Date()) : new Date().toISOString().slice(0, 10);
-    const above = (idea) => String(idea.date || '') < todayKey && statusOf(idea) === 'approved';
+    const todayKey = todayIn(tzName(ctx, mentor));
+    /* Новый сервер знает публикации (plan.stageFacts, idea.stage): выше — опубликованные и снятые с публикации. */
+    const staged = Boolean(mentor.plan?.stageFacts) || allDays.some((idea) => serverStage(idea));
+    state.aboveLabel = staged ? '↑ выше — опубликованные' : '↑ выше — прошедшие даты';
+    const above = staged ? (idea) => ['published', 'unpublished'].includes(serverStage(idea))
+      : (idea) => String(idea.date || '') < todayKey && statusOf(idea) === 'approved';
     /* Макет 07.11: ⚙ (настройка генерации) стоит прямо на вкладке «Контент-план», а не в шапке списка. */
     const head = `<nav class="cp-tabs cp-head" aria-label="Планы"><div role="tablist" aria-label="Список публикаций">
       <span class="cp-tab-plan"><button type="button" role="tab" data-cp-tab="plan" aria-selected="${state.tab === 'plan'}" aria-controls="cp-publications">Контент-план</button><button type="button" class="cp-gear" data-cp="settings-plan" aria-label="Настройка контент-плана: анкета генерации" title="Настройка контент-плана" aria-haspopup="dialog">⚙</button></span>
@@ -231,7 +239,7 @@
       onCalendar: (open) => { state.calOpen = open; state.strip?.setOpen(open); }}));
     const marked = new Set(days.map((idea) => idea.date).filter(Boolean));
     if (!state.strip) {
-      state.strip = K.dateStrip({tz: tzLabel(ctx), timeZone: tzName(ctx), marked, selected: new Date(), onSelect: (date) => jumpTo(K.dayKey(date))});
+      state.strip = K.dateStrip({tz: tzLabel(ctx, state.mentor), timeZone: tzName(ctx, state.mentor) || undefined, marked, selected: new Date(), onSelect: (date) => jumpTo(K.dayKey(date))});
     } else if ([...marked].sort().join() !== (state.stripMarked || '')) state.strip.setMarked(marked);
     state.stripMarked = [...marked].sort().join();
     const slot = root.querySelector('[data-cp-dates]');
@@ -239,12 +247,17 @@
     const list = root.querySelector('.cp-list');
     if (!list) return;
     const reset = state.feedReset; state.feedReset = false;
-    K.feedStart(list, {isAbove: (row) => row.dataset.above === '1', aboveLabel: '↑ выше — прошедшие даты', scroll: reset});
+    K.feedStart(list, {isAbove: (row) => row.dataset.above === '1', aboveLabel: state.aboveLabel || '↑ выше — прошедшие даты', scroll: reset});
     if (!reset) list.scrollTop = keepScroll;
   }
-  /* Часовой пояс компании кабинет модулю пока не передаёт: тогда дни считаются по устройству и это подписано. */
-  const tzName = (ctx) => ctx.company?.timeZone || ctx.company?.timezone || '';
-  const tzLabel = (ctx) => ctx.company?.timeZoneLabel || (tzName(ctx) ? `Время компании: ${tzName(ctx)}` : 'Время устройства');
+  /* Часовой пояс: из кабинета (ctx.company.timeZone), иначе из ответа /media-mentor (company.timeZone, «Сведения о компании»).
+     Нет нигде — дни считаются по устройству, и это подписано. */
+  const tzName = (ctx, mentor) => ctx.company?.timeZone || ctx.company?.timezone || mentor?.company?.timeZone || '';
+  const ZONES = {'Asia/Irkutsk': 'Иркутское время', 'Europe/Moscow': 'Московское время'};
+  const tzLabel = (ctx, mentor) => { const zone = tzName(ctx, mentor);
+    return ctx.company?.timeZoneLabel || ZONES[zone] || (zone ? `Время компании: ${zone}` : 'Время устройства'); };
+  const todayIn = (zone) => { try { if (zone) return new Intl.DateTimeFormat('en-CA', {timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date()); } catch { /* неизвестный пояс */ }
+    return kit() ? kit().dayKey(new Date()) : new Date().toISOString().slice(0, 10); };
   /* Выбор дня в полосе дат перематывает ленту к первому рилсу этого дня или ближайшему после него. */
   function jumpTo(key) {
     const list = state?.container.querySelector('.cp-list');
@@ -354,7 +367,8 @@
 
   async function savePlan(days, reason) {
     const {mentor, api, ctx, container} = state;
-    days = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    // stage/stageSource/publications вычисляет сервер при чтении — обратно их не отправляем (старый сервер их не знает).
+    days = [...days].map(({stage, stageSource, publications, ...idea}) => idea).sort((a, b) => a.date.localeCompare(b.date));
     await api.put('/plan', {planRevision: mentor.plan?.revision || 0, briefRevision: mentor.brief.revision, days, reason});
     await mount(container, ctx);
   }

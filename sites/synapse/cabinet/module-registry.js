@@ -67,6 +67,10 @@
     const companyCode = company?.id || '';
     return Object.freeze({
       moduleId, companyCode, companyName: company?.name || '',
+      /* Часовой пояс — только если оболочка его знает; иначе null, и вкладка берёт пояс из ответа своего API
+         (например, company.timeZone в /media-mentor). Значение не выдумывается. */
+      company: Object.freeze({ code: companyCode, name: company?.name || '',
+        timeZone: (typeof company?.timeZone === 'string' && company.timeZone) || (typeof company?.timezone === 'string' && company.timezone) || null }),
       user: Object.freeze({ id: user?.userId ?? null, login: user?.login || '', name: user?.displayName || user?.login || '', role: user?.role || '' }),
       permissions: Object.freeze([...(user?.permissions || [])]),
       viewAs: user?.viewAs || null,

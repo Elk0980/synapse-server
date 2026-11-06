@@ -294,3 +294,24 @@ test('№120: полный вид рилса без реквизита не вы
   assert.match(full.querySelector('.shoot-before').textContent, /До съёмки.*проверить свет/);
   delete snapshot.plan.days[0].script;
 });
+
+/* Пакет H (specs/209-cf-stages): новый /media-mentor отдаёт idea.stage и company.timeZone; старый — нет. */
+test('пакет H: этап с сервера — опубликованное скрыто, чип по idea.stage; пояс из company.timeZone, без него — время устройства', async () => {
+  const days = [{ideaId: 'h-1', date: '2099-11-06', platform: 'instagram', format: 'reel', topic: 'Вышло', stage: 'published', publications: []},
+    {ideaId: 'h-2', date: '2099-11-07', platform: 'instagram', format: 'reel', topic: 'Смонтировано', stage: 'edit_review', publications: []},
+    {ideaId: 'h-3', date: '2099-11-08', platform: 'instagram', format: 'reel', topic: 'Ждёт съёмки', stage: 'planned', publications: []}];
+  const fresh = {approval: {status: 'approved'}, company: {code: 'avokado', timeZone: 'Asia/Irkutsk', timeZoneSource: 'company'},
+    plan: {days, stageFacts: {stages: [], shooting: true, unpublished: false}}, variants: days.map((d) => ({ideaId: d.ideaId, status: 'approved'}))};
+  const p = page({settings: {}}), root = p.d.getElementById('m');
+  p.ctx.crm = async () => fresh;
+  await p.registered['content-shooting'].mount(root, p.ctx); await settle();
+  assert.equal(card(root, 'h-1'), null, 'опубликованное на «Съёмке» не показывается');
+  assert.equal(card(root, 'h-2').querySelector('[data-stage]').textContent, 'Монтаж на согласовании');
+  assert.equal(card(root, 'h-3').querySelector('[data-stage]').textContent, 'Запланировано');
+  assert.equal(root.querySelector('.cfk-tz').textContent, 'Иркутское время');
+  const old = page({settings: {}}), oldRoot = old.d.getElementById('m');
+  old.ctx.crm = async () => ({...fresh, company: undefined, plan: {days: days.map(({stage, publications, ...d}) => d)}});
+  await old.registered['content-shooting'].mount(oldRoot, old.ctx); await settle();
+  assert.ok(card(oldRoot, 'h-1'), 'старый сервер: этапа нет — рилс остаётся по прежней логике');
+  assert.equal(oldRoot.querySelector('.cfk-tz').textContent, 'Время устройства');
+});
