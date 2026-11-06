@@ -551,7 +551,8 @@ def main(argv=None):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            return 0
+            # A maintenance command must never report success without doing work.
+            return 2 if a.rollback or a.bootstrap_avokado or a.init else 0
         try:
             if sum((a.init, a.rollback, a.bootstrap_avokado)) > 1:
                 raise RuntimeError('режимы несовместимы')

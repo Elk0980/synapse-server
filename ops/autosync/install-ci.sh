@@ -16,13 +16,13 @@ for i in {1..30}; do curl -fsS http://127.0.0.1:18788/index.html >/dev/null && b
 sudo bash ops/autosync/install.sh "$REV" http://127.0.0.1:18788 | tee /tmp/install-result.log
 grep '^ГОТОВО' /tmp/install-result.log
 grep 'ОТЧЁТ О ДИСКЕ' /tmp/install-result.log
-sudo systemctl stop synapse-autosync.timer
+sudo systemctl stop synapse-autosync.timer synapse-autosync.service
 echo 'eaa509393766bb1f20acb23595d616844111a37a733f5af04bb3eae300aa0a5f  /opt/synapse/sites/avokado3/index.html' | sha256sum -c -
 sudo grep 'BASELINE' /var/log/synapse-autosync/autosync.log
 sudo systemctl is-enabled synapse-autosync.timer
 sudo cp /var/lib/synapse-autosync/state.json /tmp/state-before-reinstall.json
 sudo bash ops/autosync/install.sh "$REV" http://127.0.0.1:18788 > /tmp/reinstall-result.log
-sudo systemctl stop synapse-autosync.timer
+sudo systemctl stop synapse-autosync.timer synapse-autosync.service
 grep 'BASELINE сохранён' /tmp/reinstall-result.log
 grep 'BOOTSTRAP уже установлен' /tmp/reinstall-result.log
 sudo cmp /tmp/state-before-reinstall.json /var/lib/synapse-autosync/state.json

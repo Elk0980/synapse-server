@@ -156,6 +156,13 @@ class AutosyncTest(unittest.TestCase):
         self.assertEqual(self.run_sync('--rollback'), 0)
         self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a1')
 
+    def test_busy_maintenance_reports_failure(self):
+        with patch.object(autosync.fcntl, 'flock', side_effect=BlockingIOError):
+            self.assertEqual(self.run_sync('--rollback'), 2)
+            self.assertEqual(self.run_sync('--bootstrap-avokado'), 2)
+            self.assertEqual(self.run_sync('--init'), 2)
+            self.assertEqual(self.run_sync(), 0)
+
     def test_bootstrap_exact_hash_and_reinstall_noop(self):
         rel = autosync.AVOKADO
         (self.live / 'sites/avokado3').mkdir(parents=True)
