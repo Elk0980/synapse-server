@@ -651,7 +651,7 @@
         <label>Стиль<input data-field="style" maxlength="1000" value="${esc(item.style || '')}"></label>
         <label>Реквизит<textarea data-field="props" maxlength="2000" rows="2">${esc(item.props || '')}</textarea></label>
         <label>Кто снимает<input data-field="filmingBy" maxlength="200" value="${esc(item.filmingBy || '')}"></label>
-        <label>Статус подготовки<select data-field="productionStatus">${options([{id:'planned',label:'Запланировано'},{id:'shot',label:'Отснято'},{id:'editing',label:'В монтаже'},{id:'draft',label:'Черновик'},{id:'published',label:'Опубликовано'}],item.productionStatus || 'planned')}</select></label>
+        ${item.productionStatus==='published' ? '<p>Статус подготовки: Опубликовано</p><input type="hidden" data-field="productionStatus" value="published">' : `<label>Статус подготовки<select data-field="productionStatus">${options([{id:'planned',label:'Запланировано'},{id:'shot',label:'Отснято'},{id:'editing',label:'В монтаже'},{id:'draft',label:'Черновик'}],item.productionStatus || 'planned')}</select></label>`}
         ${variantsMarkup(item, data, index)}
         <div class="mentor-day-order">
           <button type="button" class="plain-button" data-move="up" aria-label="Выше в плане">↑ Выше</button>

@@ -194,10 +194,11 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
     // сохранённый сценарий; у старых планов новые ключи сами не появляются.
     const prior=before.get(ideaId);
     for(const key of ['script','filmingBy','productionStatus','broll','style','props']) {
-      const source=Object.hasOwn(row,key)?row:prior;
+      const source=key==='productionStatus'&&row[key]==='published'?prior:(Object.hasOwn(row,key)?row:prior);
       if(!source||!Object.hasOwn(source,key))continue;
       if(key==='productionStatus') {
-        if(!['planned','shot','editing','draft','published'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft');
+        if(source[key]==='published')continue; // Старое значение не является доказательством публикации.
+        if(!['planned','shot','editing','draft'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft. Опубликовано определяется автоматически по результатам публикации.');
         idea[key]=source[key];
       }else{const clean=text(source[key],REEL_TEXT_LIMITS[key]);idea[key]=key==='script'?source[key]:clean;}
     }
@@ -329,11 +330,11 @@ function createMediaMentor(db,{now=Date.now}={}) {
     if(!row)return {revision:0,updatedAt:null,fields:structuredClone(EMPTY_BRIEF)};
     return {revision:row.revision,updatedAt:row.updatedAt,fields:{...structuredClone(EMPTY_BRIEF),...parse(row.brief,{})}};
   }
-  function planOf(owner) {
+  function planOf(owner,computed=true) {
     const row=db.prepare('SELECT revision,brief_revision briefRevision,plan,updated_at updatedAt FROM media_mentor_plans WHERE company_id=?').get(owner.id);
     if(!row)return null;
     const stored=parse(row.plan,{days:[],startDate:null,endDate:null,windowDays:0});
-    return {revision:row.revision,briefRevision:row.briefRevision,updatedAt:row.updatedAt,days:require('./reel-plan-status').statuses(db,owner.id,stored.days),
+    return {revision:row.revision,briefRevision:row.briefRevision,updatedAt:row.updatedAt,days:computed?require('./reel-plan-status').statuses(db,owner.id,stored.days):stored.days,
       startDate:stored.startDate,endDate:stored.endDate,windowDays:stored.windowDays};
   }
   // Строки SQLite копируются в обычные объекты: ответ модуля не зависит от прототипа драйвера.
@@ -455,7 +456,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
     const reason=body.reason===undefined?'План обновлён':text(body.reason,500,true);
     const who=person(actor);
     return transaction(()=>{
-      const owner=company(db,code),brief=briefOf(owner),current=planOf(owner);
+      const owner=company(db,code),brief=briefOf(owner),current=planOf(owner,false);
       if(!brief.revision)fail(409,'Сначала заполните бриф компании','BRIEF_REQUIRED');
       if(body.briefRevision!==brief.revision)fail(409,'Бриф изменился. Составьте план по свежему брифу.','BRIEF_CHANGED');
       if(body.planRevision!==(current?current.revision:0))fail(409,'План уже изменили. Обновите страницу.','REVISION_CONFLICT');
@@ -560,7 +561,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
       if(!row)fail(404,'Версия плана не найдена','NOT_FOUND');
       const stored=parse(row.plan,{days:[],startDate:null,endDate:null,windowDays:0});
       return {companyCode:owner.code.toLowerCase(),revision:row.revision,briefRevision:row.briefRevision,createdAt:row.createdAt,
-        actorId:row.actorId,actorName:row.actorName,reason:row.reason,days:require('./reel-plan-status').statuses(db,owner.id,stored.days),startDate:stored.startDate,
+        actorId:row.actorId,actorName:row.actorName,reason:row.reason,days:stored.days,startDate:stored.startDate,
         endDate:stored.endDate,windowDays:stored.windowDays,decision:decisionOf(owner,row.revision),
         feedback:feedbackOf(owner,row.revision)};
     });
