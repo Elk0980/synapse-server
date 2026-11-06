@@ -124,7 +124,7 @@ test('explicit save converts company local time to UTC; preview and separate sch
     assert.equal(f.d.activeElement,f.node('autoposting-preview-title'));assert.equal(scrolled.block,'start');
     f.set('autoposting-text','Изменение');assert.equal(f.node('autoposting-schedule').disabled,true);await f.click('autoposting-save');await f.click('autoposting-preview');await f.click('autoposting-schedule');
     assert.equal(f.posts[0].status,'scheduled');assert.equal(f.calls.filter(call=>call.path.endsWith('/schedule')).length,1);
-    f.set('autoposting-month','2099-01','change');assert.ok(f.node('autoposting-calendar').querySelector('[data-calendar-date="2099-01-01"] span'));
+    assert.ok(f.d.querySelector('#autoposting-feed [data-feed-post][data-date="2099-01-01"]'),'запланированный материал — в ленте «Публикации» на дату выхода');
   }finally{f.close();}
 });
 test('Telegram media caption and VK link caps block scheduling; preview escapes text and rejects unsafe material URLs',async()=>{
@@ -390,7 +390,7 @@ test('weekly plan import is disabled for read-only users and unsupported compani
  const f=await fixture({starter:true,role:'editor',permissions:['autoposting.view']});try{
   assert.equal(f.node('autoposting-import-plan').disabled,true);await f.click('autoposting-import-plan');assert.equal(f.posts.length,0);assert.ok(f.calls.every(c=>c.method==='GET'));
  }finally{f.close();}
- const unavailable=await fixture();try{assert.equal(unavailable.node('autoposting-starter-plan').hidden,true);assert.equal(unavailable.node('autoposting-title').disabled,false);assert.ok(unavailable.node('autoposting-calendar').querySelector('button'));}finally{unavailable.close();}
+ const unavailable=await fixture();try{assert.equal(unavailable.node('autoposting-starter-plan').hidden,true);assert.equal(unavailable.node('autoposting-title').disabled,false);assert.ok(unavailable.node('autoposting-feed'));assert.match(unavailable.node('autoposting-calendar-zone').textContent,/Asia\/Irkutsk/);}finally{unavailable.close();}
 });
 
 test('delayed weekly import does not replace the destination company list or start a second request for that company',async()=>{

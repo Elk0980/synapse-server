@@ -103,7 +103,6 @@ const boardStatus = item => {
 };
 // CF3-R1: одна метка статуса для доски, окна публикации и списка «Открыть материал».
 const statusLabel = item => BOARD_STATUS.find(([key])=>key===boardStatus(item))?.[1]||"Статус неизвестен";
-const WEEKDAYS = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 /* CF4: замечания к версии (контракт CONTENT_FACTORY_CF4_REVIEW_CONTRACT_20261001). Отправка — существующий reject
    с необязательными annotations; время допустимо для любой категории; длительность сервер не проверяет. */
 const NOTE_CATEGORIES = [["text","Текст"],["music","Музыка"],["visual","Изображение / видеоряд"],["other","Другое"]];
@@ -129,15 +128,7 @@ const ARCHIVABLE = new Set(["draft","failed","cancelled"]);
 const archivedAt = item => item?.archive?.archivedAt||null;
 const isActive = item => Boolean(item)&&!archivedAt(item);
 const MONTHS_GEN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
-const MONTHS_SHORT = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
 const daysOfMonth = value => {const [year,m]=value.split("-").map(Number),count=new Date(Date.UTC(year,m,0)).getUTCDate();return Array.from({length:count},(_,i)=>value+"-"+String(i+1).padStart(2,"0"));};
-const weekdayOf = date => (new Date(date+"T12:00:00Z").getUTCDay()+6)%7;
-// Недели доски — с понедельника, внутри выбранного месяца: первая и последняя бывают короче семи дней.
-const weeksOf = value => {const out=[];for(const date of daysOfMonth(value)){if(!out.length||weekdayOf(date)===0)out.push([]);out.at(-1).push(date);}return out;};
-const weekIndexOf = (value,date) => Math.max(0,weeksOf(value).findIndex(days=>days.includes(date)));
-const dayLabel = date => `${WEEKDAYS[weekdayOf(date)]}, ${Number(date.slice(8))} ${MONTHS_SHORT[Number(date.slice(5,7))-1]}`;
-const weekLabel = days => {const first=days[0],last=days.at(-1),name=MONTHS_GEN[Number(first.slice(5,7))-1];
-  return (first===last?`${Number(first.slice(8))}`:`${Number(first.slice(8))}–${Number(last.slice(8))}`)+` ${name} ${first.slice(0,4)}`;};
 const REVIEW = {draft:"Черновик",pending:"На согласовании",approved:"Согласовано",rejected:"На доработке"};
 const META_TEXT = [["audience","Аудитория (для кого снимаем)",500],["hook","Хук — первые 3 секунды",500],["idea","Идея / сценарий (одна мысль)",4000],["hughNote","Комментарий Хью: почему может сработать",2000],["metrics","Что измеряем (удержание, репосты, сохранения)",1000],["methodSource","Источник методики",300]];
 const HISTORY_LABEL = {submitted:"отправлено на согласование",approved:"согласовано",rejected:"возвращено на доработку",revoked:"согласование снято",edited:"правка",reordered:"порядок изменён",rescheduled:"плановая дата изменена"};
@@ -232,31 +223,20 @@ const DELETABLE_STATUSES=new Set(["draft","cancelled","failed","needs_review"]);
 function create(container, context) {
   const time = cabinet.companyTime;
   let ctx=context, companyCode="", settings=null, information=null, starterPlan=null, posts=[], post=null, busy=false, epoch=0, baseline=null, reviewed=null;
-  let selectedDate="", month="", week=0, overview=false, filtersOpen=false, editorOpener=null, calendarData=null, calendarEpoch=0, calendarPending=false;
-  const boardFilter={platform:"",format:"",role:"",status:""};
+  let selectedDate="", month="", feedPlaced=false, calendarSettled=false, feedSort="time", head=null, strip=null, stripMarked="", sheetUrl="", pubId=null, pubPlatform="", pubOpener=null, editorOpener=null, calendarData=null, calendarEpoch=0, calendarPending=false;
   const approvalSelection=new Map(), approvalResults=new Map(), approvalBlocked=new Set();
   let archived=null, archivedState="", archivedLimited=false, archivedEpoch=0, archiveConfirm=false, archiveFocus=null;
   const drafts=new Map(), selections=new Map(), channelDrafts=new Map(), providerProfiles=new Map();
   let pendingLink=null,handledLink='',linkEpoch=0,trashPosts=[],deleteArmed="";
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
-  container.innerHTML=`<h2 class="autoposting-sr-only">Постинг</h2>
-    <p id="autoposting-status" role="status" aria-live="polite"></p>
-    <section class="card autoposting-calendar-section ap-board-section" aria-label="Доска публикаций">
-    <div class="ap-board-nav"><button class="plain-button" id="autoposting-prev-week" type="button" aria-label="Предыдущая неделя">←</button><strong id="autoposting-week-label" class="ap-week-label" aria-live="polite"></strong><button class="plain-button" id="autoposting-next-week" type="button" aria-label="Следующая неделя">→</button>
-      <label class="ap-nav-field">Месяц<input type="month" id="autoposting-month"></label><label class="ap-nav-field">Перейти к дате<input type="date" id="autoposting-jump"></label>
-      <button class="plain-button" id="autoposting-overview" type="button" aria-pressed="false" aria-controls="autoposting-month-controls">Обзор месяца</button></div>
-    <div class="ap-filters-bar"><button class="plain-button ap-filters-toggle" id="autoposting-filters-toggle" type="button" aria-expanded="false" aria-controls="autoposting-filters">Фильтры</button>
-      <div id="autoposting-filters" class="ap-filters" role="group" aria-label="Фильтры доски">
-      <label>Площадка<select id="autoposting-daily-platform"><option value="">Все площадки</option>${CAPTIONS.map(([id,label])=>`<option value="${id}">${label}</option>`).join("")}</select></label>
-      <label>Формат<select id="autoposting-filter-format"><option value="">Все форматы</option>${FORMATS.map(([id,label])=>`<option value="${id}">${label}</option>`).join("")}<option value="none">Формат не указан</option></select></label>
-      <label>Цель ОВП<select id="autoposting-filter-role"><option value="">Все цели</option>${OVP.map(([id,label])=>`<option value="${id}">${label}</option>`).join("")}<option value="none">Цель не указана</option></select></label>
-      <label>Статус<select id="autoposting-filter-status"><option value="">Все статусы</option>${BOARD_STATUS.map(([id,label])=>`<option value="${id}">${label}</option>`).join("")}</select></label>
-      <span id="autoposting-filter-count" class="autoposting-note" role="status"></span><button class="plain-button" id="autoposting-filter-reset" type="button">Сбросить</button></div></div>
+  container.innerHTML=`<p id="autoposting-status" role="status" aria-live="polite"></p>
+    <section class="card autoposting-calendar-section ap-board-section ap-posting" aria-label="Публикации">
+    <div id="autoposting-head" class="ap-head"><h2 class="ap-head-fallback">Публикации</h2></div>
     <p id="autoposting-calendar-zone" class="autoposting-note"></p><p id="autoposting-calendar-state" role="status"></p><p id="autoposting-plan-gaps" role="status" hidden></p>
-    <div id="autoposting-month-controls" hidden><div id="autoposting-calendar" class="autoposting-calendar"></div></div>
-    <nav id="autoposting-day-strip" class="ap-day-strip" aria-label="Дни недели"></nav>
-    <div id="autoposting-batch"><p>Флажок на карточке — только выбор. Решение применяется к каждому выбранному материалу отдельно после нажатия кнопки ниже. Публикация не запускается.</p><fieldset id="autoposting-batch-platforms"><legend>Площадки решения</legend><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="all" checked>Все площадки выбранных материалов</label><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="subset">Только отмеченные ниже</label>${CAPTIONS.map(([id,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-batch-platform="${esc(id)}">${esc(label)}</label>`).join("")}<p class="autoposting-note">Решение применяется к пересечению отмеченных площадок с площадками каждой карточки. Материал без общих площадок пропускается — с указанием причины.</p></fieldset><div id="autoposting-selected-list"></div><button type="button" class="plain-button" id="autoposting-batch-approve" disabled>Согласовать выбранные (0)</button><label class="autoposting-batch-reason">Причина возврата на доработку (обязательна)<textarea id="autoposting-batch-reason" rows="2" maxlength="2000"></textarea></label><button type="button" class="danger" id="autoposting-batch-reject" disabled>Вернуть выбранные на доработку (0)</button></div><div id="autoposting-batch-results" role="status" aria-live="polite"></div><div id="autoposting-posts"></div><details id="autoposting-archive" class="ap-archive"><summary>Удалённые материалы</summary><p class="autoposting-note">Черновики, удалённые из плана. Восстановленный материал вернётся черновиком — без согласования и даты отправки.</p><div id="autoposting-archive-list"></div></details></section>
+    <div class="ap-feed-cols" aria-hidden="true"><span>Рилс и выход</span><span>Статус</span><span>Instagram</span><span>TikTok</span><span>YouTube</span><span>VK</span><span>Telegram</span></div>
+    <ol id="autoposting-feed" class="ap-feed" aria-label="Готовые рилсы по датам выхода"></ol>
+    <div id="autoposting-batch"><p>Флажок на карточке — только выбор. Решение применяется к каждому выбранному материалу отдельно после нажатия кнопки ниже. Публикация не запускается.</p><fieldset id="autoposting-batch-platforms"><legend>Площадки решения</legend><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="all" checked>Все площадки выбранных материалов</label><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="subset">Только отмеченные ниже</label>${CAPTIONS.map(([id,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-batch-platform="${esc(id)}">${esc(label)}</label>`).join("")}<p class="autoposting-note">Решение применяется к пересечению отмеченных площадок с площадками каждой карточки. Материал без общих площадок пропускается — с указанием причины.</p></fieldset><div id="autoposting-selected-list"></div><button type="button" class="plain-button" id="autoposting-batch-approve" disabled>Согласовать выбранные (0)</button><label class="autoposting-batch-reason">Причина возврата на доработку (обязательна)<textarea id="autoposting-batch-reason" rows="2" maxlength="2000"></textarea></label><button type="button" class="danger" id="autoposting-batch-reject" disabled>Вернуть выбранные на доработку (0)</button></div><div id="autoposting-batch-results" role="status" aria-live="polite"></div><details id="autoposting-team" class="ap-team"><summary>Для команды · все материалы и согласование</summary><p class="autoposting-note">Черновики, согласование и материалы без даты. Карточка открывает редактор публикации.</p><div id="autoposting-posts"></div></details><details id="autoposting-archive" class="ap-archive"><summary>Удалённые материалы</summary><p class="autoposting-note">Черновики, удалённые из плана. Восстановленный материал вернётся черновиком — без согласования и даты отправки.</p><div id="autoposting-archive-list"></div></details></section>
     <details class="autoposting-workspace-tools"><summary>Компания и настройки</summary>    <div class="autoposting-toolbar"><label for="autoposting-company">Компания</label><select id="autoposting-company">${companies.map(item=>`<option value="${esc(item.code)}">${esc(item.name)}</option>`).join("")}</select><button class="plain-button" id="autoposting-refresh" type="button">Обновить статусы</button><a href="#company-information">Данные компании</a></div>
     <details class="card autoposting-advanced"><summary>Подключения и подготовка материалов</summary><section class="card vk-connection-guide" id="vk-connection-guide" aria-labelledby="vk-connection-title"></section>
     <details class="card autoposting-connections"><summary>Подключение площадок</summary><p class="autoposting-note">Пустой ключ сохраняет прежний. Новый ключ применяется только кнопкой сохранения; после изменения канала проверьте доступ. Проверка не публикует посты.</p><div id="autoposting-channels" class="autoposting-channel-grid"></div><div id="autoposting-planning" class="autoposting-planning"></div></details>
@@ -470,6 +450,9 @@ function create(container, context) {
     container.querySelectorAll("[data-restore-post]").forEach(node=>{node.disabled=busy||!edit();});
     // Подсказки — только чтение: доступны и при просмотре, и пока идёт запрос.
     container.querySelectorAll(".ap-hint").forEach(node=>{node.disabled=false;});
+    // Окно публикации только показывает данные: закрыть и переключить маску можно и во время запроса.
+    container.querySelectorAll("[data-pub-free]").forEach(node=>{node.disabled=false;});
+    container.querySelectorAll('.cfk-head [data-cfk-act="sheet"][aria-disabled="true"]').forEach(node=>{node.disabled=true;});
   };
   const invalidate=()=>{reviewed=null;get("autoposting-preview-content").innerHTML="<p>Предпросмотр не выполнен или устарел. Сохраните изменения и проверьте материал заново.</p>";get("autoposting-media-preview").closest(".ap-editor-media").hidden=false;controls();};
   const renderMediaPreview=()=>{const urls=get("autoposting-media").value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean).slice(0,10);get("autoposting-media-preview").innerHTML=mediaPreview(urls);};
@@ -1070,7 +1053,9 @@ function create(container, context) {
   const addDays=(date,count)=>new Date(Date.parse(date+"T12:00:00Z")+count*86400000).toISOString().slice(0,10);
   const dateRange=()=>({from:month+'-01',to:daysOfMonth(month).at(-1)});
   const dailyItems=()=>{
-    const source=calendarData?[...calendarData.posts,...calendarData.undated]:posts;
+    // Календарь даёт даты плана за месяц; остальные загруженные материалы (другие месяцы) — по дате выхода.
+    const fromCalendar=calendarData?[...calendarData.posts,...calendarData.undated]:[],seen=new Set(fromCalendar.map(item=>item.id));
+    const source=calendarData?[...fromCalendar,...posts.filter(item=>!seen.has(item.id))]:posts;
     return source.filter(isActive).map(item=>{
       const latest=posts.find(value=>value.id===item.id),value=latest&&latest.revision>=item.revision?{...item,...latest}:item;
       if(latest&&latest.revision>item.revision)value.calendarReadiness=null;
@@ -1105,14 +1090,9 @@ function create(container, context) {
     get('autoposting-batch').hidden=!permitted(ctx,'approve')||!approvalSelection.size;
     get('autoposting-batch-approve').textContent=`Согласовать выбранные (${approvalSelection.size})`;
     get('autoposting-batch-reject').textContent=`Вернуть выбранные на доработку (${approvalSelection.size})`;
-    get('autoposting-selected-list').innerHTML=approvalSelection.size?'<p>Будут согласованы все выбранные материалы, в том числе за пределами текущего фильтра:</p><ul>'+[...approvalSelection.values()].map(item=>`<li>${esc(item.title)} · версия ${esc(item.contentRevision)} <button type="button" class="plain-button" data-daily-unselect="${esc(item.id)}">Убрать из выбора</button></li>`).join('')+'</ul>':'';
+    get('autoposting-selected-list').innerHTML=approvalSelection.size?'<p>Будут согласованы все выбранные материалы, даже если список для команды свёрнут:</p><ul>'+[...approvalSelection.values()].map(item=>`<li>${esc(item.title)} · версия ${esc(item.contentRevision)} <button type="button" class="plain-button" data-daily-unselect="${esc(item.id)}">Убрать из выбора</button></li>`).join('')+'</ul>':'';
     get('autoposting-batch-results').innerHTML=approvalResults.size?'<ul>'+[...approvalResults.values()].map(result=>`<li>${esc(result.title)}: ${esc(result.message)}</li>`).join('')+'</ul>':'';
   };
-  const matchesFilter=item=>(!boardFilter.platform||platformsOf(item).includes(boardFilter.platform))
-    &&(!boardFilter.format||(boardFilter.format==='none'?!item.meta?.format:item.meta?.format===boardFilter.format))
-    &&(!boardFilter.role||(boardFilter.role==='none'?!item.meta?.role:item.meta?.role===boardFilter.role))
-    &&(!boardFilter.status||boardStatus(item)===boardFilter.status);
-  const activeFilters=()=>Object.values(boardFilter).filter(Boolean).length;
   const localTime=item=>item.scheduledAt?time.toLocal(item.scheduledAt,zone()).slice(11,16):'';
   const byTime=(a,b)=>(a.scheduledAt?0:1)-(b.scheduledAt?0:1)||String(a.scheduledAt||'').localeCompare(String(b.scheduledAt||''))||String(a.id).localeCompare(String(b.id),'en',{numeric:true});
   const approvedText=item=>{
@@ -1141,37 +1121,241 @@ function create(container, context) {
       ${approved?`<p class="ap-card-note">${esc(approved)}</p>`:''}${item.publishDate&&item.plannedDate&&item.publishDate!==item.plannedDate?`<p class="ap-card-note">Дата плана: ${esc(item.plannedDate)}</p>`:''}
       ${hasLocalChanges(item)?'<p class="ap-card-note ap-card-warning">Есть несохранённые правки в этом окне</p>':''}</li>`;
   };
+  /* №209 «Публикации» по макету Влада 07.11. Лента — только готовые рилсы с датой выхода: опубликованные
+     выше стартовой точки, экран открывается на ближайшем неопубликованном. Шапка, полоса дат, этапы и
+     стартовая точка — общий набор CfKit (если он загружен). Недельная доска и «Обзор месяца» убраны:
+     план по дням — только в «Контент-плане». «Создать публикацию» — в «Монтаже». Прочие материалы
+     (черновики, согласование, без даты) остаются в свёрнутом «Для команды» с прежним редактором. */
+  const kit=()=>window.CfKit&&window.CfKit.version?window.CfKit:null;
+  const SORTS=[{id:'time',label:'Время выхода'},{id:'platform',label:'Площадка'},{id:'status',label:'Статус: ошибки и ожидание → вышло'}];
+  const SHORT={instagram:'IG',tiktok:'TT',youtube_shorts:'YT',vk:'VK',telegram:'TG',max:'MAX',two_gis:'2ГИС',yandex_maps:'ЯК'};
+  const PLATFORM_ORDER=['instagram','tiktok','youtube_shorts','vk','telegram','max','two_gis','yandex_maps'];
+  const PUB_TABS=['instagram','tiktok','youtube_shorts','vk','telegram'];
+  const WEEKDAY_FULL=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+  const READY_STATUSES=new Set(['scheduled','publishing','published','failed','needs_review']);
+  const FALLBACK_STAGE={ready:'Готово к выходу',scheduled:'Запланировано к выходу',published:'Опубликовано',publish_error:'Ошибка публикации',unpublished:'Снято с публикации'};
+  const STAGE_RANK={publish_error:0,scheduled:1,ready:2,unpublished:3,published:4};
+  const ZONE_NAMES={'Asia/Irkutsk':'Иркутское время','Europe/Moscow':'Московское время','Asia/Bangkok':'Время Бангкока','Asia/Novosibirsk':'Новосибирское время','Asia/Yekaterinburg':'Екатеринбургское время','Asia/Krasnoyarsk':'Красноярское время','Asia/Vladivostok':'Владивостокское время'};
+  const zoneLabel=()=>{const value=zone();if(ZONE_NAMES[value])return ZONE_NAMES[value];
+    try{const name=new Intl.DateTimeFormat('ru-RU',{timeZone:value,timeZoneName:'long'}).formatToParts(new Date()).find(part=>part.type==='timeZoneName')?.value;if(name)return name;}catch(_){}
+    return 'Часовой пояс '+value;};
+  // Готов к выходу: есть дата выхода и версия согласована, стоит в очереди, уже отправлялась или вышла.
+  const isReady=item=>Boolean(item.effectiveDate)&&(READY_STATUSES.has(item.status)||receiptsOf(item).length>0||Boolean(item.approval?.approved&&!item.approval?.stale));
+  const sortedPlatforms=item=>platformsOf(item).slice().sort((a,b)=>{const ia=PLATFORM_ORDER.indexOf(a),ib=PLATFORM_ORDER.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  /* Этап — ближайший из общей цепочки CfKit по уже существующим полям карточки; новых переходов кабинет не придумывает.
+     PROVIDER_LINK_UNAVAILABLE: сервис сообщил о выходе, но ссылку на пост не отдал (ВК через Onlypult) — «вышло · сообщество». */
+  const stageOf=item=>{
+    if(item.status==='published')return 'published';
+    if(item.status==='failed')return 'publish_error';
+    if(item.status==='needs_review')return item.lastErrorCode==='PROVIDER_PENDING'?'scheduled':item.lastErrorCode==='PROVIDER_LINK_UNAVAILABLE'?'published':'publish_error';
+    if(item.status==='scheduled'||item.status==='publishing')return 'scheduled';
+    if(item.status==='cancelled')return 'unpublished';
+    const marked=receiptPlatforms(item),list=platformsOf(item);
+    if(marked.size&&list.length&&list.every(id=>marked.has(id)))return 'published';
+    return 'ready';
+  };
+  const chipHtml=id=>kit()?kit().stageChip(id):`<span class="cfk-chip" data-stage="${esc(id)}">${esc(FALLBACK_STAGE[id]||id)}</span>`;
+  const whenLabel=item=>{const date=String(item.effectiveDate||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 'Дата не задана';
+    return `${WEEKDAY_FULL[new Date(date+'T12:00:00Z').getUTCDay()]}, ${Number(date.slice(8))} ${MONTHS_GEN[Number(date.slice(5,7))-1]}`;};
+  // «№N тема»: номер из названия плана («№2 «Первый визит»»); если его нет — номер материала в кабинете.
+  const numberOf=item=>{const title=String(item.title||'').trim(),match=/^№\s?(\d{1,4})\s*[·.:—–-]?\s*/.exec(title);
+    return match?{n:match[1],rest:title.slice(match[0].length)||'Без названия'}:{n:String(item.id),rest:title||'Без названия'};};
+  const videoOf=item=>(item.mediaUrls||[]).map(safeUrl).find(url=>url&&isVideo(url))||null;
+  const frameOf=url=>url.split('#')[0]+'#t=0.5';
+  /* Страница сообщества — только из сохранённых ссылок компании (CRM socials): тип и домен должны совпасть. */
+  const COMMUNITY={vk:[['vk'],/(^|\.)vk\.(com|ru)$/],telegram:[['telegram_channel'],/^(t\.me|telegram\.me)$/],instagram:[['instagram'],/(^|\.)instagram\.com$/],
+    tiktok:[['tiktok'],/(^|\.)tiktok\.com$/],youtube_shorts:[['youtube','youtube_shorts'],/(^|\.)youtube\.com$/],max:[['max'],/(^|\.)max\.ru$/]};
+  const communityUrl=platform=>{
+    const spec=COMMUNITY[platform];if(!spec||information?.companyCode!==companyCode)return null;
+    const check=cabinet.platformLinks?.safeUrl||safeUrl;
+    for(const entry of Array.isArray(information?.profile?.socials)?information.profile.socials:[]){
+      if(!spec[0].includes(String(entry?.type||'')))continue;const url=check(entry.url);
+      if(!url||!/^https:/i.test(url)||!spec[1].test(new URL(url).hostname.toLowerCase()))continue;return url;}
+    return null;
+  };
+  const platformState=(item,platform)=>{
+    const delivery=(item.deliveries||[]).find(entry=>(channels().find(channel=>channel.id===entry.channelId)?.platform||entry.channelId)===platform);
+    const receipt=receiptsOf(item).find(entry=>entry.platform===platform);
+    const link=(receipt&&safeReceiptUrl(platform,receipt.url))||(delivery?.url&&(safeReceiptUrl(platform,delivery.url)||safeUrl(delivery.url)))||null;
+    const state=(kind,text,href=null,hrefLabel='')=>({kind,text,href,hrefLabel});
+    const code=delivery?.errorCode||'';
+    if(receipt||delivery?.status==='published'||(delivery?.status==='needs_review'&&code==='PROVIDER_LINK_UNAVAILABLE')){
+      if(link)return state('published','вышло',link,'вышло ↗');
+      const community=communityUrl(platform);
+      return community?state('published','вышло · сообщество',community,'вышло · сообщество ↗'):state('published','вышло · ссылка позже');
+    }
+    if(delivery?.status==='failed')return state('error',ERRORS[code]||'Площадка не подтвердила публикацию.');
+    if(delivery?.status==='needs_review')return state(code==='PROVIDER_PENDING'?'wait':'error',ERRORS[code]||'Нужна проверка на площадке.');
+    if(delivery?.status==='publishing')return state('wait','публикуется');
+    if(delivery?.status==='pending')return state('wait','ждёт времени выхода');
+    if(['published','failed','needs_review','publishing'].includes(item.status))return state('off','не отправлялось из кабинета');
+    if(item.status==='scheduled')return state('wait','ждёт времени выхода');
+    if(item.status==='cancelled')return state('off','снято с публикации');
+    if(PLAN_DELIVERY.get(platform)==='manual')return state('wait','выкладывается вручную');
+    return state('wait','готово · не в очереди');
+  };
+  const badge=(item,platform)=>{const st=platformState(item,platform);
+    return `<span class="ap-pf" data-platform="${esc(platform)}" data-kind="${esc(st.kind)}" title="${esc(platformLabel(platform)+': '+st.text)}">${esc(SHORT[platform]||platform)}</span>`;};
+  /* ПК: та же карточка строкой таблицы — по колонке на площадку (IG/TT/YT/VK/TG), как в макете. */
+  const CELL={published:'вышло',wait:'ждёт',error:'ошибка',off:'не отпр.'};
+  const cell=(item,platform)=>{
+    if(!platformsOf(item).includes(platform))return '<span class="ap-cell" data-kind="none">—</span>';
+    const st=platformState(item,platform),label=st.kind==='published'&&!st.href?'ссылка позже':CELL[st.kind]||st.text;
+    return `<span class="ap-cell" data-kind="${esc(st.kind)}" title="${esc(platformLabel(platform)+': '+st.text)}">${st.href?`<a href="${esc(st.href)}" target="_blank" rel="noopener noreferrer">${esc(st.hrefLabel.includes('сообщество')?'сообщество ↗':'вышло ↗')}</a>`:esc(label)}</span>`;
+  };
+  const feedCompare=(a,b)=>{
+    const byDate=String(a.effectiveDate).localeCompare(String(b.effectiveDate))||byTime(a,b);
+    if(feedSort==='platform'){const rank=item=>{const index=PLATFORM_ORDER.indexOf(sortedPlatforms(item)[0]);return index<0?99:index;};return rank(a)-rank(b)||byDate;}
+    if(feedSort==='status')return (STAGE_RANK[stageOf(a)]??9)-(STAGE_RANK[stageOf(b)]??9)||byDate;
+    return byDate;
+  };
+  const feedCard=item=>{
+    const {n,rest}=numberOf(item),stage=stageOf(item),video=videoOf(item),platforms=sortedPlatforms(item);
+    // Превью-кадр — только у смонтированного ролика (видео есть в карточке); кадр с 0,5 с, без загрузки всего файла.
+    const thumb=video?`<span class="ap-feed-thumb"><video preload="metadata" muted playsinline src="${esc(frameOf(video))}" aria-hidden="true" tabindex="-1"></video></span>`:'';
+    const note=stage==='publish_error'&&item.lastErrorCode?`<p class="ap-feed-note">${esc(ERRORS[item.lastErrorCode]||'Публикация не подтверждена.')}</p>`
+      :item.status==='publishing'?'<p class="ap-feed-note">Публикуется…</p>':'';
+    return `<li class="ap-feed-card${video?' has-thumb':''}" data-feed-post="${esc(item.id)}" data-date="${esc(item.effectiveDate)}" data-stage="${esc(stage)}"${selectedDate&&selectedDate===item.effectiveDate?' data-day="selected"':''}>
+      <button type="button" class="ap-feed-open" data-feed-open="${esc(item.id)}" aria-haspopup="dialog" aria-label="Открыть публикацию №${esc(n)} ${esc(rest)}">${thumb}<span class="ap-feed-main"><span class="ap-feed-title"><b>№${esc(n)}</b> ${esc(rest)}</span><span class="ap-feed-when">${esc(whenLabel(item))} · ${esc(localTime(item)||'время не задано')}</span></span></button>
+      <p class="ap-feed-foot">${chipHtml(stage)}<span class="ap-pfs">${platforms.map(platform=>badge(item,platform)).join('')||'<span class="ap-pf" data-kind="off">площадки не выбраны</span>'}</span></p><span class="ap-feed-cells">${PUB_TABS.map(platform=>cell(item,platform)).join('')}</span>${note}</li>`;
+  };
+  const renderFeed=all=>{
+    const feed=get('autoposting-feed'),ready=all.filter(isReady).sort(feedCompare);
+    const marks=[...new Set(ready.map(item=>item.effectiveDate))].sort();
+    if(strip&&marks.join()!==stripMarked){stripMarked=marks.join();strip.setMarked(marks);}
+    const cols=container.querySelector('.ap-feed-cols');if(cols)cols.hidden=!ready.length;
+    if(!ready.length){
+      feed.classList.remove('has-above');
+      feed.innerHTML=calendarPending&&!all.length?'':'<li class="ap-feed-empty"><p><strong>Готовых к выходу рилсов пока нет.</strong> Здесь появятся смонтированные и согласованные ролики с датой выхода: что и куда уходит.</p><p>Сценарии и даты — в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся в <a href="#content/materials">«Монтаже»</a>.</p></li>';
+      return;
+    }
+    feed.innerHTML=ready.map(feedCard).join('');
+    // Есть опубликованные над стартовой точкой — лента во всю высоту, чтобы встать на ближайший неопубликованный.
+    feed.classList.toggle('has-above',feedSort==='time'&&ready.some(item=>stageOf(item)==='published')&&ready.some(item=>stageOf(item)!=='published'));
+    const k=kit();
+    // Встаём на стартовую точку один раз — когда список месяца уже пришёл; до этого и после — без сброса прокрутки.
+    const place=!feedPlaced&&calendarSettled&&!calendarPending;
+    if(k)k.feedStart(feed,{isAbove:node=>feedSort==='time'&&node.dataset.stage==='published',aboveLabel:'↑ выше — опубликованные',...(place?{}:{scroll:false})});
+    if(place&&k){
+      /* CfKit добирает отступ по scrollHeight, а у короткой ленты он равен высоте окна — отступа не хватает,
+         и старт остаётся ниже верха. Доводим сами после его кадра; запись — только прокрутка. */
+      const settle=()=>{const state=feed._cfkFeed;if(!state?.separator||!feed.isConnected)return;
+        const max=feed.scrollHeight-feed.clientHeight;
+        if(max<state.start)feed.style.paddingBottom=`${(parseFloat(feed.style.paddingBottom)||0)+state.start-max}px`;
+        feed.scrollTop=state.start;feed.classList.remove('cfk-feed-up');};
+      if(window.requestAnimationFrame)window.requestAnimationFrame(settle);else settle();
+    }
+    if(place)feedPlaced=true;
+  };
+  const scrollFeedTo=key=>{
+    const feed=get('autoposting-feed'),cards=[...feed.querySelectorAll('[data-feed-post]')];
+    cards.forEach(node=>{if(node.dataset.date===key)node.dataset.day='selected';else delete node.dataset.day;});
+    const target=cards.find(node=>node.dataset.date===key)||(feedSort==='time'?cards.find(node=>node.dataset.date>key):null);if(!target)return;
+    const top=target.getBoundingClientRect().top-feed.getBoundingClientRect().top;
+    if(top)feed.scrollTop+=top-4;
+  };
+  const onStripSelect=date=>{
+    const k=kit();if(!k)return;const key=k.dayKey(date);selectedDate=key;
+    if(key.slice(0,7)!==month&&settings){month=key.slice(0,7);void loadCalendar().then(()=>scrollFeedTo(key));return;}
+    scrollFeedTo(key);
+  };
+  const buildHead=()=>{
+    const k=kit(),host=get('autoposting-head');if(!k||!host)return;
+    const open=strip?!strip.hidden:false;
+    head=k.header({title:'Публикации',actions:['calendar','sheet','sort'],sheetUrl,sortOptions:SORTS,sortKey:'autoposting',calendarOpen:open,
+      onSort:id=>{feedSort=id;feedPlaced=false;renderCalendar();},onCalendar:value=>{strip?.setOpen(value);}});
+    feedSort=SORTS.some(item=>item.id===head.getSort())?head.getSort():'time';
+    strip=k.dateStrip({tz:zoneLabel(),timeZone:zone(),marked:[],selected:selectedDate||today(),onSelect:onStripSelect});stripMarked='';
+    host.replaceChildren(head,strip);if(open)strip.setOpen(true);
+  };
+  // Ссылка на Google Таблицу — из Настройки → Контент (через реестр модулей, если он есть); иначе ▦ неактивна с подсказкой.
+  const sheetLink=value=>{try{const url=new URL(value);return url.protocol==='https:'&&url.hostname==='docs.google.com'&&!url.port&&!url.username&&!url.password&&/^\/spreadsheets\/d\/[\w-]+(?:\/|$)/.test(url.pathname)?url.href:'';}catch(_){return '';}};
+  const loadSheet=code=>{
+    let source=null;try{source=window.SynapseModules?.contentSettings?.(code)||null;}catch(_){source=null;}
+    if(!source?.get)return;const version=epoch;
+    Promise.resolve().then(()=>source.get()).then(result=>{const url=sheetLink(result?.settings?.contentPlanSheetUrl);if(version!==epoch||!url||url===sheetUrl)return;sheetUrl=url;buildHead();renderCalendar();controls();},()=>{});
+  };
   const renderCalendar=()=>{
     if(!month)return;
-    const weeks=weeksOf(month);week=Math.min(Math.max(0,week),weeks.length-1);const days=weeks[week];
-    get('autoposting-week-label').textContent=`Неделя ${week+1} из ${weeks.length} · ${weekLabel(days)}`;
-    get('autoposting-month').value=month;
     get('autoposting-calendar-zone').textContent=`Время — по часовому поясу проекта ${zone()}. Сегодня: ${today()}.`;
-    get('autoposting-month-controls').hidden=!overview;get('autoposting-overview').setAttribute('aria-pressed',String(overview));
-    get('autoposting-calendar-state').textContent=calendarPending?'Обновляем доску…':calendarData?calendarData.truncated?'Список за месяц ограничен и может быть неполным.':calendarData.undatedTruncated?'Список публикаций без даты ограничен. Показаны первые 200.':'':`Доска за месяц недоступна. Показаны только загруженные материалы (до 200); список может быть неполным.`;
+    get('autoposting-calendar-state').textContent=calendarPending?'Обновляем публикации…':calendarData?calendarData.truncated?'Список за месяц ограничен и может быть неполным.':calendarData.undatedTruncated?'Список публикаций без даты ограничен. Показаны первые 200.':'':`Календарь месяца недоступен. Показаны только загруженные материалы (до 200); список может быть неполным.`;
     const gaps=calendarData?.coverage?.basis==='current_plan'&&Array.isArray(calendarData.coverage.uncoveredDates)?[...new Set(calendarData.coverage.uncoveredDates.filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&date>=today()&&date<=addDays(today(),2)))].sort():[];
     get('autoposting-plan-gaps').hidden=!gaps.length;
     get('autoposting-plan-gaps').textContent=gaps.length?'По текущему плану компании нужно подготовить публикацию к '+gaps.join(', ')+'.':'';
-    const all=dailyItems(),items=all.filter(matchesFilter),count=activeFilters();
-    get('autoposting-filter-count').textContent=count?`Активных фильтров: ${count}`:'';get('autoposting-filter-reset').hidden=!count;
-    get('autoposting-filters-toggle').textContent=count?`Фильтры (${count})`:'Фильтры';get('autoposting-filters-toggle').setAttribute('aria-expanded',String(filtersOpen));get('autoposting-filters').classList.toggle('is-open',filtersOpen);
-    let html=WEEKDAYS.map(day=>`<span class="autoposting-weekday">${day}</span>`).join('')+'<span></span>'.repeat(weekdayOf(month+'-01'));
-    for(const date of daysOfMonth(month)){const total=items.filter(item=>item.effectiveDate===date).length;
-      html+=`<button type="button" data-calendar-date="${date}" aria-pressed="${selectedDate===date}" aria-label="${date}: публикаций ${total}">${Number(date.slice(8))}${total?`<span>${total}</span>`:''}</button>`;}
-    get('autoposting-calendar').innerHTML=html;
-    const dayItems=date=>items.filter(item=>item.effectiveDate===date).sort(byTime);
-    get('autoposting-day-strip').innerHTML=days.map(date=>{const total=dayItems(date).length;return `<button type="button" class="plain-button" data-strip-date="${date}" aria-pressed="${selectedDate===date}" aria-label="${dayLabel(date)}: публикаций ${total}"><span>${WEEKDAYS[weekdayOf(date)]}</span><b>${Number(date.slice(8))}</b>${total?`<em>${total}</em>`:''}</button>`;}).join('');
-    const weekTotal=days.reduce((sum,date)=>sum+dayItems(date).length,0),weekAll=all.filter(item=>days.includes(item.effectiveDate)).length;
-    const undated=items.filter(item=>!item.effectiveDate).sort(byTime);
-    const invite=!all.length&&!calendarPending?`<div class="ap-empty-board"><p><strong>На доске пока пусто.</strong> Здесь появятся готовые рилсы с предпросмотром по площадкам. План составляется в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся из <a href="#content/materials">«Материалов»</a>.</p><p><a href="#content-factory/settings">Перейти в «Настройки модуля»</a></p></div>`:'';
-    const filtered=!weekTotal&&weekAll?`<p class="ap-filter-empty">По выбранным фильтрам на этой неделе публикаций нет. <button type="button" class="plain-button" data-filter-reset>Сбросить фильтры</button></p>`:'';
-    const board=`<div class="ap-board" style="--ap-days:${days.length}" aria-label="Неделя: ${esc(weekLabel(days))}">${days.map(date=>{const list=dayItems(date);
-      return `<section class="ap-day${date===today()?' is-today':''}${selectedDate===date?' is-selected':''}" data-board-day="${date}" aria-labelledby="ap-day-${date}"><h3 class="ap-day-head" id="ap-day-${date}">${esc(dayLabel(date))}${date===today()?' <span class="ap-today">Сегодня</span>':''}<span class="ap-day-count" aria-label="публикаций ${list.length}">${list.length||''}</span></h3>
-        ${list.length?`<ul class="ap-day-list">${list.map(renderDailyCard).join('')}</ul>`:'<p class="ap-day-empty">Нет публикаций</p>'}</section>`;}).join('')}</div>`;
+    const all=dailyItems();
+    renderFeed(all);
+    const dated=all.filter(item=>item.effectiveDate).sort((a,b)=>String(a.effectiveDate).localeCompare(String(b.effectiveDate))||byTime(a,b)),undated=all.filter(item=>!item.effectiveDate).sort(byTime);
+    const invite=!all.length&&!calendarPending?`<div class="ap-empty-board"><p><strong>Материалов пока нет.</strong> План составляется в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся в <a href="#content/materials">«Монтаже»</a>.</p><p><a href="#content-factory/settings">Перейти в «Настройки модуля»</a></p></div>`:'';
+    const list=dated.length?`<ul class="ap-team-list">${dated.map(renderDailyCard).join('')}</ul>`:'';
     const undatedBlock=`<section class="ap-undated autoposting-undated" data-board-day="undated" aria-labelledby="ap-undated-title"><h3 id="ap-undated-title">Без даты · ${undated.length}</h3>${undated.length?`<p class="autoposting-note">Дата публикации не назначена. Откройте карточку, чтобы назначить дату.</p><ul class="ap-undated-list">${undated.map(renderDailyCard).join('')}</ul>`:'<p class="autoposting-note">Публикаций без даты нет.</p>'}</section>`;
-    get('autoposting-posts').innerHTML=invite+filtered+board+undatedBlock;
+    get('autoposting-posts').innerHTML=invite+list+undatedBlock;
+    get('autoposting-team').querySelector('summary').textContent=`Для команды · все материалы и согласование (${all.length})`;
     renderBatch();
+    if(pubId)renderPub();
   };
+  /* Окно публикации: телефон — во весь экран, ПК — поверх ленты; ✕, Esc и щелчок по фону закрывают. */
+  const MASK={instagram:['Reels',['♡','✉','➤']],tiktok:['Рекомендации',['♡','✉','⤴']],youtube_shorts:['Shorts',['▲','▼','✉']],vk:['Клипы',['♡','✉','⤴']],telegram:['Канал',[]]};
+  const maskOverlay=(platform,caption)=>{const [title,rail]=MASK[platform]||MASK.instagram,name=companies.find(item=>item.code===companyCode)?.name||'';
+    return `<div class="ap-mask" data-mask="${esc(platform)}" aria-hidden="true"><span class="ap-mask-top">${esc(title)}</span>${rail.length?`<span class="ap-mask-rail">${rail.map(icon=>`<i>${icon}</i>`).join('')}</span>`:''}<span class="ap-mask-bottom"><b>${esc(name)}</b><em>${esc(String(caption||'').slice(0,90))}</em></span></div>`;};
+  /* «Удалить публикацию» (PR 579) — только если в кабинете есть его окно и сервер отвечает на GET …/unpublish. */
+  const unpublishApi=new Map();
+  const unpublishOffer=item=>{
+    if(!edit()||stageOf(item)!=='published'||!get('autoposting-unpublish-zone'))return '';
+    const key=companyCode+':'+item.id,known=unpublishApi.get(key);
+    if(known===undefined){unpublishApi.set(key,null);const version=epoch;
+      Promise.resolve().then(()=>request('/autoposting/posts/'+encodeURIComponent(item.id)+'/unpublish')).then(result=>{if(version!==epoch)return;unpublishApi.set(key,Boolean(result&&Array.isArray(result.targets)));if(pubId===String(item.id))renderPub();},()=>{if(version===epoch)unpublishApi.set(key,false);});
+      return '';}
+    return known?'<button type="button" class="plain-button danger" data-pub-unpublish data-pub-free>Удалить публикацию</button>':'';
+  };
+  container.insertAdjacentHTML('beforeend','<div id="autoposting-pub" class="ap-pub" role="dialog" aria-modal="true" aria-labelledby="autoposting-pub-title" hidden><div class="ap-pub-box"></div></div>');
+  const renderPub=()=>{
+    const node=get('autoposting-pub'),item=dailyItems().find(value=>String(value.id)===pubId);
+    if(!item){closePub(true);return;}
+    const {n,rest}=numberOf(item),stage=stageOf(item),video=videoOf(item),platforms=sortedPlatforms(item);
+    if(!PUB_TABS.includes(pubPlatform))pubPlatform=platforms.find(id=>PUB_TABS.includes(id))||'instagram';
+    const caption=item.captions?.[pubPlatform]||item.text||'',download=video||(item.mediaUrls||[]).map(safeUrl).find(Boolean);
+    const rows=platforms.map(platform=>{const st=platformState(item,platform);
+      return `<li data-pub-platform="${esc(platform)}" data-kind="${esc(st.kind)}"><span class="ap-pf" data-platform="${esc(platform)}" data-kind="${esc(st.kind)}">${esc(SHORT[platform]||platform)}</span><span class="ap-pub-name">${esc(platformLabel(platform))}</span><span class="ap-pub-st">${st.href?`<a href="${esc(st.href)}" target="_blank" rel="noopener noreferrer">${esc(st.hrefLabel)}</a>`:esc(st.text)}</span></li>`;}).join('');
+    const playing=node.querySelector('.ap-pub-screen video');
+    node.firstElementChild.innerHTML=`<header class="ap-pub-head"><h3 id="autoposting-pub-title" tabindex="-1"><b>№${esc(n)}</b> ${esc(rest)}</h3><button type="button" class="ap-pub-x" data-pub-close data-pub-free aria-label="Закрыть окно публикации">✕</button></header>
+      <div class="ap-pub-grid"><div class="ap-pub-preview">
+        <div class="ap-pub-tabs" role="tablist" aria-label="Площадка предпросмотра">${PUB_TABS.map(id=>`<button type="button" role="tab" data-pub-tab="${id}" data-pub-free aria-selected="${id===pubPlatform}" title="${esc(platformLabel(id))}">${SHORT[id]}</button>`).join('')}</div>
+        <div class="ap-pub-screen">${video?`<video controls playsinline preload="metadata" src="${esc(video)}"></video>`:'<p class="ap-pub-novideo">Ролик не прикреплён</p>'}${maskOverlay(pubPlatform,caption)}</div>
+        <p class="autoposting-note">Маска ${esc(platformLabel(pubPlatform))} — ориентировочные безопасные зоны; точный вид зависит от версии приложения.</p></div>
+      <div class="ap-pub-info"><p class="ap-pub-line">${chipHtml(stage)}<span>${esc(whenLabel(item))} · ${esc(localTime(item)||'время не задано')}</span></p>
+        <h4>Площадки</h4><ul class="ap-pub-platforms">${rows||'<li data-kind="off">Площадки не выбраны</li>'}</ul>
+        <h4>Текст публикации · ${esc(platformLabel(pubPlatform))}${item.captions?.[pubPlatform]?'':item.text?' · общий текст':''}</h4><pre class="ap-pub-text">${esc(caption)||'Текст не задан.'}</pre>
+        <div class="ap-pub-actions">${download?`<a class="plain-button" href="${esc(download)}" download target="_blank" rel="noopener noreferrer" data-pub-download>Скачать</a>`:''}<button type="button" class="plain-button" data-pub-edit data-pub-free>Открыть в редакторе</button>${unpublishOffer(item)}</div></div></div>`;
+    // Перерисовка той же карточки не сбрасывает ролик, который уже смотрят.
+    if(playing&&video&&playing.getAttribute('src')===video){const fresh=node.querySelector('.ap-pub-screen video');fresh?.replaceWith(playing);}
+  };
+  const openPub=(id,opener)=>{
+    pubId=String(id);pubPlatform='';pubOpener=opener||null;renderPub();if(!pubId)return;
+    get('autoposting-pub').hidden=false;container.ownerDocument.body.classList.add('autoposting-modal-open');
+    get('autoposting-pub-title')?.focus?.({preventScroll:true});
+  };
+  function closePub(quiet=false){
+    const node=get('autoposting-pub');if(!node||(node.hidden&&!pubId))return;
+    node.querySelectorAll('video').forEach(video=>{try{video.pause();}catch(_){}});
+    node.hidden=true;pubId=null;node.firstElementChild.replaceChildren();
+    container.ownerDocument.body.classList.toggle('autoposting-modal-open',Boolean(get('autoposting-editor')?.open));
+    const back=pubOpener;pubOpener=null;if(!quiet&&back?.isConnected)back.focus?.();
+  }
+  get('autoposting-feed').addEventListener('click',event=>{
+    const card=event.target.closest('[data-feed-post]');if(!card||event.target.closest('a'))return;
+    openPub(card.dataset.feedPost,card.querySelector('[data-feed-open]'));
+  });
+  get('autoposting-pub').addEventListener('click',event=>{
+    const node=get('autoposting-pub');
+    if(event.target===node||event.target.closest('[data-pub-close]')){closePub();return;}
+    const tab=event.target.closest('[data-pub-tab]');if(tab){pubPlatform=tab.dataset.pubTab;renderPub();node.querySelector(`[data-pub-tab="${pubPlatform}"]`)?.focus?.();return;}
+    const id=pubId;
+    if(event.target.closest('[data-pub-edit]')&&id){closePub(true);selectPost(id);return;}
+    if(event.target.closest('[data-pub-unpublish]')&&id&&!busy){closePub(true);selectPost(id);get('autoposting-unpublish-open')?.click();}
+  });
+  container.addEventListener('keydown',event=>{if(event.key==='Escape'&&pubId){event.preventDefault();closePub();}});
+  window.addEventListener('cfkit:ready',()=>{if(!head){buildHead();renderCalendar();controls();}});
+  buildHead();
   /* Корзина читается отдельно: если сервер её ещё не умеет, раздел просто скрыт, а материалы работают как прежде. */
   const renderTrash=()=>{
     const box=get("autoposting-trash");box.hidden=!trashPosts.length;get("autoposting-trash-count").textContent=String(trashPosts.length);
@@ -1194,7 +1378,7 @@ function create(container, context) {
       calendarData=result;
       const merged=new Map(posts.map(item=>[item.id,item]));for(const item of [...result.posts,...result.undated])if(!merged.has(item.id)||merged.get(item.id).revision<item.revision)merged.set(item.id,item);posts=[...merged.values()].filter(isActive);
     }catch(_){if(version===epoch&&calendarVersion===calendarEpoch)calendarData=null;}
-    finally{if(version===epoch&&calendarVersion===calendarEpoch){calendarPending=false;renderList();controls();}}
+    finally{if(version===epoch&&calendarVersion===calendarEpoch){calendarPending=false;calendarSettled=true;renderList();controls();}}
   };
   const renderList=()=>{
     get("autoposting-select").innerHTML='<option value="">Новый черновик</option>'+posts.map(item=>`<option value="${esc(item.id)}">${esc(item.title)} — ${esc(statusLabel(item))}</option>`).join("");
@@ -1305,7 +1489,8 @@ function create(container, context) {
     if(refresh)handledLink='';
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
     get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
-    companyCode=code;const version=++epoch;fullHistory.clear();trashPosts=[];renderTrash();calendarEpoch++;archivedEpoch++;archived=null;archivedState="";archiveFocus=null;renderArchive();calendarData=null;calendarPending=false;approvalSelection.clear();approvalResults.clear();approvalBlocked.clear();renderBatch();posts=[];get('autoposting-posts').replaceChildren();get('autoposting-calendar').replaceChildren();get('autoposting-batch-results').replaceChildren();get('autoposting-calendar-state').textContent='';get('autoposting-calendar-zone').textContent='';get('autoposting-plan-gaps').hidden=true;get('autoposting-plan-gaps').textContent='';get('autoposting-editor').open=false;syncEditor();busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
+    closePub(true);unpublishApi.clear();sheetUrl="";feedPlaced=false;calendarSettled=false;
+    companyCode=code;const version=++epoch;fullHistory.clear();trashPosts=[];renderTrash();calendarEpoch++;archivedEpoch++;archived=null;archivedState="";archiveFocus=null;renderArchive();calendarData=null;calendarPending=false;approvalSelection.clear();approvalResults.clear();approvalBlocked.clear();renderBatch();posts=[];get('autoposting-posts').replaceChildren();get('autoposting-batch-results').replaceChildren();get('autoposting-calendar-state').textContent='';get('autoposting-calendar-zone').textContent='';get('autoposting-plan-gaps').hidden=true;get('autoposting-plan-gaps').textContent='';get('autoposting-editor').open=false;syncEditor();busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
     get('autoposting-channels').querySelectorAll('[data-channel-links]').forEach(node=>node.replaceChildren());get('autoposting-planning').replaceChildren();
     get("vk-connection-guide").innerHTML='<h3 id="vk-connection-title">Подключение ВКонтакте</h3><p>Загружаем настройки выбранной компании…</p>';controls();
     if(!code){busy=false;get("vk-connection-guide").textContent="Выберите доступную компанию.";message("Нет доступных компаний.");controls();return;}
@@ -1313,9 +1498,9 @@ function create(container, context) {
     try{const result=await Promise.all([request("/autoposting/settings"),request("/autoposting/posts"),request("/company-information"),request('/autoposting/starter-plan')]);if(version!==epoch)return;
       if(result[1].companyCode!==code||result[2].companyCode!==code||result[3].companyCode!==code)throw Error("Wrong company");
       [settings,,information,starterPlan]=result;posts=Array.isArray(result[1].posts)?result[1].posts.filter(isActive):[];
-      if(!(refresh&&month)){month=time.toLocal(new Date().toISOString(),zone()).slice(0,7);week=weekIndexOf(month,today());}selectedDate="";
+      if(!(refresh&&month)){month=time.toLocal(new Date().toISOString(),zone()).slice(0,7);feedPlaced=false;}selectedDate="";
       post=posts.find(item=>item.id===selections.get(code))||null;
-      renderChannels();renderList();renderPost();renderStarterPlan();message(edit()?"":"Доступ только для просмотра.");
+      buildHead();loadSheet(code);renderChannels();renderList();renderPost();renderStarterPlan();message(edit()?"":"Доступ только для просмотра.");
       if(get("autoposting-archive").open)void loadArchive();
       await loadCalendar();await loadTrash();
     }catch(_){if(version===epoch){get("vk-connection-guide").textContent="Не удалось получить статус подключения выбранной компании. Обновите статусы.";message("Не удалось загрузить автопостинг. Ввод сохранён в текущем окне; повторите обновление.");}}
@@ -1500,12 +1685,6 @@ function create(container, context) {
     },video?"Загружаем видео…":"Загружаем фото…",video?"Не удалось загрузить видео. Нужен MP4 или WebM до 60 МБ.":"Не удалось загрузить фото. Нужен JPEG, PNG или WebP до 10 МБ.");
   });
   get("autoposting-refresh").addEventListener("click",()=>{void load(companyCode,true);});
-  // Фильтры доски только меняют показ: запросов на запись нет, выбор и правки сохраняются.
-  for(const [id,field] of [['autoposting-daily-platform','platform'],['autoposting-filter-format','format'],['autoposting-filter-role','role'],['autoposting-filter-status','status']])
-    get(id).addEventListener('change',()=>{boardFilter[field]=get(id).value;renderCalendar();controls();});
-  const resetFilters=()=>{for(const key of Object.keys(boardFilter))boardFilter[key]='';for(const id of ['autoposting-daily-platform','autoposting-filter-format','autoposting-filter-role','autoposting-filter-status'])get(id).value='';renderCalendar();controls();};
-  get('autoposting-filter-reset').addEventListener('click',resetFilters);
-  get('autoposting-filters-toggle').addEventListener('click',()=>{filtersOpen=!filtersOpen;renderCalendar();controls();});
   get('autoposting-posts').addEventListener('change',event=>{
     const node=event.target.closest('[data-daily-approve]');if(!node)return;const item=posts.find(value=>String(value.id)===node.dataset.dailyApprove);
     if(busy||!canSelectApproval(item)){node.checked=false;return;}
@@ -1590,24 +1769,9 @@ function create(container, context) {
     },'Возвращаем выбранные на доработку…','Не удалось вернуть часть материалов. Результат по каждому — в списке ниже.');
   });
   for(const id of ["autoposting-posts","autoposting-queue"])get(id).addEventListener("click",event=>{
-    if(event.target.closest('[data-filter-reset]')){resetFilters();return;}
     if(event.target.closest('input,label,select,textarea,a,video'))return;
     const button=event.target.closest("[data-open-post]")||event.target.closest("[data-daily-post]")?.querySelector("[data-open-post]");
     if(button){editorOpenerId=button.dataset.openPost;selectPost(button.dataset.openPost);}});
-  const showMonth=(value,date)=>{const changed=value!==month;month=value;week=date?weekIndexOf(month,date):weekIndexOf(month,today());selectedDate=date||'';renderCalendar();controls();if(changed)void loadCalendar();};
-  const shiftWeek=delta=>{
-    if(busy||!settings)return;const next=week+delta;
-    if(next>=0&&next<weeksOf(month).length){week=next;selectedDate='';renderCalendar();controls();return;}
-    const [year,m]=month.split('-').map(Number);const value=new Date(Date.UTC(year,m-1+(delta>0?1:-1),1)).toISOString().slice(0,7);
-    month=value;week=delta>0?0:weeksOf(value).length-1;selectedDate='';renderCalendar();controls();void loadCalendar();
-  };
-  const revealDay=date=>{const node=container.querySelector(`[data-board-day="${date}"]`);node?.scrollIntoView?.({block:'nearest',inline:'nearest'});};
-  get('autoposting-prev-week').addEventListener('click',()=>shiftWeek(-1));get('autoposting-next-week').addEventListener('click',()=>shiftWeek(1));
-  get('autoposting-month').addEventListener('change',()=>{const value=get('autoposting-month').value;if(/^\d{4}-\d{2}$/.test(value)&&!busy&&settings)showMonth(value,value===today().slice(0,7)?today():'');});
-  get('autoposting-jump').addEventListener('change',()=>{const value=get('autoposting-jump').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||busy||!settings)return;showMonth(value.slice(0,7),value);revealDay(value);});
-  get('autoposting-overview').addEventListener('click',()=>{overview=!overview;renderCalendar();controls();});
-  get("autoposting-calendar").addEventListener("click",event=>{const button=event.target.closest("[data-calendar-date]");if(button){showMonth(month,button.dataset.calendarDate);revealDay(button.dataset.calendarDate);}});
-  get('autoposting-day-strip').addEventListener('click',event=>{const button=event.target.closest('[data-strip-date]');if(button){selectedDate=button.dataset.stripDate;renderCalendar();controls();revealDay(selectedDate);}});
   const channelValues=node=>{
     const provider=node.querySelector('[data-channel-field="provider"]').value,target=node.querySelector('[data-channel-field="target"]').value;
     return {provider,name:node.querySelector('[data-channel-field="name"]').value,target,enabled:!(provider==='onlypult'&&!target.trim())&&node.querySelector('[data-channel-field="enabled"]').checked};
@@ -1653,7 +1817,7 @@ function create(container, context) {
     },"Проверяем доступ без публикации…","Не удалось проверить канал. Посты этой проверкой не публикуются.");
   });
   const code=companies.find(item=>item.code===ctx.selectedProjectId)?.code||companies[0]?.code||"";
-  return {ready:load(code),leave(){closeEditor(true);},update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);return (async()=>{await openLinkedPost();consumeOpen();})();}};
+  return {ready:load(code),leave(){closePub(true);closeEditor(true);},update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);return (async()=>{await openLinkedPost();consumeOpen();})();}};
 }
 cabinet.registerView("autoposting",{title:"Постинг",onLeave(){controller?.leave?.();},render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
   onProjectChange(context){if(permitted(context,"view"))return controller?.change(context);}});

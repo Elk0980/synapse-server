@@ -48,12 +48,6 @@
 .autoposting-planning { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:20px; }
 .autoposting-planning > div { padding:16px; border:1px solid var(--line,rgba(244,240,235,.12)); border-radius:10px; }
 .autoposting-connections > summary { min-height:48px; cursor:pointer; font-weight:600; }
-.autoposting-calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; max-width:740px; }
-.autoposting-weekday { text-align:center; color:var(--muted,#b9afa7); }
-.autoposting-calendar button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:0; padding:6px 2px; border:1px solid var(--line,rgba(244,240,235,.12)); border-radius:8px; background:var(--surface-soft,#181513); }
-.autoposting-calendar button[aria-pressed=true] { border-color:var(--accent,#9fd4ff); outline:2px solid var(--accent,#9fd4ff); }
-.autoposting-calendar button span { color:var(--accent,#9fd4ff); font-size:12px; }
-.autoposting-calendar-section input[type=month] { width:auto; flex:0 1 220px; }
 .autoposting-post-list { list-style:none; padding:0; }
 .autoposting-post-list li { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line,rgba(244,240,235,.12)); }
 .autoposting-post-list li span { color:var(--muted,#b9afa7); }
@@ -75,7 +69,6 @@
 @media(max-width:600px) {
   .autoposting-view .card { padding:18px; }
   .autoposting-date-fields,.autoposting-planning { grid-template-columns:minmax(0,1fr); gap:12px; }
-  .autoposting-calendar { gap:4px; }
   .autoposting-channel { padding:14px; }
   .autoposting-actions > button { flex:1 1 180px; }
 }
@@ -126,8 +119,6 @@
   .autoposting-view textarea { min-height:72px; }
   .autoposting-video { max-width:100%; max-height:60vh; }
   .autoposting-thumbnail { width:100%; height:auto; }
-  .autoposting-calendar { gap:2px; }
-  .autoposting-calendar button { min-height:40px; padding:2px; font-size:0.85rem; }
   .autoposting-queue-card { padding:12px; }
   .autoposting-queue-head { flex-wrap:wrap; }
   .autoposting-queue-order { width:100%; justify-content:flex-end; }
@@ -148,34 +139,12 @@
   #autoposting-batch button{width:100%;margin-top:6px}
 }
 
-/* ---------- CF3-BOARD: недельная доска Контент-плана ---------- */
+/* ---------- CF3-BOARD: карточки «Для команды» (недельная доска убрана в №209) ---------- */
 .autoposting-view { --ap-telegram:#4fb3ea; --ap-vk:#6f97d6; --ap-instagram:#e264b4; --ap-tiktok:#4fd8d2; --ap-youtube_shorts:#ff6b6b; --ap-max:#a98bff; --ap-two_gis:#5fd08f; --ap-yandex_maps:#f2c94c; --ap-none:#8d857e; }
 .view-panel .ap-board-section { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; padding:16px; }
 .ap-board-section > * { min-width:0; }
 .ap-board-section > p:empty { display:none; }
-.ap-board-nav { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; }
-.view-panel .ap-board-nav > button.plain-button { width:auto; min-width:44px; padding:8px 12px; }
-.ap-week-label { flex:0 1 auto; min-width:250px; text-align:center; font-size:1.05rem; }
-.ap-board-nav > #autoposting-next-week { margin-right:auto; }
-.ap-nav-field { display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--muted); }
-.ap-nav-field input { width:auto; min-height:40px; }
-.ap-filters-bar { display:grid; gap:8px; }
-.ap-filters-toggle { display:none; justify-self:start; }
-.ap-filters { display:flex; flex-wrap:wrap; align-items:end; gap:8px 12px; }
-.ap-filters label { display:grid; gap:2px; font-size:.85rem; color:var(--muted); min-width:150px; flex:0 1 190px; }
-.ap-filters select { min-height:40px; width:100%; }
-.ap-filters [hidden] { display:none; }
-#autoposting-month-controls .autoposting-calendar { max-width:520px; }
-.ap-day-strip { display:none; }
-.ap-board { display:grid; grid-template-columns:repeat(var(--ap-days,7),minmax(132px,1fr)); gap:8px; overflow-x:auto; padding-bottom:6px; scroll-snap-type:x proximity; }
-.ap-day { min-width:0; display:flex; flex-direction:column; gap:6px; padding:6px; border:1px solid var(--line); border-radius:14px; background:rgba(24,21,19,.6); scroll-snap-align:start; }
-.ap-day.is-today { border-color:rgba(159,212,255,.55); }
-.ap-day.is-selected { outline:2px solid var(--accent); outline-offset:1px; }
-.ap-day-head { display:flex; align-items:center; gap:6px; margin:0; font-size:.92rem; font-weight:600; }
-.ap-today { font-size:.72rem; font-weight:600; color:var(--accent); }
-.ap-day-count { margin-left:auto; min-width:22px; text-align:center; font-size:.78rem; color:var(--muted); }
-.ap-day-empty { margin:0; font-size:.82rem; color:var(--muted); }
-.ap-day-list, .ap-undated-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.ap-team-list, .ap-undated-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 .ap-undated-list { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
 .ap-undated { border-top:1px solid var(--line); padding-top:10px; }
 .ap-undated h3 { margin:0 0 4px; font-size:1rem; }
@@ -211,8 +180,8 @@
 .ap-status[data-status="failed"] { color:var(--red); border-color:rgba(255,156,156,.5); }
 .ap-card-select { display:inline-flex; align-items:center; gap:4px; font-size:.76rem; color:var(--muted); cursor:pointer; }
 .ap-card-select input { width:18px; height:18px; margin:0; }
-.ap-empty-board, .ap-filter-empty { padding:12px; border:1px dashed var(--line); border-radius:12px; }
-.ap-empty-board p, .ap-filter-empty { margin:0 0 6px; }
+.ap-empty-board { padding:12px; border:1px dashed var(--line); border-radius:12px; }
+.ap-empty-board p { margin:0 0 6px; }
 /* Редактор публикации поверх доски */
 .autoposting-view .autoposting-editor > summary { display:none; }
 .autoposting-view .autoposting-editor[open] { position:fixed; inset:0; z-index:60; overflow:auto; padding:24px clamp(8px,3vw,32px); background:rgba(5,4,4,.72); margin:0; }
@@ -222,23 +191,7 @@
 .ap-editor-bar button { margin-left:auto; }
 .autoposting-view .autoposting-editor[open] > .autoposting-editor-grid { padding:12px; border:1px solid var(--line); border-top:0; border-radius:0 0 16px 16px; background:var(--bg); }
 body.autoposting-modal-open { overflow:hidden; }
-@media(max-width:1100px) { .ap-board { grid-template-columns:repeat(var(--ap-days,7),minmax(160px,1fr)); } }
 @media(max-width:720px) {
-  .ap-week-label { flex:1 1 0; min-width:0; font-size:.95rem; }
-  .view-panel .ap-board-nav > #autoposting-overview { flex:1 1 100%; }
-  .ap-board-nav > #autoposting-next-week { margin-right:0; }
-  .ap-nav-field { flex:1 1 100%; justify-content:space-between; }
-  .ap-nav-field input { flex:1 1 auto; max-width:220px; }
-  .ap-filters-toggle { display:inline-block; }
-  .ap-filters:not(.is-open) { display:none; }
-  .ap-filters { flex-direction:column; align-items:stretch; padding:10px; border:1px solid var(--line); border-radius:12px; }
-  .ap-filters label { flex:1 1 auto; min-width:0; }
-  .ap-day-strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
-  .view-panel .ap-board-section .ap-day-strip button { width:auto; flex:0 0 auto; display:grid; justify-items:center; gap:0; min-width:48px; min-height:56px; padding:4px 8px; }
-  .ap-day-strip button[aria-pressed="true"] { outline:2px solid var(--accent); }
-  .ap-day-strip span { font-size:.72rem; color:var(--muted); } .ap-day-strip em { font-style:normal; font-size:.72rem; color:var(--accent); }
-  .ap-board { display:grid; grid-template-columns:minmax(0,1fr); overflow:visible; }
-  .ap-day { scroll-margin-top:72px; }
   .ap-card { grid-template-columns:minmax(0,1fr); }
   .ap-card.has-thumb .ap-card-open { grid-template-columns:96px minmax(0,1fr); align-items:start; }
   .ap-card.has-thumb .ap-thumb { aspect-ratio:1/1; }
@@ -306,6 +259,112 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-archive-item strong { display:block; color:var(--text); }
 .ap-archive-item[data-focus="true"] { border-style:solid; border-color:var(--accent); }
 .view-panel .ap-archive-item button { width:auto; }
+
+/* ---------- №209 «Публикации»: шапка CfKit, лента готовых рилсов, окно публикации ---------- */
+.ap-head { min-width:0; }
+.ap-head-fallback { margin:4px 0 6px; font-size:18px; }
+/* Глобальные кнопки кабинета крупнее иконок шапки и дней полосы: здесь возвращаем размеры CfKit. */
+.view-panel .autoposting-view .cfk-head button.cfk-ico, .view-panel .autoposting-view .cfk-head a.cfk-ico { width:32px; min-height:32px; height:32px; padding:0; border-radius:8px; background:transparent; font-size:15px; }
+.view-panel .autoposting-view .cfk-head button.cfk-sort-item { min-height:0; width:100%; padding:8px; border:0; background:transparent; font-size:13px; text-align:left; }
+.view-panel .autoposting-view .cfk-dates button.cfk-day { min-height:0; padding:0; border:0; background:transparent; border-radius:0; }
+.view-panel .autoposting-view .cfk-dates button.cfk-arrow { width:30px; min-height:30px; height:30px; padding:0; border-radius:50%; background:transparent; font-size:17px; }
+.view-panel .autoposting-view .cfk-dates button.cfk-dates-title { min-height:0; padding:4px 8px; border:0; background:transparent; font-size:14px; }
+.ap-posting #autoposting-calendar-zone { margin:0; font-size:12px; }
+/* border-box: добор отступа снизу от CfKit.feedStart остаётся внутри max-height и даёт место встать на старт. */
+.ap-feed { box-sizing:border-box; list-style:none; margin:0; padding:0 2px 0 0; display:grid; gap:8px; align-content:start; min-width:0; }
+.ap-feed.cfk-feed.has-above { height:var(--cfk-feed-h, calc(100dvh - 230px)); }
+.ap-feed-card { position:relative; display:grid; gap:6px; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface); cursor:pointer; }
+.ap-feed-card:hover { border-color:rgba(168,207,255,.45); }
+.ap-feed-card[data-stage="published"] { opacity:.86; }
+.ap-feed-card[data-day="selected"] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.view-panel .autoposting-view .ap-feed-card button.ap-feed-open { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-items:center; width:100%; min-height:0; padding:0; border:0; border-radius:8px; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.view-panel .autoposting-view .ap-feed-card.has-thumb button.ap-feed-open { grid-template-columns:52px minmax(0,1fr); }
+.ap-feed-open:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.ap-feed-thumb { display:block; width:52px; aspect-ratio:9/16; border-radius:8px; overflow:hidden; background:var(--surface-soft); }
+.ap-feed-thumb video { display:block; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.ap-feed-main { display:grid; gap:2px; min-width:0; }
+.ap-feed-title { font-weight:600; font-size:15px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.ap-feed-title b { color:var(--accent); font-weight:700; }
+.ap-feed-when { font-size:13px; color:var(--muted); }
+.ap-feed-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 10px; margin:0; min-width:0; }
+.ap-pfs { display:inline-flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; }
+.ap-pf { --pf:var(--ap-none); display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:6px; border:1px solid color-mix(in srgb,var(--pf) 55%,transparent); color:var(--text); font-size:11px; font-weight:700; letter-spacing:.02em; line-height:1.5; white-space:nowrap; }
+.ap-pf::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--pf); }
+.ap-pf[data-platform="telegram"] { --pf:var(--ap-telegram); } .ap-pf[data-platform="vk"] { --pf:var(--ap-vk); } .ap-pf[data-platform="instagram"] { --pf:var(--ap-instagram); }
+.ap-pf[data-platform="tiktok"] { --pf:var(--ap-tiktok); } .ap-pf[data-platform="youtube_shorts"] { --pf:var(--ap-youtube_shorts); } .ap-pf[data-platform="max"] { --pf:var(--ap-max); }
+.ap-pf[data-platform="two_gis"] { --pf:var(--ap-two_gis); } .ap-pf[data-platform="yandex_maps"] { --pf:var(--ap-yandex_maps); }
+.ap-pf[data-kind="published"] { background:color-mix(in srgb,var(--pf) 18%,transparent); }
+.ap-pf[data-kind="error"] { border-color:#f08c8c; color:#f5b3b3; }
+.ap-pf[data-kind="off"] { opacity:.6; }
+.ap-feed-note { margin:0; font-size:12.5px; color:#f5b3b3; overflow-wrap:anywhere; }
+.ap-feed-empty { padding:14px; border:1px dashed var(--line); border-radius:12px; }
+.ap-feed-empty p { margin:0 0 6px; }
+.ap-team { margin-top:6px; }
+.ap-team > summary { cursor:pointer; min-height:44px; padding:10px 0; color:var(--muted); font-weight:600; }
+.ap-team-list { margin-bottom:10px; }
+/* Окно публикации: телефон — во весь экран, ПК — окном поверх ленты */
+.autoposting-view .ap-pub { position:fixed; inset:0; z-index:70; display:grid; overflow:auto; background:var(--bg); overscroll-behavior:contain; }
+.ap-pub-box { display:grid; gap:10px; align-content:start; width:100%; min-width:0; padding:max(10px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); }
+.ap-pub-head { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; margin:0 -16px; padding:8px 16px; background:var(--bg); border-bottom:1px solid var(--line); }
+.ap-pub-head h3 { flex:1 1 auto; min-width:0; margin:0; font-size:17px; line-height:1.3; overflow-wrap:anywhere; outline:none; }
+.ap-pub-head h3 b { color:var(--accent); }
+.view-panel .autoposting-view button.ap-pub-x { flex:none; width:40px; min-height:40px; height:40px; padding:0; border-radius:50%; font-size:16px; }
+.ap-pub-grid { display:grid; gap:14px; min-width:0; }
+.ap-pub-preview { display:grid; gap:8px; justify-items:center; min-width:0; }
+.ap-pub-tabs { display:flex; gap:4px; padding:3px; border:1px solid var(--line); border-radius:10px; }
+.view-panel .autoposting-view .ap-pub-tabs button { min-height:34px; padding:4px 12px; border:0; border-radius:7px; background:transparent; font-size:13px; font-weight:700; }
+.view-panel .autoposting-view .ap-pub-tabs button[aria-selected="true"] { background:rgba(168,207,255,.2); color:var(--accent); }
+.ap-pub-screen { position:relative; width:min(100%,250px); aspect-ratio:9/16; border-radius:18px; overflow:hidden; background:#000; border:1px solid var(--line); }
+.ap-pub-screen video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.ap-pub-novideo { position:absolute; inset:0; display:grid; place-items:center; margin:0; color:var(--muted); background:var(--surface-soft); }
+.ap-mask { position:absolute; inset:0; pointer-events:none; color:#fff; font-size:12px; text-shadow:0 1px 2px rgba(0,0,0,.7); }
+.ap-mask-top { position:absolute; top:0; left:0; right:0; padding:10px 12px; font-weight:700; background:linear-gradient(rgba(0,0,0,.45),transparent); }
+.ap-mask-rail { position:absolute; right:8px; bottom:26%; display:grid; gap:14px; font-size:18px; }
+.ap-mask-rail i { font-style:normal; }
+.ap-mask-bottom { position:absolute; left:0; right:0; bottom:0; display:grid; gap:2px; padding:28px 54px 12px 12px; background:linear-gradient(transparent,rgba(0,0,0,.6)); }
+.ap-mask[data-mask="telegram"] .ap-mask-bottom { padding-right:12px; }
+.ap-mask-bottom em { font-style:normal; opacity:.9; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.ap-pub-preview .autoposting-note { margin:0; font-size:12px; text-align:center; }
+.ap-pub-info { display:grid; gap:8px; align-content:start; min-width:0; }
+.ap-pub-info h4 { margin:6px 0 0; font-size:14px; color:var(--muted); font-weight:600; }
+.ap-pub-line { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:0; }
+.ap-pub-platforms { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.ap-pub-platforms li { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; }
+.ap-pub-platforms li[data-kind="error"] { border-color:rgba(240,140,140,.5); }
+.ap-pub-platforms li[data-kind="error"] .ap-pub-st { grid-column:1 / -1; color:#f5b3b3; text-align:left; }
+.ap-pub-st { text-align:right; font-size:13.5px; overflow-wrap:anywhere; }
+.ap-pub-st a { color:var(--accent); font-weight:600; text-decoration:none; }
+.ap-pub-text { margin:0; padding:10px 12px; max-height:260px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.ap-pub-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+.view-panel .autoposting-view .ap-pub-actions :is(a,button) { width:auto; flex:1 1 140px; text-align:center; }
+.ap-pub-box, .ap-pub-head, .ap-pub-grid, .ap-pub-text { box-sizing:border-box; }
+.ap-pub-box { max-width:100%; overflow-x:hidden; }
+.view-panel .autoposting-view .ap-pub-actions a.plain-button { display:inline-grid; place-items:center; min-height:44px; padding:9px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); color:var(--text); text-decoration:none; }
+@media (min-width:900px) {
+  .autoposting-view .ap-pub { place-items:center; padding:24px; background:rgba(4,7,12,.66); }
+  .ap-pub-box { max-width:980px; max-height:calc(100dvh - 48px); overflow:auto; padding:0 20px 20px; border:1px solid var(--line); border-radius:16px; background:var(--bg); box-shadow:0 18px 50px rgba(0,0,0,.55); }
+  .ap-pub-head { margin:0 -20px; padding:12px 20px; border-radius:16px 16px 0 0; }
+  .ap-pub-grid { grid-template-columns:minmax(260px,320px) minmax(0,1fr); align-items:start; gap:22px; }
+  .ap-pub-screen { width:100%; }
+}
+.ap-feed-cols, .ap-feed-cells { display:none; }
+/* ПК: лента — одна колонка на всю ширину, строка таблицы: рилс и выход · статус · колонка на каждую площадку (как в макете). */
+@media (min-width:1100px) {
+  .ap-feed-cols { display:grid; grid-template-columns:minmax(0,1fr) 200px repeat(5,104px); column-gap:12px; padding:0 16px 4px; font-size:12px; color:var(--muted); }
+  .ap-feed-card { grid-template-columns:minmax(0,1fr) 200px repeat(5,104px); align-items:center; column-gap:12px; row-gap:4px; padding:8px 16px; }
+  .view-panel .autoposting-view .ap-feed-card.has-thumb button.ap-feed-open { grid-template-columns:38px minmax(0,1fr); }
+  .ap-feed-thumb { width:38px; border-radius:6px; }
+  .ap-feed-foot { display:block; }
+  .ap-feed-foot .ap-pfs { display:none; }
+  .ap-feed-cells { display:contents; }
+  .ap-cell { font-size:12.5px; color:var(--muted); overflow-wrap:anywhere; }
+  .ap-cell[data-kind="published"] { color:#8fd3a6; }
+  .ap-cell[data-kind="wait"] { color:#e3c37a; }
+  .ap-cell[data-kind="error"] { color:#f08c8c; }
+  .ap-cell a { color:var(--accent); font-weight:600; text-decoration:none; }
+  .ap-feed-note { grid-column:1 / -1; }
+  .ap-feed-title { -webkit-line-clamp:1; }
+}
 
 /* ---------- CF6: компактная история замечаний ---------- */
 .ap-review-history { display: grid; gap: 4px; }
