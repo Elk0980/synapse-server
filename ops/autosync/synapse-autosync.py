@@ -515,7 +515,7 @@ def run_once(ctx, init=False, bootstrap=False):
         save_state(ctx, state)
         return 1
     state.update(commit=base if bootstrap else head, time=now(), deployed=[p for p, _, _ in actions], skipped=skipped,
-                 backup=bdir if actions else None, note='ok')
+                 backup=bdir if actions else state.get('backup'), note='ok')
     state.pop('lastError', None)
     state.pop('stop', None)
     save_state(ctx, state)

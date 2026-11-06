@@ -21,12 +21,11 @@ STATE=/var/lib/synapse-autosync
 BACK=/var/backups/synapse-autosync
 mkdir -p "$BACK" "$LIB"
 SNAP=$(mktemp -d "$BACK/install-XXXXXXXX")
-# Save before stopping or changing any installed state; do not copy secrets.
+# Stop the managed writer before taking the snapshot; do not copy secrets.
 paths=()
-for p in usr/local/lib/synapse-autosync var/lib/synapse-autosync/state.json etc/systemd/system/synapse-autosync.service etc/systemd/system/synapse-autosync.timer opt/synapse/sites/avokado3/index.html; do
+for p in usr/local/lib/synapse-autosync var/lib/synapse-autosync/state.json etc/systemd/system/synapse-autosync.service etc/systemd/system/synapse-autosync.timer etc/systemd/system/synapse-autosync.service.d/paths.conf opt/synapse/sites/avokado3/index.html; do
   [[ ! -e /$p ]] || paths+=("$p")
 done
-tar -C / -cpf "$SNAP/before.tar" "${paths[@]}"
 systemctl is-active synapse-autosync.timer > "$SNAP/timer-active" || true
 systemctl is-enabled synapse-autosync.timer > "$SNAP/timer-enabled" || true
 changed=0
@@ -37,6 +36,9 @@ restore() {
     tar -C / -xpf "$SNAP/before.tar"
     systemctl daemon-reload || true
   fi
+  if grep -qx disabled "$SNAP/timer-enabled" || grep -qx not-found "$SNAP/timer-enabled"; then
+    systemctl disable synapse-autosync.timer || true
+  fi
   if grep -qx active "$SNAP/timer-active"; then systemctl start synapse-autosync.timer || true; fi
   echo "ОШИБКА: установка остановлена; копия $SNAP/before.tar; таймер новой установки не включён"
   report_disk
@@ -44,6 +46,7 @@ restore() {
 }
 trap restore ERR
 systemctl stop synapse-autosync.timer synapse-autosync.service || true
+tar -C / -cpf "$SNAP/before.tar" "${paths[@]}"
 # Existing rights stay unchanged. Missing private directories only are created.
 for dir in "$STATE" /var/log/synapse-autosync /run/synapse-autosync; do
   [[ -d $dir ]] || install -d -o synapse-autosync -g synapse-autosync -m 700 "$dir"

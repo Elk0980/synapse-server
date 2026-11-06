@@ -146,6 +146,16 @@ class AutosyncTest(unittest.TestCase):
         self.assertEqual(self.run_sync('--rollback'), 1)
         self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'local-after')
 
+    def test_rollback_survives_unrelated_commit(self):
+        self.put('sites/synapse/cabinet/a.js', 'a2')
+        self.commit('publish')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        self.put('ops/crm/unused.txt', 'unrelated')
+        self.commit('no static changes')
+        self.assertEqual(self.run_sync('--no-ci'), 0)
+        self.assertEqual(self.run_sync('--rollback'), 0)
+        self.assertEqual((self.live / 'sites/synapse/cabinet/a.js').read_text(), 'a1')
+
     def test_bootstrap_exact_hash_and_reinstall_noop(self):
         rel = autosync.AVOKADO
         (self.live / 'sites/avokado3').mkdir(parents=True)
