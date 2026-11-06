@@ -12,8 +12,3 @@ body.owner-task-board .main { min-width:0; padding:16px; }
   body.owner-task-board .main { padding:10px 10px calc(90px + env(safe-area-inset-bottom)); }
 }
 body.owner-task-board .tb-sheet { padding-top:env(safe-area-inset-top); }
-body.owner-task-board.tb-owner-theme-light {
-  --bg:#f4f6fa; --surface:#fff; --surface-soft:#edf1f7; --text:#172033;
-  --muted:#536078; --accent:#3156ba; --line:#d5dce8; --red:#b3303d;
-  background:var(--bg); color:var(--text); color-scheme:light;
-}

@@ -1,0 +1,330 @@
+[
+  {
+    "width": 390,
+    "stage": "before",
+    "screen": "plan",
+    "file": "390-before-plan.png",
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttonLines": []
+    },
+    "errors": []
+  },
+  {
+    "width": 390,
+    "stage": "after",
+    "screen": "plan",
+    "file": "390-after-plan.png",
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 390,
+    "stage": "after",
+    "screen": "sort",
+    "file": "390-after-sort.png",
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        },
+        {
+          "text": "✓ По дате",
+          "lines": 1
+        },
+        {
+          "text": "По площадке",
+          "lines": 1
+        },
+        {
+          "text": "По статусу",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 390,
+    "stage": "after",
+    "screen": "drafts",
+    "file": "390-after-drafts.png",
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        },
+        {
+          "text": "✓ По дате",
+          "lines": 1
+        },
+        {
+          "text": "По площадке",
+          "lines": 1
+        },
+        {
+          "text": "По статусу",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 390,
+    "stage": "after",
+    "screen": "new",
+    "file": "390-after-new.png",
+    "metrics": {
+      "width": 390,
+      "scroll": 390,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        },
+        {
+          "text": "✓ По дате",
+          "lines": 1
+        },
+        {
+          "text": "По площадке",
+          "lines": 1
+        },
+        {
+          "text": "По статусу",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "stage": "before",
+    "screen": "plan",
+    "file": "1440-before-plan.png",
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttonLines": []
+    },
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "stage": "after",
+    "screen": "plan",
+    "file": "1440-after-plan.png",
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "stage": "after",
+    "screen": "sort",
+    "file": "1440-after-sort.png",
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        },
+        {
+          "text": "✓ По дате",
+          "lines": 1
+        },
+        {
+          "text": "По площадке",
+          "lines": 1
+        },
+        {
+          "text": "По статусу",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "stage": "after",
+    "screen": "drafts",
+    "file": "1440-after-drafts.png",
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        },
+        {
+          "text": "✓ По дате",
+          "lines": 1
+        },
+        {
+          "text": "По площадке",
+          "lines": 1
+        },
+        {
+          "text": "По статусу",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "stage": "after",
+    "screen": "new",
+    "file": "1440-after-new.png",
+    "metrics": {
+      "width": 1440,
+      "scroll": 1440,
+      "buttonLines": [
+        {
+          "text": "Контент-план",
+          "lines": 1
+        },
+        {
+          "text": "Черновики",
+          "lines": 1
+        },
+        {
+          "text": "+ Новый",
+          "lines": 1
+        },
+        {
+          "text": "⇅",
+          "lines": 1
+        },
+        {
+          "text": "✓ По дате",
+          "lines": 1
+        },
+        {
+          "text": "По площадке",
+          "lines": 1
+        },
+        {
+          "text": "По статусу",
+          "lines": 1
+        }
+      ]
+    },
+    "errors": []
+  }
+]

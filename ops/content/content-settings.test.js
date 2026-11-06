@@ -90,3 +90,16 @@ test('компании изолированы; отозванное право �
   f.auth.updateAccess(f.owner.id,f.tuner.id,['avokado'],['settings.view']);
   assert.equal((await f.call('tuner','PUT','avokado',{version:1,settings:valid()})).status,403);
 });
+
+test('№181: ссылка сохраняется, изолирована, старый PUT сохраняет новое поле; опасные ссылки отклоняются',async t=>{
+  const f=setup(t),url='https://docs.google.com/spreadsheets/d/sample/edit';
+  const saved=await f.call('root','PUT','avokado',{version:0,settings:valid({contentPlanSheetUrl:url})});
+  assert.equal(saved.status,200);assert.equal(saved.payload.settings.contentPlanSheetUrl,url);
+  const old=await f.call('root','PUT','avokado',{version:1,settings:valid()});
+  assert.equal(old.status,200);assert.equal(old.payload.settings.contentPlanSheetUrl,url);
+  const other=await f.call('root','GET','alvi');assert.ok(!other.payload.settings.contentPlanSheetUrl);
+  for(const bad of ['javascript:alert(1)','http://docs.google.com/spreadsheets/d/test','https://docs.google.com.evil.test/spreadsheets/d/test','https://user:pass@docs.google.com/spreadsheets/d/test']){
+    const r=await f.call('root','PUT','avokado',{version:2,settings:valid({contentPlanSheetUrl:bad})});assert.equal(r.status,400);
+  }
+  const cleared=await f.call('root','PUT','avokado',{version:2,settings:valid({contentPlanSheetUrl:''})});assert.equal(cleared.payload.settings.contentPlanSheetUrl,'');
+});
