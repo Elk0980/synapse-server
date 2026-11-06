@@ -105,7 +105,12 @@
       }
     });
     el.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
-    doc.addEventListener('click', (event) => { if (!el.contains(event.target)) closeMenu(); });
+    // Вкладки перерисовывают шапку: слушатель старой шапки снимается при первом щелчке после её удаления.
+    const outside = (event) => {
+      if (!el.isConnected) { doc.removeEventListener('click', outside); return; }
+      if (!el.contains(event.target)) closeMenu();
+    };
+    doc.addEventListener('click', outside);
     el.dataset.sort = current;
     el.setCalendar = setCalendar;
     el.getSort = () => current;
@@ -294,7 +299,8 @@
     const columns = table ? Math.max(1, ...[...table.querySelectorAll('tr')].map((row) => row.children.length)) : 1;
     const makeSep = (cls, label) => {
       if (!table) {
-        const node = doc.createElement('div');
+        // В списке <ol>/<ul> разделитель — тоже <li>, чтобы разметка оставалась допустимой.
+        const node = doc.createElement(/^(OL|UL)$/.test(host.tagName) ? 'li' : 'div');
         node.className = cls;
         node.innerHTML = `<span>${esc(label)}</span>`;
         return node;

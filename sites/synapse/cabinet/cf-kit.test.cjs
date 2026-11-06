@@ -187,6 +187,11 @@ test('лента-таблица: разделитель строкой на вс
   const sep = table.querySelector('tr.cfk-feed-sep');
   assert.ok(sep);
   assert.equal(sep.querySelector('td').getAttribute('colspan'), '3');
+  const ol = w.document.createElement('ol');
+  ol.innerHTML = '<li data-p="1">1</li><li>2</li>';
+  w.document.body.append(ol);
+  w.CfKit.feedStart(ol, {isAbove: (li) => li.dataset.p === '1'});
+  assert.equal(ol.querySelector('.cfk-feed-sep').tagName, 'LI');
   const none = w.document.getElementById('none');
   const state = w.CfKit.feedStart(none, {isAbove: () => false});
   assert.equal(state.separator, null);
