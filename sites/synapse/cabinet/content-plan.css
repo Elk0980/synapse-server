@@ -108,3 +108,14 @@ body.cp-modal-open{overflow:hidden}
 .cp-modal-foot .cp-gen{margin-top:0}
 @media(max-width:760px){.cp-modal{inset:auto 0 auto 0;top:var(--cp-vvt,0px);width:100%;height:var(--cp-vvh,100dvh);max-height:none;border:0;border-radius:0;margin:0;box-shadow:none}
 .cp-modal-bar{flex:none;padding-top:max(8px,env(safe-area-inset-top));background:var(--surface)}}
+
+/* Влад 06.11: «Согласовать» / «Внести правку» у каждой публикации в списке */
+.cp-acts { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:0 12px 10px; }
+.cp-act { min-height:40px; padding:0 14px; border-radius:10px; border:1px solid var(--line,#333); background:transparent; color:var(--text,#eee); font:inherit; font-size:.92rem; cursor:pointer; }
+.cp-act-go { background:var(--accent,#9fd4ff); border-color:var(--accent,#9fd4ff); color:#0b0f16; font-weight:600; }
+.cp-act:disabled { opacity:.5; cursor:default; }
+.cp-ok { color:var(--green,#79dcb6); font-weight:600; font-size:.92rem; }
+.cp-fix { display:grid; gap:8px; padding:0 12px 12px; }
+.cp-fix label { display:grid; gap:4px; font-size:.9rem; }
+.cp-fix textarea { width:100%; min-width:0; box-sizing:border-box; font:inherit; font-size:16px; padding:8px 10px; border-radius:10px; border:1px solid var(--line,#333); background:var(--surface,#12100f); color:var(--text,#eee); }
+.cp-fix-btns { display:flex; flex-wrap:wrap; gap:8px; }
