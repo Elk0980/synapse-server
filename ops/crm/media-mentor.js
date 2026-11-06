@@ -9,6 +9,7 @@
 const {company,fail,object,text,revision}=require('./company-information');
 const {FORMATS,ROLES,CAPTION_PLATFORMS}=require('./autoposting');
 const {createContentFactoryInputs}=require('./content-factory-inputs');
+const {COMPUTED_DAY_FIELDS}=require('./content-stages');
 
 const COMFORT=Object.freeze({unknown:'Не выяснено',off_camera:'В кадр не готов',voice_only:'Только голос',
   hands_only:'Руки и процесс без лица',on_camera:'Готов в кадр'});
@@ -166,7 +167,10 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
   const before=new Map();
   for(const old of (priorPlan?.days||[]))if(old&&old.ideaId)before.set(old.ideaId,old);
   let previous=-Infinity,generated=0;
-  const days=value.map((row,index)=>{
+  const days=value.map((input,index)=>{
+    /* Этап и публикации идеи вычисляет сервер при чтении (content-stages): присланные обратно, они не правка. */
+    const row=input&&typeof input==='object'&&!Array.isArray(input)
+      ?Object.fromEntries(Object.entries(input).filter(([key])=>!COMPUTED_DAY_FIELDS.includes(key))):input;
     object(row,DAY_FIELDS);
     const date=calendarDate(row.date);
     if(date.time<previous)fail(400,'Дни плана должны идти по возрастанию даты');

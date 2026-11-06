@@ -26,7 +26,7 @@ function createReelMaterialsHandler({materials,companyModuleContext,readJson,sen
     const {identity,company}=companyModuleContext(request,url.searchParams.get('companyCode'),read?'autoposting.view':'autoposting.edit');
     const code=company.code,reelId=id?Number(id):null;let result,status=200;
     if(!id&&read)result=materials.list(code,{from:url.searchParams.get('from')||'',to:url.searchParams.get('to')||'',platform:url.searchParams.get('platform')||''});
-    else if(!id&&request.method==='POST'){result=materials.create(code,await readJson(request),identity);status=201;}
+    else if(!id&&request.method==='POST'){result=materials.create(code,await readJson(request),identity);status=result.appended?200:201;}
     else if(id&&!section&&read)result=materials.get(code,reelId);
     else if(id&&!section&&request.method==='PATCH')result=materials.update(code,reelId,await readJson(request));
     else if(section==='edits'&&!editId&&request.method==='POST'){result=materials.requestEdit(code,reelId,await readJson(request),identity);status=result.duplicate?200:201;}

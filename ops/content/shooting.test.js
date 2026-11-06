@@ -199,3 +199,23 @@ test('безопасность места: брошенные загрузки �
   assert.equal(fresh.status, 201); assert.notEqual(fresh.body.upload.id, mine.body.upload.id);
   assert.equal((await s.call('GET', '/reels')).body.storage.usedBytes, file.length, 'квота считает только живые сессии');
 });
+
+test('факты съёмки для этапа идеи (specs/209-cf-stages): кадры раскадровки, снятые кадры, дубли, черновики; только своя компания', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shooting-facts-'));
+  const db = new DatabaseSync(':memory:');
+  t.after(() => { db.close(); fs.rmSync(dir, {recursive: true, force: true}); });
+  const service = createShooting({db, assetsDir: dir, storage: createLocalStorage(path.join(dir, 'shooting')), authStore: {getById: () => null},
+    requireSession: () => { throw new Error('нет'); }, requireCsrf: () => {}, readJson: async () => ({}), sendJson: () => {}});
+  const put = db.prepare(`INSERT INTO shooting_uploads(company_code,idea_id,frame,kind,name,mime,size,disk_key,status,created_by,created_at)
+    VALUES(?,?,?,?,'f.mov','video/quicktime',1,?,?,'t','t')`);
+  let n = 0;
+  put.run('avokado', 'i1', 1, 'take', `k${++n}`, 'stored'); put.run('avokado', 'i1', 2, 'take', `k${++n}`, 'stored');
+  put.run('avokado', 'i1', 2, 'take', `k${++n}`, 'stored'); put.run('avokado', 'i1', 3, 'take', `k${++n}`, 'uploading');
+  put.run('avokado', 'i2', null, 'draft', `k${++n}`, 'stored'); put.run('alvi', 'i1', 1, 'take', `k${++n}`, 'stored');
+  db.prepare(`INSERT INTO shooting_reels(company_code,idea_id,status,board,board_revision) VALUES('avokado','i1',NULL,?,1),('avokado','i3','editing','[]',0)`)
+    .run(JSON.stringify([{shot: 'a'}, {shot: 'b'}, {shot: 'c'}]));
+  assert.deepEqual(service.facts('avokado'), {v: 1, companyCode: 'avokado', reels: {i1: [3, 2, 3, 0, null], i2: [0, 0, 0, 1, null], i3: [0, 0, 0, 0, 'editing']}});
+  assert.equal(service.facts('unknown'), null);
+  const decoded = JSON.parse(Buffer.from(service.factsHeader('alvi'), 'base64url').toString('utf8'));
+  assert.deepEqual(decoded, {v: 1, companyCode: 'alvi', reels: {i1: [0, 0, 1, 0, null]}});
+});
