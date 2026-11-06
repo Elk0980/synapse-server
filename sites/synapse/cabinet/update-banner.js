@@ -4,9 +4,16 @@
   function createUpdateBanner({window:w,document:d,fetch:request,reload=()=>w.location.reload(),interval=300000}){
     const valid=v=>typeof v==='string'&&/^[0-9a-f]{7,40}$/.test(v);
     let baseline=valid(w.SB_CABINET_ASSET_VERSION)?w.SB_CABINET_ASSET_VERSION:null,pending=false,busy=false,stopped=false,button=null;
+    const editableDefaults=new WeakMap();
+    for(const el of d.querySelectorAll('[contenteditable="true"]'))editableDefaults.set(el,el.textContent);
+    const rememberEditable=event=>{const el=event.target.closest?.('[contenteditable="true"]');if(el&&!editableDefaults.has(el))editableDefaults.set(el,el.textContent);};
+    d.addEventListener('focusin',rememberEditable);
     const dirty=()=>[...d.querySelectorAll('input,textarea,[contenteditable="true"]')].some(el=>{
-      if(el.disabled||['hidden','button','submit','reset','checkbox','radio','range','color'].includes(el.type))return false;
-      return el.type==='file'?el.files?.length>0:Boolean((el.isContentEditable?el.textContent:el.value||'').trim());
+      if(el.disabled||!el.getClientRects().length||['hidden','button','submit','reset'].includes(el.type))return false;
+      if(el.matches('[contenteditable="true"]'))return editableDefaults.has(el)&&el.textContent!==editableDefaults.get(el);
+      if(el.type==='file')return el.files?.length>0;
+      if(['checkbox','radio'].includes(el.type))return el.checked!==el.defaultChecked;
+      return el.value!==el.defaultValue;
     });
     function place(){
       if(!button)return;
@@ -35,7 +42,7 @@
     d.addEventListener('visibilitychange',visible);w.addEventListener('resize',place);w.visualViewport?.addEventListener('resize',place);
     const timer=w.setInterval(()=>{if(d.visibilityState!=='hidden')void check();},interval);
     void check();
-    return {check,dirty,get pending(){return pending;},stop(){stopped=true;w.clearInterval(timer);d.removeEventListener('visibilitychange',visible);w.removeEventListener('resize',place);w.visualViewport?.removeEventListener('resize',place);button?.remove();}};
+    return {check,dirty,get pending(){return pending;},stop(){stopped=true;d.removeEventListener('focusin',rememberEditable);w.clearInterval(timer);d.removeEventListener('visibilitychange',visible);w.removeEventListener('resize',place);w.visualViewport?.removeEventListener('resize',place);button?.remove();}};
   }
   if(typeof module==='object'&&module.exports)module.exports={createUpdateBanner};
   else if(!root.SynapseUpdateBanner){
