@@ -26,6 +26,7 @@
       if(ids.some((id,i)=>id!==sorted[i]))for(const id of sorted)menu.append(nodes.find(n=>n.dataset.projectId===id));
     }
     function bind(){
+      try{if(w.sessionStorage.getItem("synapse-view-as")){observer?.disconnect();return;}}catch(error){}
       let ctx;try{ctx=registry.createContext('project-preferences');}catch(error){return;}
       const id=ctx.user?.id;if(id===null||id===undefined)return;
       menu=w.document.getElementById('project-menu');if(!menu)return;
