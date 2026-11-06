@@ -6,6 +6,8 @@
   const MORE_ITEMS = ['social-stats','platform-demand','hypotheses','competitors','calltracking','editor:site','editor:price','project-forms','actor-onboarding','actor-workspace','company-information','vk-community','reviews','campaigns','site-orders','system-settings','accounts','account','trademarks'];
   api.MENU_MORE_ITEMS = MORE_ITEMS;
   api.initMenuPreferences = ({identity, setDrawer}) => {
+    // №180: порядок блока «Проект» — отдельная часть ниже; её сбой не мешает меню разделов.
+    try { api.initProjectPreferences?.({identity}); } catch { /* меню проектов остаётся в исходном порядке */ }
     api.destroyMenuPreferences?.();
     const sidebar = document.getElementById('sidebar');
     const nav = sidebar.querySelector('.nav');
@@ -167,5 +169,132 @@
     categories.forEach(button=>observer.observe(button,{attributes:true,attributeFilter:['hidden']}));
     renderFavorites(); syncMore(); applyFold();
     api.destroyMenuPreferences = () => { observer.disconnect();moved.forEach(({link,mark})=>mark.replaceWith(link));emptied.forEach(({button,menu})=>{button.classList.remove('nav-empty');menu.classList.remove('nav-empty');});moreButton.remove();moreMenu.remove();nav.removeEventListener('click',onClick);window.removeEventListener('hashchange',onNavigate);window.removeEventListener('resize',applyFold);controls.remove();favorites.remove();dialog.remove();document.body.classList.remove('menu-collapsed'); };
+  };
+})();
+
+/* №180 (specs/180-project-default-order): проект по умолчанию — последний выбранный человеком на любом
+   устройстве, дальше в меню «Проект» — по числу выборов за 30 дней. Источник — сервер: /content/whoami
+   отдаёт projectPreferences, выбор сохраняется PUT /content/user-project-prefs (только своя сессия, CSRF).
+   Старый сервер без этих полей: журнал выборов этого устройства в localStorage, запросов и ошибок нет.
+   Режим «Посмотреть как» ничего не читает и не пишет. cabinet.html не меняется: выбор до первого
+   показа делается через SynapseViewAs.render(profile), который оболочка вызывает до readSelectedProject. */
+(() => {
+  const api = window.SbCabinet ||= {};
+  const WINDOW = 30 * 86400000, LIMIT = 300;
+  const projectKey = userId => `synapse_cabinet_project_v2:${userId}`;
+  const logKey = userId => `sb-project-picks-v1:${userId}`;
+  const viewAsToken = () => { try { return Boolean(sessionStorage.getItem('synapse-view-as')); } catch { return false; } };
+  const impersonated = profile => Boolean(profile?.viewAs) || viewAsToken();
+  const companyIds = profile => (Array.isArray(profile?.companies) ? profile.companies : [])
+    .map(company => company?.id).filter(id => typeof id === 'string');
+  const serverPrefs = value => value && typeof value === 'object' && Array.isArray(value.companies) ? value : null;
+  const readLog = userId => {
+    try {
+      const log = JSON.parse(localStorage.getItem(logKey(userId)) || '[]');
+      return Array.isArray(log) ? log.filter(entry => entry && typeof entry.c === 'string' && Number.isFinite(entry.t)) : [];
+    } catch { return []; }
+  };
+  const writeLog = (userId, log) => { try { localStorage.setItem(logKey(userId), JSON.stringify(log.slice(-LIMIT))); } catch { /* только память */ } };
+  const localPrefs = (userId, now = Date.now()) => {
+    const stats = new Map();
+    for (const {c, t} of readLog(userId)) {
+      const item = stats.get(c) || {companyCode: c, picks30d: 0, lastPickedAt: 0};
+      if (t > now - WINDOW) item.picks30d += 1;
+      item.lastPickedAt = Math.max(item.lastPickedAt, t);
+      stats.set(c, item);
+    }
+    const companies = [...stats.values()].sort((a, b) => b.lastPickedAt - a.lastPickedAt);
+    return {lastCompanyCode: companies[0]?.companyCode || null, companies};
+  };
+  // Текущий проект первым, затем выборы за 30 дней, затем давность; неиспользованные — в исходном порядке.
+  const sortProjects = (list, current, prefs) => {
+    const stats = new Map((prefs?.companies || []).map(item => [item.companyCode, item]));
+    const position = new Map(list.map((id, index) => [id, index]));
+    return [...list].sort((a, b) => Number(b === current) - Number(a === current)
+      || (stats.get(b)?.picks30d || 0) - (stats.get(a)?.picks30d || 0)
+      || (stats.get(b)?.lastPickedAt || 0) - (stats.get(a)?.lastPickedAt || 0)
+      || position.get(a) - position.get(b));
+  };
+  // До readSelectedProject: серверный последний выбор (любое устройство) становится сохранённым выбором вкладки.
+  const preselect = profile => {
+    if (!profile || profile.userId == null || impersonated(profile)) return;
+    const prefs = serverPrefs(profile.projectPreferences) || localPrefs(profile.userId);
+    if (!companyIds(profile).includes(prefs.lastCompanyCode)) return;
+    try { localStorage.setItem(projectKey(profile.userId), prefs.lastCompanyCode); } catch { /* выбор останется прежним */ }
+  };
+  const viewAs = window.SynapseViewAs;
+  if (viewAs && typeof viewAs.render === 'function' && !viewAs.projectPreferencesHook) {
+    const render = viewAs.render;
+    viewAs.render = function (profile, ...rest) {
+      try { preselect(profile); } catch { /* исходное поведение */ }
+      return render.call(this, profile, ...rest);
+    };
+    viewAs.projectPreferencesHook = true;
+  }
+  const requestId = () => {
+    try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ниже запасной вариант */ }
+    return `pick-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  };
+
+  api.projectPreferences = {sortProjects, localPrefs, preselect};
+  api.initProjectPreferences = ({identity}) => {
+    api.destroyProjectPreferences?.();
+    api.destroyProjectPreferences = null;
+    const menu = document.getElementById('project-menu');
+    if (!menu || !identity || identity.userId == null || impersonated(identity)) return;
+    const userId = identity.userId;
+    let prefs = serverPrefs(identity.projectPreferences);
+    let serverOn = Boolean(prefs), busy = false, stopped = false;
+    const queue = [];
+    const current = () => menu.querySelector('[data-project-id][aria-checked="true"]')?.dataset.projectId || null;
+    const paint = () => {
+      const nodes = [...menu.children].filter(node => node.dataset?.projectId);
+      const list = nodes.map(node => node.dataset.projectId);
+      const sorted = sortProjects(list, current(), serverOn ? prefs : localPrefs(userId));
+      if (list.some((id, index) => id !== sorted[index])) sorted.forEach(id => menu.append(nodes.find(node => node.dataset.projectId === id)));
+    };
+    const flush = async () => {
+      if (busy || stopped || !serverOn) return;
+      busy = true;
+      try {
+        while (queue.length && !stopped && serverOn) {
+          const response = await fetch('/content/user-project-prefs', {method: 'PUT', credentials: 'same-origin', cache: 'no-store',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': identity.csrfToken || ''}, body: JSON.stringify(queue[0])});
+          if (stopped) return;
+          if (response.status === 404 || response.status === 405) { serverOn = false; queue.length = 0; break; }
+          if ([400, 403, 409].includes(response.status)) { queue.shift(); continue; }
+          if (!response.ok) break; // неизвестный исход: повтор с тем же requestId при следующем выборе или online
+          const body = await response.json().catch(() => null);
+          if (stopped) return;
+          if (serverPrefs(body?.preferences)) prefs = body.preferences;
+          queue.shift();
+          paint();
+        }
+      } catch { /* сеть: тот же requestId при повторе, второй выбор не засчитывается */ }
+      finally { busy = false; }
+    };
+    const record = companyCode => {
+      const now = Date.now();
+      writeLog(userId, [...readLog(userId).filter(entry => entry.t > now - WINDOW), {c: companyCode, t: now}]);
+      if (serverOn) { queue.push({companyCode, requestId: requestId()}); void flush(); }
+    };
+    // Захват: срабатывает до chooseProject оболочки, пока отмечен прежний проект.
+    const onPick = event => {
+      const option = event.target?.closest?.('[data-project-id]');
+      if (!option || !menu.contains(option) || option.dataset.projectId === current()) return;
+      record(option.dataset.projectId);
+    };
+    const observer = new MutationObserver(paint);
+    observer.observe(menu, {childList: true});
+    menu.addEventListener('click', onPick, true);
+    window.addEventListener('online', flush);
+    // Однократный перенос прежнего выбора этого устройства, если на сервере ещё нет записей.
+    if (serverOn && !prefs.lastCompanyCode && current()) queue.push({companyCode: current(), requestId: requestId()});
+    paint();
+    void flush();
+    api.destroyProjectPreferences = () => {
+      stopped = true; observer.disconnect();
+      menu.removeEventListener('click', onPick, true); window.removeEventListener('online', flush);
+    };
   };
 })();
