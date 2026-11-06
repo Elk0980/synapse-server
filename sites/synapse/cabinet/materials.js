@@ -29,6 +29,13 @@ function maskHtml(id) {
 }
 sb.reelMask = {PLATFORMS, html: maskHtml, label: id => platformOf(id).label};
 
+/* Открыть черновик публикации в «Постинге» — одно место и для «Материалов», и для карточки рилса в чате (№166). */
+sb.openPostingDraft = (ctx, postId) => {
+  sb.pendingMaterialOpen = {companyCode: ctx.companyCode, postId, source: "materials"};
+  ctx.navigate("content-factory/plan");
+  setTimeout(() => window.dispatchEvent(new CustomEvent("sb:content-factory-open-draft", {detail: {companyCode: ctx.companyCode, postId, source: "materials"}})), 0);
+};
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-zA-Z0-9_.:-]/g, "");
 const dateRu = value => value ? value.split("-").reverse().join(".") : "без даты";
 const STATE = {pending: "ждёт монтажа", in_progress: "в монтаже", done: "готово", cancelled: "отменено"};
 
@@ -39,7 +46,9 @@ function create(el, ctx) {
     list: () => ctx.api.get("crm/autoposting/reels", state.filters),
     get: id => ctx.api.get("crm/autoposting/reels/" + id),
     adopt: postId => ctx.api.post("crm/autoposting/reels", {postId}),
-    publication: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/publication", body)
+    publication: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/publication", body),
+    post: id => ctx.api.get("crm/autoposting/posts/" + id),
+    toChat: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/chat-approvals", body)
   };
   el.classList.add("mt-view");
   el.innerHTML = `<header class="mt-head"><h1>Материалы</h1><p class="muted">Смонтированные рилсы: предпросмотр по площадкам, скачивание, публикация и правки.</p>
@@ -96,6 +105,8 @@ function create(el, ctx) {
   function close() {state.open = null;$("[data-detail]").hidden = true;$("[data-grid]").hidden = false;$("[data-filters]").hidden = false;const opener = $("[data-upload-open]");if (opener) opener.hidden = false;}
   const currentVersion = () => (state.open.versions || []).find(v => v.version === state.version) || state.open.currentVersion;
   function renderDetail() {
+    queueMicrotask(oneClickControls);
+    queueMicrotask(planLinkControls);
     const reel = state.open, version = currentVersion(), media = safeUrl(version?.mediaUrl), node = $("[data-detail]");
     $("[data-grid]").hidden = true;$("[data-filters]").hidden = true;node.hidden = false;
     if (!state.busy) toggleUpload(false);const opener = $("[data-upload-open]");if (opener) opener.hidden = true;
@@ -114,7 +125,16 @@ function create(el, ctx) {
             ${media ? `<a class="plain-button" href="${esc(media)}" download="${esc(reel.title)} v${esc(version?.version ?? 1)}.mp4" data-download>Скачать</a>` : ""}
             ${canEdit ? (reel.id ? `<button type="button" class="plain-button primary" data-publish>Создать публикацию</button>` : `<button type="button" class="plain-button" data-open-post>Открыть публикацию в «Постинге»</button>`) : ""}
             ${canEdit && sb.reelEditor ? `<button type="button" class="plain-button" data-edit>Редактировать</button>` : ""}
+            ${canEdit ? `<button type="button" class="plain-button primary" data-chat-open>Отправить на согласование в чат</button>` : ""}
           </div>
+          ${canEdit ? `<form class="mt-chat" data-chat-form hidden>
+            <h3>Согласование в чате</h3>
+            <p class="muted">В общем чате компании появится карточка с роликом v${esc(version?.version ?? 1)}: её можно посмотреть и нажать «Согласовано» или «Нужны правки». Ничего не публикуется — время публикации ставят в «Постинге».</p>
+            <label>Подпись к публикации<textarea name="text" rows="4" maxlength="20000" placeholder="Текст, который выйдет под рилсом"></textarea></label>
+            <fieldset class="mt-targets" data-chat-targets><legend>Площадки</legend>${PLATFORMS.map(p => `<label><input type="checkbox" value="${p.id}"${(reel.platforms?.length ? reel.platforms : [state.platform]).includes(p.id) ? " checked" : ""}> ${esc(p.label)}</label>`).join("")}</fieldset>
+            <div class="mt-actions"><button type="submit" class="plain-button primary" data-chat-submit>Отправить в чат</button><button type="button" class="plain-button" data-chat-cancel>Отмена</button></div>
+            <p class="mt-status" role="status" data-chat-status></p>
+          </form>` : ""}
           ${canEdit && reel.id ? `<fieldset class="mt-targets" data-targets><legend>Площадки публикации</legend>${PLATFORMS.map(p => `<label><input type="checkbox" value="${p.id}"${(reel.platforms?.length ? reel.platforms : [state.platform]).includes(p.id) ? " checked" : ""}> ${esc(p.label)}</label>`).join("")}</fieldset>` : ""}
           <p class="mt-status" role="status" data-detail-status></p>
           ${(reel.edits || []).length ? `<h3>Правки</h3><ul class="mt-edits">${reel.edits.map(e => `<li><strong>№${esc(e.id)}</strong> к v${esc(e.baseVersion)} · ${esc(STATE[e.status] || e.status)}${e.resultVersion ? " → v" + esc(e.resultVersion) : ""}<br><span class="muted">${esc(e.kind === "request" ? e.comment : "список правок монтажа" + (e.comment ? ": " + e.comment : ""))}</span></li>`).join("")}</ul>` : ""}
@@ -122,11 +142,40 @@ function create(el, ctx) {
     node.querySelector("[data-title]").focus({preventScroll: true});
   }
   const detailStatus = text => {const target = el.querySelector("[data-detail-status]");if (target) target.textContent = text;};
+  async function planLinkControls(){
+    const reel=state.open;if(!reel?.id||!canEdit)return;
+    try{
+      const plan=await ctx.api.get('crm/media-mentor');if(ctx.signal.aborted||state.open!==reel)return;
+      const days=plan.plan?.days||[];if(!days.length)return;
+      const label=document.createElement('label');label.textContent='Пункт контент-плана';const select=document.createElement('select');
+      select.append(new Option('Выберите пункт',''));for(const day of days)select.append(new Option(day.topic,day.ideaId));
+      select.onchange=async()=>{if(!select.value)return;select.disabled=true;try{await ctx.api.patch(`crm/autoposting/reels/${reel.id}`,{ideaId:select.value});detailStatus('Рилс связан с контент-планом.');}catch(e){detailStatus(e.message);}finally{select.disabled=false;}};
+      label.append(select);el.querySelector('[data-detail-status]')?.before(label);
+    }catch(error){/* Нет права чтения плана — связь остаётся доступной через штатный API. */}
+  }
+  async function oneClickControls() {
+    const reel=state.open,version=state.version;if(!reel?.id||!canEdit)return;
+    try{
+      const {approval:a}=await ctx.api.get(`crm/autoposting/reels/${reel.id}/chat-approvals`);
+      if(ctx.signal.aborted||state.open!==reel||state.version!==version||!a||a.version!==version||a.status!=='approved')return;
+      const old=el.querySelector('[data-publish]');if(!old)return;old.textContent='Опубликовать сейчас';old.dataset.oneClick=String(a.id);
+      const date=document.createElement('input');date.type='datetime-local';date.setAttribute('aria-label','Дата и время публикации');
+      const later=document.createElement('button');later.type='button';later.className='plain-button';later.textContent='Опубликовать в …';old.after(date,later);
+      const send=async scheduledAt=>{
+        if(state.busy)return;state.busy=true;old.disabled=later.disabled=true;
+        try{await ctx.api.post(`crm/autoposting/reels/${reel.id}/chat-approvals/${a.id}/publish`,scheduledAt?{scheduledAt}:{});detailStatus('Публикация поставлена в план.');}
+        catch(error){detailStatus(error.message||'Результат не подтверждён. Обновите карточку.');old.disabled=later.disabled=false;}
+        finally{state.busy=false;}
+      };
+      old.onclick=()=>send();later.onclick=()=>{if(date.value)send(new Date(date.value).toISOString());else date.focus();};
+    }catch(error){/* Обычная карточка остаётся доступной; согласованной её не считаем. */}
+  }
   async function ensureReel() {
     if (state.open.id) return state.open;
     const adopted = await api.adopt(state.open.postId);state.open = adopted;return adopted;
   }
   async function publish() {
+    if(el.querySelector("[data-publish]")?.dataset.oneClick)return;
     if (state.busy) return;const targets = [...el.querySelectorAll("[data-targets] input:checked")].map(input => input.value);
     if (!targets.length) {detailStatus("Отметьте хотя бы одну площадку публикации.");return;}
     state.busy = true;detailStatus("Создаём черновик публикации…");
@@ -139,10 +188,38 @@ function create(el, ctx) {
     } catch (error) {detailStatus(error?.code === "PROFILE_CHANGED" ? "Данные компании изменились — обновите страницу и повторите." : "Не удалось создать публикацию: " + (error?.message || "ошибка"));}
     finally {state.busy = false;}
   }
-  function openPost(postId) {
-    sb.pendingMaterialOpen = {companyCode: ctx.companyCode, postId, source: "materials"};
-    ctx.navigate("content-factory/plan");
-    setTimeout(() => window.dispatchEvent(new CustomEvent("sb:content-factory-open-draft", {detail: {companyCode: ctx.companyCode, postId, source: "materials"}})), 0);
+  const openPost = postId => sb.openPostingDraft(ctx, postId);
+  /* №166: рилс на согласование в общий чат компании. Сервер привязывает версию к черновику публикации,
+     переводит его «на согласование» и создаёт запрос; карточку в чат пишет content. Повтор того же ключа не дублирует. */
+  const chatStatus = text => {const target = el.querySelector("[data-chat-status]");if (target) target.textContent = text || "";};
+  async function openChat() {
+    const form = el.querySelector("[data-chat-form]");if (!form) return;
+    form.hidden = false;form.dataset.key = uid();chatStatus("");form.elements.text.focus({preventScroll: true});
+    const postId = state.open.postId;
+    if (postId && !form.elements.text.value) {
+      try {const post = await api.post(postId);if (!ctx.signal.aborted && state.open?.postId === postId && !form.elements.text.value) form.elements.text.value = post.text || "";}
+      catch (_) {/* подпись можно ввести вручную */}
+    }
+  }
+  async function sendToChat(event) {
+    event.preventDefault();if (state.busy) return;
+    const form = event.target, platformIds = [...form.querySelectorAll("[data-chat-targets] input:checked")].map(input => input.value);
+    if (!platformIds.length) {chatStatus("Отметьте хотя бы одну площадку.");return;}
+    const text = form.elements.text.value.trim();
+    state.busy = true;form.querySelector("[data-chat-submit]").disabled = true;chatStatus("Отправляем в общий чат компании…");
+    try {
+      const reel = await ensureReel();if (ctx.signal.aborted) return;
+      const result = await api.toChat(reel.id, {clientRequestId: form.dataset.key || uid(), version: state.version, platformIds, ...(text ? {text} : {})});
+      if (ctx.signal.aborted) return;
+      const approval = result.approval;
+      chatStatus(`Отправлено в общий чат компании: «${approval.title}» v${approval.version}. Статус: ${approval.statusLabel}.`);
+      const link = document.createElement("button");link.type = "button";link.className = "plain-button";link.textContent = "Открыть чат";
+      link.addEventListener("click", () => ctx.navigate("chats?room=common"));el.querySelector("[data-chat-status]").append(" ", link);
+      form.dataset.key = uid();
+    } catch (error) {
+      chatStatus(error?.code === "CAPTION_REQUIRED" || error?.details?.code === "CAPTION_REQUIRED" ? "Добавьте подпись к публикации: без неё площадки не примут рилс."
+        : error?.status === 403 ? "Нет права отправлять материалы этой компании на согласование." : "Не удалось отправить: " + (error?.message || "ошибка сети") + ". Повтор безопасен.");
+    } finally {state.busy = false;const submit = el.querySelector("[data-chat-submit]");if (submit) submit.disabled = false;}
   }
   async function edit() {
     if (state.busy) return;state.busy = true;
@@ -243,7 +320,10 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-publish")) void publish();
     else if (target.hasAttribute("data-open-post")) openPost(state.open.postId);
     else if (target.hasAttribute("data-edit")) void edit();
+    else if (target.hasAttribute("data-chat-open")) void openChat();
+    else if (target.hasAttribute("data-chat-cancel")) {if (!state.busy) {const form = el.querySelector("[data-chat-form]");form.hidden = true;chatStatus("");}}
   });
+  el.addEventListener("submit", event => {if (event.target.matches("[data-chat-form]")) void sendToChat(event);});
   el.addEventListener("change", event => {
     if (event.target.name === "mt-platform") {
       state.platform = event.target.value;const screen = el.querySelector(".mt-screen");

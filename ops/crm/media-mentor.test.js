@@ -616,3 +616,12 @@ test('обмен датами между материалами принимае
   const map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
   assert.ok(map.get(`${first}|vk`).contentRevision>1,'смена даты меняет действующее содержимое');
 });
+
+test('№168: входной published без доставки не сохраняется; прежняя подготовка остаётся',t=>{
+ const f=fixture(t),first=f.ready('alvi',daysFor().map(d=>({...d,productionStatus:'shot'})));
+ const rows=first.plan.days.map((d,i)=>({...d,...(i?{}:{productionStatus:'published'})}));
+ const saved=f.api.savePlan('alvi',{planRevision:first.plan.revision,briefRevision:1,days:rows},ACTOR);
+ assert.equal(saved.plan.days[0].productionStatus,'shot');assert.equal(JSON.parse(f.db.prepare('SELECT plan FROM media_mentor_plans WHERE company_id=1').get().plan).days[0].productionStatus,'shot');
+ const fresh=fixture(t);fresh.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);const newPlan=fresh.api.savePlan('alvi',{planRevision:0,briefRevision:1,days:daysFor().map(d=>({...d,productionStatus:'published'}))},ACTOR);
+ assert.ok(newPlan.plan.days.every(d=>d.productionStatus!=='published'));
+});

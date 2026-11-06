@@ -61,10 +61,32 @@
       } catch {}
     }
     compose();
+    // Узлы сообщений переиспользуются между опросами (раз в 5 с): иначе встроенный плеер рилса (№166)
+    // пересоздавался бы и воспроизведение обрывалось. Меняется только то сообщение, у которого изменились данные.
+    const nodes = new Map();
+    const signature = m => JSON.stringify([viewer, m.author_name, m.text, m.kind, m.payload, m.task_id, m.ref_task_id, m.command_state, m.answerAudit?.status]);
     function render() {
       const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
-      list.replaceChildren();
+      const wanted = [];
       for (const m of [...messages.values()].sort((a, b) => a.id - b.id)) {
+        const sig = signature(m); let entry = nodes.get(m.id);
+        if (entry?.sig !== sig) {
+          if (entry?.rich) { entry.rich.update(m); entry.sig = sig; }
+          else if (window.SynapseReelChat?.supports(m)) { const rich = window.SynapseReelChat.render(m, { ctx, reload: () => load().catch(() => {}) }); entry = { sig, li: rich.el, rich }; }
+          else entry = { sig, li: plain(m) };
+          nodes.set(m.id, entry);
+        }
+        wanted.push(entry.li);
+      }
+      for (const [id, entry] of nodes) if (!messages.has(id)) { nodes.delete(id); entry.li.remove(); }
+      if (!messages.size) list.replaceChildren(node('li', 'sbc-empty', room.startsWith('hugh:') ? 'Здесь ваш личный чат с Хью: запросы, уточнения по задачам и ответы. Его видите только вы.' : 'Сообщений пока нет.'));
+      else {
+        for (const child of [...list.children]) if (!wanted.includes(child)) child.remove();
+        wanted.forEach((li, index) => { if (list.children[index] !== li) list.insertBefore(li, list.children[index] || null); });
+      }
+      if (atBottom) list.scrollTop = list.scrollHeight;
+    }
+    function plain(m) {
         const li = node('li', m.user_id === 0 ? 'sbc-msg sbc-msg--hugh' : m.user_id === viewer ? 'sbc-msg sbc-msg--own' : 'sbc-msg');
         if (m.kind === 'hugh-merge') li.classList.add('sbc-msg--merge');
         li.append(node('strong', '', m.author_name), node('span', 'sbc-msg__text', m.text), node('time', '', time(m.created_at)));
@@ -72,10 +94,7 @@
         else if (m.ref_task_id && m.kind === 'task-note') li.append(node('span', 'sbc-msg__task', m.command_state === 'done' ? `Комментарий в задаче №${m.ref_task_id}` : 'Комментарий ещё не подтверждён'));
         else if (m.command_state === 'pending') li.append(node('span', 'sbc-msg__task', 'Задача ещё не подтверждена — повторите отправку'));
         if (m.answerAudit && m.answerAudit.status !== 'approved') li.append(node('small', '', m.answerAudit.status === 'refused' ? 'Запрос отклонён' : 'Передано на проверку'));
-        list.append(li);
-      }
-      if (!messages.size) list.append(node('li', 'sbc-empty', room.startsWith('hugh:') ? 'Здесь ваш личный чат с Хью: запросы, уточнения по задачам и ответы. Его видите только вы.' : 'Сообщений пока нет.'));
-      if (atBottom) list.scrollTop = list.scrollHeight;
+        return li;
     }
     async function load(before) {
       const request = ++loadEpoch; let data;
