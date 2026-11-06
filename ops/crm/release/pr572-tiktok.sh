@@ -10,10 +10,12 @@ C=$(docker ps --format '{{.ID}} {{.Names}}' | awk '$2 ~ /(^|[-_])crm([-_][0-9]+)
 B=/var/backups/synapse-release/pr572
 F=/app/onlypult-provider.js
 if [ "${1:-}" = rollback ]; then
+  [ -s "$B/onlypult-provider.js.old" ] || { echo "FAIL: нет копии для отката"; exit 1; }
   docker cp "$B/onlypult-provider.js.old" "$C:$F"
   docker restart "$C" >/dev/null
   echo "ROLLBACK OK"; exit 0
 fi
+[ ! -e "$B/onlypult-provider.js.old" ] || { echo "FAIL: выпуск уже выполнялся, копия $B есть — ничего не менял"; exit 1; }
 mkdir -p "$B"
 for f in crm.sqlite crm.sqlite-wal crm.sqlite-shm; do docker cp "$C:/data/$f" "$B/$f" 2>/dev/null || true; done
 [ -s "$B/crm.sqlite" ] || { echo "FAIL: копия базы не снята"; exit 1; }
