@@ -75,3 +75,13 @@
 .mt-view input[type=date], .mt-upload input[type=date] { -webkit-appearance:none; appearance:none; display:block; max-width:100%; box-sizing:border-box; }
 .mt-view input[type=date]::-webkit-date-and-time-value, .mt-upload input[type=date]::-webkit-date-and-time-value { text-align:left; }
 @media (max-width:430px) { .mt-filters label { flex:1 1 calc(50% - 6px); } }
+
+/* №166 · «Отправить на согласование в чат» */
+.mt-chat { display:grid; gap:10px; margin:0 0 14px; padding:14px; min-width:0; border:1px solid var(--line,#34404d); border-radius:14px; background:var(--surface,#14110f); }
+.mt-chat[hidden] { display:none; }
+.mt-chat h3, .mt-chat p { margin:0; }
+.mt-chat label { display:grid; gap:4px; min-width:0; font-size:14px; }
+.mt-chat .mt-targets label { display:flex; }
+.mt-chat textarea { width:100%; min-width:0; box-sizing:border-box; padding:9px 10px; font:inherit; font-size:16px; resize:vertical;
+  border:1px solid var(--line,#34404d); border-radius:10px; color:var(--text,#f4f0eb); background:var(--surface-soft,#181513); }
+.mt-chat .mt-actions { margin:0; }

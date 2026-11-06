@@ -21,6 +21,7 @@ on:
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
       - 'ops/crm/autoposting*'
+      - 'ops/crm/reel-*'
       - 'ops/crm/server.js'
       - 'ops/crm/task-coordination*'
       - 'ops/crm/company-facts*'
@@ -55,6 +56,7 @@ on:
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
       - 'ops/crm/autoposting*'
+      - 'ops/crm/reel-*'
       - 'ops/crm/server.js'
       - 'ops/crm/task-coordination*'
       - 'ops/crm/company-facts*'
@@ -143,7 +145,7 @@ jobs:
 
       - name: Тесты календаря и публикаций
         timeout-minutes: 10
-        run: node --test ops/crm/autoposting*.test.js
+        run: node --test ops/crm/autoposting*.test.js ops/crm/reel-materials*.test.js ops/crm/reel-chat-approval*.test.js
 
       # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
       # каталога ops/crm этой проверкой по-прежнему не покрываются.

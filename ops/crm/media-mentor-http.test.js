@@ -475,3 +475,10 @@ test('workflow PUT использует fresh trusted actor при той же �
  await f.call('PUT',editor,{revision:0,fields:{releaseMode:'manual'}},{afterRead:request=>{request.identity={...editor,userName:'Актуальное имя'};}});
  assert.equal(f.db.prepare('SELECT actor_name FROM content_factory_workflow_versions').get().actor_name,'Актуальное имя');
 });
+
+test('№168: PUT плана с published без доставки не сохраняет этот статус',async t=>{
+ const f=fixture(t);await seedBrief(f);const payload=days().map(d=>({...d,productionStatus:'published'}));
+ const result=await f.call('PUT','/media-mentor/plan',OWNER,{planRevision:0,briefRevision:1,days:payload});
+ assert.equal(result.status,200);assert.ok(result.result.plan.days.every(d=>d.productionStatus!=='published'));
+ const stored=JSON.parse(f.db.prepare('SELECT plan FROM media_mentor_plans WHERE company_id=1').get().plan);assert.ok(stored.days.every(d=>d.productionStatus!=='published'));
+});

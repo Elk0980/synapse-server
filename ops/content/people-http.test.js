@@ -8,6 +8,9 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   const task=(id,assignee)=>({id,title:`Старая задача ${id}`,description:'ЦКП: Проверяемый результат',company_code:'synapse-business',assignee_name:assignee,status:'planned',parent_task_id:null,subtask_count:0,subtask_done:0,coordination:{revision:1,milestones:{}}});
   let all=[],calls=0;
   const crm=http.createServer(async(req,res)=>{
+    // №166: чтение общего чата подтягивает карточки согласования рилсов служебным ключом, без личности.
+    if(req.url.startsWith('/internal/reel-materials/chat-approvals')){assert.equal(req.headers['x-api-key'],'synthetic-crm-key');assert.equal(req.headers['x-synapse-crm-identity'],undefined);
+      res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({approvals:[]}));}
     calls++;let body='';for await(const chunk of req)body+=chunk;const args=body?JSON.parse(body):{};
     const actor=JSON.parse(Buffer.from(req.headers['x-synapse-crm-identity'],'base64url'));
     assert.deepEqual(actor.companyCodes,['synapse-business']);assert.equal(req.headers['x-api-key'],'synthetic-crm-key');
