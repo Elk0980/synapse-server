@@ -3,6 +3,8 @@
    /content/people/my-board и /my-board/action. Порядок, пауза и «Удалённые» — личные, задача доски не стирается. */
 (() => {
   const node = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
+  // №148: у владельца заголовок задачи открывает карточку общей доски (SbTaskBoard.openTask); задаётся ниже в show().
+  let ownerCard = null;
   const STATUS = { inbox: 'Входящие', planned: 'Запланировано', in_progress: 'В работе', done: 'Сделано', cancelled: 'Отменено' };
   const PRIORITY = { urgent: 'Срочно', high: 'Высокий', normal: 'Обычный', low: 'Низкий' };
   const FROM = { system: 'От системы', manager: 'От руководителя', me: 'Я поставил Хью' };
@@ -53,7 +55,10 @@
           };
         }
         const main = node('div', 'sbt-item__main');
-        const title = node('strong', 'sbt-item__title', task.title);
+        // №148: заголовок — кнопка, открывает карточку задачи (описание, инструкция, ссылки, ход работы).
+        const title = node('button', 'sbt-item__title sbt-item__open', task.title); title.type = 'button'; title.dataset.taskOpen = String(task.id);
+        title.setAttribute('aria-label', `Открыть задачу №${task.id}: ${task.title}`);
+        title.onclick = () => { if (ctx.user?.role === 'owner' && ownerCard) ownerCard(task.id); else if (ctx.navigate) ctx.navigate(`tasks/${task.id}`); else location.hash = `tasks/${task.id}`; };
         const meta = node('div', 'sbt-item__meta');
         meta.append(node('span', `sbt-chip sbt-chip--${task.status}`, STATUS[task.status] || task.status));
         if (task.priority && task.priority !== 'normal') meta.append(node('span', `sbt-chip sbt-chip--${task.priority}`, PRIORITY[task.priority] || task.priority));
@@ -99,7 +104,22 @@
   let controller = null;
   const hashRoute = () => { const raw = location.hash.slice(1), at = raw.indexOf('?'); return { sub: (at < 0 ? raw : raw.slice(0, at)).split('/')[1] || '', query: at < 0 ? '' : raw.slice(at + 1) }; };
   const header = () => document.querySelector('#tasks-view > .content-header');
-  const stop = () => { if (!controller) return; controller.unmount(); controller = null; const h = header(); if (h) h.hidden = false; };
+  // №148: карточка задачи для владельца — тот же компонент, что на общей доске; доска живёт в скрытом контейнере рядом со списком.
+  let cardBoard = null, cardHost = null;
+  const stopCard = () => { cardBoard?.destroy(); cardBoard = null; cardHost?.remove(); cardHost = null; ownerCard = null; };
+  function ownerCardOpener(context) {
+    if (context?.identity?.role !== 'owner' || !window.SbTaskBoard?.mount) return null;
+    return id => {
+      if (!cardBoard) {
+        cardHost = node('div', 'sbt-card-host'); cardHost.hidden = true; cardHost.setAttribute('aria-hidden', 'true');
+        (document.getElementById('tasks-view') || document.body).append(cardHost);
+        cardBoard = window.SbTaskBoard.mount(cardHost, context, { view: 'projects' });
+        if (!cardBoard) { stopCard(); return; }
+      }
+      void cardBoard.openTask(Number(id));
+    };
+  }
+  const stop = () => { stopCard(); if (!controller) return; controller.unmount(); controller = null; const h = header(); if (h) h.hidden = false; };
   // У владельца заголовок экрана скрыт общей доской, поэтому переход — отдельной строкой над доской.
   function ownerLink(context, visible) {
     const card = document.querySelector('#tasks-view > .card');
@@ -115,6 +135,7 @@
     if (!personal || !host || !window.SynapseModules?.mount) { stop(); ownerLink(context, !!window.SynapseModules?.mount); return false; }
     stop(); legacy.onLeave?.(); ownerLink(context, false);
     const h = header(); if (h) h.hidden = true;
+    ownerCard = ownerCardOpener(context);
     controller = window.SynapseModules.mount(host, 'tasks', { route: { path: 'mine', query } });
     return true;
   }

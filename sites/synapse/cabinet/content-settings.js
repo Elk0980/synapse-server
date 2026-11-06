@@ -60,7 +60,10 @@
     const actions = el('div', { className: 'cs-actions' },
       canEdit ? el('button', { type: 'submit', className: 'plain-button cs-save', text: 'Сохранить' }) : el('p', { className: 'muted', text: 'Только просмотр: менять может владелец или настройщик компании.' }),
       status);
-    form.append(approvers, days, deadline, platforms, style, actions);
+    const sheet = el('fieldset', {className:'card cs-block'}, el('legend', {text:'Таблица контент-плана'}),
+      el('label', {className:'cs-field'}, el('span', {text:'Ссылка Google Таблицы'}), el('input', {type:'url',name:'contentPlanSheetUrl',value:settings.contentPlanSheetUrl || '',maxlength:2048,disabled,placeholder:'https://docs.google.com/spreadsheets/d/…'})),
+      !settings.contentPlanSheetUrl && canEdit ? el('p',{className:'muted',text:'Указать таблицу: вставьте ссылку и сохраните настройки.'}) : null);
+    form.append(sheet, approvers, days, deadline, platforms, style, actions);
     const updatePreview = () => {
       preview.style.fontFamily = `"${form.elements.font.value}", system-ui, sans-serif`;
       preview.style.fontSize = { s: '18px', m: '24px', l: '32px' }[form.elements.size.value] || '24px';
@@ -77,7 +80,7 @@
       if (!Number.isInteger(deadlineDays) || deadlineDays < 0 || deadlineDays > 60) { status.textContent = 'Дедлайн: целое число от 0 до 60.'; return; }
       const next = {
         approverUserIds: values('approver').map(Number), shootingWeekdays: values('weekday').map(Number), deadlineDays,
-        platforms: values('platform'),
+        platforms: values('platform'), contentPlanSheetUrl: form.elements.contentPlanSheetUrl.value.trim(),
         caption: { font: form.elements.font.value, size: form.elements.size.value, color: form.elements.color.value, uppercase: form.elements.uppercase.checked }
       };
       state.busy = true;

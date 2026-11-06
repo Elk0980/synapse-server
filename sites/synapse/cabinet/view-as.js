@@ -2,6 +2,7 @@
 (() => {
   const key='synapse-view-as', companyKey='synapse-view-as-company', nativeFetch=window.fetch.bind(window);
   const token=()=>sessionStorage.getItem(key);
+  let rendered=false;
   /* №137: компания владельца в момент входа в режим. Выбор кабинета хранится по userId; в режиме
      просмотра userId — сотрудника, поэтому берём сохранённый выбор владельца так же, как кабинет. */
   const ownerCompany=(profile)=>{
@@ -27,6 +28,7 @@
     return {get:()=>sessionStorage.getItem(companyKey),set:(id)=>sessionStorage.setItem(companyKey,id)};
   },
   render(profile){
+    rendered=true;
     const start=document.getElementById('view-as-start');
     if (start) {
       start.hidden=profile.role!=='owner'||!!profile.viewAs;
@@ -63,7 +65,8 @@
   // Expired/revoked token must remain recoverable before whoami succeeds.
   document.addEventListener('DOMContentLoaded',async()=>{
     if(!token())return;
-    window.SynapseViewAs.render({viewAs:{}});
+    // A late DOMContentLoaded must not replace an already rendered whoami profile.
+    if(!rendered)window.SynapseViewAs.render({viewAs:{}});
     if(location.pathname.endsWith('/cabinet.html'))return;
     try {const r=await fetch('/content/whoami');if(r.ok)window.SynapseViewAs.render(await r.json());}catch{}
   });

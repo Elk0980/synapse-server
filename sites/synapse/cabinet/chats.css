@@ -79,3 +79,7 @@
 }
 .sbt-mine-link { display: inline-flex; margin: 0 0 10px; text-decoration: none; }
 .sbt-mine-link[hidden] { display: none; }
+/* №148: заголовок задачи в «Мои задачи» — кнопка, открывает карточку задачи. */
+.sbt .sbt-item__main .sbt-item__open, .view-panel .sbt .sbt-item__main .sbt-item__open { display: block; width: 100%; min-height: 0; margin: 0; padding: 2px 0; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-weight: 700; text-align: left; overflow-wrap: anywhere; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--sbc-accent) 45%, transparent); text-underline-offset: 3px; }
+.sbt .sbt-item__main .sbt-item__open:hover, .view-panel .sbt .sbt-item__main .sbt-item__open:hover { color: var(--sbc-accent); text-decoration-color: var(--sbc-accent); }
+.sbt-card-host[hidden] { display: none !important; }
