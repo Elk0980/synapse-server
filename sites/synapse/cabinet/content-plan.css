@@ -81,6 +81,9 @@
   .cp-sheet { min-width:0; display:block; }
   .cp-sheet thead { display:none; }
   .cp-sheet > tbody, .cp-sheet > tbody > tr, .cp-sheet > tbody > tr > td { display:block; width:100%; white-space:normal; }
+  /* №144: правило nowrap для первых трёх колонок (строка 61) сильнее по специфичности — на 390 ячейка
+     «Площадки» уезжала за правый край (текст до 427px, страница получала горизонтальную прокрутку). */
+  .cp-sheet > tbody > tr > td:nth-child(-n+3) { white-space:normal; overflow-wrap:anywhere; }
   .cp-sheet > tbody > tr { border:1px solid var(--line,#333); border-radius:12px; margin-bottom:8px; padding:6px 10px; background:var(--surface,#12100f); }
   .cp-sheet > tbody > tr > td { border:0; padding:4px 0; }
   .cp-sheet > tbody > tr > td:empty { display:none; }

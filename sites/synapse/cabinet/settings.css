@@ -15,6 +15,10 @@
 .settings-actions p { min-height: 1.3em; }
 
 #settings-email { width: min(100%, 880px); margin-top: 28px; }
+/* №144: подпись «Почта компании» и поле стояли в одну строку — поле получало 205px и список
+   получателей обрезался. Подпись над полем, поле на всю ширину формы. */
+.settings-email form.field-stack > label { display: grid; gap: 6px; min-width: 0; }
+.settings-email form.field-stack input { box-sizing: border-box; width: 100%; min-width: 0; font: inherit; }
 #settings-email[hidden] { display: none; }
 #settings-email h2 { margin: 0 0 12px; }
 .settings-email-header { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between; }
