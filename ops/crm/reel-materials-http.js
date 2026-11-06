@@ -6,7 +6,7 @@ const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,..
 const REEL=/^\/autoposting\/reels(?:\/(\d+)(?:\/(edits|publication)(?:\/(\d+)\/(cancel))?)?)?$/;
 const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(claim)|reels\/(\d+)\/(versions))$/;
 /* №166: согласование рилса в общем чате компании. Решения — существующими approve / requestEdit (reel-chat-approval.js). */
-const CHAT=/^\/autoposting\/reels\/(\d+)\/chat-approvals(?:\/(\d+)(?:\/(approve|changes))?)?$/;
+const CHAT=/^\/autoposting\/reels\/(\d+)\/chat-approvals(?:\/(\d+)(?:\/(approve|changes|publish))?)?$/;
 function createReelMaterialsHandler({materials,chatApprovals,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
     const headers={'cache-control':'no-store'};
@@ -18,14 +18,15 @@ function createReelMaterialsHandler({materials,chatApprovals,companyModuleContex
     const chat=chatApprovals&&CHAT.exec(url.pathname);
     if(chat){
       const [,reel,approvalId,action]=chat,read=request.method==='GET';
-      if(read?(!approvalId||action):(request.method!=='POST'||(approvalId&&!action)))fail(405,'Метод не поддерживается');
+      if(read?Boolean(action):(request.method!=='POST'||(approvalId&&!action)))fail(405,'Метод не поддерживается');
       const {identity,company}=companyModuleContext(request,url.searchParams.get('companyCode'),read?'autoposting.view':'autoposting.edit');
       /* Согласование версии — то же право, что у /autoposting/posts/:id/approve: владелец или autoposting.approve. */
       if(action==='approve'&&identity.role!=='owner'&&!identity.permissions?.has('autoposting.approve'))fail(403,'Нет права согласовывать публикации','FORBIDDEN');
       const reelId=Number(reel),id=approvalId?Number(approvalId):null;let result,status=200;
-      if(read)result=chatApprovals.get(company.code,reelId,id);
+      if(read)result=id?chatApprovals.get(company.code,reelId,id):chatApprovals.latest(company.code,reelId);
       else if(!approvalId){result=chatApprovals.send(company.code,reelId,await readJson(request),identity);status=result.duplicate?200:201;}
       else if(action==='approve'){const body=await readJson(request);if(body&&Object.keys(body).length)fail(400,'Лишние поля запроса');result=chatApprovals.approve(company.code,reelId,id,identity);}
+      else if(action==='publish')result=await chatApprovals.publish(company.code,reelId,id,await readJson(request),identity);
       else result=chatApprovals.changes(company.code,reelId,id,await readJson(request),identity);
       send(response,status,result,headers);return true;
     }

@@ -51,7 +51,7 @@ test('Опрос чата не пересоздаёт плеер; новый с�
   await f.poll();
   assert.equal(f.host.querySelector('video'),video,'статус сменился — плеер тот же');assert.equal(f.host.querySelector('[data-reel-approval="3"]'),li);
   assert.equal(li.querySelector('.rc-status').textContent,'Согласовано — ждёт публикации');assert.match(li.textContent,/Согласовал\(а\): Лена/);
-  assert.equal(li.querySelectorAll('.rc-actions .rc-btn').length,0,'после решения кнопок нет');
+  assert.equal(li.querySelectorAll('.rc-actions .rc-btn').length,2,'после согласования доступны кнопки публикации');
   assert.deepEqual([...f.host.querySelectorAll('.sbc-messages > li')].map(n=>n.textContent.includes('Отлично')),[false,true]);
 });
 
@@ -121,6 +121,7 @@ test('«Материалы»: «Отправить на согласование
     if(p==='crm/autoposting/reels'&&method==='GET')return {companyCode:'avokado',reels:[reel]};
     if(p==='crm/autoposting/reels/4')return reel;
     if(p==='crm/autoposting/posts/40')return {id:40,text:'Подпись из черновика'};
+    if(p==='crm/autoposting/reels/4/chat-approvals'&&method==='GET')return {approval:null};
     if(p==='crm/autoposting/reels/4/chat-approvals'){if(fail-->0)throw Object.assign(Error('Связь'),{status:503});return {approval:{id:3,title:'Рилс №1',version:2,statusLabel:'Ждёт согласования'}};}
     throw Object.assign(Error('unexpected '+p),{status:500});};
   const ctx={moduleId:'content-materials',companyCode:'avokado',can:p=>['autoposting.view','autoposting.edit'].includes(p),signal:new w.AbortController().signal,route:{path:''},
@@ -134,10 +135,18 @@ test('«Материалы»: «Отправить на согласование
   form.dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));await flush();
   assert.match(el.querySelector('[data-chat-status]').textContent,/Повтор безопасен/);
   form.dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));await flush();
-  const sends=calls.filter(c=>c.p==='crm/autoposting/reels/4/chat-approvals');
+  const sends=calls.filter(c=>c.method==='POST'&&c.p==='crm/autoposting/reels/4/chat-approvals');
   assert.equal(sends.length,2);assert.equal(sends[0].body.clientRequestId,sends[1].body.clientRequestId,'повтор после сбоя — тот же ключ');
   assert.equal(JSON.stringify({...sends[1].body,clientRequestId:'k'}),JSON.stringify({clientRequestId:'k',version:2,platformIds:['vk'],text:'Подпись из черновика'}));
   assert.match(el.querySelector('[data-chat-status]').textContent,/Отправлено в общий чат компании: «Рилс №1» v2/);
   [...el.querySelectorAll('[data-chat-status] button')].find(b=>b.textContent==='Открыть чат').click();
   assert.equal(JSON.stringify(navigations),JSON.stringify(['chats?room=common']));
 });
+
+ test('№168: согласованная карточка → публикация сейчас без изменения подписи; повторный клик заблокирован',async t=>{
+  let resolve;const pending=new Promise(r=>resolve=r);
+  const f=load({onPost:async(p,b)=>{if(p.endsWith('/publish')){await pending;return {approval:{...card({status:'scheduled',statusLabel:'В плане',open:false}),id:3}};}return {};}});t.after(()=>f.w.close());
+  f.set([{id:1,user_id:5,author_name:'СММ',kind:'reel-approval',payload:JSON.stringify(card({status:'approved',statusLabel:'Согласовано',open:false})),created_at:'2026-11-05T10:00:00Z'}]);
+  await f.mount();await flush();const b=[...f.host.querySelectorAll('button')].find(b=>b.textContent==='Опубликовать сейчас');assert.ok(b);b.click();b.click();await flush();
+  assert.equal(f.calls.filter(c=>c[0]==='POST'&&c[1].endsWith('/publish')).length,1);resolve();await flush();assert.match(f.host.textContent,/В плане/);
+ });

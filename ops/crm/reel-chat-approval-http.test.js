@@ -7,19 +7,20 @@ const {spawn}=require('node:child_process'),{once}=require('node:events'),{rando
 const {DatabaseSync}=require('node:sqlite');
 
 async function startCrm(t){
+  const connections=[];
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'reel-chat-approval-'));
   const key=randomBytes(24).toString('hex'),probe=http.createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');
   const port=probe.address().port;await new Promise(resolve=>probe.close(resolve));
   const databasePath=path.join(directory,'crm.sqlite');let output='';
   const child=spawn(process.execPath,[path.join(__dirname,'server.js')],{env:{PATH:process.env.PATH||'',PORT:String(port),DATABASE_PATH:databasePath,API_KEY:key},stdio:['ignore','pipe','ignore']});
-  t.after(async()=>{if(child.exitCode===null){const done=once(child,'exit');child.kill();await done;}await fs.rm(directory,{recursive:true,force:true});});
+  t.after(async()=>{if(child.exitCode===null){const done=once(child,'exit');child.kill();await done;}for(const db of connections)db.close();await fs.rm(directory,{recursive:true,force:true});});
   child.stdout.on('data',chunk=>{output+=chunk;});
   for(let i=0;i<200&&!output.includes('слушает');i++){if(child.exitCode!==null)throw Error('CRM не запустился');await new Promise(r=>setTimeout(r,25));}
   async function request(method,url,{body,identity}={}){
     const response=await fetch(`http://127.0.0.1:${port}${url}`,{method,headers:{'x-api-key':key,...(identity?{'x-synapse-crm-identity':identity}:{}),...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
     return {status:response.status,body:await response.json()};
   }
-  return {request,databasePath};
+  return {request,databasePath,connections};
 }
 const encode=identity=>Buffer.from(JSON.stringify({v:1,role:'editor',permissions:[],companyCodes:[],...identity})).toString('base64url');
 const owner=encode({userId:1,role:'owner',userName:'Влад'});
@@ -103,12 +104,12 @@ test('Чат-согласование: «Нужны правки» → суще�
 });
 
 test('Итоги публикации: прямые ссылки, Onlypult без ссылки, ошибки, расписка владельца — только из записей автопостинга',async t=>{
-  const {request,databasePath}=await startCrm(t);
+  const {request,databasePath,connections}=await startCrm(t);
   await request('POST','/companies',{identity:owner,body:{code:'avokado',name:'Авокадо',timezone:'UTC'}});
   const reel=(await request('POST','/autoposting/reels?companyCode=avokado',{identity:smm,body:{title:'Рилс №3',platforms:['instagram','vk','telegram','youtube_shorts'],mediaUrl:asset('avokado','e'),durationMs:15000}})).body;
   const a=(await request('POST',`/autoposting/reels/${reel.id}/chat-approvals?companyCode=avokado`,{identity:smm,body:{clientRequestId:'p1',version:1,platformIds:['instagram','vk','telegram','youtube_shorts'],text:'Подпись'}})).body.approval;
   await request('POST',`/autoposting/reels/${reel.id}/chat-approvals/${a.id}/approve?companyCode=avokado`,{identity:lena,body:{}});
-  const db=new DatabaseSync(databasePath);t.after(()=>db.close());db.exec('PRAGMA busy_timeout=5000');
+  const db=new DatabaseSync(databasePath);connections.push(db);db.exec('PRAGMA busy_timeout=5000');
   const insert=db.prepare(`INSERT INTO autoposting_deliveries(post_id,channel_id,channel_revision,status,external_id,url,error_code,finished_at,provider_post_id,provider_status)
     VALUES(?,?,1,?,?,?,?,?,?,?)`);
   insert.run(a.postId,'vk','published','-1_2','https://vk.com/wall-1_2',null,'2026-11-05T10:00:00Z',null,null);

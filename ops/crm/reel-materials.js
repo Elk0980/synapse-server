@@ -163,7 +163,8 @@ function createReelMaterials(db,{autoposting,information,mediaOrigins=process.en
     });
   }
   function update(code,id,body){
-    const owner=company(db,code),row=rowFor(owner,id);object(body,['title','releaseDate','platforms']);
+    const owner=company(db,code),row=rowFor(owner,id);object(body,['title','releaseDate','platforms','ideaId']);
+    if(Object.hasOwn(body,'ideaId'))require('./reel-plan-status').link(db,owner.id,text(body.ideaId,100,true),row.id);
     const next={title:Object.hasOwn(body,'title')?text(body.title,200,true):row.title,releaseDate:Object.hasOwn(body,'releaseDate')?date(body.releaseDate):row.release_date,
       platforms:JSON.stringify(Object.hasOwn(body,'platforms')?platforms(body.platforms):parse(row.platforms,[]))};
     db.prepare('UPDATE reel_materials SET title=?,release_date=?,platforms=?,updated_at=? WHERE id=?').run(next.title,next.releaseDate,next.platforms,iso(),row.id);

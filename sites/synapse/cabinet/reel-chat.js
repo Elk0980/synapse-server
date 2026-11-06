@@ -35,6 +35,7 @@
     const title = node('h3', 'rc-title'), caption = node('p', 'rc-caption'), chips = node('ul', 'rc-chips'), status = node('p', 'rc-status');
     const who = node('p', 'rc-muted'), note = node('p', 'rc-note'), actions = node('div', 'rc-actions');
     note.setAttribute('role', 'status');
+    const publishBtn = button('Опубликовать сейчас', 'rc-btn rc-btn--ok'), laterBtn = button('Опубликовать в …', 'rc-btn');
     const approveBtn = button('Согласовано', 'rc-btn rc-btn--ok'), changesBtn = button('Нужны правки', 'rc-btn rc-btn--warn'), postingBtn = button('Открыть в «Постинге»', 'rc-btn');
     body.append(title, caption, chips, status, who, actions, note); box.append(media, body);
     li.append(author, box, node('time', '', time(message.created_at)));
@@ -50,24 +51,33 @@
       if (data.approvedBy) lines.push(`Согласовал(а): ${data.approvedBy}${data.approvedAt ? ', ' + time(data.approvedAt) : ''}`);
       if (data.returned) lines.push(`Вернул(а) на доработку: ${data.returned.byName || '—'}${data.returned.comment ? ' — ' + data.returned.comment : ''}`);
       if (data.edit) lines.push(`Правки: ${data.edit.byName || '—'}${data.edit.at ? ', ' + time(data.edit.at) : ''} — «${data.edit.comment}»${data.edit.taskId ? ` · задача №${data.edit.taskId} на доске` : ''}`);
-      if (data.status === 'approved') lines.push('Время публикации ставят в «Постинге»; из чата ничего не отправляется.');
+
       who.textContent = lines.join('\n');
       const open = data.open === true, mayApprove = can(ctx, 'autoposting.approve'), mayEdit = can(ctx, 'autoposting.edit');
       const list = [];
       if (open && mayApprove) list.push(approveBtn);
       if (open && mayEdit) list.push(changesBtn);
+      if (mayEdit && data.status === 'approved') list.push(publishBtn, laterBtn);
       if (!open && mayEdit && data.postId && ['approved', 'scheduled'].includes(data.status) && window.SbCabinet?.openPostingDraft) list.push(postingBtn);
       actions.replaceChildren(...list); actions.hidden = !list.length;
       if (open && !mayApprove && !mayEdit) note.textContent = 'Согласует владелец или сотрудник с правом согласования публикаций.';
       for (const b of list) b.disabled = busy;
     }
+    publishBtn.onclick = () => act('publish', {});
+    laterBtn.onclick = () => {
+      if (li.querySelector('[data-publish-date]')) return;
+      const form = node('form', 'rc-actions'), date = node('input'), submit = button('Опубликовать в …', 'rc-btn');
+      date.type = 'datetime-local';date.required = true;date.dataset.publishDate = '';date.setAttribute('aria-label', 'Дата и время публикации');submit.type = 'submit';
+      form.append(date, submit);body.append(form);
+      form.onsubmit = async event => {event.preventDefault();if(!date.value)return;await act('publish', {scheduledAt:new Date(date.value).toISOString()});if(data.status==='scheduled')form.remove();};
+    };
     const path = action => `crm/autoposting/reels/${Number(data.reelId)}/chat-approvals/${Number(data.approvalId)}/${action}`;
     async function act(action, body) {
-      if (busy) return false; busy = true; paint(); note.textContent = action === 'approve' ? 'Согласовываю…' : 'Отправляю правки…';
+      if (busy) return false; busy = true; paint(); note.textContent = action === 'publish' ? 'Планирую публикацию…' : action === 'approve' ? 'Согласовываю…' : 'Отправляю правки…';
       try {
         const result = await ctx.api.post(path(action), body);
         if (result?.approval && result.approval.id === data.approvalId) data = { ...data, ...result.approval, approvalId: result.approval.id };
-        note.textContent = action === 'approve' ? 'Согласовано. Публикация — по плану в «Постинге».' : `Правки отправлены${data.edit?.taskId ? ` — задача №${data.edit.taskId}` : ''}.`;
+        note.textContent = action === 'publish' ? 'Публикация поставлена в план.' : action === 'approve' ? 'Согласовано. Публикация — по плану в «Постинге».' : `Правки отправлены${data.edit?.taskId ? ` — задача №${data.edit.taskId}` : ''}.`;
         env.reload?.(); return true;
       } catch (error) { note.textContent = human(error); return false; }
       finally { busy = false; paint(); }

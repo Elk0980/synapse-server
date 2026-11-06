@@ -651,7 +651,7 @@
         <label>Стиль<input data-field="style" maxlength="1000" value="${esc(item.style || '')}"></label>
         <label>Реквизит<textarea data-field="props" maxlength="2000" rows="2">${esc(item.props || '')}</textarea></label>
         <label>Кто снимает<input data-field="filmingBy" maxlength="200" value="${esc(item.filmingBy || '')}"></label>
-        <label>Статус подготовки<select data-field="productionStatus">${options([{id:'planned',label:'Запланировано'},{id:'shot',label:'Отснято'},{id:'editing',label:'В монтаже'},{id:'draft',label:'Черновик'}],item.productionStatus || 'planned')}</select></label>
+        <label>Статус подготовки<select data-field="productionStatus">${options([{id:'planned',label:'Запланировано'},{id:'shot',label:'Отснято'},{id:'editing',label:'В монтаже'},{id:'draft',label:'Черновик'},{id:'published',label:'Опубликовано'}],item.productionStatus || 'planned')}</select></label>
         ${variantsMarkup(item, data, index)}
         <div class="mentor-day-order">
           <button type="button" class="plain-button" data-move="up" aria-label="Выше в плане">↑ Выше</button>
@@ -676,7 +676,8 @@
       </div>` : `${variantsMarkup(item, data, index)}<dl class="mentor-brief-view"><div><dt>Задача материала</dt><dd>${esc(vocabulary.roles.find((role) => role.id === item.role)?.label || item.role)}</dd></div>
         ${item.script ? `<div><dt>Сценарий</dt><dd class="mentor-reel-script">${esc(item.script)}</dd></div>` : ''}
         ${item.filmingBy ? `<div><dt>Кто снимает</dt><dd>${esc(item.filmingBy)}</dd></div>` : ''}
-        ${item.productionStatus ? `<div><dt>Статус подготовки</dt><dd>${esc({planned:'Запланировано',shot:'Отснято',editing:'В монтаже',draft:'Черновик'}[item.productionStatus] || item.productionStatus)}</dd></div>` : ''}
+        ${item.publication ? `<div><dt>Публикация</dt><dd>${item.publication.approved ? 'Согласовано · '+esc(item.publication.approvedBy||'')+' · '+esc(item.publication.approvedAt||'') : ''}${item.publication.items.map(i=>`<p>${esc(i.platform)}: ${i.published ? (i.url && /^https:\/\//.test(i.url) ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Опубликовано</a>` : 'Опубликовано, ссылка недоступна') : 'Ожидает публикации'}</p>`).join('')}</dd></div>` : ''}
+        ${item.productionStatus ? `<div><dt>Статус подготовки</dt><dd>${esc({planned:'Запланировано',shot:'Отснято',editing:'В монтаже',draft:'Черновик',published:'Опубликовано'}[item.productionStatus] || item.productionStatus)}</dd></div>` : ''}
         ${item.hook ? `<div><dt>Зацепка</dt><dd>${esc(item.hook)}</dd></div>` : ''}
         <div><dt>Что уже есть</dt><dd>${esc(assets.find((asset) => asset.id === item.assetId)?.label || 'Не указано')}</dd></div>
         ${item.mentorNote ? `<div><dt>Задание</dt><dd>${esc(item.mentorNote)}</dd></div>` : ''}</dl>`}</details></article>`;

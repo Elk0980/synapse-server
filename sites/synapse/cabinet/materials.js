@@ -105,6 +105,8 @@ function create(el, ctx) {
   function close() {state.open = null;$("[data-detail]").hidden = true;$("[data-grid]").hidden = false;$("[data-filters]").hidden = false;const opener = $("[data-upload-open]");if (opener) opener.hidden = false;}
   const currentVersion = () => (state.open.versions || []).find(v => v.version === state.version) || state.open.currentVersion;
   function renderDetail() {
+    queueMicrotask(oneClickControls);
+    queueMicrotask(planLinkControls);
     const reel = state.open, version = currentVersion(), media = safeUrl(version?.mediaUrl), node = $("[data-detail]");
     $("[data-grid]").hidden = true;$("[data-filters]").hidden = true;node.hidden = false;
     if (!state.busy) toggleUpload(false);const opener = $("[data-upload-open]");if (opener) opener.hidden = true;
@@ -140,11 +142,40 @@ function create(el, ctx) {
     node.querySelector("[data-title]").focus({preventScroll: true});
   }
   const detailStatus = text => {const target = el.querySelector("[data-detail-status]");if (target) target.textContent = text;};
+  async function planLinkControls(){
+    const reel=state.open;if(!reel?.id||!canEdit)return;
+    try{
+      const plan=await ctx.api.get('crm/media-mentor');if(ctx.signal.aborted||state.open!==reel)return;
+      const days=plan.plan?.days||[];if(!days.length)return;
+      const label=document.createElement('label');label.textContent='Пункт контент-плана';const select=document.createElement('select');
+      select.append(new Option('Выберите пункт',''));for(const day of days)select.append(new Option(day.topic,day.ideaId));
+      select.onchange=async()=>{if(!select.value)return;select.disabled=true;try{await ctx.api.patch(`crm/autoposting/reels/${reel.id}`,{ideaId:select.value});detailStatus('Рилс связан с контент-планом.');}catch(e){detailStatus(e.message);}finally{select.disabled=false;}};
+      label.append(select);el.querySelector('[data-detail-status]')?.before(label);
+    }catch(error){/* Нет права чтения плана — связь остаётся доступной через штатный API. */}
+  }
+  async function oneClickControls() {
+    const reel=state.open,version=state.version;if(!reel?.id||!canEdit)return;
+    try{
+      const {approval:a}=await ctx.api.get(`crm/autoposting/reels/${reel.id}/chat-approvals`);
+      if(ctx.signal.aborted||state.open!==reel||state.version!==version||!a||a.version!==version||a.status!=='approved')return;
+      const old=el.querySelector('[data-publish]');if(!old)return;old.textContent='Опубликовать сейчас';old.dataset.oneClick=String(a.id);
+      const date=document.createElement('input');date.type='datetime-local';date.setAttribute('aria-label','Дата и время публикации');
+      const later=document.createElement('button');later.type='button';later.className='plain-button';later.textContent='Опубликовать в …';old.after(date,later);
+      const send=async scheduledAt=>{
+        if(state.busy)return;state.busy=true;old.disabled=later.disabled=true;
+        try{await ctx.api.post(`crm/autoposting/reels/${reel.id}/chat-approvals/${a.id}/publish`,scheduledAt?{scheduledAt}:{});detailStatus('Публикация поставлена в план.');}
+        catch(error){detailStatus(error.message||'Результат не подтверждён. Обновите карточку.');old.disabled=later.disabled=false;}
+        finally{state.busy=false;}
+      };
+      old.onclick=()=>send();later.onclick=()=>{if(date.value)send(new Date(date.value).toISOString());else date.focus();};
+    }catch(error){/* Обычная карточка остаётся доступной; согласованной её не считаем. */}
+  }
   async function ensureReel() {
     if (state.open.id) return state.open;
     const adopted = await api.adopt(state.open.postId);state.open = adopted;return adopted;
   }
   async function publish() {
+    if(el.querySelector("[data-publish]")?.dataset.oneClick)return;
     if (state.busy) return;const targets = [...el.querySelectorAll("[data-targets] input:checked")].map(input => input.value);
     if (!targets.length) {detailStatus("Отметьте хотя бы одну площадку публикации.");return;}
     state.busy = true;detailStatus("Создаём черновик публикации…");

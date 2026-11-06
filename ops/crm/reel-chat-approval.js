@@ -107,6 +107,24 @@ function createReelChatApproval(db,{materials,autoposting,mediaOrigins=process.e
     db.prepare('UPDATE reel_chat_approvals SET updated_at=? WHERE id=?').run(iso(),row.id);
     return {approval:view(owner,rowFor(owner,reelId,id))};
   }
+  // Планирует только уже согласованную версию через штатные проверки автопостинга.
+  // Повтор после неизвестного ответа возвращает существующий результат, а не создаёт пост.
+  async function publish(code,reelId,id,body,actor){
+    object(body,['scheduledAt']);
+    const owner=company(db,code),{row,post}=openFor(owner,reelId,id);
+    const card=view(owner,row);
+    if(['scheduled','publishing','published','partial'].includes(card.status))return {approval:card,duplicate:true};
+    if(card.status!=='approved')fail(409,'Сначала согласуйте эту версию рилса','APPROVAL_REQUIRED');
+    const at=body.scheduledAt===undefined?new Date(now()+5000).toISOString():body.scheduledAt;
+    await autoposting.schedule(post.id,owner.code,{revision:post.revision,scheduledAt:at,
+      profileRevision:post.profileRevision,timezone:post.timezone,platformIds:parse(row.platform_ids,[])});
+    return {approval:view(owner,rowFor(owner,reelId,id)),duplicate:false};
+  }
+  function latest(code,reelId){
+    const owner=company(db,code);materials.get(code,reelId);
+    const row=db.prepare('SELECT * FROM reel_chat_approvals WHERE company_id=? AND reel_id=? ORDER BY id DESC LIMIT 1').get(owner.id,reelId);
+    return {approval:row?view(owner,row):null};
+  }
   /* Скриншот — изображение из хранилища публикаций этой же компании и разрешённого origin. */
   function screenshot(value,owner){
     if(value===undefined||value===null||value==='')return null;
@@ -196,6 +214,6 @@ function createReelChatApproval(db,{materials,autoposting,mediaOrigins=process.e
       WHERE c.is_deleted=0 AND (a.closed_at IS NULL OR a.closed_at>=?) ${owner?'AND a.company_id=?':''} ORDER BY a.id DESC LIMIT 200`).all(since,...(owner?[owner.id]:[]));
     return {approvals:rows.map(row=>view({id:row.company_id,code:row.company_code},row)).reverse()};
   }
-  return {send,approve,changes,get,updates};
+  return {send,approve,publish,latest,changes,get,updates};
 }
 module.exports={createReelChatApproval,PLATFORM_LABELS:LABELS};

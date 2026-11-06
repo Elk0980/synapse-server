@@ -197,7 +197,7 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
       const source=Object.hasOwn(row,key)?row:prior;
       if(!source||!Object.hasOwn(source,key))continue;
       if(key==='productionStatus') {
-        if(!['planned','shot','editing','draft'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft');
+        if(!['planned','shot','editing','draft','published'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft');
         idea[key]=source[key];
       }else{const clean=text(source[key],REEL_TEXT_LIMITS[key]);idea[key]=key==='script'?source[key]:clean;}
     }
@@ -333,7 +333,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
     const row=db.prepare('SELECT revision,brief_revision briefRevision,plan,updated_at updatedAt FROM media_mentor_plans WHERE company_id=?').get(owner.id);
     if(!row)return null;
     const stored=parse(row.plan,{days:[],startDate:null,endDate:null,windowDays:0});
-    return {revision:row.revision,briefRevision:row.briefRevision,updatedAt:row.updatedAt,days:stored.days,
+    return {revision:row.revision,briefRevision:row.briefRevision,updatedAt:row.updatedAt,days:require('./reel-plan-status').statuses(db,owner.id,stored.days),
       startDate:stored.startDate,endDate:stored.endDate,windowDays:stored.windowDays};
   }
   // Строки SQLite копируются в обычные объекты: ответ модуля не зависит от прототипа драйвера.
@@ -560,7 +560,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
       if(!row)fail(404,'Версия плана не найдена','NOT_FOUND');
       const stored=parse(row.plan,{days:[],startDate:null,endDate:null,windowDays:0});
       return {companyCode:owner.code.toLowerCase(),revision:row.revision,briefRevision:row.briefRevision,createdAt:row.createdAt,
-        actorId:row.actorId,actorName:row.actorName,reason:row.reason,days:stored.days,startDate:stored.startDate,
+        actorId:row.actorId,actorName:row.actorName,reason:row.reason,days:require('./reel-plan-status').statuses(db,owner.id,stored.days),startDate:stored.startDate,
         endDate:stored.endDate,windowDays:stored.windowDays,decision:decisionOf(owner,row.revision),
         feedback:feedbackOf(owner,row.revision)};
     });

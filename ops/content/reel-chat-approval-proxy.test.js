@@ -8,11 +8,11 @@ const {createAuthStore}=require('./auth-store'),{hashPassword}=require('./passwo
 async function freePort(){const server=net.createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;}
 
 test('Рилс на согласование в чате через proxy: CSRF и права, карточка видна участникам, решение и итоги публикации',{timeout:90000},async t=>{
-  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'reel-chat-proxy-')),children=[];
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'reel-chat-proxy-')),children=[],connections=[];
   const contentDb=path.join(directory,'content.sqlite'),crmDb=path.join(directory,'crm.sqlite');
   const password='Local-reel-chat-fixture-password',key=randomBytes(32).toString('hex');
   t.after(async()=>{for(const child of children.reverse())if(child.exitCode===null&&child.signalCode===null){const exited=once(child,'exit');child.kill();await exited;}
-    await fs.rm(directory,{recursive:true,force:true});});
+    for(const db of connections)db.close();await fs.rm(directory,{recursive:true,force:true});});
   const authDb=new DatabaseSync(contentDb),auth=createAuthStore(authDb,`owner:owner:${hashPassword(password)}`),owner=auth.getByLogin('owner');
   for(const [login,displayName,permissions,companies]of [['smm','СММ',['autoposting.view','autoposting.edit'],['avokado']],['lena','Лена',['autoposting.view','autoposting.edit','autoposting.approve'],['avokado']],
     ['alien','Чужой',['autoposting.view','autoposting.edit','autoposting.approve'],['alvi']]])
@@ -65,7 +65,7 @@ test('Рилс на согласование в чате через proxy: CSRF 
   assert.equal(ok.body.approval.approvedBy,'Лена');
   await waitFor('smm',list=>list.some(m=>m.kind==='reel-approval'&&JSON.parse(m.payload).status==='approved'));
   // Итоги: прямой ВК с реальной ссылкой, Telegram — ошибка. Записываются в CRM как это сделал бы автопостинг.
-  const crm=new DatabaseSync(crmDb);t.after(()=>crm.close());crm.exec('PRAGMA busy_timeout=5000');
+  const crm=new DatabaseSync(crmDb);connections.push(crm);crm.exec('PRAGMA busy_timeout=5000');
   const insert=crm.prepare(`INSERT INTO autoposting_deliveries(post_id,channel_id,channel_revision,status,external_id,url,error_code,finished_at) VALUES(?,?,1,?,?,?,?,?)`);
   insert.run(ok.body.approval.postId,'vk','published','-1_2','https://vk.com/wall-1_2',null,new Date().toISOString());
   insert.run(ok.body.approval.postId,'telegram','failed',null,null,'PUBLISH_FAILED',new Date().toISOString());

@@ -591,6 +591,7 @@ test('публикации вне кабинета: владелец отмеч�
     f.set('autoposting-receipt-platform','telegram','change');
     f.set('autoposting-receipt-url','https://t.me/taisabai/512');f.set('autoposting-receipt-date','2099-01-01T10:00');
     await submit();assert.equal(recorded.length,0);assert.match(f.node('autoposting-status').textContent,/в будущем/);
+    f.node('autoposting-receipt-form').ownerDocument.defaultView.confirm=()=>true;
     // корректная отметка: площадка, ссылка, время в поясе карточки и версия содержимого
     f.set('autoposting-receipt-date','2026-09-17T16:30');await submit();
     assert.equal(recorded.length,1);
