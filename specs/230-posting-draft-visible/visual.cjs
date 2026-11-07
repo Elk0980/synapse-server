@@ -1,4 +1,4 @@
-/* №228 (Spec-lite): лента «Постинг · что и куда уходит» с черновиком из «Монтажа» — 390 и 1440, без наложений и горизонтальной прокрутки.
+/* №228/№231/№232 (Spec-lite): лента «Постинг · что и куда уходит» с черновиком из «Монтажа» — 390 и 1440, без наложений и горизонтальной прокрутки.
    Данные — SAMPLE (синтетические), API кабинета подменено заглушкой; реальных данных клиентов нет. */
 const {chromium}=require('playwright'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const root=path.resolve(__dirname,'../..'),dir=path.join(root,'sites/synapse'),out=__dirname;
@@ -7,7 +7,7 @@ const POSTS=[
   {...base,id:71,status:'published',title:'№1 SAMPLE · Первый визит',text:'SAMPLE',mediaUrls:['https://sample.test/r1.mp4'],scheduledAt:'2026-11-05T10:30:00Z',approval:{approved:true,stale:false},
     deliveries:[{channelId:'telegram',status:'published',url:'https://t.me/sample_channel/15'},{channelId:'vk',status:'published',url:'https://vk.com/wall-1_2'}]},
   {...base,id:79,status:'draft',title:'№3 SAMPLE · «500 ₽» — длинное название ролика для проверки переноса строки в ленте',text:'',origin:'Материалы: ролик №8 v5',
-    mediaUrls:['https://sample.test/reel8-v5.mp4'],scheduledAt:null,captions:{tiktok:''},platformIds:['telegram','vk'],readiness:{ready:false,issues:['Нет текста и подписей площадок']}},
+    mediaUrls:['https://sample.test/reel8-v5.mp4'],scheduledAt:null,captions:{tiktok:''},platformIds:['telegram','vk','tiktok'],readiness:{ready:false,issues:['Нет текста и подписей площадок']}},
   {...base,id:80,status:'scheduled',title:'№4 SAMPLE · Уход после процедуры',text:'SAMPLE',mediaUrls:['https://sample.test/r4.mp4'],scheduledAt:'2026-11-09T11:30:00Z',approval:{approved:true,stale:false}}];
 (async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});const results=[];try{
 for(const width of [390,1440]){
@@ -56,9 +56,31 @@ for(const width of [390,1440]){
   const opened=await page.evaluate(()=>({editor:document.getElementById('autoposting-editor').open,select:document.getElementById('autoposting-select').value}));
   assert.deepEqual(opened,{editor:true,select:'79'});
   const editorFile=`posting-${width}-editor.png`;await page.screenshot({path:path.join(out,editorFile)});
+  /* №231: TikTok выбран, режим не задан — «Кто увидит» сразу под площадками; ссылка предупреждения фокусирует поле. */
+  const privacy=await page.evaluate(()=>{const zone=document.getElementById('autoposting-tiktok-privacy-zone'),select=document.querySelector('[data-option="tiktok.privacy"]');
+    document.querySelector('#autoposting-approval [data-focus-privacy]').click();
+    const r=zone.getBoundingClientRect();return {hidden:zone.hidden,inZone:zone.contains(select),folded:Boolean(select.closest('details.autoposting-options')),focused:document.activeElement===select,
+      right:r.right,width:innerWidth,scroll:document.documentElement.scrollWidth};});
+  assert.deepEqual({hidden:privacy.hidden,inZone:privacy.inZone,folded:privacy.folded,focused:privacy.focused},{hidden:false,inZone:true,folded:false,focused:true},JSON.stringify(privacy));
+  assert.ok(privacy.right<=privacy.width+1);assert.equal(privacy.scroll,privacy.width);
+  await page.waitForTimeout(400);const privacyFile=`posting-${width}-privacy.png`;
+  await page.locator('#autoposting-tiktok-privacy-zone').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(out,privacyFile)});
+  /* №232: серая «Поставить в план» — подпись «Сначала нажмите „Предпросмотр“» и кнопка рядом, без наложений. */
+  await page.locator('#autoposting-schedule').scrollIntoViewIfNeeded();await page.waitForTimeout(200);
+  const sched=await page.evaluate(()=>{const ids=['autoposting-schedule','autoposting-schedule-hint','autoposting-schedule-preview'],b=id=>document.getElementById(id).getBoundingClientRect();
+    const overlaps=[];for(let i=0;i<3;i++)for(let j=i+1;j<3;j++){const x=b(ids[i]),y=b(ids[j]);if(x.left<y.right-1&&y.left<x.right-1&&x.top<y.bottom-1&&y.top<x.bottom-1)overlaps.push(ids[i]+' × '+ids[j]);}
+    return {disabled:document.getElementById('autoposting-schedule').disabled,hint:document.getElementById('autoposting-schedule-hint').textContent,
+      again:!document.getElementById('autoposting-schedule-preview').hidden,overlaps,outside:ids.filter(id=>b(id).right>innerWidth+1),scroll:document.documentElement.scrollWidth,width:innerWidth};});
+  assert.equal(sched.disabled,true);assert.equal(sched.hint,'Сначала нажмите «Предпросмотр»');assert.equal(sched.again,true);
+  assert.deepEqual(sched.overlaps,[]);assert.deepEqual(sched.outside,[]);assert.equal(sched.scroll,sched.width);
+  const scheduleFile=`posting-${width}-schedule.png`;await page.screenshot({path:path.join(out,scheduleFile)});
+  await page.locator('#autoposting-schedule-preview').click();await page.waitForTimeout(200);
+  const after=await page.evaluate(()=>({hint:document.getElementById('autoposting-schedule-hint').hidden?'':document.getElementById('autoposting-schedule-hint').textContent,
+    link:Boolean(document.querySelector('#autoposting-preview-content [data-focus-privacy]'))}));
+  assert.equal(after.link,true,'в замечаниях предпросмотра — ссылка на «Кто увидит»');
   assert.equal(errors.filter(e=>!/Failed to load resource/.test(e)).length,0,errors.join('\n'));
-  results.push({width,file,editorFile,...m,opened,errors:errors.length});await page.close();
+  results.push({width,file,editorFile,privacyFile,scheduleFile,...m,opened,privacy,schedule:sched,afterPreview:after,errors:errors.length});await page.close();
 }
 fs.writeFileSync(path.join(out,'visual-results.json'),JSON.stringify(results,null,2)+'\n');
-console.log('PASS',results.length,'ширины: черновик в ленте, шаги видны, наложений 0, scrollWidth = ширине, клик открывает редактор');
+console.log('PASS',results.length,'ширины: черновик в ленте, шаги видны, наложений 0, scrollWidth = ширине, клик открывает редактор; «Кто увидит» на виду; подпись и «Предпросмотр» у «Поставить в план»');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

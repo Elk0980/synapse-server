@@ -51,6 +51,8 @@ const PLATFORM_OPTIONS = [
   ["tiktok",[["disable_comment","Отключить комментарии"],["disable_duet","Запретить дуэты"],["disable_stitch","Запретить склейки"]]],
   ["max",[["pin_message","Закрепить сообщение"]]],
 ];
+/* №231: формулировка предупреждения — она же ключ ссылки, раскрывающей поле «Кто увидит». */
+const TIKTOK_PRIVACY_ISSUE = "Выберите, кто увидит видео TikTok";
 const TIKTOK_PRIVACY = [["","Не выбрано — отправка не пойдёт"],["PUBLIC_TO_EVERYONE","Публично для всех"],["SELF_ONLY","Только для себя"]];
 /* Человеческие формулировки сохранённых опций для предпросмотра: владелец должен видеть
    утверждаемое поведение рядом с текстом, а не технические названия полей. */
@@ -253,13 +255,13 @@ function create(container, context) {
     <details class="card autoposting-trash" id="autoposting-trash" hidden><summary>Корзина · <span id="autoposting-trash-count">0</span></summary><p class="autoposting-note">Удалённые материалы не показываются в списках и календаре, не согласуются и не публикуются. Файлы, тексты и история сохраняются; материал можно восстановить.</p><ul id="autoposting-trash-list" class="autoposting-daily-list"></ul></details>
     <details id="autoposting-editor" class="autoposting-editor" role="dialog" aria-modal="true" aria-labelledby="autoposting-editor-title"><summary>Редактор публикации</summary><div class="ap-editor-bar"><strong id="autoposting-editor-title" tabindex="-1">Публикация</strong><span id="autoposting-editor-note" class="autoposting-note"></span><button class="plain-button" id="autoposting-editor-close" type="button">Закрыть</button></div><div class="autoposting-editor-grid"><section class="card ap-editor-fields" aria-labelledby="ap-editor-fields-title"><h3 id="ap-editor-fields-title">Материал</h3>${field("autoposting-select","Открыть материал",'<select id="autoposting-select"><option value="">Новый черновик</option></select>',"Какую карточку править. «Новый черновик» — пустая форма. Например: «Отзыв клиента — Черновик».")}<p id="autoposting-post-state" class="ap-editor-state"></p><p id="autoposting-post-error" role="status" hidden></p><div id="autoposting-deliveries"></div>
     <form id="autoposting-form">${field("autoposting-title","Название в кабинете",'<input id="autoposting-title" maxlength="200" required>',"Видно в кабинете и на доске. Для YouTube Shorts это ещё и заголовок ролика — до 100 символов. Например: «Шары на выписку — отзыв».")}
-    <fieldset id="autoposting-platforms" aria-labelledby="ap-platforms-title">${PLATFORMS_LEGEND}</fieldset>
+    <fieldset id="autoposting-platforms" aria-labelledby="ap-platforms-title">${PLATFORMS_LEGEND}</fieldset><div id="autoposting-tiktok-privacy-zone" class="ap-tiktok-privacy" hidden><p class="autoposting-note">TikTok выбран: укажите, кто увидит видео. Без этого отправка в TikTok не пойдёт.</p></div>
     <div class="autoposting-date-fields ap-editor-plan-fields">${field("autoposting-format","Формат",`<select id="autoposting-format"><option value="">Не указан</option>${FORMATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select>`,"Вид материала. В подпись не попадает. Например: «Reels / Shorts / клип».")}${field("autoposting-role","Цель (ОВП)",`<select id="autoposting-role"><option value="">Не указана</option>${ROLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select>`,"Зачем материал: Охват → Влюбление → Продажи. В подпись не попадает. Например: «Охват» — для тех, кто видит вас впервые.")}</div>
     <div class="autoposting-date-fields">${field("autoposting-date","Дата и время",'<input id="autoposting-date" type="datetime-local">',"Когда отправить. Можно оставить пустым — черновик сохранится без даты. Например: 15.10.2026, 18:00.")}${field("autoposting-timezone","Часовой пояс",'<input id="autoposting-timezone" maxlength="80" required placeholder="Asia/Irkutsk">',"Пояс, в котором указано время, — не пояс вашего компьютера. Например: Europe/Moscow.")}</div>
     ${field("autoposting-text","Текст публикации",'<textarea id="autoposting-text" rows="9" maxlength="20000"></textarea>',"Общая подпись. Идёт на все площадки, где не задана своя. Например: «Шары к выписке за 2 часа — пишите в Telegram».")}
     ${field("autoposting-photo","Фото или видео с устройства",'<input id="autoposting-photo" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm">',"Фото JPEG, PNG или WebP до 10 МБ; видео MP4 или WebM до 60 МБ. Выберите файл и нажмите «Загрузить файл». Для фото во ВКонтакте нужно подключение Onlypult. Например: ролик 9:16 в MP4.")}<button class="plain-button" id="autoposting-upload" type="button">Загрузить файл</button><input type="hidden" id="autoposting-media-sha"><p id="autoposting-media-check" class="autoposting-note"></p>
     <details class="autoposting-captions"><summary>Подписи площадок (7)</summary><div class="ap-field ap-field-group"><span class="ap-field-title">Своя подпись для площадки</span>${hintButton("f-autoposting-captions","Подписи площадок",`Пустая подпись — значит, используется общий текст. Например, для TikTok короче: «Шары за 2 часа». Подтверждённые лимиты площадок: ${CAPTIONS.filter(([,,,,source])=>source==="confirmed").map(([,l,n])=>`${l} — ${n}`).join(", ")}. Для 2ГИС официальный лимит не подтверждён: ${CAPTIONS.find(item=>item[0]==="two_gis")[2]} — это наш внутренний предел поля, а не ограничение 2ГИС.`)}</div>${CAPTIONS.map(([id,label,limit,,source])=>`<label>${label}${source==="internal"?" · внутренний предел поля":""}<textarea data-caption="${id}" rows="3" maxlength="${limit}"></textarea><span class="autoposting-note" data-caption-count="${id}"></span></label>`).join("")}</details>
-    <details class="autoposting-options"><summary>Публикуемые опции площадок</summary><div class="ap-field ap-field-group"><span class="ap-field-title">Настройки выхода на площадке</span>${hintButton("f-autoposting-options","Публикуемые опции","Меняют то, что выйдет на площадке, поэтому их правка снимает согласование. Для TikTok обязательно выберите, кто увидит. Например: TikTok — «Все».")}</div>${PLATFORM_OPTIONS.map(([platform,fields])=>`<fieldset data-options="${platform}"><legend>${esc(CAPTIONS.find(item=>item[0]===platform)[1])}</legend>${platform==='tiktok'?`<label>Кто увидит<select data-option="tiktok.privacy">${TIKTOK_PRIVACY.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>`:''}${fields.map(([key,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-option="${platform}.${key}">${label}</label>`).join("")}</fieldset>`).join("")}</details>
+    <details class="autoposting-options"><summary>Публикуемые опции площадок</summary><div class="ap-field ap-field-group"><span class="ap-field-title">Настройки выхода на площадке</span>${hintButton("f-autoposting-options","Публикуемые опции","Меняют то, что выйдет на площадке, поэтому их правка снимает согласование. Для TikTok обязательно выберите, кто увидит. Например: TikTok — «Все».")}</div>${PLATFORM_OPTIONS.map(([platform,fields])=>`<fieldset data-options="${platform}"><legend>${esc(CAPTIONS.find(item=>item[0]===platform)[1])}</legend>${platform==='tiktok'?`<label data-privacy-label>Кто увидит<select data-option="tiktok.privacy">${TIKTOK_PRIVACY.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>`:''}${fields.map(([key,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-option="${platform}.${key}">${label}</label>`).join("")}</fieldset>`).join("")}</details>
     <details class="autoposting-meta"><summary>Для команды · источники и ссылки</summary>    <div class="autoposting-date-fields">${field("autoposting-day","День карточки",`<select id="autoposting-day">${DAYS.map(d=>`<option value="${d}">${d||"—"}</option>`).join("")}</select>`,"День в пакете из семи карточек — нужен для импорта. Обычно не меняется. Например: D3.")}${field("autoposting-origin","Происхождение материала",'<input id="autoposting-origin" maxlength="200" placeholder="например: видео Gemini, без надписи ИИ">',"Откуда материал — видно только команде. Например: «видео Gemini, без надписи ИИ».")}</div>
     ${field("autoposting-media","Материалы по ссылкам",'<textarea id="autoposting-media" rows="3" placeholder="https://example.com/video.mp4"></textarea>',"Открытые ссылки на файлы, по одной в строке, до 10. Например: https://example.com/video.mp4.")}
 </details>
@@ -269,7 +271,7 @@ function create(container, context) {
     <section class="card autoposting-preview-section ap-editor-preview" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3>
     <div class="ap-editor-media"><ul id="autoposting-media-preview" class="autoposting-media-preview" data-empty="Файл ещё не добавлен"></ul></div>
     <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div><details class="autoposting-workspace-tools"><summary>Дополнительные действия</summary><button class="plain-button" id="autoposting-delete" type="button" hidden>Удалить в корзину</button></details><div id="autoposting-archive-zone" class="ap-archive-zone"></div>
-    <div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-variant" class="ap-variant-zone"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
+    <div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-variant" class="ap-variant-zone"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><div class="ap-schedule-row"><button class="plain-button" id="autoposting-schedule" type="button" disabled aria-describedby="autoposting-schedule-hint">Поставить в план</button><span id="autoposting-schedule-hint" class="autoposting-note" hidden></span><button class="plain-button" id="autoposting-schedule-preview" type="button" hidden>Предпросмотр</button></div><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Согласование относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и согласование ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без согласования; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></details>`;
   const get=id=>container.querySelector("#"+id), form=get("autoposting-form");
@@ -348,6 +350,39 @@ function create(container, context) {
         TIKTOK_PRIVACY.some(([id])=>id&&id===saved.privacy)?saved.privacy:'';
       for(const [key] of fields)container.querySelector(`[data-option="${platform}.${key}"]`).checked=saved[key]===true;
     }
+    placePrivacy(true);
+  };
+  /* №231: «Кто увидит» TikTok — обязательный выбор. Если TikTok выбран, а режим не задан, поле переносится
+     из свёрнутых «Публикуемых опций» сразу под площадки. Пока человек выбирает значение, поле не прыгает:
+     обратно оно возвращается при открытии другой карточки или снятии TikTok. Узел один — readOptions не меняется. */
+  const privacyLabel=()=>container.querySelector('[data-privacy-label]');
+  const tiktokChosen=()=>Boolean(container.querySelector('#autoposting-platforms input[value="tiktok"]:checked'));
+  const placePrivacy=(reset=false)=>{
+    const label=privacyLabel(),zone=get('autoposting-tiktok-privacy-zone'),home=container.querySelector('fieldset[data-options="tiktok"]');
+    if(!label||!zone||!home)return;
+    const empty=!label.querySelector('select').value,inZone=zone.contains(label);
+    const want=tiktokChosen()&&(empty||(inZone&&!reset));
+    if(want&&!inZone)zone.append(label);
+    else if(!want&&inZone)home.querySelector('legend').after(label);
+    zone.hidden=!want;
+  };
+  const focusPrivacy=()=>{
+    const label=privacyLabel();if(!label)return;
+    if(tiktokChosen())placePrivacy();
+    for(let fold=label.closest('details');fold;fold=fold.parentElement?.closest('details'))fold.open=true;
+    const select=label.querySelector('select');
+    select.scrollIntoView?.({block:'center',behavior:window.matchMedia?.("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+    select.focus({preventScroll:true});
+  };
+  /* №232: серая «Поставить в план» объясняет, чего не хватает, и рядом даёт «Предпросмотр». */
+  const scheduleHint=()=>{
+    const hint=get('autoposting-schedule-hint'),again=get('autoposting-schedule-preview');if(!hint||!again)return;
+    const blocked=get('autoposting-schedule').disabled,editable=Boolean(post)&&edit()&&EDITABLE.has(post.status);
+    const needPreview=editable&&reviewed!==post.revision;
+    const text=!blocked||!editable||busy?'':dirty()?'Сначала сохраните черновик, затем нажмите «Предпросмотр»'
+      :needPreview?'Сначала нажмите «Предпросмотр»':'Не готово к плану: см. замечания предпросмотра выше';
+    hint.textContent=text;hint.hidden=!text;
+    again.hidden=!(text&&needPreview);again.disabled=busy||!post||dirty();
   };
   const raw=()=>({title:get("autoposting-title").value,text:get("autoposting-text").value,media:get("autoposting-media").value,
     date:get("autoposting-date").value,timezone:get("autoposting-timezone").value,dayKey:get("autoposting-day").value,origin:get("autoposting-origin").value,mediaSha256:get("autoposting-media-sha").value,
@@ -397,6 +432,7 @@ function create(container, context) {
     const targets=approving?data.platformIds:scheduleTargets(post,data.platformIds);
     // Требования YouTube проверяются только если этот канал действительно уходит в план:
     // несогласованный YouTube не должен блокировать согласованный Telegram.
+    if(targets.includes('tiktok')&&!data.platformOptions?.tiktok?.privacy)result.push(TIKTOK_PRIVACY_ISSUE);
     if(targets.includes('youtube_shorts')){
       if(data.title.length>100)result.push('YouTube Shorts: название станет публичным заголовком, сократите его до 100 символов.');
       if(data.mediaUrls.length!==1||!data.mediaUrls.every(isShortsVideoUrl))
@@ -448,7 +484,7 @@ function create(container, context) {
     const importButton2=get("autoposting-import");if(importButton2)importButton2.disabled=busy||!edit()||!settings;get("autoposting-import-json").disabled=busy||!edit()||!settings;
     // Счётчик сам объясняет происхождение предела: внутренний предел поля не выдаётся за лимит площадки.
     for(const [id,,limit,,source] of CAPTIONS){const node=container.querySelector(`[data-caption-count="${id}"]`);const len=container.querySelector(`[data-caption="${id}"]`).value.length;node.textContent=`${len} / ${limit}`+(source==="internal"?" · внутренний предел поля, лимит площадки не подтверждён":"");node.classList.toggle("autoposting-over",len>limit);}
-    get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();
+    get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();scheduleHint();
     const approveSchedule=get('autoposting-approve-schedule');if(approveSchedule)approveSchedule.disabled=busy||!readyToApproveAndSchedule();
     get("autoposting-cancel").hidden=!post||!["scheduled","publishing"].includes(post.status);
     get("autoposting-cancel").disabled=busy||!edit();
@@ -731,6 +767,7 @@ function create(container, context) {
     node.innerHTML=`<p>Версия ${esc(post.revision)} · содержимое v${esc(post.contentRevision||"")} · <strong data-review-state="${esc(rv.state)}">${esc(REVIEW[rv.state]||rv.state)}</strong>${rv.byName?` (${esc(rv.byName)}${rv.at?", "+esc(time.toLocal(rv.at,zone()).replace("T"," ")):""})`:""}</p>
       ${rv.state==="rejected"&&rv.comment?`<p class="autoposting-issues" data-review-comment>Причина отклонения: ${esc(rv.comment)}</p>`:""}
       <p>${r.ready?"Материал готов к согласованию":"Материал не готов: "+esc((r.issues||[]).join("; "))}</p>
+      ${(post.platformIds||[]).includes("tiktok")&&!post.platformOptions?.tiktok?.privacy?`<p class="autoposting-issues" data-privacy-issue><a href="#" data-focus-privacy>${esc(TIKTOK_PRIVACY_ISSUE)}</a></p>`:""}
       ${(post.platformApprovals||[]).length?`<ul class="autoposting-platform-approvals">${post.platformApprovals.map(item=>`<li data-platform-state="${esc(item.state)}">${owner?`<label class="autoposting-checkbox"><input type="checkbox" data-approval-platform="${esc(item.platformId)}" checked>${esc(item.platformLabel)}</label>`:`<strong>${esc(item.platformLabel)}</strong>`} <span class="autoposting-badge">${esc(item.stateLabel)}</span>${item.stale?' <span class="autoposting-badge">решение относилось к прежней версии</span>':""}${item.comment?`<p class="autoposting-issues">Причина: ${esc(item.comment)}</p>`:""}${item.byName?`<p class="autoposting-note">${esc(item.byName)}${item.at?" · "+esc(time.toLocal(item.at,zone()).replace("T"," ")):""}</p>`:""}</li>`).join("")}</ul>${owner?'<p class="autoposting-note">Решение относится только к отмеченным площадкам.</p>':""}`:""}
       ${rv.state!=="pending"&&!a.approved&&requiresApproval(post)?`<button class="plain-button" type="button" id="autoposting-submit-review"${canEdit?"":" disabled"}>Отправить на согласование</button>`:""}
       <button type="button" class="primary-action ap-approve" id="autoposting-approve" data-approved="${a.approved?"true":"false"}"${owner?"":" disabled"}>${a.approved?"Снять согласование":"Согласовать"}${Number.isSafeInteger(post.contentRevision)?` · версия v${esc(post.contentRevision)}`:""}</button>
@@ -1618,7 +1655,7 @@ function create(container, context) {
      явное false, а не «поля нет». Отметка ставится до пересчёта формы. */
   const markOption=event=>{const node=event.target.closest('[data-option]');if(node&&node.type==='checkbox')optionTouched.add(node.dataset.option);};
   form.addEventListener("input",event=>{markOption(event);stash();invalidate();syncVariantDirty();if(event.target.id==="autoposting-media")renderMediaPreview();});
-  form.addEventListener("change",event=>{markOption(event);stash();invalidate();syncVariantDirty();});
+  form.addEventListener("change",event=>{markOption(event);if(event.target.closest('#autoposting-platforms'))placePrivacy();stash();invalidate();syncVariantDirty();});
   get("autoposting-import-state").addEventListener("click",event=>{
     const target=event.target.closest("[data-import-archive]");if(!target)return;
     const id=Number(target.dataset.importArchive);archiveFocus=Number.isSafeInteger(id)&&id>0?id:null;
@@ -1692,12 +1729,14 @@ function create(container, context) {
         const internal=source==="internal";
         const over=caption.length>limit?(internal?" · превышен внутренний предел поля":" · превышен лимит"):"";
         return `<details${post.captions?.[id]?" open":""}><summary>${label} · ${caption.length} / ${limit}${internal?" · внутренний предел поля, лимит площадки не подтверждён":""}${over}${post.captions?.[id]?"":" · общий текст"}${deliveryState(id).ready?"":" · "+deliveryState(id).label}</summary><pre>${esc(caption)}</pre></details>`;}).join("")}</div>`:""}
-      ${issues.length?`<ul class="autoposting-issues">${issues.map(item=>`<li>${esc(item)}</li>`).join("")}</ul>`:"<p>Материал готов к постановке в план.</p>"}`;
+      ${issues.length?`<ul class="autoposting-issues">${issues.map(item=>`<li>${item===TIKTOK_PRIVACY_ISSUE?`<a href="#" data-focus-privacy>${esc(item)}</a>`:esc(item)}</li>`).join("")}</ul>`:"<p>Материал готов к постановке в план.</p>"}`;
     // Файл показан один раз: после предпросмотра — в нём, а не ещё и в списке файлов формы.
     if((post.mediaUrls||[]).length)get("autoposting-media-preview").closest(".ap-editor-media").hidden=true;controls();
     const heading=get("autoposting-preview-title");heading.focus({preventScroll:true});
     heading.scrollIntoView?.({block:"start",behavior:window.matchMedia?.("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
   });
+  get("autoposting-schedule-preview").addEventListener("click",()=>get("autoposting-preview").click());
+  container.addEventListener("click",event=>{const link=event.target.closest('[data-focus-privacy]');if(!link)return;event.preventDefault();focusPrivacy();});
   get("autoposting-schedule").addEventListener("click",()=>{
     if(!edit()||!readyToSchedule())return;
     const selectedTargets=scheduleTargets(post,read().platformIds);
