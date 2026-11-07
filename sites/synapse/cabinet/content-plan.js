@@ -332,6 +332,11 @@
     } catch (err) { state.rowBusy = null; draw(); error(err.status === 403 ? 'Согласовывать и возвращать на доработку может владелец кабинета.' : err.message); }
   }
 
+  /* «Что снять» (макет, Влад 07.11): кадры из сценария («Кадры — А → Б → В»), иначе вставки (B-roll); нет — строки нет. */
+  function whatToShoot(idea) {
+    const shots = String(idea.script || '').split(/\r?\n/).map((l) => /Кадры\s*[—–-]\s*(.+)/.exec(l)?.[1]?.trim()).filter(Boolean);
+    return (shots.length ? shots.join('; ') : String(idea.broll || '').trim()).slice(0, 300);
+  }
   /* Полный вид: поля идеи, которые есть в плане (чего нет — не показываем), затем «Сценарий по секундам» и детали рилса. */
   function full(idea, edit, st, status) {
     const {mentor} = state, vocab = mentor.vocabulary || {};
@@ -340,10 +345,10 @@
       .map((v) => (v.actorName ? v.actorName + ': ' : '') + v.comment))];
     const asset = idea.assetId && (mentor.brief?.fields?.assets || []).find((a) => a.id === idea.assetId);
     const secs = duration(idea.script), format = (vocab.formats || []).find((f) => f.id === idea.format)?.label || idea.format || '';
-    /* Макет 07.11 (раскрытая карточка): Дата, Формат · N с, Съёмка, Задача, Статус, Правки, Исходники; пустое не выводится.
+    /* Макет 07.11 (раскрытая карточка): Дата, Формат · N с, Что снять, Съёмка, Задача, Статус, Правки, Исходники; пустое не выводится.
        «Вышло» — ссылки на опубликованные посты из idea.publications (сервер); строки нет, пока ничего не вышло. */
     const fields = [['Дата', esc(day(idea.date))], ['Формат', esc(format && secs ? `${format} · ${secs} с` : format)],
-      ['Съёмка', esc(idea.filmingBy || '')], ['Задача', esc((vocab.roles || []).find((r) => r.id === idea.role)?.label || '')],
+      ['Что снять', esc(whatToShoot(idea))], ['Съёмка', esc(idea.filmingBy || '')], ['Задача', esc((vocab.roles || []).find((r) => r.id === idea.role)?.label || '')],
       ['Статус', status(idea)], ['Правки', comments.map(esc).join('<br>') || '—'],
       ['Исходники', asset ? `📁 ${esc(asset.title)}` : ''], ['Вышло', published(idea)]].filter(([, v]) => v);
     /* Макет: на доработке текст правки закреплён над сценарием. */
