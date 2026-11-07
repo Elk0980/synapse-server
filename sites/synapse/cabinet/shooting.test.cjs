@@ -77,6 +77,8 @@ test('«Сценарий по секундам»: строки таблицы, �
   assert.deepEqual(['approved', 'shot', 'editing', 'draft'].map((s) => script.stageOf(reel(s))), ['planned', 'shot', 'editing', 'edit_review']);
   assert.equal(script.stageOf(reel('approved', {stage: 'published'})), 'published', 'этап из плана, когда сервер его отдаёт');
   assert.equal(script.onShoot(reel('approved', {stage: 'published'}), '2026-11-07'), false, 'опубликованное не показывается');
+  assert.equal(script.onShoot(reel('approved', {publications: [{platform: 'vk', status: 'published'}]}), '2026-11-07'), false, 'вышло на площадке — на Съёмку не попадает');
+  assert.equal(script.onShoot(reel('approved', {publications: [{platform: 'vk', status: 'scheduled'}]}), '2026-11-07'), true);
   assert.equal(script.onShoot(reel('approved', {stage: 'ready'}), '2026-11-07'), false, 'готовое с прошедшей датой не показывается');
   assert.equal(script.onShoot(reel('approved', {stage: 'ready', date: '2026-11-20'}), '2026-11-07'), true);
   assert.equal(script.onShoot(reel('draft'), '2026-11-07'), true, 'без признака публикации рилс остаётся');
@@ -140,7 +142,10 @@ test('экран «Съёмка» по макету 07.11: шапка CfKit, к�
   await p.registered['content-shooting'].mount(root, p.ctx);
   assert.deepEqual(p.calls[0], ['crm', '/media-mentor', 'avokado']);
   const head = root.querySelector('.cfk-head');
-  assert.equal(head.querySelector('.cfk-title').textContent, 'Согласованные рилсы');
+  // Макет 07.11: телефон — «Согласованные рилсы», ПК — «Съёмка · рилсы по порядку из согласованного плана».
+  assert.equal(head.querySelector('.shoot-head__phone').textContent, 'Согласованные рилсы');
+  assert.equal(head.querySelector('.shoot-head__pc').textContent, 'Съёмка');
+  assert.match(head.querySelector('.shoot-head__lead').textContent, /рилсы по порядку из согласованного плана/);
   assert.ok(head.querySelector('[data-cfk-act=calendar]') && head.querySelector('[data-cfk-act=sort]'));
   assert.match(head.querySelector('a[data-cfk-act=sheet]').href, /^https:\/\/docs\.google\.com\/spreadsheets\/d\/SAMPLE/);
   assert.ok(!root.textContent.includes('⚙'), 'шестерёнки на «Съёмке» нет');
@@ -152,7 +157,9 @@ test('экран «Съёмка» по макету 07.11: шапка CfKit, к�
   const rows = [...root.querySelectorAll('.shoot-row')];
   assert.deepEqual(rows.map((row) => row.dataset.idea), ['r-first', 'r-late'], 'по дате съёмки');
   const first = rows[0];
-  assert.match(first.querySelector('.shoot-row__meta').textContent, /Съёмка чт, 05\.11 · выход чт, 12\.11/);
+  // Дата карточки как в макете — «Чт 05.11»; полная строка «съёмка · выход» — в подсказке.
+  assert.equal(first.querySelector('.shoot-row__meta').textContent, 'Чт 05.11');
+  assert.match(first.querySelector('.shoot-row__meta').title, /Съёмка чт, 05\.11 · выход чт, 12\.11/);
   assert.equal(first.querySelector('[data-stage]').textContent, 'Запланировано', 'этап из общей цепочки, без «Снимается»');
   assert.ok(first.querySelector('.cfk-chip'), 'чип CfKit');
   assert.equal(first.querySelector('.shoot-row__topic').textContent, '№2 Новое меню');
@@ -236,7 +243,7 @@ test('без настроек — честная подсказка; смена 
   const p = page({settings: {}}), root = p.d.getElementById('m');
   await p.registered['content-shooting'].mount(root, p.ctx);
   assert.match(root.querySelector('.shoot-warning').textContent, /не заданы.*Настройки → Контент/);
-  assert.match(card(root, 'r-first').querySelector('.shoot-row__meta').textContent, /день съёмки не задан/);
+  assert.match(card(root, 'r-first').querySelector('.shoot-row__meta').title, /день съёмки не задан/);
   const job = {companyCode: 'avokado', controller: new p.w.AbortController()};
   p.w.SbShooting.view.active.set('x', job);
   await p.registered['content-shooting'].mount(root, {...p.ctx, companyCode: 'alvi'});

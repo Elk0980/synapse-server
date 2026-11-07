@@ -152,6 +152,8 @@
   function onShoot(reel, today) {
     const stage = stageOf(reel);
     if (stage === 'published' || stage === 'unpublished') return false;
+    // Сервер ещё не отдал этап, но площадка уже вернула публикацию — рилс вышел, снимать нечего.
+    if (!reel.idea?.stage && (reel.idea?.publications || []).some((item) => item?.status === 'published')) return false;
     if ((stage === 'ready' || stage === 'scheduled') && reel.idea?.date && reel.idea.date < today) return false;
     return true;
   }
