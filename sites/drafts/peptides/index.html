@@ -335,7 +335,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .stage.mid{color:var(--signal)}.stage.fix{color:var(--teal)}
 .skip{top:calc(70px + env(safe-area-inset-top,0px))!important}
 @media (max-width:700px){.stage{top:calc(44px + env(safe-area-inset-top,0px))}.skip{top:calc(62px + env(safe-area-inset-top,0px))!important}}
-.paintint{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(40,60,75,.0) 30%,rgba(6,14,20,.55) 100%),linear-gradient(180deg,rgba(30,50,70,.28),rgba(30,50,70,.28));opacity:0;mix-blend-mode:normal}
+.paintint{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 40%,rgba(6,14,20,.45) 100%),linear-gradient(180deg,rgba(40,90,120,.22),rgba(40,90,120,.18));opacity:0}
 .pains .pain-top{display:flex;gap:28px;align-items:center;margin-top:30px;max-width:900px}
 .pains .pain-top .big{flex:none;font-family:var(--display);font-weight:200;font-size:clamp(54px,7vw,96px);line-height:1;color:var(--pain)}
 .pains .pain-top .big small{font-size:18px;margin-left:6px;color:var(--fg2)}
@@ -1047,8 +1047,8 @@ html{scroll-behavior:smooth}
   /* v4: pain -> solution grade. Grey, cold and dim at the problem stops; colour returns as the science starts; full warmth at the doctor */
   var gEls=[canvas,document.getElementById('tv'),document.getElementById('loops')], tint=document.getElementById('paintint'), stageEl=document.getElementById('stage'), lastPain=-1, lastStage='';
   function grade(p){var t=p*DUR, q=Math.round((1-ramp(t,7,15))*40)/40; if(q===lastPain)return; lastPain=q;
-    var f=q>0?('saturate('+(1-0.8*q).toFixed(3)+') brightness('+(1-0.2*q).toFixed(3)+') contrast('+(1+0.06*q).toFixed(3)+')'):'none';
-    gEls.forEach(function(e){if(e)e.style.filter=f}); if(tint)tint.style.opacity=q;}
+    var f=q>0?('saturate('+(1-0.3*q).toFixed(3)+') brightness('+(1-0.04*q).toFixed(3)+') contrast('+(1+0.08*q).toFixed(3)+')'):'none';
+    gEls.forEach(function(e){if(e)e.style.filter=f}); if(tint)tint.style.opacity=(0.45*q).toFixed(3);}
   function stageFor(step){var st=step<2?'':step<6?'mid':'fix'; if(st===lastStage)return; lastStage=st; stageEl.className='stage'+(st?' '+st:''); stageEl.textContent=st===''?'Проблема':st==='mid'?'Механизм':'Решение';}
   function setPanels(p){
     var step=0;
