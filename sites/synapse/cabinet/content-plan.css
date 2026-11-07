@@ -184,3 +184,8 @@ body.cp-modal-open{overflow:hidden}
 .cp-sec th { white-space:nowrap; }
 .cp-sec td, .cp-sec th { overflow-wrap:break-word; }
 @media (min-width: 1100px) { .cp-sec td[data-label="Время"], .cp-sec td[data-label="Кто говорит"] { white-space:nowrap; } }
+/* 07.11 «не ровно» (телефон): ⚙ той же высоты, что вкладки; чип статуса в деталях не вылезает за край. */
+.cp-tab-plan { align-items:stretch; }
+.cp-tabs .cp-tab-plan .cp-gear { min-height:0 !important; align-self:stretch; display:inline-flex; align-items:center; justify-content:center; }
+.cp-fgrid dd { min-width:0; }
+.cp-fgrid .cfk-chip, .cp-fgrid .cp-st { white-space:normal; max-width:100%; overflow-wrap:anywhere; }
