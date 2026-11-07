@@ -171,21 +171,13 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
         if (options.is_reels === true && (post.mediaUrls.length !== 1 || !isVideoUrl(post.mediaUrls[0]))) throw failure('CONTENT_LIMIT');
         if (!post.mediaUrls.length) throw failure('CONTENT_LIMIT');
       }
-      /* TikTok. Выбор владельца — необходимое, но НЕ достаточное условие: отправить режим,
-         которого у аккаунта может не быть, значит опубликовать не то, что утверждали.
-         Проверенный контракт Onlypult (openapi.yaml, 29.09.2026) не даёт способа узнать,
-         какие режимы доступны конкретному профилю: ни GET /profiles (id, name, status,
-         platform, username), ни GET /posts/limits (charLimit, hashLimit, mentionsLimit,
-         minCount, maxCount, maxCountStory, firstComment, global_max_file_size) об этом
-         ничего не сообщают, а примеры PUBLIC_TO_EVERYONE/SELF_ONLY в схеме перечнем
-         доступного не являются. Выдумывать endpoint или поле ради проверки нельзя.
-         Поэтому выбранный режим сохраняется в плане и согласуется, но отправка честно
-         останавливается отдельной причиной. Это временный барьер, а не подключённый TikTok:
-         снять его может только подтверждение возможностей профиля в контракте. */
+      /* TikTok. Режим доступа выбирает владелец в карточке, без умолчаний. Решение Влада 06.11:
+         публикуем выбранный режим. Если профилю он недоступен, TikTok/Onlypult отклоняет пост
+         ошибкой — это видно в журнале, «тихой» подмены режима нет. Опубликованность
+         подтверждается только повторным чтением поста, а не ответом API. */
       if (row.id === 'tiktok') {
         if (!['PUBLIC_TO_EVERYONE', 'SELF_ONLY'].includes(options.privacy)) throw failure('TIKTOK_PRIVACY_REQUIRED');
         if (post.mediaUrls.filter(isVideoUrl).length !== 1 || post.mediaUrls.length !== 1) throw failure('CONTENT_LIMIT');
-        throw failure('TIKTOK_PRIVACY_UNCONFIRMED');
       }
       if (Object.keys(options).length) extra.platform_options = {[OPTION_KEY[row.id]]: options};
     } else if (chosen && Object.keys(chosen).length) {

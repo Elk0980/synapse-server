@@ -136,3 +136,8 @@
   .cs-head .cfk-head-row > .cfk-sp { display: block; flex: 1 1 auto; }
   .cs-head .cfk-head-row > .cs-tabs { order: 0; flex: 0 1 auto; flex-wrap: nowrap; margin-right: 6px; }
 }
+/* specs/217: «рилс → переходы → заявки → продажи → выручка» на вкладке Статистика. */
+.cs-funnel { display: grid; gap: 8px; border: 1px solid var(--line, #283143); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.cs-funnel code { font-size: .78rem; }
+.cs-pfchip { display: inline-block; font-size: .72rem; font-weight: 700; padding: 0 5px; border-radius: 4px; background: rgba(163, 172, 187, .12); color: var(--muted, #a3acbb); cursor: help; }
+:is(.view-panel) .cs-root button.cs-funnel-toggle { min-height: 28px; height: 28px; padding: 0 10px; margin-left: 6px; border-radius: 8px; font-size: .8rem; vertical-align: middle; }
