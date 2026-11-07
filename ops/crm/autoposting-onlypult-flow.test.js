@@ -110,16 +110,24 @@ test('очередь → реальный транспорт Onlypult → YouTub
   await api.drain();
   assert.equal(calls.length, afterSubmission, 'немедленный второй проход не отправляет заново и соблюдает интервал сверки');
 
+  /* specs/215-publish-verify: повторное чтение задания со статусом published подтверждает выход.
+     Ссылки на пост у YouTube через Onlypult нет — url пустой, источник подтверждения записан. */
   clock += 60000;
   await api.drain();
   card = api.get(card.id, 'alvi');
-  checkPending(card, 'published', 'PROVIDER_LINK_UNAVAILABLE');
-  card = await api.reconcile(card.id, 'alvi', {revision: card.revision});
-  checkPending(card, 'published', 'PROVIDER_LINK_UNAVAILABLE');
+  assert.equal(card.status, 'published');
+  assert.equal(card.lastErrorCode, null);
+  const confirmed = card.deliveries[0];
+  assert.equal(confirmed.status, 'published');
+  assert.equal(confirmed.providerStatus, 'published');
+  assert.equal(confirmed.errorCode, 'PROVIDER_LINK_UNAVAILABLE');
+  assert.equal(confirmed.confirmedVia, 'provider_status');
+  assert.equal(confirmed.url, null, 'социальная ссылка не выдумывается');
+  await assert.rejects(api.reconcile(card.id, 'alvi', {revision: card.revision}), error => error.details?.code === 'PROVIDER_POST_REQUIRED',
+    'для опубликованного YouTube без способа получить ссылку проверять нечего');
   assert.deepEqual(calls.slice(afterSubmission).map(({method, path}) => ({method, path})), [
     {method: 'GET', path: `/v1/posts/${providerPostId}`},
-    {method: 'GET', path: `/v1/posts/${providerPostId}`},
-  ], 'автоматическая и ручная сверки только читают одно сохранённое задание');
+  ], 'сверка только читает одно сохранённое задание');
   assert.equal(calls.filter(call => call.method === 'POST').length, 1, 'сверки не создают повторную публикацию');
   assert.equal(api.list('other').posts.length, 0);
 });
