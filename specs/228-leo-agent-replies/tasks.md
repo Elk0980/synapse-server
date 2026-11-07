@@ -1,4 +1,4 @@
-# Задачи 227
+# Задачи 228
 
 - [x] T1 `team-chat.js`: таблица ответов агента, видимость и `agentReply` в `list`, обращение «Лео, …», `scope()`.
 - [x] T2 `team-chat-answers.js`: запасной ответ Лео (`agent_pending` / `agent_redirect`), без дубля после `agent_answered`.

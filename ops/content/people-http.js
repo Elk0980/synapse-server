@@ -58,7 +58,7 @@ function createPeopleHttp({authStore,team,tasks,chat,agent,plan,notifications,ru
       if(path==='/members'&&method==='GET') {code=company();fresh(code,true);return reply(200,{members:team.list(session.user.id,code).map(m=>{const permissions=authStore.getById(m.id)?.permissions||[];return {...m,permissions:[...permissions],canApprovePlan:permissions.includes('content-plan.approve')};}),roles:['human_executor']});}
       fail(405,'Метод не поддерживается');
     }
-    // specs/227: агент владельца (Лео/Хью · Claude). Только владелец системы, CSRF на запись, комната — как у владельца.
+    // specs/228: агент владельца (Лео/Хью · Claude). Только владелец системы, CSRF на запись, комната — как у владельца.
     if(path==='/team-chat/agent-reply'||path==='/team-chat/agent-inbox') {
       if(!agent)fail(404,'Адрес не поддерживается');
       if(session.user.role!=='owner')fail(403,'Доступно владельцу');

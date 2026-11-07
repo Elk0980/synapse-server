@@ -1,6 +1,6 @@
-# План 227
+# План 228
 
-Владелец работ: Claude (ветка `claude/leo-agent-replies`). Разрешённые файлы: перечисленные ниже, `specs/227-leo-agent-replies/`.
+Владелец работ: Claude (ветка `claude/leo-agent-replies`). Разрешённые файлы: перечисленные ниже, `specs/228-leo-agent-replies/`.
 
 ## Существующие модули и контракты
 - `ops/content/team-chat.js` — комнаты (`common`, `dm:a-b`, `hugh:<id>`), `chatAccess`, `room()`, `list`, `send`. Добавлено: таблица `team_chat_agent_replies` (reply_id, message_id, persona, owner_id, created_at), видимость ответов агента всем читающим комнату, поле `agentReply` в `list`, вызов ассистента по «Лео, …» (`leoAddressed`), экспорт `scope()` — та же проверка комнаты для агента.

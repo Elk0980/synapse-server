@@ -39,7 +39,7 @@ test('ссылка из старой задачи открывает сообщ�
   w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();
   assert.ok(w.document.getElementById('message-1'));assert.ok(w.document.getElementById('message-200'));assert.equal(scrolled,'message-1');
 });
-test('specs/227: в отдельном чате «Лео · Claude» подписан «Лео»',async t=>{
+test('specs/228: в отдельном чате «Лео · Claude» подписан «Лео»',async t=>{
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
   t.after(()=>w.close());w.AbortSignal=AbortSignal;w.setInterval=()=>1;w.clearInterval=()=>{};
   w.fetch=async url=>({ok:true,json:async()=>url.endsWith('context')?{user:{id:1},companies:[{id:'alpha',name:'Альфа'}]}:

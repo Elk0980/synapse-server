@@ -226,7 +226,7 @@ test('подтверждённый другой viewer не получает н�
   assert.doesNotMatch(f.dock.textContent,/Скрыть от Bob|№11/);assert.equal(bar.querySelector('span').textContent,'');
   assert.equal(bar.hidden,true);assert.equal(bar.style.display,'none');assert.equal(sends(f).length,0);
 });
-test('specs/227: «Лео · Claude» — ответ ассистента с именем «Лео», запасной ответ Лео с понятным статусом',async t=>{
+test('specs/228: «Лео · Claude» — ответ ассистента с именем «Лео», запасной ответ Лео с понятным статусом',async t=>{
   const msgs=[{id:1,user_id:2,author_name:'Лена',text:'Лео, смонтируй рилс',created_at:'2026-11-07T11:00:00Z'},
     {id:2,user_id:0,author_name:'Лео',text:'Лео получил запрос и ответит здесь.',created_at:'2026-11-07T11:00:01Z',answerAudit:{status:'agent_answered',model:'',review_model:'',checked_at:''}},
     {id:3,user_id:0,author_name:'Лео · Claude',text:'Смонтировал черновик.',kind:'agent-reply',agentReply:{persona:'leo',replyTo:1},created_at:'2026-11-07T11:05:00Z'},

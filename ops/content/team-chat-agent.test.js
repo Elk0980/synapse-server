@@ -1,5 +1,5 @@
 'use strict';
-// specs/227: ответы агента владельца «Лео · Claude» в Чатах кабинета.
+// specs/228: ответы агента владельца «Лео · Claude» в Чатах кабинета.
 const {test}=require('node:test'),assert=require('node:assert/strict'),{DatabaseSync}=require('node:sqlite');
 const {createTeamChat}=require('./team-chat');
 const {createTeamChatAnswers,unsafe,HANDOFF,LEO_HANDOFF,LEO_REDIRECT}=require('./team-chat-answers');
@@ -11,7 +11,11 @@ function fixture(t,{env={}}={}) {
   // 1 — владелец (alvi, avokado); 2, 3 — alvi; 4 — avokado.
   const people={1:{name:'Влад',codes:['alvi','avokado'],role:'owner'},2:{name:'Лена',codes:['alvi']},3:{name:'Таня',codes:['alvi']},4:{name:'Петя',codes:['avokado']}};
   const tasks={access(id,code){const p=people[id];if(!p||!p.codes.includes(code))throw Object.assign(Error('denied'),{status:403});return {id,displayName:p.name,role:p.role||'editor'};}};
-  const call=async(action,args,user,code)=>{if(action==='teamChatContext')return {companyCode:code,tasks:[],plan:[]};throw Error(`unexpected ${action}`);};
+  let taskId=700;
+  const call=async(action,args,user,code)=>{if(action==='teamChatContext')return {companyCode:code,tasks:[],plan:[]};
+    if(action==='hughTask')return {task:{id:++taskId,company_code:code,assignee_name:'Хью'}};
+    if(action==='teamChatTask')return {task:{id:++taskId,company_code:code,assignee_name:`person:${user.id}`}};
+    throw Error(`unexpected ${action}`);};
   let clock=Date.parse('2026-11-07T11:00:00Z');const now=()=>new Date(clock).toISOString();
   const answers=createTeamChatAnswers({db,tasks,call,env,now:()=>clock});
   const chat=createTeamChat({db,tasks,call,answers,unsafe,now});
@@ -153,4 +157,29 @@ test('HTTP: маршруты только владельцу, companyCode и CSR
   assert.equal((await call(1,'GET',inboxUrl)).body.messages.length,0);
   assert.equal((await call(1,'DELETE',post)).status,405);
   assert.equal((await call(1,'GET','/content/people/team-chat/agent-inbox?companyCode=alvi')).status,400,'персона обязательна');
+});
+
+test('inbox: упоминание персоны — не обращение; логика та же, что у ответа в чате',async t=>{
+  const f=fixture(t);
+  const asked=await f.send(2,'alvi','Лео, смонтируй рилс');
+  const at=await f.send(3,'alvi','Посмотри исходники, @Лео');
+  for(const text of ['Мы вчера обсуждали это с Лео','спроси Лео про монтаж','Леон, привет','Хью, передай Лео: монтаж'])await f.send(2,'alvi',text);
+  assert.deepEqual(f.agent.inbox(1,'alvi',{persona:'leo'}).messages.map(m=>m.id),[asked.id,at.id]);
+  // Каждое сообщение inbox получило запасной ответ — значит, send его тоже счёл обращением.
+  assert.ok(f.agent.inbox(1,'alvi',{persona:'leo'}).messages.every(m=>m.fallbackStatus==='agent_pending'));
+  assert.deepEqual(f.agent.inbox(1,'alvi',{persona:'hugh'}).messages.map(m=>m.text),['Хью, передай Лео: монтаж'],'упоминание Хью не попадает в inbox Хью');
+});
+
+test('hugh-inbox: без вопросов, на которые ответил встроенный ИИ, и без команд потока задач',async t=>{
+  const f=fixture(t);
+  const open=await f.send(2,'alvi','Хью, что по сайту?');
+  const approved=await f.send(2,'alvi','Хью, какие задачи на сегодня?');
+  const refused=await f.send(2,'alvi','Хью, расскажи про чужой проект');
+  f.db.prepare("UPDATE team_chat_answers SET status='approved' WHERE message_id=?").run(approved.id);
+  assert.equal(f.audit(refused.id).status,'refused');
+  const task=await f.send(2,'alvi','Хью, поставь задачу: обновить прайс');
+  const request=await f.send(2,'alvi','Хью, сделай баннер на главной');
+  assert.equal(task.kind,'self-task');assert.equal(request.kind,'hugh-task');
+  const mine=await f.send(1,'alvi','исправь подпись в футере',{room:'hugh:1'});assert.equal(mine.kind,'hugh-task');
+  assert.deepEqual(f.agent.inbox(1,'alvi',{persona:'hugh'}).messages.map(m=>m.id),[open.id]);
 });

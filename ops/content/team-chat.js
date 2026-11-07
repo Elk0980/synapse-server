@@ -3,9 +3,15 @@ const fail = (status, message) => { throw Object.assign(Error(message), {status}
 const taskTitle = text => /^(?:Хью\s*[,!:]?\s*)?поставь\s+задачу\s*[:—-]?\s+([\s\S]+)$/iu.exec(text)?.[1]?.trim() || '';
 // Хью пишет только при обращении: «Хью, …» в начале или упоминание «@Хью».
 const addressed = text => /^\s*@?хью(?![\p{L}\p{N}])/iu.test(text) || /(?<![\p{L}\p{N}])@хью(?![\p{L}\p{N}])/iu.test(text);
-// Лео (specs/227) — так же только по обращению: «Лео, …» в начале или «@Лео». Отвечает агент владельца.
+// Лео (specs/228) — так же только по обращению: «Лео, …» в начале или «@Лео». Отвечает агент владельца.
 const leoAddressed = text => /^\s*@?(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text) || /(?<![\p{L}\p{N}])@(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text);
 const {detect} = require('./hugh-personas');
+// Кому адресовано сообщение — одна логика для ответа (send) и для agent-inbox (specs/228).
+// Названы оба — тот, кто раньше; в логе с Хью обращение к Хью подразумевается; простое упоминание — никому.
+function addressedTo(text, hughRoom=false) {
+  if (leoAddressed(text)) return addressed(text) ? detect(text) || 'hugh' : 'leo';
+  return addressed(text) || hughRoom ? 'hugh' : null;
+}
 // «Хью, сделай …» → задача «Я поставил Хью». В личном чате с Хью обращение подразумевается.
 function hughTitle(text, implicit=false) {
   const match = /^\s*(@?хью\s*[,!:]?\s*)?((?:сделай(?:те)?|измени(?:те)?|поменяй(?:те)?|исправь(?:те)?|добавь(?:те)?|убери(?:те)?|подготовь(?:те)?|перенеси(?:те)?)\s+[\s\S]+)$/iu.exec(text);
@@ -34,7 +40,7 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
   for (const [name, type] of [['room',"TEXT NOT NULL DEFAULT 'common'"],['kind',"TEXT NOT NULL DEFAULT 'message'"],['ref_task_id','INTEGER'],['audience_id','INTEGER']])
     if (!columns.has(name)) db.exec(`ALTER TABLE team_chat_messages ADD COLUMN ${name} ${type}`);
   db.exec('CREATE INDEX IF NOT EXISTS team_chat_room_idx ON team_chat_messages(company_code,room,id)');
-  // specs/227: ответы агента владельца (Лео/Хью · Claude). Видны всем, кто читает комнату, как сообщение владельца.
+  // specs/228: ответы агента владельца (Лео/Хью · Claude). Видны всем, кто читает комнату, как сообщение владельца.
   db.exec(`CREATE TABLE IF NOT EXISTS team_chat_agent_replies (
     reply_id INTEGER PRIMARY KEY REFERENCES team_chat_messages(id), message_id INTEGER REFERENCES team_chat_messages(id),
     persona TEXT NOT NULL, owner_id INTEGER NOT NULL, created_at TEXT NOT NULL);
@@ -161,14 +167,13 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
       });
     }
     user = chatAccess(userId,code,true);
-    // Кого позвали: «Лео, …» — Лео; названы оба — тот, кто раньше (hugh-personas.detect); иначе Хью.
-    const persona = leoAddressed(text) ? (addressed(text) ? detect(text) || 'hugh' : 'leo') : 'hugh';
-    if(!title&&!request&&answers&&user.tasksAccess&&(scope.hugh||addressed(text)||leoAddressed(text)))await answers.answer(row,{persona});
+    const persona = addressedTo(text, Boolean(scope.hugh));
+    if(!title&&!request&&answers&&user.tasksAccess&&persona)await answers.answer(row,{persona});
     chatAccess(userId,code,true);
     return {message:db.prepare('SELECT * FROM team_chat_messages WHERE id=?').get(row.id)};
   }
-  // Та же проверка комнаты, что при чтении/отправке (specs/227: агент владельца не получает новых комнат).
+  // Та же проверка комнаты, что при чтении/отправке (specs/228: агент владельца не получает новых комнат).
   const scope = (userId, code, roomName, write=false) => { const user = chatAccess(userId, code, write); return {user, ...room(user, code, roomName || 'common')}; };
   return {list,send,members,access:chatAccess,scope};
 }
-module.exports = {createTeamChat,taskTitle,hughTitle,addressed,leoAddressed,similar};
+module.exports = {createTeamChat,taskTitle,hughTitle,addressed,leoAddressed,addressedTo,similar};

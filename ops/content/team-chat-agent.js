@@ -1,15 +1,17 @@
 'use strict';
-/* specs/227: ответы агента владельца в «Чатах» кабинета — «Лео · Claude» / «Хью · Claude».
+/* specs/228: ответы агента владельца в «Чатах» кабинета — «Лео · Claude» / «Хью · Claude».
 
    Агент (Claude) работает через сессию владельца: читает обращения к персоне (inbox)
    и публикует ответ (reply). Прав не добавляется: комната проверяется той же функцией,
    что при обычном чтении/отправке владельцем (чужой лог с Хью и чужой личный чат закрыты). */
-const {addressedPersona} = require('./hugh-personas');
+const {addressedTo} = require('./team-chat');
 const fail = (status, message) => { throw Object.assign(Error(message), {status}); };
 const AUTHOR = Object.freeze({leo:'Лео · Claude', hugh:'Хью · Claude'});
 const PERSONAS = Object.keys(AUTHOR);
 const DAY = 864e5, INBOX_DAYS = 7, INBOX_LIMIT = 50, BATCH = 200;
 // Запасные ответы, которые заменяет ответ агента; история не удаляется — меняется только статус.
+// Встроенный ИИ уже ответил по существу (approved) или отказал (refused) — второй ответ не нужен.
+const ANSWERED = new Set(['approved','refused']);
 const FALLBACK = ['pending','review_required','agent_pending'];
 
 function createTeamChatAgent({db, chat, now = () => new Date().toISOString()}) {
@@ -77,9 +79,13 @@ function createTeamChatAgent({db, chat, now = () => new Date().toISOString()}) {
       const rows = page.all(code, last, from, userId, `hugh:${userId}`);
       for (const row of rows) {
         last = row.id;
-        if (!canRead(row.room) || addressedPersona(row.text, {addressed:row.room.startsWith('hugh:')}) !== persona) continue;
+        // Только обращения (та же логика, что у send) и только обычные сообщения: «Хью, поставь задачу / сделай …»
+        // (self-task, hugh-task) и уточнения по задаче ведёт существующий поток задач.
+        if (row.kind !== 'message' || !canRead(row.room) || addressedTo(row.text, row.room.startsWith('hugh:')) !== persona) continue;
+        const fallbackStatus = fallback?.get(row.id)?.status ?? null;
+        if (ANSWERED.has(fallbackStatus)) continue;
         messages.push({id:row.id, room:row.room, userId:row.user_id, authorName:row.author_name, text:row.text, createdAt:row.created_at,
-          kind:row.kind, persona, fallbackStatus:fallback?.get(row.id)?.status ?? null});
+          kind:row.kind, persona, fallbackStatus});
         if (messages.length === INBOX_LIMIT) break;
       }
       if (messages.length === INBOX_LIMIT || rows.length < BATCH) break;

@@ -5,7 +5,7 @@
   const node = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-zA-Z0-9_.:-]/g, '');
   const time = value => { const d = new Date(value); return Number.isNaN(d) ? '' : d.toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); };
-  // specs/227: ответ агента владельца «Лео · Claude» / «Хью · Claude» показывается как ответ ассистента с именем персоны.
+  // specs/228: ответ агента владельца «Лео · Claude» / «Хью · Claude» показывается как ответ ассистента с именем персоны.
   const assistantName = m => m.user_id === 0 && /^(Лео|Хью) · Claude$/.exec(m.author_name || '')?.[1] || m.author_name;
   const auditLabel = status => ({ refused: 'Запрос отклонён', agent_pending: 'Ждёт ответа Лео', agent_answered: 'Ответ ниже', agent_redirect: '' })[status] ?? 'Передано на проверку';
   const human = error => error?.status === 403 ? 'Нет доступа к этому чату.' : error?.status === 401 ? 'Сессия закончилась. Войдите снова.' : 'Связь не подтвердила результат. Повтор той же отправки безопасен.';

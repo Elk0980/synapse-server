@@ -1,7 +1,7 @@
 'use strict';
 const {COMPANIES}=require('./auth-store');
 const HANDOFF='Ответ пока недоступен. Вопрос сохранён для проверки.';
-// specs/227: запрос к Лео без встроенного ИИ берёт агент владельца (Claude) через agent-inbox.
+// specs/228: запрос к Лео без встроенного ИИ берёт агент владельца (Claude) через agent-inbox.
 const LEO_HANDOFF='Лео получил запрос и ответит здесь.';
 // Чужой лог с Хью владелец не читает — агент туда ответить не сможет, поэтому честно зовём в общий чат.
 const LEO_REDIRECT='Лео отвечает в общем чате компании: напишите там «Лео, …».';
@@ -66,7 +66,7 @@ function createTeamChatAnswers({db,tasks,call,env=process.env,fetchImpl=fetch,no
   function finish(message,status,text,reason,author='Хью · ИИ') {
     db.exec('BEGIN IMMEDIATE');
     try {
-      // Агент владельца уже ответил — запасной ответ не нужен (specs/227).
+      // Агент владельца уже ответил — запасной ответ не нужен (specs/228).
       if(row(message.id).reply_id||row(message.id).status==='agent_answered'){db.exec('COMMIT');return;}
       tasks.access(message.user_id,message.company_code,true);
       const earlier=status==='review_required'&&db.prepare(`SELECT 1 FROM team_chat_answers a
