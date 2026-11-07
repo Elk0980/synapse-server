@@ -89,14 +89,17 @@ test('макет 07.11: карточка — дата, статус, тема с
   const full = a.root.querySelector('.cp-full');
   assert.equal(a.root.querySelector('[data-idea="s-1"] .cp-chev').textContent, '▴');
   const fields = Object.fromEntries([...full.querySelectorAll('.cp-fgrid > div')].map((d) => [d.querySelector('dt').textContent, d.querySelector('dd').textContent]));
-  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Задача', 'Съёмка', 'Статус', 'Правки'], 'исходников в данных нет — не показываются; правок нет — «—»');
+  // Порядок раскрытой карточки макета 07.11: Дата, Формат, Съёмка, Задача, Статус, Правки (Исходники и «Вышло» — когда есть данные).
+  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Съёмка', 'Задача', 'Статус', 'Правки'], 'исходников и публикаций в данных нет — не показываются; правок нет — «—»');
   assert.equal(fields['Формат'], 'Рилс'); assert.equal(fields['Съёмка'], 'SAMPLE оператор'); assert.equal(fields['Задача'], 'Охватный'); assert.equal(fields['Правки'], '—');
   assert.match(fields['Дата'], /^(Пн|Вт|Ср|Чт|Пт|Сб|Вс) \d{2}\.\d{2}$/, 'дата как в макете: «Сб 01.11»');
   // «До съёмки» — после сцен.
   const blocks = [...full.children].map((n) => n.className);
   assert.ok(blocks.indexOf('cp-before') > blocks.indexOf('cp-secs'), 'блок «До съёмки» после «Сценария по секундам»');
-  assert.equal(full.querySelector('.cp-before > b').textContent, 'До съёмки');
-  for (const text of ['Хук — первые 1–2 с', 'SAMPLE хук', 'SAMPLE руки', 'SAMPLE тёплый свет', 'SAMPLE халат', 'SAMPLE подпись']) assert.ok(full.textContent.includes(text), text);
+  // Макет: «До съёмки» и детали плана — приглушённые строки «Подпись: значение», без отдельной таблицы.
+  assert.equal(full.querySelector('.cp-before dl'), null);
+  assert.equal(full.querySelector('.cp-before [data-key="hook"] b').textContent, 'Хук:');
+  for (const text of ['SAMPLE хук', 'SAMPLE руки', 'SAMPLE тёплый свет', 'SAMPLE халат', 'SAMPLE подпись']) assert.ok(full.textContent.includes(text), text);
   assert.deepEqual([...full.querySelectorAll('.cp-sec th')].map((th) => th.textContent), ['Сцена', 'Кто говорит', 'Точная реплика', 'Действие / монтаж'], 'пустые колонки скрыты');
   const script = [...full.querySelectorAll('.cp-sec tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent));
   assert.deepEqual(script, [['Сцена №1', 'Мастер', 'Здравствуйте!', ''], ['Сцена №2', 'Клиент', '<b>Привет</b>', ''], ['Сцена №3', '', '', 'Пауза, смех']]);
@@ -538,6 +541,38 @@ test('макет 07.11: строка «До съёмки: …» не стано�
   const full = a.root.querySelector('.cp-full');
   assert.equal(full.querySelectorAll('.cp-sec tbody tr').length, 1);
   assert.match(full.querySelector('.cp-before').textContent, /подготовить форму/);
+});
+
+test('макет 07.11, раскрытая карточка: «Формат · N с», «Сценарий по секундам · N с», «Вышло ↗» из publications, правка над сценарием', async () => {
+  const script = '0–3 с | Актёр | Привет | У стойки | Входит | Первый визит\n3–8 с | Мастер | «Проходите» | Кабинет | Жест | «Знакомство»';
+  const plan = [idea(1, { script, stage: 'published', publications: [
+    { platform: 'instagram', status: 'published', url: 'https://example.com/p/1', publishedAt: '2026-11-05T10:00:00Z' },
+    { platform: 'tiktok', status: 'published', url: '', publishedAt: '2026-11-05T10:00:00Z' },
+    { platform: 'vk', status: 'published', url: 'javascript:alert(1)', publishedAt: '2026-11-05T10:00:00Z' },
+    { platform: 'telegram', status: 'scheduled', url: '', publishedAt: '' }] }),
+  idea(2, { stage: 'script_rework', publications: [] })];
+  const variants = [{ ideaId: 's-1', platform: 'vk', status: 'approved', approvable: true }, { ideaId: 's-2', platform: 'vk', status: 'rejected', approvable: true, comment: 'Короче вступление' }];
+  const a = api({ withKit: true, plan, variants, planExtra: { stageFacts: NEW_FACTS } }); await a.mount();
+  a.root.querySelector('[data-idea="s-1"] .cp-date').click();
+  const full = a.root.querySelector('[data-idea="s-1"] .cp-full');
+  const fields = Object.fromEntries([...full.querySelectorAll('.cp-fgrid > div')].map((d) => [d.querySelector('dt').textContent, d.querySelector('dd')]));
+  assert.equal(fields['Формат'].textContent, 'Рилс · 8 с');
+  assert.equal(full.querySelector('.cp-secs > b').textContent, 'Сценарий по секундам · 8 с');
+  const links = [...fields['Вышло'].querySelectorAll('a')];
+  assert.deepEqual(links.map((l) => [l.textContent, l.getAttribute('href'), l.target, l.rel]), [['IG вышло ↗', 'https://example.com/p/1', '_blank', 'noopener noreferrer']], 'ссылка только http(s)');
+  assert.match(fields['Вышло'].textContent, /TT вышло · ссылка позже/); assert.match(fields['Вышло'].textContent, /VK вышло · ссылка позже/); assert.match(fields['Вышло'].textContent, /TG ждёт/);
+  const cells = full.querySelectorAll('.cp-sec tbody tr');
+  assert.equal(cells[0].querySelector('[data-label="Точная реплика"]').dataset.q, '1', 'реплика без кавычек — «ёлочки» добавит стиль');
+  assert.equal(cells[1].querySelector('[data-label="Точная реплика"]').dataset.q, undefined, 'уже в кавычках — не трогаем');
+  assert.equal(cells[1].querySelector('[data-label="Титр"]').dataset.q, undefined);
+  assert.equal(full.querySelector('.cp-pin'), null, 'опубликованному правка не закрепляется');
+  a.root.querySelector('[data-idea="s-2"] .cp-date').click();
+  const row2 = a.root.querySelector('[data-idea="s-2"]');
+  assert.ok(row2.classList.contains('cp-rework'), 'карточка на доработке — коралловая');
+  const pin = row2.querySelector('.cp-pin');
+  assert.match(pin.textContent, /Правка: Короче вступление/);
+  assert.ok(pin.compareDocumentPosition(row2.querySelector('.cp-secs')) & 4, 'правка закреплена над сценарием');
+  assert.equal(row2.querySelector('.cp-fgrid').textContent.includes('Вышло'), false, 'не вышло — строки «Вышло» нет');
 });
 
 /* Пакет H (specs/209-cf-stages): новый сервер отдаёт idea.stage, publications, plan.stageFacts и company.timeZone. */

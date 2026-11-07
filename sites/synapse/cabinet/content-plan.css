@@ -189,3 +189,43 @@ body.cp-modal-open{overflow:hidden}
 .cp-tabs .cp-tab-plan .cp-gear { min-height:0 !important; align-self:stretch; display:inline-flex; align-items:center; justify-content:center; }
 .cp-fgrid dd { min-width:0; }
 .cp-fgrid .cfk-chip, .cp-fgrid .cp-st { white-space:normal; max-width:100%; overflow-wrap:anywhere; }
+
+/* 07.11 «ровно как на макете» — раскрытая карточка. Телефон: сцены столбиком «Сцена №N · время · кто», реплика
+   и титр в «ёлочках», подписи «В кадре:», «Действие:», «Титр:»; «До съёмки» — приглушённой строкой; на ПК — таблица
+   без колонки «Сцена» и заголовок «№N … — полный вид». */
+.cp-fhead { display:none; margin:0 0 6px; align-items:center; gap:8px; }
+.cp-fhead .cp-chev { margin-left:auto; }
+.cp-pin { margin:0 0 8px; padding:6px 10px; border-radius:8px; border:1px solid rgba(240,138,93,.45); background:rgba(240,138,93,.10); color:color-mix(in srgb,#f08a5d 55%,var(--text,#eee)); white-space:pre-wrap; overflow-wrap:anywhere; }
+.cp-row.cp-rework { border-color:rgba(240,138,93,.45); }
+.cp-row.cp-rework.cp-open { border-color:rgba(240,138,93,.7); }
+.cp-before { display:grid; gap:2px; margin-top:8px; padding-top:6px; border-top:1px solid var(--line,#333); color:var(--muted,#b9afa7); font-size:.88rem; }
+.cp-before p { margin:0; overflow-wrap:anywhere; white-space:pre-wrap; }
+.cp-before b { font-weight:600; }
+.cp-before p:first-child b { text-transform:uppercase; letter-spacing:.02em; }
+.cp-pubs { display:flex; flex-wrap:wrap; gap:4px; }
+.cp-pub { font-size:.82rem; padding:1px 8px; border-radius:999px; border:1px solid var(--line,#333); color:var(--muted,#b9afa7); white-space:nowrap; text-decoration:none; }
+.cp-pub[data-pub="ok"] { color:#4cc38a; border-color:rgba(76,195,138,.6); }
+a.cp-pub:hover, a.cp-pub:focus-visible { background:rgba(76,195,138,.12); }
+.cp-edit { margin-top:8px; }
+.cp-edit > summary { list-style:none; display:inline-flex; align-items:center; min-height:36px; padding:0 12px; border:1px solid var(--line,#333); border-radius:10px; cursor:pointer; font-size:.88rem; color:var(--muted,#b9afa7); }
+.cp-edit > summary::-webkit-details-marker { display:none; }
+.cp-edit[open] > summary { color:var(--text,#eee); border-color:var(--accent,#9fd4ff); }
+@media (max-width: 1099px) {
+  .cp-sec tr { padding:6px 0; }
+  .cp-sec td { font-size:.9rem; }
+  .cp-sec td[data-label="Точная реплика"] { color:var(--text,#eee); }
+  .cp-sec td[data-label="Кто / что в кадре"], .cp-sec td[data-label="Действие / монтаж"], .cp-sec td[data-label="Титр"] { color:var(--muted,#b9afa7); }
+  .cp-sec td[data-label="Кто / что в кадре"]::before { content:"В кадре: "; }
+  .cp-sec td[data-label="Действие / монтаж"]::before { content:"Действие: "; }
+  .cp-sec td[data-label="Титр"]::before { content:"Титр: "; }
+  .cp-sec td[data-label="Титр"][data-q]::before { content:"Титр: «"; }
+  .cp-sec td[data-label="Точная реплика"][data-q]::before { content:"«"; }
+  .cp-sec td[data-label="Точная реплика"][data-q]::after, .cp-sec td[data-label="Титр"][data-q]::after { content:"»"; }
+}
+@media (min-width: 1100px) {
+  .cp-fhead { display:flex; }
+  .cp-sec th[data-col="scene"], .cp-sec td[data-label="Сцена"] { display:none; }
+  /* Макет ПК: стрелка ▾ сразу после темы, а не у правого края колонки. */
+  .cp-line { justify-content:flex-start; }
+  .cp-line .cp-chev { margin-left:0; }
+}

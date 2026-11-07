@@ -58,12 +58,30 @@
     else row[4] = rest;
     return row;
   });
-  function secondsTable(script) {
+  /* Длительность рилса — конец последней сцены по времени из сценария («33–40 с» → 40). Нет времени — нет числа. */
+  const duration = (script) => { let max = 0;
+    for (const r of seconds(script)) { const m = /(\d+(?:[.,]\d+)?)\s*с/i.exec(r[0]); if (m) max = Math.max(max, Number(m[1].replace(',', '.'))); }
+    return max ? Math.round(max) : 0; };
+  /* Реплика и титр на телефоне — в «ёлочках», как в макете; уже закавыченный текст не трогаем (data-q). */
+  const quoted = (v) => /^\s*[«"“„]/.test(v);
+  function secondsTable(script, secs) {
     const rows = seconds(script); if (!rows.length) return '';
     const cols = SEC.map((_, i) => i).filter((i) => rows.some((r) => r[i]));
-    /* «Сцена №N» — жирным в начале каждой строки (макет 07.11). */
-    return `<div class="cp-secs"><b>Сценарий по секундам</b><table class="cp-sec"><thead><tr><th scope="col">Сцена</th>${cols.map((i) => `<th scope="col">${SEC[i]}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((r, n) => `<tr><td data-label="Сцена"><b>Сцена №${n + 1}</b></td>${cols.map((i) => `<td data-label="${SEC[i]}">${esc(r[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    /* «Сцена №N» — жирным в начале каждой строки (макет 07.11); на ПК колонки «Сцена» в макете нет — скрыта стилем. */
+    return `<div class="cp-secs"><b>Сценарий по секундам${secs ? ` · ${secs} с` : ''}</b><table class="cp-sec"><thead><tr><th scope="col" data-col="scene">Сцена</th>${cols.map((i) => `<th scope="col">${SEC[i]}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r, n) => `<tr><td data-label="Сцена"><b>Сцена №${n + 1}</b></td>${cols.map((i) => `<td data-label="${SEC[i]}"${(i === 2 || i === 5) && r[i] && !quoted(r[i]) ? ' data-q="1"' : ''}>${esc(r[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  /* Публикации рилса с сервера (idea.publications): «IG вышло ↗» — ссылка на пост; ссылки нет — «вышло · ссылка позже». */
+  const PUB = {published: 'вышло', scheduled: 'ждёт', pending: 'ждёт', error: 'ошибка', failed: 'ошибка', unpublished: 'снято'};
+  const httpUrl = (value) => { try { const u = new URL(value); return /^https?:$/.test(u.protocol) ? u.href : ''; } catch { return ''; } };
+  function published(idea) {
+    const list = (Array.isArray(idea.publications) ? idea.publications : []).filter((p) => p && p.platform);
+    if (!list.some((p) => p.status === 'published')) return '';
+    const rank = (id) => { const i = NET_ORDER.indexOf(id); return i < 0 ? NET_ORDER.length : i; };
+    return `<span class="cp-pubs">${list.slice().sort((a, b) => rank(a.platform) - rank(b.platform)).map((p) => {
+      const abbr = (NET[p.platform] || [String(p.platform).slice(0, 3).toUpperCase()])[0], word = PUB[p.status] || String(p.status || '—'), url = httpUrl(p.url);
+      return p.status === 'published' && url ? `<a class="cp-pub" data-pub="ok" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Открыть публикацию">${esc(abbr)} ${word} ↗</a>`
+        : `<span class="cp-pub" data-pub="${p.status === 'published' ? 'ok' : esc(p.status || '')}"${p.status === 'published' ? ' title="Ссылку на пост площадка пока не вернула"' : ''}>${esc(abbr)} ${word}${p.status === 'published' ? ' · ссылка позже' : ''}</span>`; }).join('')}</span>`;
   }
 
   /* Доступ к API только через ctx контракта А: компания, CSRF и сессия добавляются оболочкой. */
@@ -149,7 +167,7 @@
       return `<span class="cp-st" data-status="${esc(prod || st)}">${esc(prod ? PROD[prod] : (VSTATUS[st] || st))}</span>`; };
     /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
        Плана нет — порядок прежний: анкета сверху и открыта, пока не заполнена. */
-    const number = new Map(allDays.map((idea, index) => [idea.ideaId, index]));
+    const number = new Map(allDays.map((idea, index) => [idea.ideaId, index])); state.numbers = number;
     const days = allDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
       const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru')
         : state.sort === 'status' ? (STATUS_RANK[statusOf(a)] ?? 9) - (STATUS_RANK[statusOf(b)] ?? 9)
@@ -208,7 +226,8 @@
         /* Макет Влада 07.11: дата и статус; тема со стрелкой ▾/▴ (не кнопка-стрелка — раскрывает вся карточка, кроме кнопок);
            ниже «Сменить статус ▾» и значки площадок. На ПК те же элементы стоят колонками таблицы. */
         const open = state.open.has(idea.ideaId), st = statusOf(idea);
-        return `<li class="cp-row${open ? ' cp-open' : ''}" data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea)}</div>
+        const rework = kit() && ['script_rework', 'edit_rework'].includes(stageOf(idea, st));
+        return `<li class="cp-row${open ? ' cp-open' : ''}${rework ? ' cp-rework' : ''}"data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea)}</div>
           <button type="button" class="cp-line" data-toggle aria-expanded="${open}"><span class="cp-topic">${esc(idea.topic)}</span><span class="cp-chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
           ${open ? full(idea, edit, st, status) : ''}
           <div class="cp-acts">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${nets(idea, platformLabel)}</div>
@@ -316,23 +335,29 @@
   /* Полный вид: поля идеи, которые есть в плане (чего нет — не показываем), затем «Сценарий по секундам» и детали рилса. */
   function full(idea, edit, st, status) {
     const {mentor} = state, vocab = mentor.vocabulary || {};
-    const block = (key, value) => value ? `<div><dt>${LABEL[key]}</dt><dd>${esc(value)}</dd></div>` : '';
+    const line = (key, label, value) => value ? `<p data-key="${key}"><b>${label}:</b> ${esc(value)}</p>` : '';
     const comments = [...new Set((mentor.variants || []).filter((v) => v.ideaId === idea.ideaId && v.comment)
       .map((v) => (v.actorName ? v.actorName + ': ' : '') + v.comment))];
     const asset = idea.assetId && (mentor.brief?.fields?.assets || []).find((a) => a.id === idea.assetId);
-    /* Макет 07.11 (как лист «КОНТЕНТ ПЛАН»): дата, формат, задача, съёмка, статус, правки, исходники; пустое не выводится. */
-    const fields = [['Дата', esc(day(idea.date))], ['Формат', esc((vocab.formats || []).find((f) => f.id === idea.format)?.label || idea.format || '')],
-      ['Задача', esc((vocab.roles || []).find((r) => r.id === idea.role)?.label || '')],
-      ['Съёмка', esc(idea.filmingBy || '')], ['Статус', status(idea)], ['Правки', comments.map(esc).join('<br>') || '—'],
-      ['Исходники', asset ? `📁 ${esc(asset.title)}` : '']].filter(([, v]) => v);
-    /* «До съёмки» — после сцен: хук, вставки, стиль, реквизит, подпись, задание Хью. */
-    const before = `${block('hook', idea.hook)}${block('broll', idea.broll)}${block('style', idea.style)}
-      ${block('props', idea.props)}${block('caption', caption(idea))}
-      ${idea.mentorNote ? `<div><dt>Задание Хью</dt><dd>${esc(idea.mentorNote)}</dd></div>` : ''}
-      ${beforeLines(idea.script).map((line) => `<div><dt>Подготовка</dt><dd>${esc(line)}</dd></div>`).join('')}`.trim();
-    return `<div class="cp-full"><dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
-      ${secondsTable(idea.script)}${before ? `<div class="cp-before"><b>До съёмки</b><dl>${before}</dl></div>` : ''}
-      ${edit ? `<details class="cp-edit"><summary>Изменить</summary><form data-edit="${esc(idea.ideaId)}">
+    const secs = duration(idea.script), format = (vocab.formats || []).find((f) => f.id === idea.format)?.label || idea.format || '';
+    /* Макет 07.11 (раскрытая карточка): Дата, Формат · N с, Съёмка, Задача, Статус, Правки, Исходники; пустое не выводится.
+       «Вышло» — ссылки на опубликованные посты из idea.publications (сервер); строки нет, пока ничего не вышло. */
+    const fields = [['Дата', esc(day(idea.date))], ['Формат', esc(format && secs ? `${format} · ${secs} с` : format)],
+      ['Съёмка', esc(idea.filmingBy || '')], ['Задача', esc((vocab.roles || []).find((r) => r.id === idea.role)?.label || '')],
+      ['Статус', status(idea)], ['Правки', comments.map(esc).join('<br>') || '—'],
+      ['Исходники', asset ? `📁 ${esc(asset.title)}` : ''], ['Вышло', published(idea)]].filter(([, v]) => v);
+    /* Макет: на доработке текст правки закреплён над сценарием. */
+    const rework = ['script_rework', 'edit_rework'].includes(serverStage(idea)) || st === 'rejected';
+    const pinned = rework && comments.length ? `<p class="cp-pin"><b>Правка:</b> ${comments.map(esc).join('<br>')}</p>` : '';
+    /* «До съёмки» — одной приглушённой строкой после сцен (как в макете), ниже — детали плана, которые есть. */
+    const prep = beforeLines(idea.script);
+    const before = [prep.length ? `<p><b>До съёмки:</b> ${prep.map(esc).join(' ')}</p>` : '', line('hook', 'Хук', idea.hook), line('broll', 'Вставки', idea.broll),
+      line('style', 'Стиль', idea.style), line('props', 'Реквизит', idea.props), line('caption', 'Подпись', caption(idea)),
+      idea.mentorNote ? `<p><b>Задание Хью:</b> ${esc(idea.mentorNote)}</p>` : ''].join('');
+    const fhead = `<p class="cp-fhead" aria-hidden="true"><b>№${(state.numbers?.get(idea.ideaId) ?? 0) + 1} ${esc(idea.topic)} — полный вид</b><span class="cp-chev">▴</span></p>`;
+    return `<div class="cp-full">${fhead}<dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      ${pinned}${secondsTable(idea.script, secs)}${before ? `<div class="cp-before">${before}</div>` : ''}
+      ${edit ? `<details class="cp-edit"><summary>Изменить сценарий</summary><form data-edit="${esc(idea.ideaId)}">
         ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
         <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}</div>`;
   }
@@ -507,7 +532,8 @@
       if (!t.closest('[data-toggle]') && t.closest('button, a, input, textarea, select, label, summary, form, details, .cp-pop')) return;
       if (!t.closest('[data-toggle]') && String(window.getSelection?.() || '')) return;
       const id = row.dataset.idea; state.open.has(id) ? state.open.delete(id) : state.open.add(id); draw();
-      root.querySelector(`[data-idea="${id}"] [data-toggle]`)?.focus();
+      // Макет: после нажатия пальцем/мышью рамки фокуса на теме нет; с клавиатуры (detail 0) рамка остаётся.
+      root.querySelector(`[data-idea="${id}"] [data-toggle]`)?.focus({focusVisible: event.detail === 0});
     }));
     root.querySelectorAll('[data-open-row]').forEach((button) => button.addEventListener('click', () => {
       state.open.add(button.closest('[data-idea]').dataset.idea); state.view = 'short'; draw();
