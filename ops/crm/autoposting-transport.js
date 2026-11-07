@@ -288,6 +288,25 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
     return result;
   }
+  /* Сверка выхода (specs/215-publish-verify): только чтение у провайдера, тем же сохранённым подключением
+     той же ревизии. Поиск задания без идентификатора и ссылка на пост; ничего не публикует. */
+  function onlypultRow(companyCode,channelId,channelRevision) {
+    const current = company(companyCode), row = rowFor(current.code,channelId);
+    if (!row || row.provider !== 'onlypult' || row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
+    return {current,row};
+  }
+  async function lookupSubmitted({companyCode,channelId,channelRevision,contentSha,submittedAt}) {
+    const {current,row} = onlypultRow(companyCode,channelId,channelRevision);
+    const result = await onlypult.findSubmitted(row,{contentSha,submittedAt});
+    if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
+    return result;
+  }
+  async function postLink({companyCode,channelId,channelRevision,publishedAt,text}) {
+    const {current,row} = onlypultRow(companyCode,channelId,channelRevision);
+    const result = await onlypult.permalink(row,{publishedAt,text});
+    if (rowFor(current.code,channelId)?.revision !== row.revision) return null;
+    return result ? publicUrl(result) : null;
+  }
   /* Чтение статистики теми же сохранёнными ключами: только белый список методов только для чтения.
      Ничего не публикует; ключ наружу не выходит. Возвращает null, если канал не настроен. */
   const STATS_METHODS = Object.freeze({telegram: ['getChatMemberCount', 'getChat'], vk: ['stats.get', 'groups.getById', 'wall.get']});
@@ -309,7 +328,7 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     const current = company(code), row = rowFor(current.code, id);
     return {destinationRevision: row?.target && row.encrypted_token ? row.destination_revision : 0, channelRevision: row?.revision || 0};
   }
-  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats,connectionRevision,approvalDestination};
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,lookupSubmitted,postLink,readStats,connectionRevision,approvalDestination};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};

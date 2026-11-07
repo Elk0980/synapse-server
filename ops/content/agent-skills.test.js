@@ -32,7 +32,7 @@ test('встроенный навык выбирается по контентн
   assert.equal(chosen?.id, 'synapse-content-system');
   const result = store.instructions(CONTENT_TASK, { companyCode: 'alvi' });
   assert.equal(result.id, 'synapse-content-system');
-  assert.equal(result.version, '1.0.0');
+  assert.equal(result.version, '1.1.0');
   assert.match(result.text, /Рабочая инструкция/);
   assert.match(result.text, /роль/i, 'в инструкции есть содержательная часть навыка');
   // Ограничения навыка едут вместе с ним: это текст порядка работы, а не разрешение.
@@ -132,7 +132,7 @@ test('предел размера обрезает блок и честно эт
   assert.match(result.text, /сокращено по пределу размера/);
   // Неверное значение не снимает предел, а возвращает к значению по умолчанию.
   const broken = skills({ HUGH_SKILLS_MAX_BYTES: 'много' });
-  assert.equal(broken.status().maxBytes, 6000);
+  assert.equal(broken.status().maxBytes, 14000);
   assert.ok(broken.status().issues.some((issue) => /HUGH_SKILLS_MAX_BYTES/.test(issue)));
 });
 
@@ -154,7 +154,7 @@ test('в журнал уходят только идентификатор и в
   const result = store.instructions(CONTENT_TASK, { companyCode: 'alvi' });
   assert.equal(lines.length, 1);
   assert.match(lines[0], /synapse-content-system/);
-  assert.match(lines[0], /1\.0\.0/);
+  assert.match(lines[0], /1\.1\.0/);
   for (const fragment of result.text.split('\n').filter((line) => line.trim().length > 30)) {
     assert.equal(lines[0].includes(fragment.trim()), false, 'содержание навыка в журнал не попадает');
   }
@@ -162,7 +162,8 @@ test('в журнал уходят только идентификатор и в
 
 test('встроенный навык не содержит личных имён, клиентских примеров и коммерческих условий', () => {
   const text = fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'SKILL.md'), 'utf8')
-    + fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'references', 'planning.md'), 'utf8');
+    + fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'references', 'planning.md'), 'utf8')
+    + fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'references', 'reels-style.md'), 'utf8');
   for (const forbidden of ['Влад', 'Хью', 'Claude', 'Codex', 'Palitra', 'Палитра', 'ALVI', 'АЛВИ',
     'Авокадо', 'Avokado', '₽', 'руб', 'USD', 'курс', 'подписк']) {
     assert.equal(text.includes(forbidden), false, `во встроенном навыке не должно быть: ${forbidden}`);
@@ -185,4 +186,18 @@ test('каталог навыков попадает в образ сервис�
       assert.ok(fs.existsSync(path.join(DEFAULT_ROOT, item.dir, ref.file)), `справочник существует: ${ref.file}`);
     }
   }
+});
+
+test('стандарт рилсов и правило текста публикации доходят до модели целиком', () => {
+  const store = skills({}, DEFAULT_ROOT, { info() {}, error() {} });
+  for (const task of ['Составь контент-план рилсов на месяц со сценариями и съёмкой',
+    'Напиши сценарий рилса для съёмки и монтажа видео']) {
+    const result = store.instructions(task, { companyCode: 'alvi' });
+    assert.ok(result, task);
+    assert.equal(result.text.includes('сокращено по пределу размера'), false, `блок не обрезан: ${task}`);
+    assert.match(result.text, /безопасной зоне/, 'правило масок площадок');
+    assert.match(result.text, /зацепка/, 'правило зацепки');
+  }
+  const plan = store.instructions('Составь контент-план рилсов на месяц со сценариями и съёмкой', { companyCode: 'alvi' });
+  assert.match(plan.text, /готовый текст публикации/, 'текст публикации пишется в плане');
 });

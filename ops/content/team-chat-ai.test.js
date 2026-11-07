@@ -88,9 +88,12 @@ test('«Лео, …» — инструкция и контекст Медиа-н
   await f.send('Лео, а Хью уже поправил сайт?');assert.match(f.requests[4].system,/^Ты Лео/);
 });
 
-test('ИИ недоступен: запасной ответ «передал вопрос команде» от имени позванного',async t=>{
+test('ИИ недоступен: Хью — «передал вопрос команде», Лео — ждёт агента владельца (specs/228)',async t=>{
   const f=await fixture(t,{env:{}});
+  await f.send('Хью, что у меня в работе?');
+  assert.equal(f.last().text,'Хью передал вопрос команде — ответим здесь, в этом чате.');assert.equal(f.last().author_name,'Хью · ИИ');
+  assert.equal(f.audit().status,'review_required');
   await f.send('Лео, какие темы на неделе?');
-  assert.equal(f.last().text,'Лео передал вопрос команде — ответим здесь, в этом чате.');assert.equal(f.last().author_name,'Лео · ИИ');
-  assert.equal(f.audit().status,'review_required');assert.equal(f.requests.length,0);
+  assert.equal(f.last().text,'Лео получил запрос и ответит здесь.');assert.equal(f.audit().status,'agent_pending');
+  assert.equal(f.requests.length,0);
 });

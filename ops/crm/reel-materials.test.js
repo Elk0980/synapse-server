@@ -138,3 +138,143 @@ test('HTTP: права по autoposting.view/edit, компания провер
   await assert.rejects(call('DELETE','/autoposting/reels/'+created.body.id),{status:405});
   assert.ok(contexts.includes('autoposting.view')&&contexts.includes('autoposting.edit'));
 });
+
+/* specs/227-plan-caption-to-post: текст публикации из версий площадок идеи действующего плана своей компании. */
+function withPlan(f){
+  f.db.exec(`CREATE TABLE IF NOT EXISTS media_mentor_plans(company_id INTEGER PRIMARY KEY,revision INTEGER NOT NULL,brief_revision INTEGER NOT NULL,plan TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS media_mentor_idea_archive(company_id INTEGER NOT NULL,idea_id TEXT NOT NULL,idea TEXT NOT NULL,archived_at TEXT NOT NULL,archived_by INTEGER,archived_by_name TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',PRIMARY KEY(company_id,idea_id));`);
+  const put=(companyId,revision,days)=>f.db.prepare('INSERT OR REPLACE INTO media_mentor_plans(company_id,revision,brief_revision,plan,updated_at) VALUES(?,?,1,?,?)')
+    .run(companyId,revision,JSON.stringify({days}),'2026-11-07T00:00:00Z');
+  return put;
+}
+const planIdea=(ideaId,variants,extra={})=>({ideaId,date:'2026-11-12',platform:'vk',format:'reel',role:'reach',topic:'SAMPLE тема плана',variants,...extra});
+
+test('specs/227: «Создать публикацию» берёт текст из версий идеи плана — основной текст, подписи площадок, тема, пометка ревизии',()=>{
+  const f=fixture(),put=withPlan(f);
+  put(1,7,[planIdea('s-1',{vk:{text:'SAMPLE текст VK',contentRevision:3},telegram:{text:'SAMPLE текст TG',contentRevision:1},
+    instagram:{text:'SAMPLE текст VK',contentRevision:2},max:{text:'SAMPLE исключён',excluded:true}})]);
+  const reel=f.materials.create('avokado',{title:'Монтаж темы',mediaUrl:asset('avokado'),platforms:['vk'],ideaId:'s-1'},editor);
+  const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','telegram','instagram','max']},editor);
+  const body=f.created[0].body;
+  assert.equal(body.text,'SAMPLE текст VK','основной текст — версия основной площадки идеи');
+  assert.deepEqual(body.captions,{telegram:'SAMPLE текст TG'},'подпись — только у отличающейся версии; совпадающая и исключённая не дублируются');
+  assert.equal(body.title,'SAMPLE тема плана','заголовок — тема идеи');
+  assert.match(body.origin,/^Материалы: ролик №\d+ v1 · текст из контент-плана, ревизия плана 7, тема s-1$/);
+  assert.equal(out.planText.source,'plan');assert.equal(out.planText.planRevision,7);assert.equal(out.planText.mainPlatform,'vk');
+  assert.deepEqual(out.planText.captionPlatforms,['telegram']);assert.deepEqual(out.planText.warnings,[]);
+  assert.equal(out.planText.text,undefined,'сам текст в отчёт не дублируется');
+  // Свой заголовок из запроса важнее темы.
+  f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk'],title:'Свой заголовок'},editor);
+  assert.equal(f.created[1].body.title,'Свой заголовок');
+});
+
+test('specs/227: основной площадки без текста — берётся первая непустая версия; длинный текст не обрезается и не подставляется',()=>{
+  const f=fixture(),put=withPlan(f),long='Д'.repeat(1100);
+  put(1,2,[planIdea('s-2',{vk:{text:''},telegram:{text:long},tiktok:{text:'SAMPLE TT'}})]);
+  const reel=f.materials.create('avokado',{title:'Ролик',mediaUrl:asset('avokado'),platforms:['tiktok'],ideaId:'s-2'},editor);
+  const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['tiktok','telegram']},editor);
+  assert.equal(out.planText.mainPlatform,'tiktok','первая непустая версия по выбранным площадкам');
+  assert.equal(f.created[0].body.text,undefined,'общий текст пуст: иначе Telegram получил бы его вместо своей версии');
+  assert.deepEqual(f.created[0].body.captions,{tiktok:'SAMPLE TT'},'текст длиннее 1024 для Telegram не подставлен');
+  assert.deepEqual(out.planText.blockedPlatforms,['telegram']);
+  assert.deepEqual(out.planText.warnings.map(w=>[w.platform,w.code]),[['telegram','CAPTION_TOO_LONG']]);
+  assert.match(out.planText.warnings[0].message,/Telegram.*1024/);
+  // Основной текст длиннее лимита площадки без своей версии — предупреждение, текст площадки не выдумывается.
+  put(1,3,[planIdea('s-2',{vk:{text:'В'.repeat(3000)}})]);
+  const second=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','instagram']},editor);
+  assert.equal(f.created[1].body.text,undefined,'основной текст не уходит общим — Instagram его не получит');
+  assert.equal(f.created[1].body.captions.vk.length,3000);assert.equal(Object.hasOwn(f.created[1].body.captions,'instagram'),false);
+  assert.deepEqual(second.planText.warnings.map(w=>[w.platform,w.code]),[['instagram','MAIN_TOO_LONG']]);
+});
+
+test('specs/227: нет связи, плана, идеи или текста — черновик как раньше; идея в архиве и чужая компания — никогда',()=>{
+  const f=fixture(),put=withPlan(f);
+  const plain=f.materials.create('avokado',{title:'Без темы',mediaUrl:asset('avokado'),platforms:['vk']},editor);
+  let out=f.materials.createPublication('avokado',plain.id,{version:1,platformIds:['vk']},editor);
+  assert.equal(out.planText.source,'none');assert.equal(out.planText.reason,'NO_IDEA_LINK');
+  assert.equal(f.created[0].body.text,undefined);assert.equal(f.created[0].body.captions,undefined);
+  assert.equal(f.created[0].body.title,'Без темы');assert.equal(f.created[0].body.origin,`Материалы: ролик №${plain.id} v1`);
+  // Тема без текста.
+  put(1,1,[planIdea('s-3',{vk:{text:''}})]);
+  const empty=f.materials.create('avokado',{title:'Ролик без текста',mediaUrl:asset('avokado'),platforms:['vk'],ideaId:'s-3'},editor);
+  out=f.materials.createPublication('avokado',empty.id,{version:1,platformIds:['vk']},editor);
+  assert.equal(out.planText.reason,'NO_TEXT');assert.equal(f.created[1].body.text,undefined);assert.equal(f.created[1].body.title,'Ролик без текста');
+  // Тема пропала из плана после пересохранения.
+  put(1,2,[planIdea('s-other',{vk:{text:'другое'}})]);
+  out=f.materials.createPublication('avokado',empty.id,{version:1,platformIds:['vk']},editor);
+  assert.equal(out.planText.reason,'IDEA_NOT_IN_PLAN');assert.equal(f.created[2].body.text,undefined);
+  // Тема в архиве плана.
+  put(1,3,[planIdea('s-3',{vk:{text:'SAMPLE архивный'}})]);
+  f.db.prepare("INSERT INTO media_mentor_idea_archive(company_id,idea_id,idea,archived_at) VALUES(1,'s-3','{}','2026-11-07T00:00:00Z')").run();
+  out=f.materials.createPublication('avokado',empty.id,{version:1,platformIds:['vk']},editor);
+  assert.equal(out.planText.reason,'IDEA_ARCHIVED');assert.equal(f.created[3].body.text,undefined);
+  // Чужая компания: у alvi в плане идея с тем же ideaId; ролик avokado видит только план avokado.
+  put(2,9,[planIdea('s-3',{vk:{text:'ЧУЖОЙ текст'}}),planIdea('s-alvi',{vk:{text:'ЧУЖОЙ текст 2'}})]);
+  f.db.prepare("DELETE FROM media_mentor_idea_archive").run();put(1,4,[planIdea('s-3',{vk:{text:'SAMPLE свой'}})]);
+  out=f.materials.createPublication('avokado',empty.id,{version:1,platformIds:['vk']},editor);
+  assert.equal(f.created[4].body.text,'SAMPLE свой');assert.equal(out.planText.planRevision,4);
+  assert.throws(()=>f.materials.create('avokado',{title:'x',mediaUrl:asset('avokado'),platforms:['vk'],ideaId:'s-alvi'},editor),{status:404},'идея чужого плана не привязывается');
+  f.db.prepare("UPDATE reel_materials SET idea_id='s-alvi' WHERE id=?").run(plain.id);
+  out=f.materials.createPublication('avokado',plain.id,{version:1,platformIds:['vk']},editor);
+  assert.equal(out.planText.reason,'IDEA_NOT_IN_PLAN','даже прямая запись чужого ideaId не даёт текста чужой компании');
+  assert.ok(f.created.every(c=>!String(c.body.text||'').includes('ЧУЖОЙ')));
+  assert.ok(f.created.every(c=>c.code==='avokado'));
+});
+
+test('specs/227: версия длиннее лимита своей площадки не становится основным текстом',()=>{
+  const f=fixture(),put=withPlan(f);
+  put(1,1,[planIdea('s-4',{telegram:{text:'Т'.repeat(1100)},vk:{text:'SAMPLE VK'}},{platform:'telegram'})]);
+  const reel=f.materials.create('avokado',{title:'Ролик',mediaUrl:asset('avokado'),platforms:['telegram'],ideaId:'s-4'},editor);
+  const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['telegram','vk']},editor);
+  assert.equal(out.planText.mainPlatform,'vk');assert.equal(f.created[0].body.text,undefined);assert.deepEqual(f.created[0].body.captions,{vk:'SAMPLE VK'});
+  assert.deepEqual(out.planText.warnings.map(w=>[w.platform,w.code]),[['telegram','CAPTION_TOO_LONG']]);
+});
+
+test('specs/227, связка с настоящим планом: текст пустой площадки дописан через savePlan — согласование другой площадки цело, черновик получает оба текста',()=>{
+  const {createMediaMentor}=require('./media-mentor');
+  const db=new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE companies(id INTEGER PRIMARY KEY,code TEXT UNIQUE COLLATE NOCASE,name TEXT,city TEXT,timezone TEXT,phone TEXT,email TEXT,website_url TEXT,socials TEXT,is_deleted INTEGER DEFAULT 0,updated_at TEXT);
+    INSERT INTO companies(id,code,name,timezone,socials) VALUES(1,'avokado','SAMPLE','Asia/Irkutsk','[]'),(2,'alvi','SAMPLE 2','Asia/Irkutsk','[]');`);
+  const mentor=createMediaMentor(db),actor={userId:7,userName:'SAMPLE'};
+  const brief=mentor.saveBrief('avokado',{revision:0,brief:{platforms:['vk','telegram']}},actor).brief.revision;
+  let snap=mentor.savePlan('avokado',{planRevision:0,briefRevision:brief,days:[{ideaId:'s-1',date:'2026-11-12',platform:'vk',format:'reel',role:'reach',topic:'SAMPLE тема',
+    variants:{vk:{text:'SAMPLE VK'},telegram:{text:''}}}]},actor);
+  snap=mentor.decideVariants('avokado',{planRevision:snap.plan.revision,briefRevision:brief,scope:'idea',ideaId:'s-1',decision:'approved'},actor);
+  const status=(s,p)=>s.variants.find(v=>v.platform===p).status;
+  assert.equal(status(snap,'vk'),'approved');assert.equal(status(snap,'telegram'),'empty');
+  const days=snap.plan.days.map(({stage,stageSource,publications,...d})=>({...d,variants:{...d.variants,telegram:{...d.variants.telegram,text:'SAMPLE TG'}}}));
+  const before=snap.plan.days[0].variants.vk.contentRevision;
+  snap=mentor.savePlan('avokado',{planRevision:snap.plan.revision,briefRevision:brief,days,reason:'Текст публикации изменён'},actor);
+  assert.equal(snap.plan.revision,2,'новая версия плана');assert.equal(snap.plan.days[0].variants.vk.contentRevision,before);
+  assert.equal(status(snap,'vk'),'approved','версия без изменений сохраняет согласование');assert.equal(status(snap,'telegram'),'pending');
+  assert.equal(snap.approval.status,'pending','решение «план целиком» привязано к версии плана');
+  const created=[],autoposting={list:()=>({posts:[]}),create:(code,body)=>{created.push({code,body});return {id:1,title:body.title,status:'draft',platformIds:body.platformIds,mediaUrls:body.mediaUrls};}};
+  const materials=createReelMaterials(db,{autoposting,information:{get:()=>({revision:1})}});
+  const reel=materials.create('avokado',{title:'Монтаж',mediaUrl:asset('avokado'),platforms:['vk'],ideaId:'s-1'},editor);
+  const out=materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','telegram']},editor);
+  assert.equal(created[0].body.text,'SAMPLE VK');assert.deepEqual(created[0].body.captions,{telegram:'SAMPLE TG'});
+  assert.equal(created[0].body.title,'SAMPLE тема');assert.equal(out.planText.planRevision,2);
+  // Чужая компания с той же идеей ничего не получает.
+  assert.throws(()=>materials.create('alvi',{title:'x',mediaUrl:asset('alvi'),platforms:['vk'],ideaId:'s-1'},{...editor,companyCodes:new Set(['alvi'])}),{status:404});
+});
+
+test('specs/227 ревью: при MAIN_TOO_LONG основной текст не попадает в площадку с меньшим лимитом — ни общим текстом, ни подписью',()=>{
+  const f=fixture(),put=withPlan(f),long='Т'.repeat(3000);
+  put(1,1,[planIdea('s-5',{vk:{text:long},youtube_shorts:{text:'SAMPLE YT'}})]);
+  const reel=f.materials.create('avokado',{title:'Ролик',mediaUrl:asset('avokado'),platforms:['vk'],ideaId:'s-5'},editor);
+  const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','telegram','max','youtube_shorts']},editor);
+  const body=f.created[0].body;
+  assert.equal(body.text,undefined);
+  assert.deepEqual(body.captions,{vk:long,max:long,youtube_shorts:'SAMPLE YT'},'max (4000) — основной текст подписью, telegram (1024) — ничего');
+  assert.equal(Object.hasOwn(body.captions,'telegram'),false);
+  for(const [platform,caption] of Object.entries(body.captions))assert.ok(caption.length<=({vk:15000,max:4000,youtube_shorts:5000})[platform]);
+  assert.deepEqual(out.planText.warnings.map(w=>[w.platform,w.code]),[['telegram','MAIN_TOO_LONG']]);
+  // Для vk/max основной текст положен явно: проверка без max.
+  f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','telegram','max']},editor);
+  assert.deepEqual(Object.keys(f.created[1].body.captions).sort(),['max','vk']);
+  // Ни одной площадке текст не подходит — причина TOO_LONG, текста нет совсем, предупреждение есть.
+  const only=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['telegram']},editor);
+  assert.equal(only.planText.source,'none');assert.equal(only.planText.reason,'TOO_LONG');
+  assert.equal(f.created[2].body.text,undefined);assert.equal(f.created[2].body.captions,undefined);
+  assert.deepEqual(only.planText.warnings.map(w=>w.code),['MAIN_TOO_LONG']);
+});

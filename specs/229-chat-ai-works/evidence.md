@@ -24,3 +24,6 @@
   в личном чате текст не обещает передачу команде;
 - CRM `teamChatContext`: `contacts` из карточки компании; `brief` есть при доступе к контент-плану
   и отсутствует у роли только с задачами.
+
+## После слияния #615 (merge origin/main)
+Конфликт разрешён по plan.md. `team-chat.js` — версия #615 (`addressedTo`, ИИ зовётся только по обращению). `node --test ops/content/team-chat*.test.js ops/content/people-http*.test.js ops/crm/people-http*.test.js sites/synapse/cabinet/chats*.test.cjs sites/synapse/cabinet/team-chat*.test.cjs` — 57/57; gate — ok. Ожидание в `team-chat-agent.test.js` для Хью обновлено на новый запасной текст.

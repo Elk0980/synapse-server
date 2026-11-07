@@ -648,3 +648,86 @@ test('specs/225: окно ролика связанной темы показы�
   f.el.querySelector('[data-open="reel:22"]').click(); await settle();
   assert.equal(f.el.querySelector('[data-detail-modal] [data-folders]'), null, 'не https — ссылок нет');
 });
+
+/* specs/227-plan-caption-to-post: текст публикации из контент-плана в окне ролика и после «Создать публикацию». */
+const withPlanText = (text) => ({method, path}) => {
+  if (method === 'GET' && path === 'crm/media-mentor') { const m = mentor(); m.plan.days[1].variants = {instagram: {text}, tiktok: {text: ''}}; return m; }
+  return undefined;
+};
+test('specs/227: нет подписи в «Постинге» — показан текст из контент-плана; нет и в плане — «добавьте текст публикации в контент-плане»', async () => {
+  const f = fixture({plan: true, respond: withPlanText('SAMPLE <b>текст</b> из плана')});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  const box = f.el.querySelector('[data-caption-box]');
+  assert.equal(box.querySelector('[data-caption]').textContent, 'SAMPLE <b>текст</b> из плана'); assert.ok(box.querySelector('[data-from-plan]'));
+  assert.equal(box.querySelector('b'), null, 'текст плана выводится как текст');
+  assert.match(box.querySelector('[data-caption-source]').textContent, /Из контент-плана — подставится в черновик при «Создать публикацию»/);
+  // Маска TikTok: своей версии нет — основная площадка темы.
+  const tiktok = f.el.querySelector('input[name="mt-platform"][value="tiktok"]');
+  tiktok.checked = true; tiktok.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+  assert.equal(f.el.querySelector('[data-caption]').textContent, 'SAMPLE <b>текст</b> из плана');
+  const g = fixture({plan: true, respond: withPlanText('')});
+  await g.mount();
+  g.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  assert.equal(g.el.querySelector('[data-caption]').textContent, 'Текста публикации пока нет. Добавьте текст публикации в контент-плане.');
+  assert.equal(g.el.querySelector('[data-caption-source]'), null);
+  // У поста есть своя подпись — она важнее плана.
+  g.el.querySelector('[data-back]').click(); await settle();
+  g.el.querySelector('[data-open="reel:21"]').click(); await settle();
+  assert.equal(g.el.querySelector('[data-caption]').textContent, 'Подпись для Инсты'); assert.equal(g.el.querySelector('[data-from-plan]'), null);
+});
+
+test('specs/227: после «Создать публикацию» видно, подставлен ли текст из плана, и предупреждения о лимитах', async () => {
+  const answer = (planText) => ({method, path}) => path.endsWith('/publication') && method === 'POST'
+    ? {post: {id: 78}, planText, reel: {...planReels()[1], versions: [planReels()[1].currentVersion], edits: [], log: [], postId: 102}} : withPlanText('SAMPLE')({method, path});
+  const f = fixture({plan: true, respond: answer({source: 'plan', reason: '', planRevision: 7, mainPlatform: 'instagram', captionPlatforms: ['telegram'],
+    warnings: [{platform: 'telegram', code: 'CAPTION_TOO_LONG', message: 'Текст версии для Telegram длиннее 1024 символов — не подставлен. Сократите его в контент-плане.'}]})});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  f.el.querySelector('[data-publish]').click(); await settle();
+  const status = f.el.querySelector('[data-detail-status]');
+  assert.equal(status.dataset.planText, 'plan');
+  assert.match(status.textContent, /Черновик публикации №78 создан\. Ничего не отправлено: согласование и время — в «Постинге»\. Текст публикации подставлен из контент-плана \(версия плана 7\)\./);
+  assert.deepEqual([...f.el.querySelectorAll('[data-plan-warnings] li')].map((li) => li.textContent), ['Текст версии для Telegram длиннее 1024 символов — не подставлен. Сократите его в контент-плане.']);
+  const g = fixture({plan: true, respond: answer({source: 'none', reason: 'NO_TEXT', message: 'В контент-плане нет текста публикации для этой темы', warnings: []})});
+  await g.mount();
+  g.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  g.el.querySelector('[data-publish]').click(); await settle();
+  assert.equal(g.el.querySelector('[data-detail-status]').dataset.planText, 'none');
+  assert.match(g.el.querySelector('[data-detail-status]').textContent, /подпись, согласование и время — в «Постинге»\. В контент-плане нет текста публикации — добавьте текст публикации в контент-плане\./);
+  assert.equal(g.el.querySelector('[data-plan-warnings]'), null);
+});
+
+test('specs/227 ревью: превью в «Монтаже» учитывает лимит площадки и архив темы — «подставится» не обещается, если сервер не подставит', async () => {
+  const plan = (variants, extra = {}) => ({method, path}) => {
+    if (method === 'GET' && path === 'crm/media-mentor') { const m = mentor(); m.plan.days[1].variants = variants; Object.assign(m, extra); return m; }
+    return undefined;
+  };
+  const mask = (f, id) => { const input = f.el.querySelector(`input[name="mt-platform"][value="${id}"]`); input.checked = true; input.dispatchEvent(new f.w.Event('change', {bubbles: true})); };
+  const f = fixture({plan: true, respond: plan({instagram: {text: 'И'.repeat(3000)}, telegram: {text: 'Т'.repeat(1100)}, vk: {text: 'SAMPLE VK'}}, {vocabulary: {captionLimits: {instagram: 2200, telegram: 1024, vk: 15000, tiktok: 2200}}})});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  // Instagram: своя версия длиннее 2200.
+  assert.ok(f.el.querySelector('[data-plan-too-long]')); assert.equal(f.el.querySelector('[data-caption-source]'), null);
+  assert.match(f.el.querySelector('[data-caption]').textContent, /Текст для Instagram.* длиннее лимита площадки 2200 — сократите его в плане/);
+  // TikTok: своей версии нет; основная (Instagram) длиннее своего лимита и пропускается, следующая — VK, укладывается.
+  mask(f, 'tiktok');
+  assert.equal(f.el.querySelector('[data-from-plan]').textContent, 'SAMPLE VK');
+  // Telegram: своя версия 1100 > 1024.
+  mask(f, 'telegram');
+  assert.match(f.el.querySelector('[data-plan-too-long]').textContent, /длиннее лимита площадки 1024/);
+  // Основной текст длиннее лимита площадки без своей версии.
+  const g = fixture({plan: true, respond: plan({instagram: {text: 'И'.repeat(2100)}})});
+  await g.mount();
+  g.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  assert.ok(g.el.querySelector('[data-from-plan]'), 'Instagram: 2100 ≤ 2200');
+  mask(g, 'telegram');
+  assert.match(g.el.querySelector('[data-plan-too-long]').textContent, /Основной текст плана длиннее лимита площадки Telegram \(1024\) — добавьте текст для Telegram/);
+  assert.equal(g.el.querySelector('[data-caption-source]'), null);
+  // Тема в архиве плана: текст не обещается.
+  const h = fixture({plan: true, respond: plan({instagram: {text: 'SAMPLE'}}, {archivedIdeas: [{ideaId: 'idea-2', topic: 'Тема 2'}]})});
+  await h.mount();
+  h.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  assert.equal(h.el.querySelector('[data-from-plan]'), null);
+  assert.match(h.el.querySelector('[data-caption]').textContent, /Тема убрана в архив контент-плана — текст из плана не подставится/);
+});

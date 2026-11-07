@@ -3,6 +3,15 @@ const fail = (status, message) => { throw Object.assign(Error(message), {status}
 const taskTitle = text => /^(?:Хью\s*[,!:]?\s*)?поставь\s+задачу\s*[:—-]?\s+([\s\S]+)$/iu.exec(text)?.[1]?.trim() || '';
 // Хью пишет только при обращении: «Хью, …» в начале или упоминание «@Хью».
 const addressed = text => /^\s*@?хью(?![\p{L}\p{N}])/iu.test(text) || /(?<![\p{L}\p{N}])@хью(?![\p{L}\p{N}])/iu.test(text);
+// Лео (specs/228) — так же только по обращению: «Лео, …» в начале или «@Лео». Отвечает агент владельца.
+const leoAddressed = text => /^\s*@?(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text) || /(?<![\p{L}\p{N}])@(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text);
+const {detect} = require('./hugh-personas');
+// Кому адресовано сообщение — одна логика для ответа (send) и для agent-inbox (specs/228).
+// Названы оба — тот, кто раньше; в логе с Хью обращение к Хью подразумевается; простое упоминание — никому.
+function addressedTo(text, hughRoom=false) {
+  if (leoAddressed(text)) return addressed(text) ? detect(text) || 'hugh' : 'leo';
+  return addressed(text) || hughRoom ? 'hugh' : null;
+}
 // «Хью, сделай …» → задача «Я поставил Хью». В личном чате с Хью обращение подразумевается.
 function hughTitle(text, implicit=false) {
   const match = /^\s*(@?хью\s*[,!:]?\s*)?((?:сделай(?:те)?|измени(?:те)?|поменяй(?:те)?|исправь(?:те)?|добавь(?:те)?|убери(?:те)?|подготовь(?:те)?|перенеси(?:те)?)\s+[\s\S]+)$/iu.exec(text);
@@ -31,6 +40,11 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
   for (const [name, type] of [['room',"TEXT NOT NULL DEFAULT 'common'"],['kind',"TEXT NOT NULL DEFAULT 'message'"],['ref_task_id','INTEGER'],['audience_id','INTEGER']])
     if (!columns.has(name)) db.exec(`ALTER TABLE team_chat_messages ADD COLUMN ${name} ${type}`);
   db.exec('CREATE INDEX IF NOT EXISTS team_chat_room_idx ON team_chat_messages(company_code,room,id)');
+  // specs/228: ответы агента владельца (Лео/Хью · Claude). Видны всем, кто читает комнату, как сообщение владельца.
+  db.exec(`CREATE TABLE IF NOT EXISTS team_chat_agent_replies (
+    reply_id INTEGER PRIMARY KEY REFERENCES team_chat_messages(id), message_id INTEGER REFERENCES team_chat_messages(id),
+    persona TEXT NOT NULL, owner_id INTEGER NOT NULL, created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS team_chat_agent_replies_message_idx ON team_chat_agent_replies(message_id);`);
   const running = new Map();
   // №127: участник «Чатов» — исполнитель своих задач (people) или любой аккаунт ЛК, которому
   // владелец открыл эту компанию с какими-либо правами (без прав — доступ отозван). Второму доступны только общий и личные чаты: без лога Хью,
@@ -79,15 +93,18 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
       LEFT JOIN team_chat_answers a ON a.reply_id=m.id
       LEFT JOIN team_chat_messages source ON source.id=a.message_id AND source.company_code=m.company_code
       WHERE m.company_code=? AND m.room=? AND m.id<? AND (m.audience_id IS NULL OR m.audience_id=?)
-      AND (m.user_id<>0 OR m.audience_id=? OR ? OR source.user_id=?)
+      AND (m.user_id<>0 OR m.audience_id=? OR ? OR source.user_id=? OR EXISTS (SELECT 1 FROM team_chat_agent_replies r WHERE r.reply_id=m.id))
       ORDER BY m.id DESC LIMIT 101`).all(code,scope.room,cursor,userId,userId,Number(owner),userId):
-      db.prepare('SELECT * FROM team_chat_messages WHERE company_code=? AND room=? AND id<? AND (audience_id IS NULL OR audience_id=?) AND (user_id<>0 OR audience_id=? OR ?) ORDER BY id DESC LIMIT 101')
+      db.prepare('SELECT * FROM team_chat_messages m WHERE company_code=? AND room=? AND id<? AND (audience_id IS NULL OR audience_id=?) AND (user_id<>0 OR audience_id=? OR ? OR EXISTS (SELECT 1 FROM team_chat_agent_replies r WHERE r.reply_id=m.id)) ORDER BY id DESC LIMIT 101')
         .all(code,scope.room,cursor,userId,userId,Number(owner));
+    const agentReply = db.prepare('SELECT persona,message_id FROM team_chat_agent_replies WHERE reply_id=?');
     // Личные чаты сотрудников не попадают в очередь проверки владельца.
     const reviewQueue=answers&&owner?db.prepare(`SELECT a.message_id,a.checked_at,a.reason,m.text
       FROM team_chat_answers a JOIN team_chat_messages m ON m.id=a.message_id
       WHERE m.company_code=? AND m.room NOT LIKE 'dm:%' AND a.status='review_required' ORDER BY a.message_id DESC LIMIT 20`).all(code):undefined;
     return {room:scope.room,messages:rows.slice(0,100).reverse().map(message=>{
+      const agent=message.user_id===0?agentReply.get(message.id):null;
+      if(agent)message={...message,agentReply:{persona:agent.persona,replyTo:agent.message_id??null}};
       if(!answers)return message;
       const audit=db.prepare('SELECT model,review_model,checked_at,status FROM team_chat_answers WHERE reply_id=?').get(message.id);
       return audit?{...message,answerAudit:audit}:message;
@@ -150,13 +167,13 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
       });
     }
     user = chatAccess(userId,code,true);
-    // specs/229: «Лео, …» / «@Лео» — отвечает Лео со своим контекстом; названы оба — кто раньше. Совпадает с правилом #615.
-    const leo = /^\s*@?(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text) || /(?<![\p{L}\p{N}])@(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text);
-    const persona = leo ? (addressed(text) ? require('./hugh-personas').detect(text) || 'hugh' : 'leo') : 'hugh';
-    if(!title&&!request&&answers&&user.tasksAccess&&(scope.hugh||addressed(text)||leo))await answers.answer(row,{persona});
+    const persona = addressedTo(text, Boolean(scope.hugh));
+    if(!title&&!request&&answers&&user.tasksAccess&&persona)await answers.answer(row,{persona});
     chatAccess(userId,code,true);
     return {message:db.prepare('SELECT * FROM team_chat_messages WHERE id=?').get(row.id)};
   }
-  return {list,send,members,access:chatAccess};
+  // Та же проверка комнаты, что при чтении/отправке (specs/228: агент владельца не получает новых комнат).
+  const scope = (userId, code, roomName, write=false) => { const user = chatAccess(userId, code, write); return {user, ...room(user, code, roomName || 'common')}; };
+  return {list,send,members,access:chatAccess,scope};
 }
-module.exports = {createTeamChat,taskTitle,hughTitle,addressed,similar};
+module.exports = {createTeamChat,taskTitle,hughTitle,addressed,leoAddressed,addressedTo,similar};

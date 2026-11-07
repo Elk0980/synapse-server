@@ -252,7 +252,9 @@ for(const action of ['cancel','profile','stop'])test(`${action} during awaited c
   }
 });
 
-test('Onlypult accepted job survives restart, reconciles by GET only and never appears published without a social link',async t=>{
+/* specs/215-publish-verify: выход подтверждает повторное чтение задания (GET), не ответ на отправку. После
+   «published» доставка опубликована, ссылка честно пустая (PROVIDER_LINK_UNAVAILABLE, confirmedVia=provider_status). */
+test('Onlypult accepted job survives restart, is confirmed by GET only, keeps link empty and cannot be resent',async t=>{
  const f=fixture(t),p=f.draft(['telegram','vk']);let checks=0;
  f.setSend(async({channelId})=>channelId==='telegram'?{externalId:'tg-1',status:'published',url:'https://t.me/example/1'}:
   {provider:'onlypult',providerPostId:'op-job-1',providerStatus:'scheduled',status:'needs_review',errorCode:'PROVIDER_PENDING'});
@@ -262,10 +264,13 @@ test('Onlypult accepted job survives restart, reconciles by GET only and never a
  assert.equal(f.calls.length,2);assert.equal(result.status,'needs_review');assert.deepEqual(result.deliveries.map(d=>d.status),['published','needs_review']);
  assert.equal(result.deliveries[1].providerPostId,'op-job-1');assert.equal(result.deliveries[1].externalId,null);assert.equal(result.deliveries[1].url,null);
  await f.api.drain();assert.equal(checks,0);f.advance(60000);await createAutoposting(f.db,f.options).drain();
- result=f.api.get(p.id,'alvi');assert.equal(checks,1);assert.equal(f.calls.length,2);assert.equal(result.status,'needs_review');
- assert.equal(result.deliveries[1].providerStatus,'published');assert.equal(result.lastErrorCode,'PROVIDER_LINK_UNAVAILABLE');
- await assert.rejects(f.api.schedule(p.id,'alvi',{revision:result.revision,scheduledAt:'2026-09-16T00:00:00Z'}),e=>e.details.code==='PUBLICATION_REVIEW_REQUIRED');
- assert.throws(()=>f.api.update(p.id,'alvi',{revision:result.revision,text:'Resend'}),e=>e.details.code==='PUBLICATION_REVIEW_REQUIRED');
+ result=f.api.get(p.id,'alvi');assert.equal(checks,1);assert.equal(f.calls.length,2);assert.equal(result.status,'published');
+ assert.deepEqual(result.deliveries.map(d=>d.status),['published','published']);
+ assert.equal(result.deliveries[1].providerStatus,'published');assert.equal(result.deliveries[1].errorCode,'PROVIDER_LINK_UNAVAILABLE');
+ assert.equal(result.deliveries[1].url,null,'ссылка не выдумывается');assert.equal(result.deliveries[1].confirmedVia,'provider_status');
+ assert.equal(result.deliveries[1].externalId,'onlypult:op-job-1');assert.equal(result.lastErrorCode,null);
+ await assert.rejects(f.api.schedule(p.id,'alvi',{revision:result.revision,scheduledAt:'2026-09-16T00:00:00Z'}),e=>['PUBLICATION_REVIEW_REQUIRED','POST_STATE'].includes(e.details.code));
+ assert.throws(()=>f.api.update(p.id,'alvi',{revision:result.revision,text:'Resend'}),e=>e.status===409);
  f.advance(60000);await f.api.drain();assert.equal(checks,1,'terminal provider status does not need repeated automatic polling');
 });
 

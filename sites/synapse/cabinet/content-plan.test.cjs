@@ -169,14 +169,15 @@ test('CSV/XLSX import from PR 496 runs inside the screen and saves hook, B-roll,
   assert.equal(a.calls.find((c) => c.path === 'crm/media-mentor/plan/import-preview').method, 'POST');
 });
 
-test('row edit keeps other fields and replaces caption; signoff posts own slot; chat opens Hugh via ctx', async () => {
+test('row edit keeps other fields and leaves the publication text alone; signoff posts own slot; chat opens Hugh via ctx', async () => {
   const a = api(); await a.mount();
   a.root.querySelector('[data-toggle]').click();
   const form = a.root.querySelector('[data-edit="s-1"]');
-  form.querySelector('[name="broll"]').value = ' новая вставка '; form.querySelector('[name="caption"]').value = 'Новая подпись';
+  assert.equal(form.querySelector('[name="caption"]'), null, 'specs/227: текст публикации правится в блоке «Текст публикации»');
+  form.querySelector('[name="broll"]').value = ' новая вставка ';
   form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick(); await tick();
   const put = a.calls.find((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT');
-  assert.equal(put.body.days[0].broll, 'новая вставка'); assert.equal(put.body.days[0].variants.vk.text, 'Новая подпись');
+  assert.equal(put.body.days[0].broll, 'новая вставка'); assert.equal(put.body.days[0].variants.vk.text, 'SAMPLE подпись');
   assert.equal(put.body.days[0].variants.vk.contentRevision, 1); assert.equal(put.body.days[1].broll, 'SAMPLE руки');
   const box = a.root.querySelector('[data-signoff="owner"]');
   box.checked = true; box.dispatchEvent(new a.window.Event('change')); await tick(); await tick();
@@ -707,4 +708,74 @@ test('specs/225: просмотр без права правки — ссылк�
   assert.equal(viewer.root.querySelector('[data-cp-links-edit]'), null);
   const old = api(); await old.mount(); old.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
   assert.equal(old.root.querySelector('[data-cp-links]'), null);
+});
+
+/* specs/227-plan-caption-to-post: «Текст публикации» по версиям площадок — показ, правка через PUT /plan, подпись о согласовании. */
+const textsVocab = { ...VOCAB, captionLimits: { vk: 15000, telegram: 1024 } };
+const twoNets = () => [idea(1, { variants: { vk: { text: 'SAMPLE текст VK', contentRevision: 3 }, telegram: { text: '', contentRevision: 1 } } }), idea(2)];
+const twoStates = [{ ideaId: 's-1', platform: 'vk', status: 'approved', approvable: true }, { ideaId: 's-1', platform: 'telegram', status: 'empty', approvable: false },
+  { ideaId: 's-2', platform: 'vk', status: 'pending', approvable: true }];
+
+test('specs/227: карточка показывает «Текст публикации» каждой площадки, статус, длину и лимит; пустую — с подсказкой', async () => {
+  const a = api({ plan: twoNets(), variants: twoStates, briefPlatforms: ['vk', 'telegram'], mentorExtra: { vocabulary: textsVocab } }); await a.mount();
+  a.root.querySelector('[data-toggle]').click();
+  const block = a.root.querySelector('[data-idea="s-1"] [data-cp-texts]');
+  assert.ok(block, 'блок есть'); assert.match(block.querySelector('.cp-texts-top b').textContent, /Текст публикации/);
+  const items = [...block.querySelectorAll('[data-text-platform]')];
+  assert.deepEqual(items.map((n) => n.dataset.textPlatform), ['vk', 'telegram'], 'основная площадка первой');
+  assert.match(items[0].textContent, /ВКонтакте · основная · согласовано · 15 \/ 15000/);
+  assert.equal(items[0].querySelector('.cp-text-body').textContent, 'SAMPLE текст VK');
+  assert.match(items[1].textContent, /Telegram · нет текста/); assert.match(items[1].querySelector('.cp-text-none').textContent, /Текста нет/);
+  assert.match(block.textContent, /Подставится в черновик публикации при «Создать публикацию» в «Монтаже»\. Без текста: 1\./);
+  assert.ok(block.querySelector('[data-cp-texts-edit]'), 'владелец может править');
+  // Без права правки — только показ.
+  const b = api({ plan: twoNets(), variants: twoStates, role: 'editor', permissions: ['autoposting.view'], mentorExtra: { vocabulary: textsVocab } }); await b.mount();
+  b.root.querySelector('[data-toggle]').click();
+  assert.ok(b.root.querySelector('[data-cp-texts]')); assert.equal(b.root.querySelector('[data-cp-texts-edit]'), null);
+  // Текст сервера выводится как текст.
+  const c = api({ plan: [idea(1, { variants: { vk: { text: '<img src=x onerror=alert(1)>' } } })], mentorExtra: { vocabulary: textsVocab } }); await c.mount();
+  c.root.querySelector('[data-toggle]').click();
+  assert.equal(c.root.querySelector('[data-cp-texts] img'), null); assert.match(c.root.querySelector('.cp-text-body').textContent, /<img/);
+});
+
+test('specs/227: «Изменить текст» сохраняет только изменённые версии через PUT /plan; согласованной — предупреждение; лимит проверяется до отправки', async () => {
+  const a = api({ plan: twoNets(), variants: twoStates, briefPlatforms: ['vk', 'telegram'], permissions: ['autoposting.edit'], role: 'editor', mentorExtra: { vocabulary: textsVocab } }); await a.mount();
+  a.root.querySelector('[data-toggle]').click();
+  a.root.querySelector('[data-cp-texts-edit]').click();
+  const form = a.root.querySelector('[data-cp-texts-form]');
+  assert.equal(a.window.document.activeElement, form.querySelector('textarea'), 'фокус в первом поле');
+  assert.equal(form.querySelector('[name="text:telegram"]').getAttribute('maxlength'), '1024');
+  assert.match(form.querySelector('[name="text:vk"]').closest('label').textContent, /Сейчас согласовано\. После изменения этой площадке понадобится новое согласование/);
+  assert.equal(form.querySelector('[name="text:telegram"]').closest('label').querySelector('.cp-text-warn'), null);
+  assert.match(form.querySelector('[data-cp-texts-rule]').textContent, /снова уходит на согласование.*без изменений сохраняется.*«Согласование плана целиком» ставятся заново/);
+  // Лимит: в поле можно вставить больше maxlength программно — проверка до запроса.
+  form.querySelector('[name="text:telegram"]').value = 'Т'.repeat(1025);
+  form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick();
+  assert.equal(a.calls.filter((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT').length, 0);
+  assert.match(form.querySelector('[data-cp-texts-error]').textContent, /длиннее 1024/);
+  // Без изменений — запроса нет, форма закрывается.
+  form.querySelector('[name="text:telegram"]').value = '';
+  form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick();
+  assert.equal(a.calls.filter((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT').length, 0);
+  assert.equal(a.root.querySelector('[data-cp-texts-form]'), null);
+  // Только Telegram: VK уходит тем же текстом и ревизией (согласование VK не теряется).
+  a.root.querySelector('[data-cp-texts-edit]').click();
+  const again = a.root.querySelector('[data-cp-texts-form]');
+  again.querySelector('[name="text:telegram"]').value = ' SAMPLE текст TG \r\n';
+  again.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick(); await tick();
+  const put = a.calls.find((c) => c.path === 'crm/media-mentor/plan' && c.method === 'PUT');
+  assert.equal(put.body.reason, 'Текст публикации изменён'); assert.equal(put.body.planRevision, 4);
+  assert.deepEqual(put.body.days[0].variants, { vk: { text: 'SAMPLE текст VK', contentRevision: 3 }, telegram: { text: 'SAMPLE текст TG', contentRevision: 1 } });
+  assert.equal(put.body.days[0].script, idea(1).script, 'сценарий не тронут'); assert.deepEqual(put.body.days[1].variants, idea(2).variants);
+});
+
+test('specs/227: Escape и «Отмена» закрывают форму текста и возвращают фокус на «Изменить текст»', async () => {
+  const a = api({ plan: twoNets(), variants: twoStates, mentorExtra: { vocabulary: textsVocab } }); await a.mount();
+  a.root.querySelector('[data-toggle]').click();
+  a.root.querySelector('[data-cp-texts-edit]').click();
+  a.root.querySelector('[data-cp-texts-cancel]').click();
+  assert.equal(a.root.querySelector('[data-cp-texts-form]'), null); assert.equal(a.window.document.activeElement, a.root.querySelector('[data-cp-texts-edit]'));
+  a.root.querySelector('[data-cp-texts-edit]').click();
+  a.root.querySelector('.cp').dispatchEvent(new a.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(a.root.querySelector('[data-cp-texts-form]'), null);
 });

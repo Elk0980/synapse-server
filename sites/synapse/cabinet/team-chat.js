@@ -20,8 +20,9 @@
     list.replaceChildren();
     for(const m of [...messages.values()].sort((a,b)=>a.id-b.id)) {
       const li=node('li','');li.id=`message-${m.id}`;if(m.user_id===context.user.id)li.className='own';
-      li.append(node('strong',m.author_name),node('span',m.text),node('time',new Date(m.created_at).toLocaleString('ru-RU')));
-      if(m.answerAudit)li.append(node('small',`${m.answerAudit.model?m.answerAudit.model+' · ':''}${m.answerAudit.status==='approved'?'Проверено':m.answerAudit.status==='refused'?'Запрос отклонён':'Передано на проверку'}`));
+      // specs/228: «Лео · Claude» / «Хью · Claude» — ответ ассистента с именем персоны.
+      li.append(node('strong',m.user_id===0&&/^(Лео|Хью) · Claude$/.exec(m.author_name||'')?.[1]||m.author_name),node('span',m.text),node('time',new Date(m.created_at).toLocaleString('ru-RU')));
+      if(m.answerAudit&&m.answerAudit.status!=='agent_redirect')li.append(node('small',`${m.answerAudit.model?m.answerAudit.model+' · ':''}${m.answerAudit.status==='approved'?'Проверено':m.answerAudit.status==='refused'?'Запрос отклонён':m.answerAudit.status==='agent_pending'?'Ждёт ответа Лео':m.answerAudit.status==='agent_answered'?'Ответ ниже':'Передано на проверку'}`));
       if(m.task_id)li.append(node('span',`Хью · задача №${m.task_id} на доске`));
       else if(m.command_state==='pending')li.append(node('span','Хью · создание задачи ещё не подтверждено'));
       list.append(li);
