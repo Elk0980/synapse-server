@@ -606,6 +606,28 @@ async function crmCompanyOwnerScope(id) {
   }
 }
 
+/* specs/226: карточка рабочей компании в CRM нужна модулям Контент-завода (CRM ищет компанию по коду).
+   Служебный ключ без личности пользователя; передаются только код, название, город и часовой пояс.
+   Существующую карточку CRM с тем же кодом переиспользует только владелец: редактор не может
+   «занять» чужую CRM-компанию созданием рабочей компании. */
+async function ensureCrmCompany(input, user) {
+  if (!CRM_API_KEY) fail(503, 'CRM не настроена: компания не создана');
+  let upstream;
+  try {
+    upstream = await fetch(`${CRM_URL}/companies`, { method: 'POST',
+      headers: { 'x-api-key': CRM_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({ code: input.code, name: input.name, timezone: input.timezone, ...(input.city ? { city: input.city } : {}) }),
+      signal: AbortSignal.timeout(5000) });
+  } catch { fail(502, 'CRM недоступна: компания не создана'); }
+  await upstream.text().catch(() => '');
+  if (upstream.status === 201) return 'created';
+  if (upstream.status === 409) {
+    if (user.role === 'owner') return 'reused';
+    throw Object.assign(new Error('В CRM уже есть компания с этим кодом. Выберите другой код или попросите владельца подключить её'), { status: 409, code: 'CRM_CODE_TAKEN' });
+  }
+  fail(502, 'CRM не приняла карточку компании: компания не создана');
+}
+
 async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
@@ -1194,6 +1216,23 @@ const server = http.createServer(async (request, response) => {
           ...saveVersion(ownerDocumentKey, document, publicIdentity(session.user).author) });
       }
       fail(405, 'Метод не поддерживается');
+    }
+
+    /* specs/226: каталог рабочих компаний. GET — каталог ∩ доступ пользователя;
+       POST — новая компания (право companies.create, у владельца всегда) с карточкой в CRM. */
+    if (url.pathname === '/content/companies') {
+      const session = requireSession(request), user = session.user;
+      const canCreate = user.role === 'owner' || user.permissions.includes('companies.create');
+      if (request.method === 'GET') return reply(200, { companies: user.companies, canCreate });
+      if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
+      if (!canCreate) fail(403, 'Нет права создавать компании');
+      requireCsrf(request, session);
+      const input = authStore.catalog.normalizeInput(await readJson(request));
+      if (authStore.catalog.has(input.code)) fail(409, 'Компания с таким кодом уже есть');
+      const crm = await ensureCrmCompany(input, user);
+      const created = authStore.createCompany(user.id, input);
+      console.log(`content: company created code=${input.code} by=${user.login} crm=${crm}`);
+      return reply(201, { ...created, crm });
     }
 
     if (url.pathname === '/content/admin/team') {
