@@ -12,6 +12,7 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
   const tasks=createPeopleTasks({authStore,db,call});
   const answers=require('./team-chat-answers').createTeamChatAnswers({db,tasks,call,env});
   const teamChat=require('./team-chat').createTeamChat({db,tasks,call,answers,unsafe:require('./team-chat-answers').unsafe});
+  const agent=require('./team-chat-agent').createTeamChatAgent({db,chat:teamChat});
   const plan=createPeoplePlan({db,authStore,tasks,call});
   const transport={...createPeopleNotificationTransport({vapidSubject:env.PEOPLE_VAPID_SUBJECT,
     vapidPublicKey:env.PEOPLE_VAPID_PUBLIC_KEY,vapidPrivateKey:env.PEOPLE_VAPID_PRIVATE_KEY}),deliveryEnabled:enabled};
@@ -41,7 +42,7 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
     notifications,shootingFacts:typeof shootingFacts==='function'?shootingFacts:()=>'',peopleDeliveryEnabled:enabled,requireSession,sendJson,
     cabinetUrl:env.CABINET_PUBLIC_URL||undefined}):null;
   const runtime=createPeopleRuntime({db,authStore,tasks,call,notifications,enabled});
-  const peopleHandle=createPeopleHttp({authStore,team,tasks,chat:teamChat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson});
+  const peopleHandle=createPeopleHttp({authStore,team,tasks,chat:teamChat,agent,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson});
   const handle=async(request,response,url)=>(stageNotify&&await stageNotify.handle(request,response,url))||peopleHandle(request,response,url);
   return {handle,stageNotify,
     start(){runtime.start();stageNotify?.start();},

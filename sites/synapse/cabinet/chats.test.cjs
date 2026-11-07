@@ -226,3 +226,18 @@ test('подтверждённый другой viewer не получает н�
   assert.doesNotMatch(f.dock.textContent,/Скрыть от Bob|№11/);assert.equal(bar.querySelector('span').textContent,'');
   assert.equal(bar.hidden,true);assert.equal(bar.style.display,'none');assert.equal(sends(f).length,0);
 });
+test('specs/228: «Лео · Claude» — ответ ассистента с именем «Лео», запасной ответ Лео с понятным статусом',async t=>{
+  const msgs=[{id:1,user_id:2,author_name:'Лена',text:'Лео, смонтируй рилс',created_at:'2026-11-07T11:00:00Z'},
+    {id:2,user_id:0,author_name:'Лео',text:'Лео получил запрос и ответит здесь.',created_at:'2026-11-07T11:00:01Z',answerAudit:{status:'agent_answered',model:'',review_model:'',checked_at:''}},
+    {id:3,user_id:0,author_name:'Лео · Claude',text:'Смонтировал черновик.',kind:'agent-reply',agentReply:{persona:'leo',replyTo:1},created_at:'2026-11-07T11:05:00Z'},
+    {id:4,user_id:0,author_name:'Хью · Claude',text:'Сайт обновлён.',kind:'agent-reply',agentReply:{persona:'hugh',replyTo:null},created_at:'2026-11-07T11:06:00Z'},
+    {id:5,user_id:0,author_name:'Хью · ИИ',text:'Ответ пока недоступен. Вопрос сохранён для проверки.',created_at:'2026-11-07T11:07:00Z',answerAudit:{status:'review_required'}}];
+  const f=load({chatGet:params=>({messages:params.room==='common'?msgs:[],hasMore:false,viewerId:2,room:params.room})});t.after(()=>f.w.close());
+  f.mount(f.host,'chats');await flush();
+  const items=[...f.host.querySelectorAll('.sbc-msg')];
+  assert.deepEqual(items.map(li=>li.querySelector('strong').textContent),['Лена','Лео','Лео','Хью','Хью · ИИ']);
+  assert.ok(items[2].classList.contains('sbc-msg--hugh')&&items[2].classList.contains('sbc-msg--leo'),'стиль ответа ассистента');
+  assert.equal(items[2].dataset.persona,'leo');assert.ok(!items[3].classList.contains('sbc-msg--leo'));
+  assert.equal(items[1].querySelector('small').textContent,'Ответ ниже');assert.equal(items[4].querySelector('small').textContent,'Передано на проверку');
+  assert.match(f.host.querySelector('textarea').placeholder,/Лео, …/);
+});

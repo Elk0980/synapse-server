@@ -28,7 +28,7 @@
 .sbc-msg time { display: block; margin-top: 4px; font-size: 11px; color: var(--sbc-muted); }
 .sbc-msg small { display: block; margin-top: 4px; font-size: 11px; color: var(--sbc-muted); }
 .sbc-msg--own { align-self: flex-end; background: rgba(46,107,214,.28); }
-.sbc-msg--hugh { background: rgba(121,220,182,.10); border-color: rgba(121,220,182,.35); }
+.sbc-msg--hugh, .sbc-msg--leo { background: rgba(121,220,182,.10); border-color: rgba(121,220,182,.35); }
 .sbc-msg--merge { border-style: dashed; }
 .sbc-msg__task { display: block; margin-top: 6px; font-size: 12px; padding: 4px 8px; border-radius: 8px; background: rgba(0,0,0,.25); white-space: normal; }
 .sbc-empty, .sbt-empty { color: var(--sbc-muted); font-size: 14px; padding: 10px; list-style: none; }

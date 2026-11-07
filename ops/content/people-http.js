@@ -1,6 +1,6 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson}) {
+function createPeopleHttp({authStore,team,tasks,chat,agent,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson}) {
   return async function handle(request,response,url) {
     if(!/^\/content\/people(?:\/|$)/.test(url.pathname))return false;
     const session=requireSession(request),path=url.pathname.slice('/content/people'.length),method=request.method;
@@ -56,6 +56,15 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
         }
       }
       if(path==='/members'&&method==='GET') {code=company();fresh(code,true);return reply(200,{members:team.list(session.user.id,code).map(m=>{const permissions=authStore.getById(m.id)?.permissions||[];return {...m,permissions:[...permissions],canApprovePlan:permissions.includes('content-plan.approve')};}),roles:['human_executor']});}
+      fail(405,'Метод не поддерживается');
+    }
+    // specs/228: агент владельца (Лео/Хью · Claude). Только владелец системы, CSRF на запись, комната — как у владельца.
+    if(path==='/team-chat/agent-reply'||path==='/team-chat/agent-inbox') {
+      if(!agent)fail(404,'Адрес не поддерживается');
+      if(session.user.role!=='owner')fail(403,'Доступно владельцу');
+      const code=company();
+      if(path==='/team-chat/agent-reply'&&method==='POST')return reply(200,agent.reply(session.user.id,code,await read(code,true)));
+      if(path==='/team-chat/agent-inbox'&&method==='GET'){fresh(code,true);return reply(200,agent.inbox(session.user.id,code,{persona:url.searchParams.get('persona'),since:url.searchParams.get('since')}));}
       fail(405,'Метод не поддерживается');
     }
     const code=company();fresh(code);
