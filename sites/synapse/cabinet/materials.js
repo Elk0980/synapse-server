@@ -115,6 +115,7 @@ function create(el, ctx) {
   el.innerHTML = `<div class="mt-top" data-top></div><div data-dates></div>
     <p class="mt-status" role="status" data-status></p>
     <ul class="mt-list" data-grid aria-label="Рилсы монтажа"></ul>
+    <details class="mt-retired" data-retired hidden><summary>Отменённые и заменённые</summary><p class="muted mt-hint">Ролики, чья публикация отменена или чей рилс заменён в контент-плане. Открываются как обычно; в общую ленту не входят.</p><ul class="mt-list mt-list--retired" data-retired-list aria-label="Отменённые и заменённые ролики"></ul></details>
     ${canEdit ? `<div class="mt-modal" data-upload-modal hidden><form class="mt-modal__box mt-upload" data-upload hidden role="dialog" aria-modal="true" aria-labelledby="mt-upload-title">
       <header class="mt-modal__head"><h2 id="mt-upload-title">Загрузить ролик</h2><button type="button" class="mt-x" data-upload-cancel aria-label="Закрыть">✕</button></header>
       <label>Файл<input type="file" name="file" accept="video/mp4,video/webm,.mp4,.webm" required></label>
@@ -225,13 +226,21 @@ function create(el, ctx) {
         stage, reel, posts, publications: Array.isArray(idea.publications) ? idea.publications : null,
         platforms: platformList([...Object.keys(idea.variants || {}), idea.platform, ...(reel?.platforms || [])])});
     });
+    /* Макет 07.11 (#mat): в общей ленте — рилсы плана и ролики «вне плана». Ролик, чья публикация снята/удалена,
+       или ролик рилса, которого больше нет в плане (рилс заменён), не выдаётся за «Монтаж на согласовании»:
+       он уходит в свёрнутый блок внизу «Отменённые и заменённые». Решение — только по полям сервера. */
+    const retired = [];
     for (const reel of loose) {
       const post = postById.get(reel.postId);const posts = post ? [post] : [];
-      const stage = publicationStage(posts) || (reel.openEdits ? "edit_rework" : "edit_review");
-      items.push({key: reel.key, ideaId: null, number: null, title: reel.title, date: reel.releaseDate || "", stage, reel, posts, platforms: platformList(reel.platforms)});
+      const linkedIdea = reel.ideaId || reel.planLink?.ideaId || post?.planLink?.ideaId || "";
+      const why = post && (post.status === "cancelled" || post.deleted || post.archive?.archivedAt) ? "cancelled" : linkedIdea && days.length && !ideaIds.has(linkedIdea) ? "replaced" : "";
+      const stage = why === "cancelled" ? (publicationStage(posts) === "published" ? "published" : "unpublished") : publicationStage(posts) || (reel.openEdits ? "edit_rework" : "edit_review");
+      const item = {key: reel.key, ideaId: null, number: null, title: reel.title, date: reel.releaseDate || "", stage, reel, posts, platforms: platformList(reel.platforms), retired: why};
+      if (why && stage !== "published") retired.push(item); else items.push(item);
     }
     items.forEach(item => {item.group = groupOf(item.stage);item.uploadedAt = item.reel?.currentVersion?.createdAt || "";});
-    state.items = items;
+    retired.forEach(item => {item.group = "retired";item.uploadedAt = item.reel?.currentVersion?.createdAt || "";});
+    state.items = items;state.retired = retired;
   }
   const byDate = (a, b) => (a.date || "9999").localeCompare(b.date || "9999") || (a.number ?? 1e9) - (b.number ?? 1e9) || String(a.key).localeCompare(String(b.key));
   const GROUP_ORDER = {above: 0, now: 1, ahead: 2};
@@ -248,10 +257,11 @@ function create(el, ctx) {
     const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata" src="${esc(media)}#t=0.5"></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
     const version = item.reel?.currentVersion ? ` · v${esc(item.reel.currentVersion.version ?? 1)}` : "";
     const when = item.date ? `${esc(dateShort(item.date))}${version}` : `${item.number ? "дата — по плану" : "без даты"}${version}`;
-    const note = AT_EDITOR.has(item.stage) ? "Идёт монтаж" : item.group === "ahead" ? "Материалы не загружены" : "";
+    const note = item.retired ? "" : AT_EDITOR.has(item.stage) ? "Идёт монтаж" : item.group === "ahead" ? "Материалы не загружены" : "";
     const title = `${item.number ? `№${item.number} ` : ""}${item.title}`;
+    const stageChip = item.retired ? `<span class="cfk-chip mt-chip-retired" data-stage="unpublished">${item.retired === "cancelled" ? "Публикация отменена" : "Заменён в плане"}</span>` : chip(item.stage);
     const body = `${thumb}<span class="mt-card__body"><strong class="mt-card__title">${esc(title)}</strong><span class="mt-card__date">${when}</span>
-      <span class="mt-card__foot"><span class="mt-card__st">${chip(item.stage)}${note ? `<span class="mt-card__note">${note}</span>` : ""}</span>
+      <span class="mt-card__foot"><span class="mt-card__st">${stageChip}${note ? `<span class="mt-card__note">${note}</span>` : ""}</span>
       <span class="mt-card__pf">${item.platforms.map(id => esc(platformOf(id).short)).join(" · ")}</span></span></span>`;
     const clickable = item.reel || (canEdit && AT_EDITOR.has(item.stage));
     const attrs = `data-group="${item.group}" data-stage="${esc(item.stage)}" data-date="${esc(item.date)}"`;
@@ -263,6 +273,12 @@ function create(el, ctx) {
     const list = $("[data-grid]");
     const items = sorted();
     list.innerHTML = items.map(cardHtml).join("");
+    const retired = state.retired || [], box = $("[data-retired]");
+    if (box) {
+      box.hidden = !retired.length;
+      box.querySelector("summary").textContent = `Отменённые и заменённые · ${retired.length}`;
+      box.querySelector("[data-retired-list]").innerHTML = retired.slice().sort(byDate).map(cardHtml).join("");
+    }
     if (!items.length) status("Пока нет рилсов: они появятся из контент-плана и после загрузки ролика.");
     const K = kit();
     if (K && items.length) {

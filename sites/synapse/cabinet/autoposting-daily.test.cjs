@@ -184,6 +184,27 @@ test('№209 Публикации: шапка CfKit, только готовые
     assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
+test('Макет 07.11 #post: «Все площадки» фильтрует ленту; часовой пояс, «Исходники», «Настройки модуля» и «Как подключить» — в свёрнутом блоке внизу',async()=>{
+  const f=await fixture({kit:true,entries:feedRows()});try{
+    const view=f.d.querySelector('.autoposting-view'),tools=f.d.querySelector('.autoposting-workspace-tools');
+    const filter=f.node('autoposting-platform-filter');
+    assert.deepEqual([...filter.options].map(o=>o.textContent),['Все площадки','Instagram / Reels','TikTok','YouTube Shorts','ВКонтакте','Telegram'].slice(0,filter.options.length));
+    assert.equal(filter.options[0].textContent,'Все площадки');
+    assert.ok(tools.contains(f.node('autoposting-calendar-zone'))&&tools.contains(f.node('autoposting-plan-gaps')),'пояс и подсказка плана — внизу, свёрнуто');
+    assert.equal(tools.open,false);
+    assert.deepEqual([...tools.querySelectorAll('.ap-more-links a')].map(a=>a.getAttribute('href')),['#content-factory/sources','#content-factory/settings']);
+    const guide=f.d.createElement('details');guide.className='module-guide';view.prepend(guide);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(guide.parentElement,f.node('autoposting-guide-slot'),'«Как подключить и проверить» переносится вниз');
+    assert.equal(view.querySelectorAll('.module-guide').length,1);
+    const all=feedIds(f);filter.value='vk';filter.dispatchEvent(new f.d.defaultView.Event('change'));
+    const left=feedIds(f);assert.ok(left.length<all.length,'лента отфильтрована');
+    for(const id of left)assert.ok(f.d.querySelector(`#autoposting-feed [data-feed-post="${id}"] .ap-pf[data-platform="vk"]`),'у оставшихся есть VK');
+    filter.value='';filter.dispatchEvent(new f.d.defaultView.Event('change'));assert.deepEqual(feedIds(f),all);
+    assert.ok(f.d.querySelector(`#autoposting-feed [data-feed-post="3"] .ap-feed-thumb[data-empty]`),'без ролика — серая заглушка превью');
+    assert.match(f.d.querySelector('#autoposting-feed [data-feed-post="3"] .ap-feed-out').textContent,/^25\.09 17:00$/);
+  }finally{f.close();}
+});
 test('№209 Публикации: ⇅ — время выхода, площадка, статус (ошибки и ожидание → вышло); выбор запоминается; полоса дат ведёт ленту и месяц',async()=>{
   const f=await fixture({kit:true,entries:feedRows()});try{
     await f.click('#autoposting-head [data-cfk-act="sort"]');
