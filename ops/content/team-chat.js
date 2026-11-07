@@ -150,7 +150,10 @@ function createTeamChat({db,tasks,call,answers,unsafe=()=>false,now=()=>new Date
       });
     }
     user = chatAccess(userId,code,true);
-    if(!title&&!request&&answers&&user.tasksAccess&&(scope.hugh||addressed(text)))await answers.answer(row);
+    // specs/229: «Лео, …» / «@Лео» — отвечает Лео со своим контекстом; названы оба — кто раньше. Совпадает с правилом #615.
+    const leo = /^\s*@?(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text) || /(?<![\p{L}\p{N}])@(?:лео|leo)(?![\p{L}\p{N}])/iu.test(text);
+    const persona = leo ? (addressed(text) ? require('./hugh-personas').detect(text) || 'hugh' : 'leo') : 'hugh';
+    if(!title&&!request&&answers&&user.tasksAccess&&(scope.hugh||addressed(text)||leo))await answers.answer(row,{persona});
     chatAccess(userId,code,true);
     return {message:db.prepare('SELECT * FROM team_chat_messages WHERE id=?').get(row.id)};
   }

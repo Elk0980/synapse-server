@@ -13,6 +13,14 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send,
       actor.role!=='owner'&&(!(actor.permissions instanceof Set)||!actor.permissions.has(permission)))fail(403,'Нет доступа к действию в этом проекте');
     return actor;
   }
+  // Только деловые поля карточки компании: телефон, email, сайт и HTTP(S)-ссылки из socials.
+  function companyContacts(code) {
+    let row;try{row=db.prepare('SELECT phone,email,website_url,socials FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);}catch{return {};}
+    if(!row)return {};
+    let socials=[];try{socials=JSON.parse(row.socials||'[]');}catch{}
+    const links=(Array.isArray(socials)?socials:[]).map(s=>typeof s?.url==='string'?s.url.trim():'').filter(u=>/^https?:\/\//i.test(u));
+    return {phone:row.phone||'',email:row.email||'',websiteUrl:row.website_url||'',links};
+  }
   const projectRows=code=>db.prepare('SELECT * FROM tasks WHERE company_code=? COLLATE NOCASE AND is_deleted=0 ORDER BY id').all(code);
   function visible(row,map,actor,code) {
     if(!row||String(row.company_code).toLowerCase()!==code)return false;
@@ -48,7 +56,11 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send,
       const snapshot=actor.role==='owner'||actor.permissions.has('content-plan.approve')?mentor.get(code):null;
       if(snapshot&&snapshot.companyCode!==code)fail(502,'Источник другого проекта');
       result={companyCode:code,tasks:all.filter(row=>visible(row,map,actor,code)).map(row=>({id:row.id,title:row.title,status:row.status,due_date:row.due_date})),
-        plan:(snapshot?.plan?.days||[]).map(day=>({date:day.date,topic:day.topic,scripts:Object.values(day.variants||{}).map(v=>v.text||'')}))};
+        plan:(snapshot?.plan?.days||[]).map(day=>({date:day.date,topic:day.topic,scripts:Object.values(day.variants||{}).map(v=>v.text||'')})),
+        // specs/229: подтверждённые контакты профиля компании (сохранены владельцем в ЛК) — их фильтр чата не режет.
+        contacts:companyContacts(code)};
+      // Бриф — для Лео; видят те же, кому открыт контент-план.
+      if(snapshot?.brief?.fields)result.brief=snapshot.brief.fields;
     } else if(action==='ownerDecisionEvents'&&method==='GET') {
       if(actor.role!=='owner')fail(403,'Только владелец');
       result=require('./owner-decision-events').listOwnerDecisionEvents(db,code,{offset:integer(url.searchParams.get('offset')??undefined,0,1e9),taskId:url.searchParams.has('taskId')?integer(url.searchParams.get('taskId'),0,1e9):undefined});
