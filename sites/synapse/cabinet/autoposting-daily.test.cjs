@@ -162,7 +162,12 @@ const feedRows=()=>[
 const feedIds=f=>[...f.d.querySelectorAll('#autoposting-feed [data-feed-post]')].map(node=>node.dataset.feedPost);
 test('№209 Публикации: шапка CfKit, только готовые рилсы с датой выхода, опубликованные выше, старт — ближайший неопубликованный',async()=>{
   const f=await fixture({kit:true,entries:feedRows()});try{
-    assert.equal(f.d.querySelector('#autoposting-head .cfk-title').textContent,'Публикации');
+    // Макет #post: «Постинг · что и куда уходит» на ПК, «Публикации» на телефоне; фильтр площадок — в строке шапки, колонка «Статус».
+    assert.equal(f.d.querySelector('#autoposting-head .cfk-title .ap-t-pc').textContent,'Постинг');
+    assert.equal(f.d.querySelector('#autoposting-head .cfk-title .ap-t-ph').textContent,'Публикации');
+    assert.match(f.d.querySelector('#autoposting-head .ap-head-lead').textContent,/что и куда уходит/);
+    assert.ok(f.d.querySelector('#autoposting-head .cfk-head-row > .ap-filter #autoposting-platform-filter'));
+    assert.deepEqual([...f.d.querySelectorAll('.ap-feed-cols span')].map(n=>n.textContent).slice(0,3),['Рилс','Выход','Статус']);
     assert.deepEqual([...f.d.querySelectorAll('#autoposting-head [data-cfk-act]')].map(node=>node.dataset.cfkAct),['calendar','sheet','sort']);
     assert.equal(f.d.querySelector('#autoposting-head [data-cfk-act="sheet"]').disabled,true,'таблица не подключена — ▦ неактивна с подсказкой');
     assert.equal(f.d.querySelector('#autoposting-head .cfk-dates').hidden,true,'полоса дат скрыта до нажатия на календарь');

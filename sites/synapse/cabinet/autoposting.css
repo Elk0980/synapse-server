@@ -408,22 +408,43 @@ body[data-cabinet-view="autoposting"] #content-factory-header > .factory-tabs { 
 .ap-pf + .ap-pf::before { content:"·"; width:auto; height:auto; margin:0 5px; border-radius:0; background:none; color:var(--muted); }
 .ap-pf[data-kind="published"] { color:#8fd3a6; }
 .ap-pf[data-kind="error"] { color:#f5b3b3; }
+/* Шапка по макету #post: ПК — «Постинг · что и куда уходит», фильтр в строке шапки перед иконками;
+   телефон — «Публикации», фильтр отдельной строкой под шапкой. Фильтр переносит в шапку autoposting.js. */
+.ap-head-kit .ap-t-pc, .ap-head-kit .ap-head-lead { display:none; }
+.ap-head-lead { flex-shrink:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); font-size:13px; }
+.ap-head-kit .cfk-head-row { flex-wrap:wrap; row-gap:10px; }
+.ap-head-kit .cfk-title { flex:1 1 0; }
+.ap-head-kit .cfk-head-row > .cfk-sp { display:none; }
+.ap-head-kit .cfk-head-row > .ap-filter { order:9; flex:1 0 100%; }
 @media (min-width:1100px) {
+  .ap-head-kit .ap-t-ph { display:none; }
+  .ap-head-kit .ap-t-pc { display:inline; }
+  .ap-head-kit .ap-head-lead { display:block; }
+  .ap-head-kit .cfk-head-row { flex-wrap:nowrap; }
+  .ap-head-kit .cfk-title { flex:0 1 auto; }
+  .ap-head-kit .cfk-head-row > .cfk-sp { display:block; flex:1 1 auto; }
+  .ap-head-kit .cfk-head-row > .ap-filter { order:0; flex:0 0 auto; width:180px; margin-right:4px; }
+  :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-head-kit .ap-filter select { min-height:32px; height:32px; padding:4px 8px; font-size:13px; border-radius:8px; }
   .ap-filter { justify-self:end; width:240px; }
-  .ap-feed-cols { grid-template-columns:minmax(0,1fr) 110px repeat(5,104px); }
-  .ap-feed-card { grid-template-columns:minmax(0,1fr) 110px repeat(5,104px); grid-template-rows:auto auto; padding:10px 16px; }
+  /* Таблица: одна сетка и один зазор у подписей и у строк — подписи стоят ровно над ячейками.
+     Подписи резервируют место под полосу прокрутки ленты так же, как сама лента (scrollbar-gutter). */
+  .ap-posting { --ap-grid:minmax(0,1fr) 92px 196px repeat(5,92px); --ap-gap:12px; }
+  .ap-feed-cols { grid-template-columns:var(--ap-grid); column-gap:var(--ap-gap); padding:0 17px 4px; overflow:hidden; scrollbar-gutter:stable; }
+  .ap-feed { scrollbar-gutter:stable; padding-right:0; }
+  .ap-feed-card { grid-template-columns:var(--ap-grid); column-gap:var(--ap-gap); row-gap:4px; grid-template-rows:auto; align-items:center; padding:10px 16px; }
   :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card.has-thumb button.ap-feed-open,
   :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card button.ap-feed-open { grid-column:1; grid-row:1; grid-template-columns:minmax(0,1fr); }
   .ap-feed-thumb, .ap-feed-when { display:none; }
   .ap-feed-title { -webkit-line-clamp:2; font-weight:600; }
-  .ap-feed-foot { grid-column:1; grid-row:2; display:flex; }
-  .ap-feed-out { display:block; grid-column:2; grid-row:1 / 3; font-size:13px; color:var(--muted); }
-  .ap-feed-cells > .ap-cell { grid-row:1 / 3; justify-self:start; }
-  .ap-cell { display:inline-block; padding:1px 9px; border:1px solid transparent; border-radius:999px; font-size:12.5px; line-height:1.5; white-space:nowrap; }
+  .ap-feed-out { display:block; grid-column:2; grid-row:1; font-size:13px; color:var(--muted); }
+  .ap-feed-foot { grid-column:3; grid-row:1; display:flex; min-width:0; }
+  .ap-feed-foot .cfk-chip { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ap-feed-cells > .ap-cell { grid-row:1; justify-self:start; }
+  .ap-cell { display:inline-block; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; padding:1px 9px; border:1px solid transparent; border-radius:999px; font-size:12.5px; line-height:1.5; white-space:nowrap; }
   .ap-cell[data-kind="published"] { border-color:rgba(76,195,138,.7); color:#8fd3a6; }
   .ap-cell[data-kind="wait"] { border-color:rgba(232,177,76,.45); color:#e3c58a; }
   .ap-cell[data-kind="error"] { border-color:rgba(240,140,140,.6); color:#f5b3b3; }
   .ap-cell[data-kind="off"] { border-color:var(--line); }
   .ap-cell a { color:inherit; }
-  .ap-feed-note { grid-column:1 / -1; grid-row:3; }
+  .ap-feed-note { grid-column:1 / -1; grid-row:2; }
 }

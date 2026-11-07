@@ -105,7 +105,7 @@ test('Подключения: шапка CfKit без календаря (▦, �
   const { el, registered, ctx } = setupKit({ reply: () => withSettings('demo-a') });
   await registered['content-connections'].mount(el, ctx);
   const head = el.querySelector('.cfk-head');
-  assert.ok(head); assert.equal(head.querySelector('.cfk-title').textContent, 'Подключения');
+  assert.ok(head); assert.equal(head.querySelector('.cfk-title .cc-t-pc').textContent, 'Подключения'); assert.equal(head.querySelector('.cfk-title .cc-t-ph').textContent, 'Площадки');
   assert.equal(head.querySelector('[data-cfk-act="calendar"]'), null);
   assert.ok(head.querySelector('[data-cfk-act="sheet"]')); assert.ok(head.querySelector('[data-cfk-act="sort"]'));
   const order = () => [...el.querySelectorAll('[data-cc-platform]')].map((n) => n.dataset.ccStatus);
