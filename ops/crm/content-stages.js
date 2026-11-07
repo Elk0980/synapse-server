@@ -109,10 +109,12 @@ function createContentStages(db) {
     const out = new Map();
     if (!has('reel_materials')) return out;
     const direct = columns('reel_materials').has('idea_id');
-    for (const row of db.prepare(`SELECT id, post_id${direct ? ', idea_id' : ''} FROM reel_materials WHERE company_id=?`).all(companyId)) {
+    // Ролик в архиве (specs/224) этап идеи не двигает.
+    const live = columns('reel_materials').has('archived_at') ? ' AND archived_at IS NULL' : '';
+    for (const row of db.prepare(`SELECT id, post_id${direct ? ', idea_id' : ''} FROM reel_materials WHERE company_id=?${live}`).all(companyId)) {
       const ideaId = (direct && row.idea_id) || (row.post_id && postIdea.get(row.post_id)) || null;
       if (!ideaId) continue;
-      const versions = db.prepare('SELECT COUNT(*) n FROM reel_versions WHERE reel_id=?').get(row.id).n;
+      const versions = db.prepare(`SELECT COUNT(*) n FROM reel_versions WHERE reel_id=?${columns('reel_versions').has('archived_at') ? ' AND archived_at IS NULL' : ''}`).get(row.id).n;
       const open = db.prepare("SELECT COUNT(*) n FROM reel_edits WHERE reel_id=? AND company_id=? AND status IN ('pending','in_progress')").get(row.id, companyId).n;
       const entry = out.get(ideaId) || out.set(ideaId, {versions: 0, openEdits: 0}).get(ideaId);
       entry.versions += versions; entry.openEdits += open;

@@ -902,3 +902,13 @@ test('подмена площадки, возникшая после поста�
   assert.equal(post.status, 'needs_review');
   assert.equal(post.lastErrorCode, MEDIA_MENTOR_PLAN_PLATFORM_REASON, 'названа именно подмена площадки');
 });
+
+test('specs/224: убранная в архив строка плана не переносится по версиям площадок', (t) => {
+  const f = variantFixture(t), versions = f.ready();
+  f.approveAll('alvi', versions);
+  const ideaId = f.mentor.get('alvi').plan.days[0].ideaId;
+  f.mentor.archiveIdea('alvi', ideaId, {reason: 'лишняя'}, {userId: 1, userName: 'QA'});
+  const result = f.api.transferVariants('alvi', {planRevision: versions.planRevision, briefRevision: versions.briefRevision}, VARIANT_ADMIN);
+  assert.equal(result.createdCount, 12, 'две версии убранной строки не перенесены');
+  assert.ok(f.autoposting.list('alvi').posts.every((post) => post.planLink?.ideaId !== ideaId));
+});

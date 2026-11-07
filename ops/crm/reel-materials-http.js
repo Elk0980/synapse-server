@@ -3,7 +3,9 @@
    proxy уже проверяет autoposting.view/edit для компании и CSRF; здесь права и компания проверяются повторно.
    /internal/reel-materials/* — только по ключу сервиса без заголовка личности: API агента монтажа и лог для чата с Хью. */
 const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,...(code?{details:{code}}:{})});};
-const REEL=/^\/autoposting\/reels(?:\/(\d+)(?:\/(edits|publication)(?:\/(\d+)\/(cancel))?)?)?$/;
+const REEL=/^\/autoposting\/reels(?:\/(\d+)(?:\/(edits|publication|archive|restore)(?:\/(\d+)\/(cancel))?)?)?$/;
+/* specs/224-content-archive: убрать/вернуть ролик и отдельную версию. Право — правка контента компании (autoposting.edit). */
+const VERSION_ARCHIVE=/^\/autoposting\/reels\/(\d+)\/versions\/(\d+)\/(archive|restore)$/;
 const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(claim)|reels\/(\d+)\/(versions))$/;
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
@@ -21,11 +23,24 @@ function createReelMaterialsHandler({materials,companyModuleContext,readJson,sen
       else{const body=await readJson(request);result=materials.addVersion(code,Number(internal[4]),body,request.headers['x-agent-name']);}
       send(response,200,result,headers);return true;
     }
+    const versionArchive=VERSION_ARCHIVE.exec(url.pathname);
+    if(versionArchive){
+      if(request.method!=='POST')fail(405,'Метод не поддерживается');
+      const {identity,company}=companyModuleContext(request,url.searchParams.get('companyCode'),'autoposting.edit');
+      const body=await readJson(request),[,reel,version,action]=versionArchive;
+      const result=materials[action==='archive'?'archiveVersion':'restoreVersion'](company.code,Number(reel),Number(version),body,identity);
+      send(response,200,result,headers);return true;
+    }
     const match=REEL.exec(url.pathname);if(!match)return false;
     const [,id,section,editId,action]=match,read=request.method==='GET';
     const {identity,company}=companyModuleContext(request,url.searchParams.get('companyCode'),read?'autoposting.view':'autoposting.edit');
     const code=company.code,reelId=id?Number(id):null;let result,status=200;
-    if(!id&&read)result=materials.list(code,{from:url.searchParams.get('from')||'',to:url.searchParams.get('to')||'',platform:url.searchParams.get('platform')||''});
+    if(!id&&read)result=materials.list(code,{from:url.searchParams.get('from')||'',to:url.searchParams.get('to')||'',platform:url.searchParams.get('platform')||'',
+      archived:url.searchParams.get('archived')==='1'});
+    else if((section==='archive'||section==='restore')&&!editId){
+      if(request.method!=='POST')fail(405,'Метод не поддерживается');
+      result=materials[section](code,reelId,await readJson(request),identity);
+    }
     else if(!id&&request.method==='POST'){result=materials.create(code,await readJson(request),identity);status=result.appended?200:201;}
     else if(id&&!section&&read)result=materials.get(code,reelId);
     else if(id&&!section&&request.method==='PATCH')result=materials.update(code,reelId,await readJson(request));

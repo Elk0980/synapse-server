@@ -475,3 +475,22 @@ test('workflow PUT использует fresh trusted actor при той же �
  await f.call('PUT',editor,{revision:0,fields:{releaseMode:'manual'}},{afterRead:request=>{request.identity={...editor,userName:'Актуальное имя'};}});
  assert.equal(f.db.prepare('SELECT actor_name FROM content_factory_workflow_versions').get().actor_name,'Актуальное имя');
 });
+
+test('specs/224: убрать/вернуть идею плана — право правки контента своей компании, без новой версии плана', async (t) => {
+  const f = fixture(t);
+  const brief = await seedBrief(f);
+  const plan = await f.call('PUT', '/media-mentor/plan', OWNER, {planRevision: 0, briefRevision: brief.brief.revision, days: days()});
+  const ideaId = plan.result.plan.days[1].ideaId;
+  const VIEWER = {userId: 9, userName: 'Наблюдатель', role: 'editor', companies: ['alvi'], permissions: ['autoposting.view']};
+  const SMM = {...EDITOR, permissions: ['autoposting.view', 'autoposting.edit']};
+  await assert.rejects(f.call('POST', `/media-mentor/plan/ideas/${ideaId}/archive`, VIEWER, {}), (e) => e.status === 403);
+  await assert.rejects(f.call('POST', `/media-mentor/plan/ideas/${ideaId}/archive`, SMM, {}, 'avokado'), (e) => e.status === 403);
+  await assert.rejects(f.call('GET', `/media-mentor/plan/ideas/${ideaId}/archive`, SMM), (e) => e.status === 405);
+  const archived = await f.call('POST', `/media-mentor/plan/ideas/${ideaId}/archive`, SMM, {reason: 'лишняя тема'});
+  assert.equal(archived.status, 200);
+  assert.equal(archived.result.plan.revision, plan.result.plan.revision);
+  assert.equal(archived.result.archivedIdeas[0].archive.archivedByName, 'Редактор клиента', 'автор — из доверенной личности');
+  assert.ok(!archived.result.plan.days.some((d) => d.ideaId === ideaId));
+  const restored = await f.call('POST', `/media-mentor/plan/ideas/${ideaId}/restore`, SMM, {});
+  assert.equal(restored.result.plan.days.length, 7);
+});

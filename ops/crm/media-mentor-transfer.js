@@ -389,7 +389,10 @@ function createMediaMentorTransfer(db, {mentor, autoposting, information, now = 
       const time = iso();
       let order = (db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?')
         .get(owner.id).m || 0);
-      const days = JSON.parse(planRow.plan).days;
+      // specs/224-content-archive: убранная строка плана (метка media_mentor_idea_archive) в черновики не переносится.
+      const marks = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media_mentor_idea_archive'").get()
+        ? new Set(db.prepare('SELECT idea_id id FROM media_mentor_idea_archive WHERE company_id=?').all(owner.id).map((row) => row.id)) : new Set();
+      const days = JSON.parse(planRow.plan).days.filter((day) => !marks.has(day?.ideaId));
       if (selection) selectedVariant(days);
       for (const day of days) {
         if (selection && day.ideaId !== selection.ideaId) continue;

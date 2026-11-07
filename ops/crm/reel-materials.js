@@ -98,10 +98,27 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     db.exec('ALTER TABLE reel_materials ADD COLUMN idea_id TEXT');
   }
   db.exec('CREATE INDEX IF NOT EXISTS reel_materials_idea ON reel_materials(company_id,idea_id) WHERE idea_id IS NOT NULL');
+  /* Архив (specs/224-content-archive): мягкое удаление ролика и отдельной версии. Строки и файлы не стираются. */
+  for(const table of ['reel_materials','reel_versions']){
+    const have=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
+    for(const [name,type] of [['archived_at','TEXT'],['archived_by','TEXT'],['archive_reason','TEXT']])
+      if(!have.has(name))db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS reel_archive_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL REFERENCES companies(id), reel_id INTEGER NOT NULL REFERENCES reel_materials(id),
+      version INTEGER, action TEXT NOT NULL CHECK(action IN ('archived','restored')), reason TEXT NOT NULL DEFAULT '',
+      actor_id TEXT NOT NULL DEFAULT '', actor_name TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`);
   const transaction=fn=>{db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}};
-  const rowFor=(owner,id)=>{const row=Number.isSafeInteger(id)&&db.prepare('SELECT * FROM reel_materials WHERE id=? AND company_id=?').get(id,owner.id);if(!row)fail(404,'Ролик не найден','NOT_FOUND');return row;};
-  const versionsOf=id=>db.prepare('SELECT * FROM reel_versions WHERE reel_id=? ORDER BY version').all(id).map(v=>({version:v.version,mediaUrl:v.media_url,
-    sha256:v.sha256,durationMs:v.duration_ms,editId:v.edit_id,note:v.note,createdAt:v.created_at}));
+  const rowAny=(owner,id)=>{const row=Number.isSafeInteger(id)&&db.prepare('SELECT * FROM reel_materials WHERE id=? AND company_id=?').get(id,owner.id);if(!row)fail(404,'Ролик не найден','NOT_FOUND');return row;};
+  // Изменять можно только ролик вне архива; чтение (get) и восстановление идут через rowAny.
+  const rowFor=(owner,id)=>{const row=rowAny(owner,id);if(row.archived_at)fail(409,'Ролик в архиве. Сначала верните его.','REEL_ARCHIVED');return row;};
+  const archiveDto=row=>({archivedAt:row.archived_at||null,archivedBy:row.archived_by||null,reason:row.archive_reason||''});
+  const versionDto=v=>({version:v.version,mediaUrl:v.media_url,sha256:v.sha256,durationMs:v.duration_ms,editId:v.edit_id,note:v.note,createdAt:v.created_at,
+    ...(v.archived_at?{archive:archiveDto(v)}:{})});
+  const allVersions=id=>db.prepare('SELECT * FROM reel_versions WHERE reel_id=? ORDER BY version').all(id).map(versionDto);
+  const versionsOf=id=>allVersions(id).filter(v=>!v.archive);
+  const liveVersion=(reelId,version)=>{const row=db.prepare('SELECT * FROM reel_versions WHERE reel_id=? AND version=?').get(reelId,version);
+    if(row?.archived_at)fail(409,'Эта версия в архиве. Верните её или выберите другую.','VERSION_ARCHIVED');return row;};
   const editDto=e=>({id:e.id,kind:e.kind,baseVersion:e.base_version,status:e.status,edl:e.edl?parse(e.edl,null):null,comment:e.comment,
     startMs:e.start_ms,endMs:e.end_ms,taskId:e.task_id,resultVersion:e.result_version,authorName:e.author_name,createdAt:e.created_at,updatedAt:e.updated_at});
   const seconds=ms=>(ms/1000).toFixed(1);
@@ -116,13 +133,14 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const versions=versionsOf(row.id),current=versions.at(-1)||null;
     const base={id:row.id,key:'reel:'+row.id,source:'materials',companyCode:owner.code.toLowerCase(),title:row.title,releaseDate:row.release_date,
       platforms:parse(row.platforms,[]),postId:row.post_id,ideaId:row.idea_id||null,planLink:row.idea_id?{ideaId:row.idea_id,source:'materials'}:null,
-      currentVersion:current,versionCount:versions.length,
+      currentVersion:current,versionCount:versions.length,archive:archiveDto(row),
+      archivedVersions:db.prepare('SELECT COUNT(*) n FROM reel_versions WHERE reel_id=? AND archived_at IS NOT NULL').get(row.id).n,
       openEdits:db.prepare("SELECT COUNT(*) n FROM reel_edits WHERE reel_id=? AND status IN ('pending','in_progress')").get(row.id).n};
     if(!full)return base;
     const edits=db.prepare('SELECT * FROM reel_edits WHERE reel_id=? ORDER BY id').all(row.id).map(editDto);
     /* Журнал правок ролика; те же записи уходят в личный чат автора с Хью (hughLog → content). */
     const log=edits.flatMap(e=>logEntries(e,row.title,false));
-    return {...base,versions,edits,log};
+    return {...base,versions,archivedVersionList:allVersions(row.id).filter(v=>v.archive),edits,log};
   }
   /* Рилсы из контент-плана: карточка автопостинга с видео, ещё не взятая в «Материалы». Показываются как v1, без копирования. */
   function planReels(owner,taken){
@@ -138,13 +156,55 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
   function list(code,filters={}){
     const owner=company(db,code),from=date(filters.from??''),to=date(filters.to??'');
     const platform=filters.platform??'';if(platform&&!PLATFORMS.includes(platform))fail(400,'Неизвестная площадка');
-    const rows=db.prepare('SELECT * FROM reel_materials WHERE company_id=? ORDER BY id DESC').all(owner.id);
-    const reels=[...rows.map(row=>reelDto(row,owner,false)),...planReels(owner,new Set(rows.map(row=>row.post_id).filter(Boolean)))]
+    const all=db.prepare('SELECT * FROM reel_materials WHERE company_id=? ORDER BY id DESC').all(owner.id);
+    // Архивные ролики в общий список не входят; их публикация тоже не всплывает «рилсом из плана» (taken по всем строкам).
+    const archivedOnly=filters.archived===true,rows=all.filter(row=>Boolean(row.archived_at)===archivedOnly);
+    const reels=[...rows.map(row=>reelDto(row,owner,false)),...(archivedOnly?[]:planReels(owner,new Set(all.map(row=>row.post_id).filter(Boolean))))]
       .filter(reel=>(!from||reel.releaseDate&&reel.releaseDate>=from)&&(!to||reel.releaseDate&&reel.releaseDate<=to)&&(!platform||reel.platforms.includes(platform)))
       .sort((a,b)=>(b.releaseDate||'').localeCompare(a.releaseDate||'')||String(b.key).localeCompare(String(a.key)));
-    return {companyCode:owner.code.toLowerCase(),filters:{from,to,platform},platforms:PLATFORMS,reels};
+    return {companyCode:owner.code.toLowerCase(),filters:{from,to,platform,...(archivedOnly?{archived:true}:{})},platforms:PLATFORMS,reels};
   }
-  function get(code,id){const owner=company(db,code);return reelDto(rowFor(owner,id),owner,true);}
+  function get(code,id){const owner=company(db,code);return reelDto(rowAny(owner,id),owner,true);}
+  /* Архив ролика или версии: только пометка и журнал. Публикации автопостинга и соцсети не затрагиваются.
+     Ролик с правкой «в монтаже» не убирается: агент уже работает над ней. */
+  function archiveReason(body,restore){
+    object(body??{},restore?[]:['reason']);
+    return restore||body?.reason===undefined?'':text(body.reason,500);
+  }
+  function setArchive(code,id,version,body,actor,restore){
+    const owner=company(db,code),reason=archiveReason(body,restore);
+    return transaction(()=>{
+      const row=rowAny(owner,id),at=iso(),who=String(actor?.userId??''),name=String(actor?.userName||'');
+      if(version===null){
+        if(restore&&!row.archived_at)fail(409,'Ролик не в архиве','REEL_NOT_ARCHIVED');
+        if(!restore&&row.archived_at)fail(409,'Ролик уже в архиве','REEL_ARCHIVED');
+        if(!restore&&db.prepare("SELECT 1 FROM reel_edits WHERE reel_id=? AND status='in_progress' LIMIT 1").get(row.id))
+          fail(409,'Правку этого ролика уже монтируют. Дождитесь новой версии и уберите ролик после.','EDIT_IN_PROGRESS');
+        db.prepare('UPDATE reel_materials SET archived_at=?,archived_by=?,archive_reason=?,updated_at=? WHERE id=?')
+          .run(restore?null:at,restore?null:who,restore?null:reason,at,row.id);
+      }else{
+        if(row.archived_at)fail(409,'Ролик в архиве. Сначала верните его.','REEL_ARCHIVED');
+        const current=db.prepare('SELECT * FROM reel_versions WHERE reel_id=? AND version=?').get(row.id,version);
+        if(!current)fail(404,'Версия ролика не найдена','NOT_FOUND');
+        if(restore&&!current.archived_at)fail(409,'Версия не в архиве','VERSION_NOT_ARCHIVED');
+        if(!restore&&current.archived_at)fail(409,'Версия уже в архиве','VERSION_ARCHIVED');
+        if(!restore&&!db.prepare('SELECT 1 FROM reel_versions WHERE reel_id=? AND version<>? AND archived_at IS NULL LIMIT 1').get(row.id,version))
+          fail(409,'Это единственная версия ролика. Уберите ролик целиком.','LAST_VERSION');
+        if(!restore&&db.prepare("SELECT 1 FROM reel_edits WHERE reel_id=? AND base_version=? AND status='in_progress' LIMIT 1").get(row.id,version))
+          fail(409,'По этой версии уже монтируют правку.','EDIT_IN_PROGRESS');
+        db.prepare('UPDATE reel_versions SET archived_at=?,archived_by=?,archive_reason=? WHERE reel_id=? AND version=?')
+          .run(restore?null:at,restore?null:who,restore?null:reason,row.id,version);
+        db.prepare('UPDATE reel_materials SET updated_at=? WHERE id=?').run(at,row.id);
+      }
+      db.prepare('INSERT INTO reel_archive_events(company_id,reel_id,version,action,reason,actor_id,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?)')
+        .run(owner.id,row.id,version,restore?'restored':'archived',reason,who,name,at);
+      return reelDto(rowAny(owner,id),owner,true);
+    });
+  }
+  const archive=(code,id,body,actor)=>setArchive(code,id,null,body,actor,false);
+  const restore=(code,id,body,actor)=>setArchive(code,id,null,body,actor,true);
+  const archiveVersion=(code,id,version,body,actor)=>setArchive(code,id,version,body,actor,false);
+  const restoreVersion=(code,id,version,body,actor)=>setArchive(code,id,version,body,actor,true);
   function create(code,body,actor){
     const owner=company(db,code);
     if(body&&Object.hasOwn(body,'postId')){
@@ -188,11 +248,11 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     return idea;
   }
   function reelForIdea(owner,ideaId){
-    const direct=db.prepare('SELECT * FROM reel_materials WHERE company_id=? AND idea_id=? ORDER BY id LIMIT 1').get(owner.id,ideaId);
+    const direct=db.prepare('SELECT * FROM reel_materials WHERE company_id=? AND idea_id=? AND archived_at IS NULL ORDER BY id LIMIT 1').get(owner.id,ideaId);
     if(direct)return direct;
     const transfers=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media_mentor_variant_transfers'").get();
     return transfers?db.prepare(`SELECT r.* FROM reel_materials r JOIN media_mentor_variant_transfers t ON t.post_id=r.post_id AND t.company_id=r.company_id
-      WHERE r.company_id=? AND t.idea_id=? ORDER BY r.id LIMIT 1`).get(owner.id,ideaId)||null:null;
+      WHERE r.company_id=? AND t.idea_id=? AND r.archived_at IS NULL ORDER BY r.id LIMIT 1`).get(owner.id,ideaId)||null:null;
   }
   /* «Вне плана»: черновик идеи (productionStatus=draft) в текущем плане через обычное сохранение плана.
      Сохранение создаёт новую версию плана, а согласование плана целиком привязано к версии, поэтому черновик
@@ -246,7 +306,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const clientRequestId=text(body.clientRequestId??'',80,true);
     const repeat=db.prepare('SELECT * FROM reel_edits WHERE company_id=? AND client_request_id=?').get(owner.id,clientRequestId);
     if(repeat){if(repeat.reel_id!==row.id)fail(409,'Ключ запроса уже использован');return {reel:reelDto(row,owner,true),edit:editDto(repeat),duplicate:true};}
-    const version=db.prepare('SELECT * FROM reel_versions WHERE reel_id=? AND version=?').get(row.id,body.baseVersion);
+    const version=liveVersion(row.id,body.baseVersion);
     if(!version)fail(400,'Версия ролика не найдена');
     const kind=body.kind;if(!['edl','request'].includes(kind))fail(400,'Вид правки: edl или request');
     const comment=text(body.comment??'',2000,kind==='request');
@@ -277,7 +337,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
   /* Черновик автопостинга с выбранной версией. Ничего не отправляется: дальше согласование и план автопостинга. */
   function createPublication(code,id,body,actor){
     const owner=company(db,code),row=rowFor(owner,id);object(body,['version','platformIds','title']);
-    const version=db.prepare('SELECT * FROM reel_versions WHERE reel_id=? AND version=?').get(row.id,body.version);if(!version)fail(400,'Версия ролика не найдена');
+    const version=liveVersion(row.id,body.version);if(!version)fail(400,'Версия ролика не найдена');
     const ids=platforms(body.platformIds??parse(row.platforms,[]));
     const post=autoposting.create(owner.code,{title:text(body.title??row.title,200,true),mediaUrls:[version.media_url],platformIds:ids,
       profileRevision:information.get(owner.code).revision,origin:`Материалы: ролик №${row.id} v${version.version}`,format:'reel',
@@ -290,7 +350,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const owner=code?company(db,code):null;
     return {edits:db.prepare(`SELECT e.*,c.code company_code,r.title,v.media_url,v.sha256,v.duration_ms FROM reel_edits e JOIN reel_materials r ON r.id=e.reel_id
       JOIN companies c ON c.id=e.company_id JOIN reel_versions v ON v.reel_id=e.reel_id AND v.version=e.base_version
-      WHERE e.status IN ('pending','in_progress') AND r.company_id=e.company_id ${owner?'AND e.company_id=?':''} ORDER BY e.id`).all(...(owner?[owner.id]:[]))
+      WHERE e.status IN ('pending','in_progress') AND r.company_id=e.company_id AND r.archived_at IS NULL AND (v.archived_at IS NULL OR e.status='in_progress') ${owner?'AND e.company_id=?':''} ORDER BY e.id`).all(...(owner?[owner.id]:[]))
       .map(e=>({...editDto(e),companyCode:e.company_code.toLowerCase(),reelId:e.reel_id,title:e.title,base:{version:e.base_version,mediaUrl:e.media_url,sha256:e.sha256,durationMs:e.duration_ms}}))};
   }
   function claim(code,editId){
@@ -323,6 +383,6 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       WHERE e.company_id=? AND e.author_id=? ORDER BY e.id DESC LIMIT 200`).all(owner.id,author).reverse();
     return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id})))};
   }
-  return {list,get,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog};
+  return {list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog};
 }
 module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR,DEFAULT_MEDIA_ORIGINS};
