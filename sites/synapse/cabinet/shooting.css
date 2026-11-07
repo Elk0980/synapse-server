@@ -154,3 +154,12 @@ body.prompter-open, body.shoot-win-open { overflow: hidden; }
   .shoot-board__head { grid-column: 1 / -1; }
   .shoot-board__frame > .shoot-sketch, .shoot-board__frame > .shoot-sketch__img { grid-row: 2 / span 5; }
 }
+
+/* Сверка живого кабинета на 390 с макетом 07.11: общее правило .view-panel button (0,3,1) перебивало вид карточки —
+   тема получала рамку и фон, «Загрузить материал» теряла акцентную заливку. Селекторы сильнее. */
+.view-panel .shoot-row button.shoot-row__line { min-height: 0; height: auto; padding: 2px 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--text); font-weight: 700; }
+.view-panel .shoot-row button.shoot-row__line:focus:not(:focus-visible) { outline: none; }
+.view-panel .shoot-row button.shoot-pair__btn { min-height: 0; height: 34px; padding: 0 10px; }
+.view-panel .shoot-row button.shoot-upload--main { min-height: 0; height: 34px; padding: 0 12px; background: #7d9bff; border-color: #7d9bff; color: #0b0f16; font-size: 14px; font-weight: 700; }
+.view-panel .shoot-row button.shoot-upload--main:disabled { opacity: .55; }
+.view-panel .shoot-row .shoot-row__chev { color: #6f95ff; font-size: 20px; font-weight: 800; line-height: 1; }
