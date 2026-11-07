@@ -16,32 +16,40 @@
   background: var(--surface); color: var(--text); cursor: pointer; scroll-margin-top: 72px; }
 .shoot-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .shoot-row.is-picked { border-color: var(--accent); }
-.shoot-row--late { border-color: rgba(255, 156, 156, .55); }
+.shoot-row__meta.is-late { color: var(--red, #ff9c9c); }
+.shoot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* Шапка: на телефоне «Согласованные рилсы», на ПК «Съёмка · рилсы по порядку из согласованного плана» (макет 07.11). */
+.shoot .cfk-title .shoot-head__pc, .shoot .shoot-head__lead { display: none; }
+@media (min-width: 900px) {
+  .shoot .cfk-title .shoot-head__phone { display: none; }
+  .shoot .cfk-title .shoot-head__pc { display: inline; }
+  .shoot .shoot-head__lead { display: block; flex-shrink: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    color: var(--muted); font-size: 13px; }
+}
 .shoot-row__top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 .shoot-row__top > .cfk-chip, .shoot-row__top > .shoot-chip { flex: none; }
-.shoot-row__meta { flex: 1; color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
+.shoot-row__meta { position: relative; flex: 1; color: var(--muted); font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shoot-row__line { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 0; border: 0; background: none; color: var(--text);
   font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
 .shoot-row__topic { flex: 1; overflow-wrap: anywhere; line-height: 1.3; }
 .shoot-row__chev { flex: none; color: var(--accent); font-size: 1.05rem; line-height: 1.2; }
-.shoot-row__late { color: var(--red); font-size: .84rem; }
 .shoot-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.shoot-pair__btn { min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--cabinet-radius-sm, 8px);
+.shoot-pair__btn { height: 34px; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--line); border-radius: var(--cabinet-radius-sm, 8px);
   background: var(--surface-soft, transparent); color: var(--text); font: inherit; cursor: pointer; }
 .shoot-pair__btn:hover:not(:disabled), .shoot-pair__btn:focus-visible { border-color: var(--accent); }
 .shoot-pair__btn:disabled { opacity: .55; cursor: not-allowed; }
-.shoot-row__acts { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.shoot-row__acts { display: flex; align-items: flex-start; gap: 8px; }
 .shoot-row__acts .shoot-slot { flex: 1 1 auto; }
-.shoot-nets { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; padding-top: 4px; }
+.shoot-nets { display: inline-flex; flex-wrap: nowrap; gap: 4px; margin-left: auto; height: 34px; align-items: center; flex: none; }
 .shoot-nb { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 999px; color: #fff;
   font-size: 9px; font-weight: 700; letter-spacing: .02em; }
 .shoot-chip { padding: 2px 8px; border-radius: 999px; font-size: 12px; white-space: nowrap; border: 1px solid var(--line); color: var(--muted); }
 
 /* Загрузки */
 .shoot-slot { display: grid; gap: 6px; justify-items: start; }
-.shoot-upload { min-height: 32px; padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--cabinet-radius-sm, 8px);
+.shoot-upload { min-height: 32px; padding: 5px 12px; white-space: nowrap; border: 1px solid var(--line); border-radius: var(--cabinet-radius-sm, 8px);
   background: var(--surface-soft, transparent); color: var(--text); font: inherit; font-size: .88rem; cursor: pointer; }
-.shoot-upload--main { background: #4f6bed; border-color: #4f6bed; color: #fff; font-weight: 600; }
+.shoot-upload--main { height: 34px; min-height: 0; padding: 0 12px; background: #7d9bff; border-color: #7d9bff; color: #0b0f16; font-weight: 700; }
 .shoot-upload:disabled { opacity: .55; cursor: not-allowed; }
 .shoot-slot__reason { font-size: .8rem; color: var(--muted); }
 .shoot-file { display: grid; gap: 4px; font-size: .86rem; overflow-wrap: anywhere; }
@@ -56,6 +64,8 @@
 .shoot-full__grid { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: .88rem; }
 .shoot-full__grid dt { color: var(--muted); }
 .shoot-full__grid dd { margin: 0; overflow-wrap: anywhere; }
+.shoot-full__grid dd > .cfk-chip, .shoot-full__grid dd > .shoot-chip { display: inline-flex; }
+.shoot-full__head { font-size: .92rem; }
 .shoot-frame { display: grid; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--cabinet-radius-sm, 8px); background: var(--surface); }
 .shoot-frame--insert { border-style: dashed; }
 .shoot-frame__text { display: grid; gap: 2px; overflow-wrap: anywhere; line-height: 1.4; }
@@ -130,7 +140,14 @@ body.prompter-open, body.shoot-win-open { overflow: hidden; }
 .shoot-sketch__ph { font-size: .9rem; letter-spacing: .04em; }
 .shoot-sketch__draw { padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft, transparent); color: var(--text); font: inherit; font-size: .85rem; cursor: pointer; }
 .shoot-sketch__img { width: 100%; max-width: 520px; border-radius: var(--cabinet-radius-sm, 8px); background: #222; }
-@media (max-width: 599px) { .prompter__title span { display: none; } }
+@media (max-width: 599px) {
+  .prompter__title span { display: none; }
+  /* «Раскадровка · №3» помещается рядом с «← Съёмка» и «Тестовая версия» на 390 px, номер не обрезается. */
+  .shoot-win__bar { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .shoot-win__back { padding: 0 8px; }
+  .shoot-win__title { font-size: .9rem; }
+  .shoot-win__badge { padding: 2px 6px; font-size: 11px; }
+}
 @media (min-width: 900px) {
   .shoot-win__body { padding: 16px 24px; }
   .shoot-board__frame { grid-template-columns: minmax(240px, 420px) 1fr; column-gap: 16px; align-items: start; }

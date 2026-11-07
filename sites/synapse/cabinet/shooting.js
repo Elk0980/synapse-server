@@ -25,6 +25,13 @@
   }
   const kit = () => (window.CfKit && window.CfKit.version ? window.CfKit : null);
   const date = (value) => value ? new Date(`${value}T00:00:00Z`).toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit', weekday: 'short', timeZone: 'UTC'}) : '—';
+  /* Дата карточки как в макете: «Вт 03.11» — день недели с заглавной и число без запятой. */
+  const shortDay = (value) => {
+    if (!value) return '—';
+    const d = new Date(`${value}T00:00:00Z`);
+    const wd = d.toLocaleDateString('ru-RU', {weekday: 'short', timeZone: 'UTC'}).replace('.', '');
+    return `${wd.charAt(0).toUpperCase()}${wd.slice(1)} ${d.toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit', timeZone: 'UTC'})}`;
+  };
   const today = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10); // Бангкок
   const sheetLink = (value) => {
     try {
@@ -145,10 +152,16 @@
       if (!k) {
         return h('header', {class: 'shoot-head'}, h('h1', {text: 'Согласованные рилсы'}));
       }
+      /* Макет: на телефоне «Согласованные рилсы», на ПК «Съёмка · рилсы по порядку из согласованного плана». */
       this.head = k.header({title: 'Согласованные рилсы', actions: ['calendar', 'sheet', 'sort'], sheetUrl,
+        extraHtml: '<span class="shoot-head__lead">· рилсы по порядку из согласованного плана</span>',
         sortOptions: SORTS, sortKey: SORT_KEY, calendarOpen: this.calendarOpen,
         onSort: (id) => { this.sort = id; this.renderList(); },
         onCalendar: (open) => { this.calendarOpen = open; this.strip?.setOpen(open); }});
+      const title = this.head.querySelector?.('.cfk-title');
+      if (title) {
+        title.replaceChildren(h('span', {class: 'shoot-head__phone', text: 'Согласованные рилсы'}), h('span', {class: 'shoot-head__pc', text: 'Съёмка'}));
+      }
       return this.head;
     }
     dateStrip() {
@@ -206,13 +219,14 @@
       const late = plan.deadline && plan.deadline < today() && stage === 'planned' && !(reel.takes > 0);
       const when = plan.shootDate ? `Съёмка ${date(plan.shootDate)} · выход ${date(plan.publishDate)}`
         : `Выход ${date(plan.publishDate)} · день съёмки не задан`;
+      const hint = late ? `${when} · дедлайн прошёл, материалов нет` : when;
       const parsed = S.script.parse(idea.script, idea);
       const node = h('li', {class: `shoot-row${open ? ' is-open' : ''}${late ? ' shoot-row--late' : ''}`, 'data-idea': idea.ideaId,
         'data-day': this.dayOf(reel) || '', 'data-stage': stage},
-        h('div', {class: 'shoot-row__top'}, h('span', {class: 'shoot-row__meta', text: when}), stageNode(stage)),
+        h('div', {class: 'shoot-row__top'}, h('span', {class: `shoot-row__meta${late ? ' is-late' : ''}`, title: hint}, shortDay(this.dayOf(reel)),
+          late ? h('span', {class: 'shoot-sr', text: ' · дедлайн прошёл, материалов нет'}) : null), stageNode(stage)),
         h('button', {type: 'button', class: 'shoot-row__line', 'aria-expanded': String(open), 'data-toggle': ''},
           h('span', {class: 'shoot-row__topic', text: this.title(reel)}), h('span', {class: 'shoot-row__chev', 'aria-hidden': 'true', text: open ? '▴' : '▾'})),
-        late ? h('span', {class: 'shoot-row__late', text: 'Дедлайн прошёл, материалов нет'}) : null,
         open ? this.full(reel, parsed, plan) : null,
         h('div', {class: 'shoot-pair'},
           h('button', {type: 'button', class: 'shoot-pair__btn', 'data-prompter-open': '', disabled: !S.prompter, title: S.prompter ? null : 'Суфлёр не загрузился — обновите кабинет',
@@ -238,12 +252,13 @@
     /* Полный вид: сведения рилса, сцены «Сцена №N» (у каждой — своя загрузка), «До съёмки» после сцен. */
     full(reel, parsed, plan) {
       const {idea} = reel;
-      const fields = [['Формат', reel.kind || 'Рилс'], ['Выход', date(plan.publishDate)],
+      const fields = [['Дата', shortDay(this.dayOf(reel))], ['Формат', reel.kind || 'Рилс'], ['Статус', stageNode(S.script.stageOf(reel))], ['Выход', date(plan.publishDate)],
         ['Съёмка', plan.shootDate ? date(plan.shootDate) : 'день не задан'],
         ['Дедлайн', plan.deadline ? date(plan.deadline) : 'не задан'], ['Снимает', idea.filmingBy || ''],
         ['Хук 1–2 с', idea.hook || ''], ['Реквизит', parsed.props.join(', ') || idea.props || '']].filter(([, value]) => value);
       return h('div', {class: 'shoot-full'},
-        h('dl', {class: 'shoot-full__grid'}, fields.flatMap(([key, value]) => [h('dt', {text: key}), h('dd', {text: value})])),
+        h('dl', {class: 'shoot-full__grid'}, fields.flatMap(([key, value]) => [h('dt', {text: key}), typeof value === 'string' ? h('dd', {text: value}) : h('dd', {}, value)])),
+        h('b', {class: 'shoot-full__head', text: 'Сценарий по секундам'}),
         parsed.source === 'hook' ? h('p', {class: 'muted', text: 'Сценария по ролям ещё нет — показаны хук и тема. Сценарий заполняется в полном виде контент-плана.'}) : null,
         h('ol', {class: 'shoot-frames'}, parsed.frames.map((frame) => h('li', {class: `shoot-frame shoot-frame--${frame.type}`, 'data-frame': frame.n},
           h('div', {class: 'shoot-frame__text'},
