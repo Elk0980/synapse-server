@@ -27,6 +27,17 @@
     edit_review: ['approver', 'content'], edit_rework: ['editor'], ready: ['content'], published: ALL, publish_error: ['owner', 'content'] };
   const OLD_SERVER = 'Сохранение заработает после обновления сервера. Отметки пока не сохранены; остальные настройки работают.';
   const cloneMatrix = (m) => Object.fromEntries(STAGES.map(([stage]) => [stage, Array.isArray(m?.[stage]) ? ALL.filter((r) => m[stage].includes(r)) : [...MATRIX_DEFAULTS[stage]]]));
+  /* specs/214: выключатель рассылки и журнал «что ушло бы». Режим — settings.notificationDelivery (off|trial|on),
+     меняет только владелец (data.canDeliver). Журнал — GET /content/content-stage-notify/log. У старого сервера ничего этого нет. */
+  const MODES = [['off', 'Выкл.', 'Ничего не отправляется и не формируется.'],
+    ['trial', 'Пробно', 'Сообщения только записываются в журнал ниже — никому не уходят.'],
+    ['on', 'Вкл.', 'Сообщения уходят людям в их канал (push или Telegram из профиля), если человек включил уведомления.']];
+  const LOG_STATUS = { trial: 'ушло бы', queued: 'в очереди отправки', no_channel: 'не ушло: человек не включил уведомления',
+    denied: 'не ушло: нет права получать', server_off: 'не ушло: отправка на сервере выключена', not_configured: 'не ушло: очередь не подключена',
+    no_recipients: 'некому: в роли никто не назначен' };
+  const ROLE_NAME = Object.fromEntries(ROLES.map(([id, label]) => [id, label]));
+  const PEOPLE_ROLES = ROLES.filter(([id]) => ['content', 'shooting', 'editor'].includes(id));
+  const bangkok = (iso) => { try { return new Date(iso).toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return iso; } };
   const tabKey = 'sb.settings-content.tab';
   const TABS = [['platforms', 'Площадки'], ['people', 'Участники'], ['notifications', 'Уведомления']];
   // Прежнее значение 'main' (вкладка «Площадки и стиль») открывает «Площадки».
@@ -53,7 +64,8 @@
         el('a', { href: '#settings/content/people', 'data-csn-goto': 'people', text: '«Участники»' }), el('span', { text: '.' }),
         el('span', { className: 'csn-lead-save', text: canEdit ? ' Сохраняется сразу.' : '' })),
       el('div', { className: 'csn-matrix-wrap' }, table), status,
-      el('p', { className: 'muted csn-foot', text: 'У каждой компании свои настройки. Куда приходит уведомление (Telegram-бот, пуш, чат Хью) — выбор каждого человека в его профиле. Отправка по этой таблице подключается отдельно.' }));
+      el('p', { className: 'muted csn-foot', text: 'У каждой компании свои настройки. Куда приходит уведомление (push или Telegram) — выбор каждого человека в его профиле «Мои задачи». Сообщение — один раз на переход этапа.' }));
+    box.append(delivery(ctx, state));
 
     const say = (text) => { state.notifyMessage = text; status.textContent = text; };
     async function flush() {
@@ -87,6 +99,62 @@
       if (input.checked) list.add(input.dataset.role); else list.delete(input.dataset.role);
       state.matrix[input.dataset.stage] = ALL.filter((r) => list.has(r));
       void flush();
+    });
+    return box;
+  }
+
+  function delivery(ctx, state) {
+    const data = state.data, wrap = el('div', { className: 'csn-delivery', 'data-csn-delivery': true });
+    if (!data.delivery || !data.settings?.notificationDelivery) {
+      wrap.append(el('p', { className: 'muted', text: 'Отправка по таблице заработает после обновления сервера.' }));
+      return wrap;
+    }
+    const mode = data.settings.notificationDelivery, can = data.canDeliver === true;
+    const say = el('p', { className: 'cs-status', role: 'status', 'aria-live': 'polite', 'data-csn-delivery-status': true, text: state.deliveryMessage || '' });
+    const group = el('div', { className: 'csn-modes', role: 'radiogroup', 'aria-label': 'Отправлять уведомления' },
+      ...MODES.map(([id, label]) => el('label', { className: 'csn-mode' }, el('input', { type: 'radio', name: 'csn-mode', value: id,
+        checked: id === mode, disabled: !can || state.deliverySaving }), el('span', { text: label }))));
+    const hint = el('p', { className: 'muted csn-mode-hint', text: (MODES.find(([id]) => id === mode) || MODES[0])[2] +
+      (can ? '' : ' Включает и выключает только владелец.') + (data.delivery.enabledAt && mode !== 'off' ? ` Включено: ${bangkok(data.delivery.enabledAt)} (Бангкок).` : '') });
+    wrap.append(el('h3', { className: 'csn-sub', text: 'Отправлять уведомления' }), group, hint, say);
+    group.addEventListener('change', async (event) => {
+      const input = event.target.closest('input[name="csn-mode"]');
+      if (!input || !can || state.deliverySaving) return;
+      state.deliverySaving = true; say.textContent = 'Сохраняю…';
+      try {
+        const saved = await ctx.settings.content.save({ ...state.data.settings, notificationDelivery: input.value }, state.data.version);
+        if (ctx.signal.aborted) return;
+        state.data = saved; state.matrix = null;
+        state.deliveryMessage = `Режим: ${(MODES.find(([id]) => id === saved.settings.notificationDelivery) || MODES[0])[1]} · версия ${saved.version}`;
+      } catch (error) {
+        if (ctx.signal.aborted) return;
+        state.deliveryMessage = error.status === 409 ? 'Настройки уже изменил другой пользователь — обновите экран.' : `Не сохранено: ${error.message}`;
+      } finally { state.deliverySaving = false; }
+      state.redraw?.();
+    });
+    if (data.canEdit && typeof ctx.api?.get === 'function') wrap.append(journal(ctx));
+    return wrap;
+  }
+
+  // Журнал последних 50 событий: что ушло бы (пробно) или что поставлено в очередь (вкл.).
+  function journal(ctx) {
+    const list = el('ol', { className: 'csn-log', 'data-csn-log': true });
+    const note = el('p', { className: 'muted', text: 'Загружаю журнал…' });
+    const box = el('section', { className: 'csn-journal', 'data-csn-journal': true }, el('h3', { className: 'csn-sub', text: 'Что ушло бы · журнал' }), note, list);
+    ctx.api.get('content-stage-notify/log').then((log) => {
+      if (ctx.signal.aborted) return;
+      const items = Array.isArray(log?.items) ? log.items : [];
+      note.textContent = items.length ? (log.peopleDeliveryEnabled ? '' : 'Отправка уведомлений на сервере пока выключена — даже в режиме «Вкл.» сообщения не уходят.')
+        : log?.baselineAt ? 'Переходов этапов после включения пока не было.' : 'Журнал пуст. После включения первый проход только запоминает текущие этапы.';
+      note.hidden = !note.textContent;
+      const label = (id) => log?.labels?.[id] || id;
+      list.replaceChildren(...items.map((item) => el('li', { className: 'csn-log-item', 'data-status': item.status },
+        el('p', { className: 'csn-log-head' }, el('b', { text: item.title }), el('span', { className: 'muted', text: ` · ${bangkok(item.createdAt)}` })),
+        el('p', { className: 'csn-log-line', text: `${label(item.from)} → ${label(item.to)}` }),
+        el('p', { className: 'muted csn-log-line', text: `${item.person ? `${item.person} (${(item.roles || []).map((r) => ROLE_NAME[r] || r).join(', ')})` : 'Получателей нет'} — ${LOG_STATUS[item.status] || item.status}` }))));
+    }).catch((error) => {
+      if (ctx.signal.aborted) return;
+      note.textContent = error.status === 404 ? 'Журнал появится после обновления сервера.' : `Журнал не загрузился: ${error.message}`;
     });
     return box;
   }
@@ -141,10 +209,21 @@
       !settings.contentPlanSheetUrl && canEdit ? el('p',{className:'muted',text:'Указать таблицу: вставьте ссылку и сохраните настройки.'}) : null);
     /* Макет 07.11: «Площадки» — площадки, таблица, дни и сроки съёмки, стиль титров; «Участники» — кто согласует и где роли.
        Одна форма и одно сохранение на обе вкладки (тот же PUT /content/content-settings). */
+    const rolePeople = settings.rolePeople && Array.isArray(data.people) ? settings.rolePeople : null;
     const roles = el('section', { className: 'card cs-block cs-roles', 'data-cs-roles': true },
-      el('h2', { className: 'cs-block-title', text: 'Роли в уведомлениях' }),
-      el('p', { className: 'muted', text: `Роли: ${ROLES.map(([, label]) => label).join(', ')}. Права и роли людям выдаёт владелец в «Настройка аккаунтов»; отдельного списка людей по ролям сервер пока не отдаёт.` }),
-      el('p', {}, el('a', { href: '#accounts', text: 'Открыть «Настройка аккаунтов»' })));
+      el('h2', { className: 'cs-block-title', text: 'Роли в уведомлениях' }));
+    if (rolePeople) {
+      roles.append(el('p', { className: 'muted', text: 'Владелец — учётные записи владельцев; согласующий — выбор выше. Кто в остальных ролях — отметьте здесь и сохраните.' }));
+      PEOPLE_ROLES.forEach(([role, label]) => {
+        const list = el('div', { className: 'cs-grid' });
+        data.people.forEach((person) => list.append(check(`role-${role}`, person.id, person.role === 'owner' ? `${person.name} · владелец` : person.name,
+          (rolePeople[role] || []).includes(person.id), disabled)));
+        roles.append(el('fieldset', { className: 'cs-role', 'data-cs-role': role }, el('legend', { text: label }), list));
+      });
+    } else {
+      roles.append(el('p', { className: 'muted', text: `Роли: ${ROLES.map(([, label]) => label).join(', ')}. Назначение людей в роли заработает после обновления сервера.` }));
+    }
+    roles.append(el('p', {}, el('a', { href: '#accounts', text: 'Права людей — «Настройка аккаунтов»' })));
     const platformsPane = el('div', { className: 'cs-pane', 'data-cs-pane': 'platforms' }, platforms, sheet, days, deadline, style);
     const peoplePane = el('div', { className: 'cs-pane', 'data-cs-pane': 'people' }, approvers, roles);
     form.append(platformsPane, peoplePane, actions);
@@ -165,7 +244,8 @@
       const next = {
         approverUserIds: values('approver').map(Number), shootingWeekdays: values('weekday').map(Number), deadlineDays,
         platforms: values('platform'), contentPlanSheetUrl: form.elements.contentPlanSheetUrl.value.trim(),
-        caption: { font: form.elements.font.value, size: form.elements.size.value, color: form.elements.color.value, uppercase: form.elements.uppercase.checked }
+        caption: { font: form.elements.font.value, size: form.elements.size.value, color: form.elements.color.value, uppercase: form.elements.uppercase.checked },
+        ...(rolePeople ? { rolePeople: Object.fromEntries(PEOPLE_ROLES.map(([role]) => [role, values(`role-${role}`).map(Number)])) } : {})
       };
       state.busy = true;
       status.textContent = 'Сохраняю…';

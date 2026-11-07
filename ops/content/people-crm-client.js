@@ -3,11 +3,11 @@ const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const {personAliases}=require('./people-aliases');
 function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch,authStore=null}) {
   const actions=new Set(['ownerDecisionEvents','tasks_list','task_get','task_update','teamChatTask','teamChatContext','mediaMentor','taskRecords','planVariantsDecision',
-    'hughTask','myBoard','myBoardAction','taskChatComment']);
+    'hughTask','myBoard','myBoardAction','taskChatComment','contentStages']);
   const writes=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'];
   return async function call(action,args,user,companyCode) {
     if(!actions.has(action)||!apiKey)fail(503,'Источник задач не настроен');
-    const permission=['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':
+    const permission=['mediaMentor','planVariantsDecision','contentStages'].includes(action)?'content-plan.approve':
       writes.includes(action)?'tasks.self.edit':'tasks.self.view';
     if(!user||!['owner','editor'].includes(user.role)||!Number.isSafeInteger(user.id)||user.id<1||
       typeof companyCode!=='string'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(companyCode)||
@@ -20,13 +20,15 @@ function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch,authStore=null}) {
     const userAliases=authStore?personAliases(authStore.list(),user,companyCode):[];
     const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode],
       ...(userAliases.length?{userAliases}:{})};
-    const readOnly=['ownerDecisionEvents','mediaMentor','taskRecords','teamChatContext','myBoard'].includes(action);
+    const readOnly=['ownerDecisionEvents','mediaMentor','taskRecords','teamChatContext','myBoard','contentStages'].includes(action);
+    // Этапы рилсов (specs/214): факты съёмки своей компании — тот же доверенный заголовок, что у прокси /media-mentor.
+    const facts=action==='contentStages'&&typeof args.shootingFacts==='string'&&/^[A-Za-z0-9_-]{1,16000}$/.test(args.shootingFacts)?{'x-synapse-shooting-facts':args.shootingFacts}:{};
     const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
       (action==='ownerDecisionEvents'?`&offset=${Number(args.offset)||0}${args.taskId?`&taskId=${Number(args.taskId)}`:''}`:'')+
       (action==='taskRecords'?`&offset=${Number(args.offset)||0}`:'');
     let response;
     try {response=await fetchImpl(`${crmUrl}${route}`,{method:readOnly?'GET':'POST',
-      headers:{'content-type':'application/json','x-api-key':apiKey,'x-synapse-crm-identity':Buffer.from(JSON.stringify(identity)).toString('base64url')},
+      headers:{'content-type':'application/json','x-api-key':apiKey,'x-synapse-crm-identity':Buffer.from(JSON.stringify(identity)).toString('base64url'),...facts},
       ...(readOnly?{}:{body:JSON.stringify(args)}),redirect:'error',signal:AbortSignal.timeout(15000)});
     } catch{fail(503,'Источник недоступен; результат операции не подтверждён');}
     let data;

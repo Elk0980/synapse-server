@@ -63,3 +63,21 @@
   .csn-matrix th, .csn-matrix td { padding: 6px 3px; }
   .csn-matrix th[scope="row"] { width: 42%; }
 }
+
+/* specs/214: выключатель рассылки, журнал «что ушло бы», люди в ролях. */
+.csn-delivery { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.csn-sub { margin: 0; font-size: .95rem; }
+.csn-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.csn-mode { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.csn-mode:has(input:checked) { border-color: var(--text); font-weight: 700; }
+.csn-mode input { margin: 0; accent-color: var(--blue, #2e6bd6); }
+.csn-mode-hint { margin: 0; font-size: .85rem; }
+.csn-journal { display: grid; gap: 6px; }
+.csn-journal > p { margin: 0; font-size: .85rem; }
+.csn-journal > p[hidden] { display: none; }
+.csn-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 360px; overflow-y: auto; }
+.csn-log-item { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+.csn-log-item p { margin: 0; font-size: .85rem; }
+.csn-log-head b { font-weight: 600; }
+.cs-role { border: 0; padding: 0; margin: 8px 0 0; min-width: 0; }
+.cs-role legend { padding: 0; margin-bottom: 4px; font-weight: 600; font-size: .9rem; }
