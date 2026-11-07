@@ -5,9 +5,19 @@
 const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,...(code?{details:{code}}:{})});};
 const REEL=/^\/autoposting\/reels(?:\/(\d+)(?:\/(edits|publication)(?:\/(\d+)\/(cancel))?)?)?$/;
 const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(claim)|reels\/(\d+)\/(versions))$/;
+/* Автомонтаж (specs/214-auto-montage): идея плана своей компании — сценарий для черновика и версия ролика идеи. */
+const IDEA_ROUTE=/^\/internal\/reel-materials\/ideas\/([A-Za-z0-9][A-Za-z0-9_-]{0,99})(\/versions)?$/;
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
     const headers={'cache-control':'no-store'};
+    const idea=IDEA_ROUTE.exec(url.pathname);
+    if(idea){
+      if(!trustedService(request))fail(403,'Только служебный обработчик');
+      const code=url.searchParams.get('companyCode')||'';
+      if(!idea[2]&&request.method!=='GET'||idea[2]&&request.method!=='POST')fail(405,'Метод не поддерживается');
+      const result=idea[2]?materials.addIdeaVersion(code,idea[1],await readJson(request),request.headers['x-agent-name']):materials.ideaInfo(code,idea[1]);
+      send(response,200,result,headers);return true;
+    }
     const internal=INTERNAL.exec(url.pathname);
     if(internal){
       if(!trustedService(request))fail(403,'Только служебный обработчик');

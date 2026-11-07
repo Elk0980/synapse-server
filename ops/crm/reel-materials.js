@@ -1,7 +1,7 @@
 'use strict';
 /* «Материалы»: смонтированные рилсы компании, их версии v1, v2… и правки к версии.
    Правка — это список правок (EDL JSON) или просьба «Хью, измени…» по отрезку. Рендер в браузере
-   и здесь не выполняется: правку забирает Claude-агент монтажа (tools/reels-check), монтирует
+   и здесь не выполняется: правку забирает агент монтажа (воркер ops/montage, specs/214-auto-montage), монтирует
    ffmpeg и загружает новую версию через служебный маршрут. Публикации здесь нет: «Создать публикацию»
    создаёт обычный черновик автопостинга, дальше работают его согласование и план. */
 const {company,fail,object,text}=require('./company-information');
@@ -316,6 +316,25 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       return {reel,version:reel.versions.at(-1),hughChat:edit?{companyCode:reel.companyCode,authorId:edit.author_id,text:`Исправлено: «${row.title}» — готова v${version}.`}:null};
     });
   }
+  /* --- Автомонтаж (specs/214-auto-montage): служебные вызовы по идее плана своей компании --- */
+  const ideaPlatforms=idea=>PLATFORMS.filter(id=>id===idea.platform||Object.hasOwn(idea.variants||{},id));
+  function ideaInfo(code,ideaId){
+    const owner=company(db,code),idea=planIdea(owner,ideaId),reel=reelForIdea(owner,idea.ideaId);
+    return {companyCode:owner.code.toLowerCase(),idea:{ideaId:idea.ideaId,date:idea.date||'',topic:String(idea.topic||''),hook:String(idea.hook||''),
+      script:String(idea.script||''),platforms:ideaPlatforms(idea)},reel:reel?{id:reel.id,title:reel.title}:null};
+  }
+  /* Черновик автомонтажа: новая версия ролика идеи; ролика нет — создаётся ролик с этой идеей (v1).
+     Этап идеи после этого вычисляется как «Монтаж на согласовании» (content-stages: у ролика есть версии). */
+  function addIdeaVersion(code,ideaId,body,agent){
+    const owner=company(db,code),idea=planIdea(owner,ideaId);object(body,['mediaUrl','sha256','durationMs','note']);
+    const existing=reelForIdea(owner,idea.ideaId);
+    if(existing)return addVersion(owner.code,existing.id,{mediaUrl:body.mediaUrl,sha256:body.sha256,durationMs:body.durationMs,note:body.note},agent);
+    const data={title:text(String(idea.topic||'').trim()||`Рилс ${idea.ideaId}`,200,true),releaseDate:/^\d{4}-\d{2}-\d{2}$/.test(idea.date||'')?idea.date:'',
+      platforms:ideaPlatforms(idea),postId:null,mediaUrl:mediaUrl(body.mediaUrl,owner.code),sha256:sha(body.sha256),
+      durationMs:body.durationMs===undefined||body.durationMs===null?null:int(body.durationMs,100,MAX_MS,'Длительность'),note:text(body.note??'',1000),ideaId:idea.ideaId};
+    const reel=insert(owner,data,{userId:text(String(agent||MONTAGE_EXECUTOR),200)});
+    return {reel,version:reel.versions.at(-1),hughChat:null,created:true};
+  }
   /* Личный лог автора правок для чата с Хью (room hugh:<id> в content). Только правки этого автора в этой компании. */
   function hughLog(code,authorId){
     const owner=company(db,code),author=String(authorId??'');if(!/^[1-9]\d{0,15}$/.test(author))fail(400,'Нужен автор правок');
@@ -323,6 +342,6 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       WHERE e.company_id=? AND e.author_id=? ORDER BY e.id DESC LIMIT 200`).all(owner.id,author).reverse();
     return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id})))};
   }
-  return {list,get,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog};
+  return {list,get,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog,ideaInfo,addIdeaVersion};
 }
 module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR,DEFAULT_MEDIA_ORIGINS};
