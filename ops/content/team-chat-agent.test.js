@@ -32,7 +32,7 @@ test('запасной ответ: «Лео, …» без встроенного
   const hugh=await f.send(2,'alvi','Хью, что у меня в работе?');
   await f.send(2,'alvi','Мы вчера обсуждали это с Лео');
   const own=f.assistant(2);
-  assert.deepEqual(own.map(m=>[m.author_name,m.text]),[['Лео',LEO_HANDOFF],['Хью · ИИ',HANDOFF]]);
+  assert.deepEqual(own.map(m=>[m.author_name,m.text]),[['Лео',LEO_HANDOFF],['Хью · ИИ','Хью передал вопрос команде — ответим здесь, в этом чате.']]);
   assert.equal(f.audit(leo.id).status,'agent_pending');assert.equal(f.audit(hugh.id).status,'review_required');
   assert.equal(f.db.prepare('SELECT count(*) n FROM team_chat_answers').get().n,2,'упоминание без обращения ответа не вызывает');
   assert.equal(f.assistant(3).length,0,'запасной ответ видит спрашивающий и владелец, не коллеги');

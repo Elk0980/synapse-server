@@ -79,7 +79,7 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody,false)).status,403);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
-  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Ответ пока недоступен. Вопрос сохранён для проверки.');
+  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Хью передал вопрос команде — ответим здесь, в этом чате.');
   assert.equal(chatHistory.reviewQueue,undefined);
   const ownerHistory=await(await request(scoped('/team-chat'),owner)).json();assert.equal(ownerHistory.reviewQueue.length,1);
   const peerCreated=await request('/content/people/members',owner,'POST',{login:'peer',displayName:'Коллега',companyCode:'synapse-business',staffRole:'human_executor'});
