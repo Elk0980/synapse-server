@@ -194,7 +194,14 @@ function captions(value) {
   return result;
 }
 const mediaKind=urls=>urls.some(u=>VIDEO_RE.test(u))?'video':urls.some(u=>IMAGE_RE.test(u))?'image':urls.length?'file':'none';
-function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,captionLink=null,now=Date.now,logger=console}={}) {
+/* specs/225-cf-lena-onboarding: список компаний, где каждая карточка требует согласования, — конфигурация,
+   а не код. Не задано или пусто — прежнее поведение (только palitra-love). Неверные коды пропускаются. */
+function approvalCompaniesFrom(value){
+  const list=String(value||'').split(',').map(item=>item.trim().toLowerCase()).filter(item=>/^[a-z0-9][a-z0-9_-]{0,63}$/.test(item));
+  return new Set(list.length?list:['palitra-love']);
+}
+function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,captionLink=null,now=Date.now,logger=console,
+  approvalCompanies=approvalCompaniesFrom(process.env.AUTOPOSTING_APPROVAL_COMPANIES)}={}) {
   if(!information||!transport)throw Error('Autoposting requires company information and publication adapters');
   /* Охрана связи с версией контент-плана включена всегда: отдельного «выключателя» нет,
      иначе появился бы путь отправки в обход согласования. Подменить её из запроса нельзя. */
@@ -391,9 +398,10 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
      конкретный финальный текст, медиа и канал: это разные утверждения, и одно другого не
      заменяет. Признак берётся из связи в отдельной таблице, а не из day_key и подписей:
      эти поля можно очистить правкой карточки, а связь так не снимается. */
-  // Явная политика компании: обычная карточка Palitra также требует согласования.
-  // Для остальных компаний сохраняются прежние правила очереди и связанного плана.
-  const approvalPolicy=code=>String(code).toLowerCase()==='palitra-love';
+  // Явная политика компании: обычная карточка компании из AUTOPOSTING_APPROVAL_COMPANIES (по умолчанию Palitra)
+  // также требует согласования. Для остальных компаний сохраняются прежние правила очереди и связанного плана.
+  const approvalSet=approvalCompanies instanceof Set?approvalCompanies:approvalCompaniesFrom([...(approvalCompanies||[])].join(','));
+  const approvalPolicy=code=>approvalSet.has(String(code).toLowerCase());
   const companyApprovalRequired=row=>approvalPolicy(db.prepare('SELECT code FROM companies WHERE id=?').get(row.company_id)?.code);
   const requiresApproval=row=>companyApprovalRequired(row)||isQueueCard(row)||Boolean(plan.linkOf(row.id,row.company_id))||Boolean(variantLinkOf(row));
   const deliveryApproved=(row,channelId)=>{
@@ -1663,5 +1671,5 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
   }
   return {history:readHistory,createVariant,attachSource,lookupSourceAttachment,sourceUsage,remove,trash,archive,restore,archived,get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
-module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
+module.exports={createAutoposting,approvalCompaniesFrom,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};
