@@ -32,7 +32,7 @@ test('встроенный навык выбирается по контентн
   assert.equal(chosen?.id, 'synapse-content-system');
   const result = store.instructions(CONTENT_TASK, { companyCode: 'alvi' });
   assert.equal(result.id, 'synapse-content-system');
-  assert.equal(result.version, '1.0.0');
+  assert.equal(result.version, '1.1.0');
   assert.match(result.text, /Рабочая инструкция/);
   assert.match(result.text, /роль/i, 'в инструкции есть содержательная часть навыка');
   // Ограничения навыка едут вместе с ним: это текст порядка работы, а не разрешение.
@@ -154,7 +154,7 @@ test('в журнал уходят только идентификатор и в
   const result = store.instructions(CONTENT_TASK, { companyCode: 'alvi' });
   assert.equal(lines.length, 1);
   assert.match(lines[0], /synapse-content-system/);
-  assert.match(lines[0], /1\.0\.0/);
+  assert.match(lines[0], /1\.1\.0/);
   for (const fragment of result.text.split('\n').filter((line) => line.trim().length > 30)) {
     assert.equal(lines[0].includes(fragment.trim()), false, 'содержание навыка в журнал не попадает');
   }
@@ -162,7 +162,8 @@ test('в журнал уходят только идентификатор и в
 
 test('встроенный навык не содержит личных имён, клиентских примеров и коммерческих условий', () => {
   const text = fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'SKILL.md'), 'utf8')
-    + fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'references', 'planning.md'), 'utf8');
+    + fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'references', 'planning.md'), 'utf8')
+    + fs.readFileSync(path.join(DEFAULT_ROOT, 'synapse-content-system', 'references', 'reels-style.md'), 'utf8');
   for (const forbidden of ['Влад', 'Хью', 'Claude', 'Codex', 'Palitra', 'Палитра', 'ALVI', 'АЛВИ',
     'Авокадо', 'Avokado', '₽', 'руб', 'USD', 'курс', 'подписк']) {
     assert.equal(text.includes(forbidden), false, `во встроенном навыке не должно быть: ${forbidden}`);
