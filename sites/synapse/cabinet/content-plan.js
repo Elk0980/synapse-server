@@ -157,12 +157,12 @@
       return list.find((v) => v.status === 'rejected')?.status || list.find((v) => v.status === 'pending')?.status
         || list.find((v) => v.status === 'approved')?.status || list[0]?.status || 'empty'; };
     const platforms = (idea) => Object.keys(idea.variants || {[idea.platform]: 1}).map(platformLabel).join(', ');
-    const status = (idea) => { const st = statusOf(idea);
+    const status = (idea, short = false) => { const st = statusOf(idea);
       /* Влад 06.11: у строки один статус. Пока не согласовано — статус согласования; после — ход работы (Отснято, В монтаже). */
       const prod = st === 'approved' && ['shot', 'editing'].includes(idea.productionStatus) ? idea.productionStatus : '';
       const stage = kit() && stageOf(idea, st);
       // Один чип этапа общей цепочки CfKit (неяркий цвет); без CfKit — прежняя подпись.
-      if (stage) return kit().stageChip(stage).replace('class="cfk-chip', `data-status="${esc(prod || st)}" class="cp-st cfk-chip`);
+      if (stage) return kit().stageChip(stage, {short}).replace('class="cfk-chip', `data-status="${esc(prod || st)}" class="cp-st cfk-chip`);
       if (kit()) return `<span class="cp-st cfk-chip cfk-tone-gray" data-status="${esc(st)}">${esc(VSTATUS[st] || st)}</span>`;
       return `<span class="cp-st" data-status="${esc(prod || st)}">${esc(prod ? PROD[prod] : (VSTATUS[st] || st))}</span>`; };
     /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
@@ -227,7 +227,7 @@
            ниже «Сменить статус ▾» и значки площадок. На ПК те же элементы стоят колонками таблицы. */
         const open = state.open.has(idea.ideaId), st = statusOf(idea);
         const rework = kit() && ['script_rework', 'edit_rework'].includes(stageOf(idea, st));
-        return `<li class="cp-row${open ? ' cp-open' : ''}${rework ? ' cp-rework' : ''}"data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea)}</div>
+        return `<li class="cp-row${open ? ' cp-open' : ''}${rework ? ' cp-rework' : ''}"data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea, true)}</div>
           <button type="button" class="cp-line" data-toggle aria-expanded="${open}"><span class="cp-topic">${esc(idea.topic)}</span><span class="cp-chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
           ${open ? full(idea, edit, st, status) : ''}
           <div class="cp-acts">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${nets(idea, platformLabel)}</div>

@@ -496,12 +496,15 @@ test('CfKit: один чип этапа общей цепочки по данн�
   const a = api({ withKit: true, plan, variants }); await a.mount();
   const chip = (id) => a.root.querySelector(`[data-idea="${id}"] .cp-top .cfk-chip`);
   assert.deepEqual(['s-1', 's-2', 's-3', 's-4'].map((id) => [chip(id).dataset.stage, chip(id).textContent]),
-    [['planned', 'Запланировано'], ['script_review', 'Сценарий на согласовании'], ['shot', 'Отснято'], ['script_rework', 'Сценарий на доработке']]);
+    [['planned', 'Запланировано'], ['script_review', 'На согласовании'], ['shot', 'Отснято'], ['script_rework', 'На доработке']]);
+  // Макет 07.11: в свёрнутой карточке короткая подпись этапа, полная — в подсказке и в раскрытом виде.
+  assert.equal(chip('s-2').title, 'Сценарий на согласовании');
   assert.equal(a.root.querySelectorAll('[data-idea="s-2"] .cp-top .cfk-chip').length, 1, 'один статус без «Согласовано · …»');
   assert.deepEqual([...a.root.querySelectorAll('[data-idea="s-1"] .cp-nb')].map((n) => n.textContent), ['TG', 'VK', 'IG']);
   assert.ok(a.root.querySelector('[data-idea="s-1"] .cp-acts .cp-nets'), 'значки в одной строке с «Сменить статус ▾»');
   a.root.querySelector('[data-idea="s-4"] .cp-date').click();
   assert.match(a.root.querySelector('[data-idea="s-4"] .cp-full').textContent, /Правки.*Короче хук/s);
+  assert.equal(a.root.querySelector('[data-idea="s-4"] .cp-fgrid .cfk-chip').textContent, 'Сценарий на доработке', 'в раскрытом виде — полная подпись');
   a.root.querySelector('[data-cp-tab="drafts"]').click();
   assert.equal(a.root.querySelectorAll('.cp-row').length, 0);
 });

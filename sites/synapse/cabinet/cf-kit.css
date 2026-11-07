@@ -98,3 +98,10 @@ tr.cfk-feed-sep { border-top: 0; }
 .cfk-feed-ahead { font-size: 12px; color: var(--muted, #8c97ab); text-align: center; padding: 4px 0; }
 .cfk-feed-ahead td { text-align: center; color: var(--muted, #8c97ab); }
 @media (prefers-reduced-motion: reduce) { .cfk-day, .cfk-feed-sep span { transition: none; } }
+
+/* Вкладки Контент-завода: под шапкой приложения нет пустого зазора (макет 07.11). Служебная строка .content-header,
+   в которой только скрытая ошибка запуска, места не занимает; появится ошибка — строка видна как раньше. */
+body[data-cabinet-view^="content-"] #main-content > .content-header:not(:has(> :not([hidden]))) { display: none; }
+@media (max-width: 760px) {
+  body[data-cabinet-view^="content-"] #main-content { padding-top: 10px; }
+}

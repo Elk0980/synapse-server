@@ -31,6 +31,11 @@ test('этапы: ровно 13 в порядке цепочки, без «Сн�
   assert.equal(chip.textContent, 'Монтаж на доработке');
   assert.match(chip.className, /cfk-chip cfk-tone-coral/);
   assert.equal(chip.dataset.stage, 'edit_rework');
+  // Короткая подпись для свёрнутых карточек (макет 07.11), полная — в подсказке.
+  box.innerHTML = w.CfKit.stageChip('edit_rework', {short: true});
+  assert.equal(box.firstElementChild.textContent, 'На доработке');
+  assert.equal(box.firstElementChild.title, 'Монтаж на доработке');
+  assert.ok(w.CfKit.STAGES.every((s) => s.short), 'у каждого этапа есть короткая подпись');
   box.innerHTML = w.CfKit.stageChip('<b>x</b>');
   assert.equal(box.querySelector('b'), null, 'неизвестный этап экранируется');
   assert.throws(() => { w.CfKit.STAGES.push({}); });

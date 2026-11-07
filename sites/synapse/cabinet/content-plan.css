@@ -229,3 +229,31 @@ a.cp-pub:hover, a.cp-pub:focus-visible { background:rgba(76,195,138,.12); }
   .cp-line { justify-content:flex-start; }
   .cp-line .cp-chev { margin-left:0; }
 }
+
+/* Сверка живого кабинета на 390 с макетом 07.11 (снимки Влада). Общее правило .view-panel button (0,3,1) давало
+   теме, вкладкам и «Сменить статус» рамку, фон и высоту 44 px — поэтому здесь селекторы сильнее. */
+/* Тема — простой жирный текст со стрелкой ▾, без рамки-кнопки; фокус виден только с клавиатуры. */
+.view-panel .cp button.cp-line.cp-line { min-height:0 !important; height:auto; padding:2px 0; border:0; border-radius:0; background:none; box-shadow:none; color:inherit; line-height:1.3; }
+.view-panel .cp button.cp-line.cp-line:focus:not(:focus-visible) { outline:none; }
+.view-panel .cp .cp-row .cp-topic { font-weight:700; }
+/* Чип этапа — короткий, в одну строку; в раскрытом виде полная подпись тоже не переносится. */
+.cp-row .cp-top { flex-wrap:nowrap; }
+.cp-row .cp-top .cfk-chip { flex:none; font-size:13px; }
+.cp-row .cp-fgrid .cfk-chip, .cp-row .cp-fgrid .cp-st { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; font-size:13px; }
+@media (max-width: 1099px) {
+  /* «Сменить статус ▾» и значки площадок — одной строкой, как в макете. */
+  .cp-row .cp-acts { flex-wrap:nowrap; }
+  .cp-row .cp-nets { flex-wrap:nowrap; flex:none; }
+  .cp-row .cp-nb { width:22px; height:22px; font-size:8px; }
+  .view-panel .cp button.cp-act.cp-act { min-height:0 !important; height:34px; padding:0 12px; border-radius:8px; background:transparent; font-size:14px; flex:none; }
+}
+/* Вкладки «Контент-план ⚙ | Черновики | + Новый» — компактные «ушки» как в макете: рамка без низа, активная с фоном. */
+.view-panel .cp .cp-tabs > [role=tablist] { gap:6px; align-items:flex-end; }
+.view-panel .cp .cp-tabs [role=tablist] > button, .view-panel .cp .cp-tabs .cp-tab-plan { min-height:0 !important; height:32px; padding:0 10px; border:1px solid var(--line); border-bottom:0;
+  border-radius:8px 8px 0 0; background:transparent; box-shadow:none; color:var(--muted); font-size:14px; line-height:1; }
+.view-panel .cp .cp-tabs .cp-tab-plan { display:inline-flex; align-items:center; gap:6px; padding:0 8px 0 0; }
+.view-panel .cp .cp-tabs .cp-tab-plan > button[role=tab] { min-height:0 !important; height:100%; padding:0 0 0 10px; border:0; border-radius:0; background:none; box-shadow:none; color:inherit; font:inherit; }
+.view-panel .cp .cp-tabs .cp-tab-plan:has([aria-selected=true]), .view-panel .cp .cp-tabs [role=tablist] > button[aria-selected=true] {
+  color:var(--text); background:var(--surface-soft); font-weight:700; box-shadow:inset 0 -2px var(--accent); }
+.view-panel .cp .cp-tabs .cp-tab-plan .cp-gear { min-height:0 !important; min-width:0; width:20px; height:20px; align-self:center; padding:0; border:1px solid var(--line); border-radius:5px;
+  background:transparent; color:var(--muted); font-size:11px; line-height:1; font-weight:400; }

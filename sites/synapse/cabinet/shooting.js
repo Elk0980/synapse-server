@@ -42,6 +42,9 @@
   /* Значки площадок — как в Контент-плане (цветные кружки с подписью, без логотипов). */
   const NET = {telegram: ['TG', '#229ed9'], vk: ['VK', '#0077ff'], youtube_shorts: ['YT', '#e62117'], youtube: ['YT', '#e62117'],
     tiktok: ['TT', '#111'], instagram: ['IG', '#d6249f'], max: ['MAX', '#6b4eff'], two_gis: ['2Г', '#2f9e44']};
+  /* Порядок значков — как в макете и Контент-плане: TG · VK · YT · TT · IG, прочие — в конце. */
+  const NET_ORDER = ['telegram', 'vk', 'youtube_shorts', 'youtube', 'tiktok', 'instagram', 'max', 'two_gis'];
+  const netRank = (id) => { const i = NET_ORDER.indexOf(id); return i < 0 ? NET_ORDER.length : i; };
   const SORTS = [
     {id: 'shoot', label: 'Дата съёмки'},
     {id: 'status', label: 'Статус: отснято → запланировано'},
@@ -207,6 +210,7 @@
       const ids = Object.keys(idea.variants && typeof idea.variants === 'object' ? idea.variants : {}).filter((id) => !idea.variants[id]?.excluded);
       if (!ids.length && idea.platform) ids.push(idea.platform);
       if (!ids.length) return null;
+      ids.sort((a, b) => netRank(a) - netRank(b));
       return h('span', {class: 'shoot-nets', role: 'img', 'aria-label': `Площадки: ${ids.map(label).join(', ')}`},
         ids.map((id) => {
           const [abbr, color] = NET[id] || [String(id).slice(0, 3).toUpperCase(), '#667085'];

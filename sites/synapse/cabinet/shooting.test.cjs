@@ -136,6 +136,15 @@ test('№121: Съёмка показывает все видео-позиции
   assert.equal(opened.w.__scrolled, card(openedRoot, 'idea-08'), 'и прокручивает к ней');
 });
 
+test('значки площадок в Съёмке — в порядке макета TG VK YT TT IG, независимо от порядка версий плана', async () => {
+  const live = {approval: {status: 'pending'}, plan: {days: [{ideaId: 'idea-1', date: '2026-11-06', platform: 'instagram', format: 'reel', topic: 'Все площадки',
+    variants: {instagram: {}, vk: {}, tiktok: {}, youtube_shorts: {}, telegram: {}}}]}, variants: [{ideaId: 'idea-1', status: 'approved'}]};
+  const p = page({settings: {}}), root = p.d.getElementById('m');
+  p.ctx.crm = async () => live;
+  await p.registered['content-shooting'].mount(root, p.ctx);
+  assert.deepEqual([...card(root, 'idea-1').querySelectorAll('.shoot-nb')].map((n) => n.textContent), ['TG', 'VK', 'YT', 'TT', 'IG']);
+});
+
 test('экран «Съёмка» по макету 07.11: шапка CfKit, карточка без «Сменить статус», две кнопки, загрузка и площадки', async () => {
   const p = page(), root = p.d.getElementById('m');
   assert.equal(typeof p.registered['content-shooting'].mount, 'function');

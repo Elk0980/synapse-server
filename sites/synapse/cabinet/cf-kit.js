@@ -10,24 +10,27 @@
 
   /* Цепочка этапов (решение Влада 07.11 02:25–02:29): этапа «Снимается» нет; этап меняется сам по действию. */
   const STAGES = Object.freeze([
-    {id: 'draft', label: 'Черновик', tone: 'gray'},
-    {id: 'script_review', label: 'Сценарий на согласовании', tone: 'yellow'},
-    {id: 'script_rework', label: 'Сценарий на доработке', tone: 'coral'},
-    {id: 'planned', label: 'Запланировано', tone: 'blue'},
-    {id: 'shot', label: 'Отснято', tone: 'violet'},
-    {id: 'editing', label: 'В монтаже', tone: 'violet'},
-    {id: 'edit_review', label: 'Монтаж на согласовании', tone: 'yellow'},
-    {id: 'edit_rework', label: 'Монтаж на доработке', tone: 'coral'},
-    {id: 'ready', label: 'Готово к выходу', tone: 'green'},
-    {id: 'scheduled', label: 'Запланировано к выходу', tone: 'teal'},
-    {id: 'published', label: 'Опубликовано', tone: 'green'},
-    {id: 'publish_error', label: 'Ошибка публикации', tone: 'red'},
-    {id: 'unpublished', label: 'Снято с публикации', tone: 'gray'},
+    {id: 'draft', label: 'Черновик', tone: 'gray', short: 'Черновик'},
+    {id: 'script_review', label: 'Сценарий на согласовании', tone: 'yellow', short: 'На согласовании'},
+    {id: 'script_rework', label: 'Сценарий на доработке', tone: 'coral', short: 'На доработке'},
+    {id: 'planned', label: 'Запланировано', tone: 'blue', short: 'Запланировано'},
+    {id: 'shot', label: 'Отснято', tone: 'violet', short: 'Отснято'},
+    {id: 'editing', label: 'В монтаже', tone: 'violet', short: 'В монтаже'},
+    {id: 'edit_review', label: 'Монтаж на согласовании', tone: 'yellow', short: 'На согласовании'},
+    {id: 'edit_rework', label: 'Монтаж на доработке', tone: 'coral', short: 'На доработке'},
+    {id: 'ready', label: 'Готово к выходу', tone: 'green', short: 'Готово'},
+    {id: 'scheduled', label: 'Запланировано к выходу', tone: 'teal', short: 'К выходу'},
+    {id: 'published', label: 'Опубликовано', tone: 'green', short: 'Опубликовано'},
+    {id: 'publish_error', label: 'Ошибка публикации', tone: 'red', short: 'Ошибка'},
+    {id: 'unpublished', label: 'Снято с публикации', tone: 'gray', short: 'Снято'},
   ].map((stage) => Object.freeze(stage)));
   const stageById = (id) => STAGES.find((stage) => stage.id === id) || null;
-  function stageChip(id) {
+  /* opts.short — короткая подпись для свёрнутых карточек (макет 07.11: «В монтаже», «На согласовании»);
+     полная подпись остаётся во всплывающей подсказке и в раскрытом виде. */
+  function stageChip(id, opts = {}) {
     const stage = stageById(id);
     if (!stage) return `<span class="cfk-chip cfk-tone-gray" data-stage="">${esc(id ? String(id) : 'Этап неизвестен')}</span>`;
+    if (opts.short && stage.short && stage.short !== stage.label) return `<span class="cfk-chip cfk-tone-${stage.tone}" data-stage="${stage.id}" title="${esc(stage.label)}">${esc(stage.short)}</span>`;
     return `<span class="cfk-chip cfk-tone-${stage.tone}" data-stage="${stage.id}">${esc(stage.label)}</span>`;
   }
 
