@@ -173,14 +173,17 @@ test('specs/227: основной площадки без текста — бе�
   put(1,2,[planIdea('s-2',{vk:{text:''},telegram:{text:long},tiktok:{text:'SAMPLE TT'}})]);
   const reel=f.materials.create('avokado',{title:'Ролик',mediaUrl:asset('avokado'),platforms:['tiktok'],ideaId:'s-2'},editor);
   const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['tiktok','telegram']},editor);
-  assert.equal(f.created[0].body.text,'SAMPLE TT','первая непустая версия по выбранным площадкам');
-  assert.equal(f.created[0].body.captions,undefined,'текст длиннее 1024 для Telegram не подставлен');
+  assert.equal(out.planText.mainPlatform,'tiktok','первая непустая версия по выбранным площадкам');
+  assert.equal(f.created[0].body.text,undefined,'общий текст пуст: иначе Telegram получил бы его вместо своей версии');
+  assert.deepEqual(f.created[0].body.captions,{tiktok:'SAMPLE TT'},'текст длиннее 1024 для Telegram не подставлен');
+  assert.deepEqual(out.planText.blockedPlatforms,['telegram']);
   assert.deepEqual(out.planText.warnings.map(w=>[w.platform,w.code]),[['telegram','CAPTION_TOO_LONG']]);
   assert.match(out.planText.warnings[0].message,/Telegram.*1024/);
   // Основной текст длиннее лимита площадки без своей версии — предупреждение, текст площадки не выдумывается.
   put(1,3,[planIdea('s-2',{vk:{text:'В'.repeat(3000)}})]);
   const second=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','instagram']},editor);
-  assert.equal(f.created[1].body.text.length,3000);assert.equal(f.created[1].body.captions,undefined);
+  assert.equal(f.created[1].body.text,undefined,'основной текст не уходит общим — Instagram его не получит');
+  assert.equal(f.created[1].body.captions.vk.length,3000);assert.equal(Object.hasOwn(f.created[1].body.captions,'instagram'),false);
   assert.deepEqual(second.planText.warnings.map(w=>[w.platform,w.code]),[['instagram','MAIN_TOO_LONG']]);
 });
 
@@ -223,7 +226,7 @@ test('specs/227: версия длиннее лимита своей площа�
   put(1,1,[planIdea('s-4',{telegram:{text:'Т'.repeat(1100)},vk:{text:'SAMPLE VK'}},{platform:'telegram'})]);
   const reel=f.materials.create('avokado',{title:'Ролик',mediaUrl:asset('avokado'),platforms:['telegram'],ideaId:'s-4'},editor);
   const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['telegram','vk']},editor);
-  assert.equal(f.created[0].body.text,'SAMPLE VK');assert.equal(f.created[0].body.captions,undefined);
+  assert.equal(out.planText.mainPlatform,'vk');assert.equal(f.created[0].body.text,undefined);assert.deepEqual(f.created[0].body.captions,{vk:'SAMPLE VK'});
   assert.deepEqual(out.planText.warnings.map(w=>[w.platform,w.code]),[['telegram','CAPTION_TOO_LONG']]);
 });
 
@@ -253,4 +256,25 @@ test('specs/227, связка с настоящим планом: текст п�
   assert.equal(created[0].body.title,'SAMPLE тема');assert.equal(out.planText.planRevision,2);
   // Чужая компания с той же идеей ничего не получает.
   assert.throws(()=>materials.create('alvi',{title:'x',mediaUrl:asset('alvi'),platforms:['vk'],ideaId:'s-1'},{...editor,companyCodes:new Set(['alvi'])}),{status:404});
+});
+
+test('specs/227 ревью: при MAIN_TOO_LONG основной текст не попадает в площадку с меньшим лимитом — ни общим текстом, ни подписью',()=>{
+  const f=fixture(),put=withPlan(f),long='Т'.repeat(3000);
+  put(1,1,[planIdea('s-5',{vk:{text:long},youtube_shorts:{text:'SAMPLE YT'}})]);
+  const reel=f.materials.create('avokado',{title:'Ролик',mediaUrl:asset('avokado'),platforms:['vk'],ideaId:'s-5'},editor);
+  const out=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','telegram','max','youtube_shorts']},editor);
+  const body=f.created[0].body;
+  assert.equal(body.text,undefined);
+  assert.deepEqual(body.captions,{vk:long,max:long,youtube_shorts:'SAMPLE YT'},'max (4000) — основной текст подписью, telegram (1024) — ничего');
+  assert.equal(Object.hasOwn(body.captions,'telegram'),false);
+  for(const [platform,caption] of Object.entries(body.captions))assert.ok(caption.length<=({vk:15000,max:4000,youtube_shorts:5000})[platform]);
+  assert.deepEqual(out.planText.warnings.map(w=>[w.platform,w.code]),[['telegram','MAIN_TOO_LONG']]);
+  // Для vk/max основной текст положен явно: проверка без max.
+  f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['vk','telegram','max']},editor);
+  assert.deepEqual(Object.keys(f.created[1].body.captions).sort(),['max','vk']);
+  // Ни одной площадке текст не подходит — причина TOO_LONG, текста нет совсем, предупреждение есть.
+  const only=f.materials.createPublication('avokado',reel.id,{version:1,platformIds:['telegram']},editor);
+  assert.equal(only.planText.source,'none');assert.equal(only.planText.reason,'TOO_LONG');
+  assert.equal(f.created[2].body.text,undefined);assert.equal(f.created[2].body.captions,undefined);
+  assert.deepEqual(only.planText.warnings.map(w=>w.code),['MAIN_TOO_LONG']);
 });

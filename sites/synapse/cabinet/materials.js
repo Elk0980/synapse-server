@@ -393,19 +393,35 @@ function create(el, ctx) {
     for (const post of posts) {if (String(post.text || "").trim()) return post.text;}
     return "";
   }
-  /* specs/227-plan-caption-to-post: текст версии площадки темы плана (иначе основной, иначе первый непустой).
-     null — ролик не связан с темой плана; "" — тема есть, текста в плане нет. Тот же выбор делает сервер при «Создать публикацию». */
+  /* specs/227-plan-caption-to-post: текст из плана для площадки маски — тем же выбором, что сервер при «Создать публикацию»:
+     своя версия площадки, иначе основной текст (основная площадка или первая непустая версия, укладывающаяся в свой лимит).
+     Текст длиннее лимита площадки сервер не подставит — здесь он и не обещается. Тема в архиве плана текста не даёт.
+     Лимиты — mentor.vocabulary.captionLimits; у старого сервера — те же значения CAPTION_PLATFORMS. */
+  const CAPTION_LIMITS = {instagram: 2200, tiktok: 2200, youtube_shorts: 5000, vk: 15000, telegram: 1024, max: 4000, two_gis: 2000};
   function planCaption(ideaId, platform) {
-    const idea = ideaId && (state.mentor?.plan?.days || []).find((day) => day.ideaId === ideaId);
-    if (!idea) return null;
+    if (!ideaId) return {status: "none"};
+    if ((state.mentor?.archivedIdeas || []).some((item) => item?.ideaId === ideaId)) return {status: "archived"};
+    const idea = (state.mentor?.plan?.days || []).find((day) => day.ideaId === ideaId);
+    if (!idea) return {status: "none"};
+    const limits = {...CAPTION_LIMITS, ...(state.mentor?.vocabulary?.captionLimits || {})}, limit = (id) => Number(limits[id]) || 0;
     const variants = idea.variants || {}, own = (id) => variants[id] && !variants[id].excluded ? String(variants[id].text || "").trim() : "";
-    return own(platform) || own(idea.platform) || Object.keys(variants).map(own).find(Boolean) || "";
+    const fits = (id) => own(id) && (!limit(id) || own(id).length <= limit(id)), label = platformOf(platform).label;
+    if (own(platform)) return fits(platform) ? {status: "ok", text: own(platform)}
+      : {status: "too_long", message: `Текст для ${label} в контент-плане длиннее лимита площадки ${limit(platform)} — сократите его в плане, иначе он не подставится.`};
+    const main = [idea.platform, ...Object.keys(variants)].filter(Boolean).find(fits);
+    if (!main) return {status: "empty"};
+    if (limit(platform) && own(main).length > limit(platform))
+      return {status: "too_long", message: `Основной текст плана длиннее лимита площадки ${label} (${limit(platform)}) — добавьте текст для ${label} в контент-плане, иначе для неё текста не будет.`};
+    return {status: "ok", text: own(main)};
   }
   function captionHtml(posts, ideaId) {
-    const caption = captionFor(posts, state.platform), planned = caption ? null : planCaption(ideaId, state.platform);
-    if (caption || !planned) return `<p class="mt-caption${caption ? "" : " muted"}" data-caption>${caption ? esc(caption)
-      : planned === "" ? "Текста публикации пока нет. Добавьте текст публикации в контент-плане." : "Текста публикации пока нет."}</p>`;
-    return `<p class="mt-caption" data-caption data-from-plan>${esc(planned)}</p><p class="muted mt-caption-src" data-caption-source>Из контент-плана — подставится в черновик при «Создать публикацию».</p>`;
+    const caption = captionFor(posts, state.platform);
+    if (caption) return `<p class="mt-caption" data-caption>${esc(caption)}</p>`;
+    const plan = planCaption(ideaId, state.platform);
+    if (plan.status === "ok") return `<p class="mt-caption" data-caption data-from-plan>${esc(plan.text)}</p><p class="muted mt-caption-src" data-caption-source>Из контент-плана — подставится в черновик при «Создать публикацию».</p>`;
+    const text = plan.status === "too_long" ? plan.message : plan.status === "empty" ? "Текста публикации пока нет. Добавьте текст публикации в контент-плане."
+      : plan.status === "archived" ? "Текста публикации пока нет. Тема убрана в архив контент-плана — текст из плана не подставится." : "Текста публикации пока нет.";
+    return `<p class="mt-caption muted" data-caption${plan.status === "too_long" ? ' data-plan-too-long' : ""}>${esc(text)}</p>`;
   }
   /* specs/225-cf-theme-sources: «📁 Исходники» и «🎬 Монтаж» связанной темы плана (/media-mentor → ideaLinks). Только https. */
   function folderLinks(ideaId) {

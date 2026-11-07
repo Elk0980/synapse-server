@@ -358,19 +358,32 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const fits=platform=>own(platform)&&(!limit(platform)||own(platform).length<=limit(platform));
     const mainPlatform=order.find(fits)||null;
     if(!mainPlatform)return {...none('NO_TEXT','В контент-плане нет текста публикации для этой темы'),planRevision:plan.revision};
-    const main=own(mainPlatform),captions={},warnings=[];
+    const main=own(mainPlatform),captions={},warnings=[],blocked=[];
     for(const platform of ids){
       const value=own(platform),max=limit(platform);
       if(value&&max&&value.length>max){
+        blocked.push(platform);
         warnings.push({platform,code:'CAPTION_TOO_LONG',message:`Текст версии для ${label(platform)} длиннее ${max} символов — не подставлен. Сократите его в контент-плане.`});
         continue;
       }
       if(value&&value!==main){captions[platform]=value;continue;}
-      if(!value&&max&&main.length>max)
-        warnings.push({platform,code:'MAIN_TOO_LONG',message:`Для ${label(platform)} своего текста в плане нет, а основной текст длиннее ${max} символов. Добавьте текст версии для ${label(platform)} в контент-плане.`});
+      if(!value&&max&&main.length>max){
+        blocked.push(platform);
+        warnings.push({platform,code:'MAIN_TOO_LONG',message:`Для ${label(platform)} своего текста в плане нет, а основной текст длиннее ${max} символов — не подставлен. Добавьте текст версии для ${label(platform)} в контент-плане.`});
+      }
     }
+    /* Площадка без своей подписи получает общий текст при отправке. Если хоть одной площадке текст подставлять нельзя
+       (длиннее её лимита), общий текст остаётся пустым, а подходящим площадкам основной текст кладётся их подписью:
+       заблокированная площадка честно остаётся «без текста», а не уходит на отправку с CONTENT_LIMIT. */
+    let body=main;
+    if(blocked.length){
+      body='';
+      for(const platform of ids)if(!blocked.includes(platform)&&!Object.hasOwn(captions,platform))captions[platform]=main;
+    }
+    if(!body&&!Object.keys(captions).length)
+      return {...none('TOO_LONG','Текст из контент-плана длиннее лимита выбранных площадок — не подставлен'),planRevision:plan.revision,mainPlatform,warnings};
     return {source:'plan',reason:'',message:'Текст публикации подставлен из контент-плана',ideaId:row.idea_id,planRevision:plan.revision,
-      mainPlatform,captionPlatforms:Object.keys(captions),warnings,text:main,captions,topic:typeof idea.topic==='string'?idea.topic.trim():''};
+      mainPlatform,captionPlatforms:Object.keys(captions),blockedPlatforms:blocked,warnings,text:body,captions,topic:typeof idea.topic==='string'?idea.topic.trim():''};
   }
   /* Черновик автопостинга с выбранной версией. Ничего не отправляется: дальше согласование и план автопостинга. */
   function createPublication(code,id,body,actor){
@@ -390,7 +403,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     }
     const post=autoposting.create(owner.code,{title:text(title,200,true),mediaUrls:[version.media_url],platformIds:ids,
       profileRevision:information.get(owner.code).revision,origin,format:'reel',
-      ...(fromPlan.source==='plan'?{text:planBody,...(Object.keys(planCaptions).length?{captions:planCaptions}:{})}:{}),
+      ...(fromPlan.source==='plan'?{...(planBody?{text:planBody}:{}),...(Object.keys(planCaptions).length?{captions:planCaptions}:{})}:{}),
       ...(version.sha256?{mediaSha256:version.sha256}:{})},actor.userId);
     if(!row.post_id)db.prepare('UPDATE reel_materials SET post_id=?,updated_at=? WHERE id=? AND post_id IS NULL').run(post.id,iso(),row.id);
     return {post:{id:post.id,title:post.title,status:post.status,platformIds:post.platformIds,mediaUrls:post.mediaUrls},

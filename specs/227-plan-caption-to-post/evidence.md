@@ -15,6 +15,11 @@
 - Полный набор кабинета `sites/synapse/cabinet/*.test.cjs`: 1199 из 1199 (прогон после последней правки CSS).
 - `python3 tools/spec-kit/gate.py check`: status ok.
 
+## Доработка по ревью PR 616
+- Сервер: площадка с `CAPTION_TOO_LONG`/`MAIN_TOO_LONG` не получает основной текст ни общим `text`, ни подписью; подходящим площадкам он кладётся подписью; ни одной не подходит — `TOO_LONG`. Тест `specs/227 ревью: при MAIN_TOO_LONG…` (vk 15000, max 4000, youtube_shorts 5000 получают тексты в пределах лимитов; telegram 1024 — ничего); прежние тесты лимитов обновлены под пустой общий текст.
+- «Монтаж»: превью повторяет выбор сервера — лимит площадки маски (`vocabulary.captionLimits`, у старого сервера — значения CAPTION_PLATFORMS) и архив темы (`archivedIdeas`). Тест `specs/227 ревью: превью в «Монтаже»…`.
+- Повторный прогон после доработки: `reel-materials.test.js` 13/13; `ops/crm` 1101/1105 (те же 4 падения, что на `origin/main`); кабинет 1200/1200 (`materials.test.cjs` 31/31); `gate.py check` — ok.
+
 ## Скриншоты
 `visual.cjs` (headless Chrome через playwright, настоящие `content-plan.js/.css`, `shell.css`, `workspace.css`, стили `cabinet.html`, SAMPLE-данные): `texts-390-texts.png`, `texts-390-edit.png`, `texts-1440-texts.png`, `texts-1440-edit.png`. `scrollWidth` = ширине окна (390/1440), ни один элемент блока не выходит за окно, ошибок консоли нет. Длинный текст без пробелов переносится, высота текста ограничена прокруткой внутри блока.
 
