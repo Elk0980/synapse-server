@@ -5,6 +5,9 @@
   const node = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-zA-Z0-9_.:-]/g, '');
   const time = value => { const d = new Date(value); return Number.isNaN(d) ? '' : d.toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); };
+  // specs/227: ответ агента владельца «Лео · Claude» / «Хью · Claude» показывается как ответ ассистента с именем персоны.
+  const assistantName = m => m.user_id === 0 && /^(Лео|Хью) · Claude$/.exec(m.author_name || '')?.[1] || m.author_name;
+  const auditLabel = status => ({ refused: 'Запрос отклонён', agent_pending: 'Ждёт ответа Лео', agent_answered: 'Ответ ниже', agent_redirect: '' })[status] ?? 'Передано на проверку';
   const human = error => error?.status === 403 ? 'Нет доступа к этому чату.' : error?.status === 401 ? 'Сессия закончилась. Войдите снова.' : 'Связь не подтвердила результат. Повтор той же отправки безопасен.';
 
   // Один разговор: используется и в «Чатах», и в плавающей панели. Хью отвечает по обращению (сервер).
@@ -24,7 +27,7 @@
     }
     list.setAttribute('role', 'log'); list.setAttribute('aria-live', 'polite'); notice.setAttribute('role', 'status');
     const form = node('form', 'sbc-compose'), text = node('textarea'), send = node('button', 'sbc-send', '➤');
-    text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Чтобы позвать Хью: «Хью, …»';
+    text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Позвать: «Хью, …» или «Лео, …»';
     text.setAttribute('aria-label', 'Сообщение'); send.type = 'submit'; send.setAttribute('aria-label', 'Отправить');
     form.append(text, send); box.append(head, older, list, notice, form); host.replaceChildren(box);
     const companyCode = ctx.companyCode, taskId = task?.id || null, initialViewer = ctx.user?.id;
@@ -67,11 +70,13 @@
       for (const m of [...messages.values()].sort((a, b) => a.id - b.id)) {
         const li = node('li', m.user_id === 0 ? 'sbc-msg sbc-msg--hugh' : m.user_id === viewer ? 'sbc-msg sbc-msg--own' : 'sbc-msg');
         if (m.kind === 'hugh-merge') li.classList.add('sbc-msg--merge');
-        li.append(node('strong', '', m.author_name), node('span', 'sbc-msg__text', m.text), node('time', '', time(m.created_at)));
+        if (m.user_id === 0 && /^Лео(?:$| · )/.test(m.author_name || '')) li.classList.add('sbc-msg--leo');
+        if (m.agentReply) li.dataset.persona = m.agentReply.persona;
+        li.append(node('strong', '', assistantName(m)), node('span', 'sbc-msg__text', m.text), node('time', '', time(m.created_at)));
         if (m.task_id && m.kind !== 'hugh-merge') li.append(node('span', 'sbc-msg__task', m.kind === 'hugh-task' ? `Я поставил Хью · задача №${m.task_id}` : `Задача №${m.task_id} на доске`));
         else if (m.ref_task_id && m.kind === 'task-note') li.append(node('span', 'sbc-msg__task', m.command_state === 'done' ? `Комментарий в задаче №${m.ref_task_id}` : 'Комментарий ещё не подтверждён'));
         else if (m.command_state === 'pending') li.append(node('span', 'sbc-msg__task', 'Задача ещё не подтверждена — повторите отправку'));
-        if (m.answerAudit && m.answerAudit.status !== 'approved') li.append(node('small', '', m.answerAudit.status === 'refused' ? 'Запрос отклонён' : 'Передано на проверку'));
+        if (m.answerAudit && m.answerAudit.status !== 'approved' && auditLabel(m.answerAudit.status)) li.append(node('small', '', auditLabel(m.answerAudit.status)));
         list.append(li);
       }
       if (!messages.size) list.append(node('li', 'sbc-empty', room.startsWith('hugh:') ? 'Здесь ваш личный чат с Хью: запросы, уточнения по задачам и ответы. Его видите только вы.' : 'Сообщений пока нет.'));
@@ -175,7 +180,7 @@
       main.append(node('p', 'sbc-notice', 'Загрузка…'));
       const rooms = await ctx.api.get('people/team-chat/rooms');
       if (ctx.signal?.aborted) return;
-      const entries = [{ room: 'common', name: 'Общий чат компании', hint: 'Видят все сотрудники компании. Хью читает и отвечает, только когда к нему обращаются: «Хью, …».' },
+      const entries = [{ room: 'common', name: 'Общий чат компании', hint: 'Видят все сотрудники компании. Хью и Лео отвечают, только когда к ним обращаются: «Хью, …» или «Лео, …».' },
         ...rooms.people.map(p => ({ room: p.room, name: p.name, hint: 'Личный чат. Видите только вы двое. Хью отвечает по обращению «Хью, …», ответ видите только вы.' })),
         // Без доступа к задачам лога Хью нет (№127): сервер отдаёт hugh: null.
         ...(rooms.hugh ? [{ room: rooms.hugh, name: 'Хью · мой личный чат', hint: 'Видите только вы. Здесь ваши запросы и уточнения Хью.' }] : [])];

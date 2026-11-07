@@ -39,3 +39,13 @@ test('ссылка из старой задачи открывает сообщ�
   w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();
   assert.ok(w.document.getElementById('message-1'));assert.ok(w.document.getElementById('message-200'));assert.equal(scrolled,'message-1');
 });
+test('specs/227: в отдельном чате «Лео · Claude» подписан «Лео»',async t=>{
+  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+  t.after(()=>w.close());w.AbortSignal=AbortSignal;w.setInterval=()=>1;w.clearInterval=()=>{};
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('context')?{user:{id:1},companies:[{id:'alpha',name:'Альфа'}]}:
+    {viewerId:1,visibilityKey:'1:true',messages:[{id:3,user_id:0,author_name:'Лео · Claude',text:'Смонтировал.',created_at:new Date().toISOString()},
+      {id:4,user_id:0,author_name:'Лео',text:'Лео получил запрос и ответит здесь.',created_at:new Date().toISOString(),answerAudit:{status:'agent_pending',model:''}}]}});
+  w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();
+  const items=[...w.document.getElementById('messages').children];
+  assert.deepEqual(items.map(li=>li.querySelector('strong').textContent),['Лео','Лео']);assert.equal(items[1].querySelector('small').textContent,'Ждёт ответа Лео');
+});
