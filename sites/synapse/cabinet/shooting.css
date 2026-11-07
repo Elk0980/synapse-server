@@ -105,8 +105,11 @@ body.prompter-open, body.shoot-win-open { overflow: hidden; }
 .prompter__title b { color: #fff; }
 .prompter__body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 14px; min-height: 0; }
 .prompter__viewport { position: relative; overflow: hidden; cursor: pointer; touch-action: manipulation; user-select: none; }
-.prompter__viewport::after { content: ''; position: absolute; left: 0; right: 0; top: 30%; border-top: 2px solid rgba(159, 212, 255, .3); pointer-events: none; }
-.prompter__text { padding: 30vh 5vw 60vh; line-height: 1.35; will-change: transform; overflow-wrap: anywhere; }
+/* Замечание Влада 07.11: без большого пустого отступа сверху и без линии поверх букв. Ориентир чтения — тонкая
+   полупрозрачная полоса высотой в строку ПОЗАДИ текста, на уровне первой строки. */
+.prompter__viewport::before { content: ''; position: absolute; z-index: 0; left: 0; right: 0; top: calc(16px - .1 * var(--prompter-font, 30px));
+  height: calc(1.55 * var(--prompter-font, 30px)); background: rgba(159, 212, 255, .07); border-radius: 6px; pointer-events: none; }
+.prompter__text { position: relative; z-index: 1; padding: 16px 5vw 60vh; line-height: 1.35; will-change: transform; overflow-wrap: anywhere; }
 .prompter__line { margin: 0 0 .6em; color: #fff; }
 .prompter__line--dim { color: #7d7d7d; }
 .prompter__line--own { color: #ffe866; }
@@ -118,6 +121,12 @@ body.prompter-open, body.shoot-win-open { overflow: hidden; }
 .prompter__controls { display: flex; align-items: center; gap: 10px; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); background: #111; border-top: 1px solid #2a2a2a; }
 .prompter__sp { flex: 1; }
 .prompter__play { width: 56px; height: 44px; border: 0; border-radius: 10px; background: #2e6bd6; color: #fff; font-size: 1.2rem; cursor: pointer; }
+.prompter__font { display: inline-flex; align-items: baseline; justify-content: center; gap: 3px; min-width: 64px; height: 44px; padding: 0 10px; border: 1px solid #444; border-radius: 10px;
+  background: #1b1b1b; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.prompter__font-id { font-size: .72rem; font-weight: 600; color: #bbb; }
+.prompter__title { flex: 0 1 auto; }
+.prompter .shoot-share { margin-left: auto; min-width: 0; }
+.prompter .shoot-share__actor { max-width: none; min-width: 0; text-overflow: ellipsis; }
 .prompter__speed { min-width: 64px; height: 44px; border: 1px solid #444; border-radius: 10px; background: #1b1b1b; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 
 /* Раскадровка — окно */
@@ -142,6 +151,13 @@ body.prompter-open, body.shoot-win-open { overflow: hidden; }
 .shoot-sketch__img { width: 100%; max-width: 520px; border-radius: var(--cabinet-radius-sm, 8px); background: #222; }
 @media (max-width: 599px) {
   .prompter__title span { display: none; }
+  /* 390 px: «←», «Суфлёр №3», роль целиком («Администратор») и «Поделиться» в одну строку. */
+  .prompter__bar { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .prompter__back { padding: 0 10px; }
+  .prompter__back-text { display: none; }
+  .prompter__title { flex: none; }
+  .prompter .shoot-share { gap: 6px; }
+  .prompter .shoot-share__actor { font-size: .92rem; }
   /* «Раскадровка · №3» помещается рядом с «← Съёмка» и «Тестовая версия» на 390 px, номер не обрезается. */
   .shoot-win__bar { gap: 6px; padding-left: 8px; padding-right: 8px; }
   .shoot-win__back { padding: 0 8px; }

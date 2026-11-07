@@ -236,7 +236,7 @@ test('«Суфлёр» и «Раскадровка» открываются ок
   card(root, 'r-first').querySelector('[data-prompter-open]').click();
   const prompter = p.d.querySelector('.prompter');
   assert.ok(prompter); assert.equal(prompter.querySelector('.prompter__back').textContent, '← Съёмка');
-  assert.match(prompter.querySelector('.prompter__title').textContent, /Суфлёр · №2/);
+  assert.match(prompter.querySelector('.prompter__title').textContent, /Суфлёр №2/);
   prompter.querySelector('.prompter__back').click();
   assert.equal(p.d.querySelector('.prompter'), null);
   card(root, 'r-first').querySelector('[data-board-open]').click(); await settle();

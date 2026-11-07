@@ -305,3 +305,35 @@ test('лента: длинной ленте и ленте без своей пр
   assert.equal(flat.querySelector('.cfk-feed-pad'), null, 'без overflow:auto лента не получает хвост');
   assert.match(kitCss, /\.cfk-feed-pad \{[^}]*grid-column: 1 \/ -1/);
 });
+
+/* Замечание Влада 07.11: в ленте дат ничего не обрезается и не наезжает, лента не уходит под кнопку чата. */
+test('полоса дат: без маски по краям, «лупа» внутри кнопки дня, точка внутри; общий стиль кнопок не превращает дни в плашки', () => {
+  const rail = /\.cfk-rail \{[^}]*\}/.exec(kitCss)[0];
+  assert.doesNotMatch(rail, /mask-image/, 'края ленты не затемняются маской');
+  const day = /\.cfk-day \{[^}]*\}/.exec(kitCss)[0];
+  assert.doesNotMatch(day, /transform:/, 'кнопка дня не масштабируется — соседние дни не пересекаются');
+  assert.match(kitCss, /\.cfk-dn \{[^}]*margin: 5px 0[^}]*transform: scale\(calc\(1 \+ \.3 \* var\(--k\)\)\)/, 'увеличивается кружок, место под него заложено (28 × 0,15 < 5 px)');
+  assert.match(kitCss, /\.cfk-day\.has::after \{[^}]*bottom: 2px/, 'точка «есть рилс» внутри кнопки дня');
+  assert.match(kitCss, /\.view-panel \.cfk-dates \.cfk-rail button\.cfk-day\.cfk-day \{[^}]*min-height: 0[^}]*border: 0[^}]*background: transparent/);
+  assert.match(kitCss, /\.view-panel \.cfk-dates \.cfk-dates-top button\.cfk-arrow \{[^}]*min-height: 30px/);
+});
+
+test('лента: нижний запас под кнопку чата и высота до кнопки (--cfk-feed-top), пересчёт после нажатий', async () => {
+  assert.match(kitCss, /\.cfk-feed \{[^}]*padding-bottom: var\(--cfk-fab-room, 76px\)/, 'запас ≥ 58 + 16 px');
+  assert.match(kitCss, /\.cfk-feed \{[^}]*max-height: min\(var\(--cfk-feed-h[^;]*var\(--cfk-feed-top, 0px\) - var\(--cfk-fab-clear\)/);
+  assert.match(kitCss, /@media \(max-width: 760px\) \{ \.cfk-feed \{ --cfk-fab-clear: calc\(140px/);
+  const w = load('<div id="feed"><div data-stage="draft">a</div><div data-stage="draft">b</div></div>');
+  const feed = w.document.getElementById('feed');
+  let top = 120;
+  feed.getBoundingClientRect = () => ({top, left: 0, right: 300, bottom: top + 200, width: 300, height: 200});
+  w.CfKit.feedStart(feed, {isAbove: () => false});
+  assert.equal(feed.style.getPropertyValue('--cfk-feed-top'), '120px');
+  top = 260; // открыли полосу дат — лента сдвинулась ниже
+  w.document.body.click();
+  await new Promise((resolve) => w.requestAnimationFrame(() => resolve()));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(feed.style.getPropertyValue('--cfk-feed-top'), '260px');
+  feed.remove(); w.document.body.click(); // лента снята — обработчики уходят без ошибок
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  w.close();
+});

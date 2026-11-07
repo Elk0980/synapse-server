@@ -356,6 +356,23 @@
       state.start = offset;
       listEl.classList.remove('cfk-feed-up');
     };
+    /* Замечание Влада 07.11: лента заканчивается над плавающей кнопкой чата кабинета, а не уходит под неё.
+       CSS берёт высоту из --cfk-feed-top (верх ленты от начала страницы); пересчёт — при изменении окна и после
+       нажатий (открыли/скрыли полосу дат). Лента вне страницы снимает свои обработчики. */
+    const fitTop = () => {
+      if (!listEl.isConnected) return false;
+      const top = listEl.getBoundingClientRect().top + (win.scrollY || 0);
+      listEl.style.setProperty('--cfk-feed-top', `${Math.max(0, Math.round(top))}px`);
+      return true;
+    };
+    if (!listEl._cfkFitBound) {
+      listEl._cfkFitBound = true;
+      const later = () => { if (win.requestAnimationFrame) win.requestAnimationFrame(refit); else refit(); };
+      const refit = () => { if (!fitTop()) { win.removeEventListener('resize', later); doc.removeEventListener('click', later, true); listEl._cfkFitBound = false; } };
+      win.addEventListener('resize', later, {passive: true});
+      doc.addEventListener('click', later, true);
+    }
+    fitTop();
     if (!listEl._cfkFeedBound) {
       listEl._cfkFeedBound = true;
       listEl.addEventListener('scroll', () => {
@@ -373,7 +390,8 @@
       padTo(state.start);
       listEl.classList.toggle('cfk-feed-up', listEl.scrollTop < state.start - 8);
     };
-    const run = opts.scroll === false ? measure : scrollToStart;
+    const start = opts.scroll === false ? measure : scrollToStart;
+    const run = () => { fitTop(); start(); };
     if (win.requestAnimationFrame) win.requestAnimationFrame(run); else run();
     state.refresh = scrollToStart;
     return state;
