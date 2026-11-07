@@ -28,6 +28,9 @@
   const OLD_SERVER = 'Сохранение заработает после обновления сервера. Отметки пока не сохранены; остальные настройки работают.';
   const cloneMatrix = (m) => Object.fromEntries(STAGES.map(([stage]) => [stage, Array.isArray(m?.[stage]) ? ALL.filter((r) => m[stage].includes(r)) : [...MATRIX_DEFAULTS[stage]]]));
   const tabKey = 'sb.settings-content.tab';
+  const TABS = [['platforms', 'Площадки'], ['people', 'Участники'], ['notifications', 'Уведомления']];
+  // Прежнее значение 'main' (вкладка «Площадки и стиль») открывает «Площадки».
+  const pickTab = (value) => value === 'main' ? 'platforms' : TABS.some(([id]) => id === value) ? value : '';
   const readTab = () => { try { return window.localStorage.getItem(tabKey) || ''; } catch { return ''; } };
   const writeTab = (tab) => { try { window.localStorage.setItem(tabKey, tab); } catch { /* память вкладки не обязательна */ } };
 
@@ -36,7 +39,7 @@
     state.supported = Boolean(data.settings && typeof data.settings.notificationMatrix === 'object' && data.settings.notificationMatrix);
     if (!state.matrix || state.matrixVersion !== data.version) { state.matrix = cloneMatrix(data.settings.notificationMatrix); state.matrixVersion = data.version; }
     const status = el('p', { className: 'cs-status', role: 'status', 'aria-live': 'polite', 'data-csn-status': true,
-      text: state.notifyMessage || (canEdit ? 'Отметьте, кому сообщать о каждом этапе. Сохраняется сразу.' : 'Только просмотр: менять может владелец или настройщик компании.') });
+      text: state.notifyMessage || (canEdit ? '' : 'Только просмотр: менять может владелец или настройщик компании.') });
     const head = el('tr', {}, el('th', { scope: 'col', text: 'Этап' }), ...ROLES.map(([, label, short]) =>
       el('th', { scope: 'col' }, el('span', { className: 'csn-long', text: label }), el('span', { className: 'csn-short', 'aria-hidden': 'true', text: short }))));
     const body = el('tbody');
@@ -46,8 +49,11 @@
     const table = el('table', { className: 'csn-matrix', 'data-csn-matrix': true }, el('thead', {}, head), body);
     const box = el('section', { className: 'card cs-block csn-notify', 'data-csn-notify': true },
       el('h2', { className: 'csn-notify-title', text: 'Контент-план · уведомления' }),
-      el('p', { className: 'muted', text: 'Кто в какой роли — во вкладке «Участники» компании; у каждой компании свои настройки. Куда приходит уведомление (Telegram-бот, пуш, чат Хью) — выбор каждого человека в его профиле. Отправка по этой таблице подключается отдельно.' }),
-      el('div', { className: 'csn-matrix-wrap' }, table), status);
+      el('p', { className: 'muted csn-lead' }, el('span', { text: 'Отметьте, кому сообщать о каждом этапе. Кто в какой роли — во вкладке ' }),
+        el('a', { href: '#settings/content/people', 'data-csn-goto': 'people', text: '«Участники»' }), el('span', { text: '.' }),
+        el('span', { className: 'csn-lead-save', text: canEdit ? ' Сохраняется сразу.' : '' })),
+      el('div', { className: 'csn-matrix-wrap' }, table), status,
+      el('p', { className: 'muted csn-foot', text: 'У каждой компании свои настройки. Куда приходит уведомление (Telegram-бот, пуш, чат Хью) — выбор каждого человека в его профиле. Отправка по этой таблице подключается отдельно.' }));
 
     const say = (text) => { state.notifyMessage = text; status.textContent = text; };
     async function flush() {
@@ -93,7 +99,7 @@
     const { settings, canEdit } = data;
     const disabled = !canEdit;
     const form = el('form', { className: 'cs-form', novalidate: true });
-    const approvers = el('fieldset', { className: 'card cs-block' }, el('legend', { text: 'Кто согласует контент-план' }));
+    const approvers = el('fieldset', { className: 'card cs-block', 'data-cs-approvers': true }, el('legend', { text: 'Кто согласует контент-план' }));
     if (data.candidates.length) {
       const list = el('div', { className: 'cs-grid' });
       data.candidates.forEach((person) => list.append(check('approver', person.id,
@@ -109,7 +115,7 @@
     const deadline = el('fieldset', { className: 'card cs-block' }, el('legend', { text: 'Дедлайн съёмки' }),
       el('label', { className: 'cs-inline' }, el('input', { type: 'number', name: 'deadlineDays', min: 0, max: 60, step: 1,
         value: settings.deadlineDays, inputmode: 'numeric', disabled }), el('span', { text: 'дней до выхода рилса' })));
-    const platforms = el('fieldset', { className: 'card cs-block' }, el('legend', { text: 'Площадки' }));
+    const platforms = el('fieldset', { className: 'card cs-block' }, el('legend', { text: 'Площадки компании' }));
     const platformList = el('div', { className: 'cs-grid' });
     data.options.platforms.forEach((id) => platformList.append(check('platform', id, PLATFORM_NAMES[id] || id, settings.platforms.includes(id), disabled)));
     platforms.append(platformList);
@@ -133,7 +139,15 @@
     const sheet = el('fieldset', {className:'card cs-block'}, el('legend', {text:'Таблица контент-плана'}),
       el('label', {className:'cs-field'}, el('span', {text:'Ссылка Google Таблицы'}), el('input', {type:'url',name:'contentPlanSheetUrl',value:settings.contentPlanSheetUrl || '',maxlength:2048,disabled,placeholder:'https://docs.google.com/spreadsheets/d/…'})),
       !settings.contentPlanSheetUrl && canEdit ? el('p',{className:'muted',text:'Указать таблицу: вставьте ссылку и сохраните настройки.'}) : null);
-    form.append(sheet, approvers, days, deadline, platforms, style, actions);
+    /* Макет 07.11: «Площадки» — площадки, таблица, дни и сроки съёмки, стиль титров; «Участники» — кто согласует и где роли.
+       Одна форма и одно сохранение на обе вкладки (тот же PUT /content/content-settings). */
+    const roles = el('section', { className: 'card cs-block cs-roles', 'data-cs-roles': true },
+      el('h2', { className: 'cs-block-title', text: 'Роли в уведомлениях' }),
+      el('p', { className: 'muted', text: `Роли: ${ROLES.map(([, label]) => label).join(', ')}. Права и роли людям выдаёт владелец в «Настройка аккаунтов»; отдельного списка людей по ролям сервер пока не отдаёт.` }),
+      el('p', {}, el('a', { href: '#accounts', text: 'Открыть «Настройка аккаунтов»' })));
+    const platformsPane = el('div', { className: 'cs-pane', 'data-cs-pane': 'platforms' }, platforms, sheet, days, deadline, style);
+    const peoplePane = el('div', { className: 'cs-pane', 'data-cs-pane': 'people' }, approvers, roles);
+    form.append(platformsPane, peoplePane, actions);
     const updatePreview = () => {
       preview.style.fontFamily = `"${form.elements.font.value}", system-ui, sans-serif`;
       preview.style.fontSize = { s: '18px', m: '24px', l: '32px' }[form.elements.size.value] || '24px';
@@ -166,26 +180,35 @@
         status.textContent = error.status === 409 ? 'Настройки уже изменил другой пользователь — обновите экран, ваши отметки не сохранены.' : `Не сохранено: ${error.message}`;
       }
     });
-    const head = el('div', { className: 'content-header' }, el('h1', { text: 'Настройки контента' }),
+    const head = el('div', { className: 'content-header' }, el('h1', { text: 'Настройки → Контент-план' }),
       el('p', { className: 'muted', text: `Компания: ${ctx.companyName}. Эти значения используют контент-план, съёмка и постинг.` }));
     const meta = data.updatedAt ? el('p', { className: 'muted cs-meta', text: `Изменено: ${new Date(data.updatedAt).toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok' })} (Бангкок) · ${data.updatedBy}` }) : null;
     const more = el('p', { className: 'muted cs-more' }, el('span', { text: 'Ещё: ' }),
       el('a', { href: '#content-factory/settings', text: 'вводные для плана' }), el('span', { text: ' · ' }),
       el('a', { href: '#content-factory/sources', text: 'исходники' }));
-    // Вкладки экрана: прежняя форма и «Уведомления» (адрес #settings/content/notifications открывает её сразу).
-    const tab = state.tab || (ctx.route?.path === 'notifications' ? 'notifications' : readTab() === 'notifications' ? 'notifications' : 'main');
+    // Вкладки как в макете: «Площадки · Участники · Уведомления»; адрес #settings/content/<вкладка> открывает её сразу.
+    const tab = state.tab || pickTab(ctx.route?.path) || pickTab(readTab()) || 'platforms';
     state.tab = tab;
     const tabs = el('div', { className: 'csn-tabs', role: 'tablist', 'aria-label': 'Разделы настроек контента' },
-      ...[['main', 'Площадки и стиль'], ['notifications', 'Уведомления']].map(([id, label]) => el('button', { type: 'button', role: 'tab', className: 'csn-tab',
+      ...TABS.map(([id, label]) => el('button', { type: 'button', role: 'tab', className: 'csn-tab',
         'data-csn-tab': id, 'aria-selected': String(id === tab), text: label })));
     const notify = notifications(ctx, state);
-    form.hidden = tab !== 'main'; more.hidden = tab !== 'main'; notify.hidden = tab !== 'notifications';
+    const show = (id) => {
+      state.tab = id;
+      tabs.querySelectorAll('[data-csn-tab]').forEach((node) => node.setAttribute('aria-selected', String(node.dataset.csnTab === id)));
+      form.hidden = id === 'notifications'; more.hidden = id !== 'platforms'; notify.hidden = id !== 'notifications';
+      form.querySelectorAll('[data-cs-pane]').forEach((pane) => { pane.hidden = pane.dataset.csPane !== id; });
+    };
+    show(tab);
     tabs.addEventListener('click', (event) => {
       const button = event.target.closest('[data-csn-tab]');
       if (!button) return;
-      state.tab = button.dataset.csnTab; writeTab(state.tab);
-      tabs.querySelectorAll('[data-csn-tab]').forEach((node) => node.setAttribute('aria-selected', String(node === button)));
-      form.hidden = state.tab !== 'main'; more.hidden = state.tab !== 'main'; notify.hidden = state.tab !== 'notifications';
+      writeTab(button.dataset.csnTab); show(button.dataset.csnTab);
+    });
+    notify.addEventListener('click', (event) => {
+      const link = event.target.closest('[data-csn-goto]');
+      if (!link) return;
+      event.preventDefault(); writeTab(link.dataset.csnGoto); show(link.dataset.csnGoto);
     });
     state.redraw = () => render(root, ctx, state.data, state);
     root.replaceChildren(head, ...(meta ? [meta] : []), tabs, form, notify, more);

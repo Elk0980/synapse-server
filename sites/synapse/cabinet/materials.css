@@ -10,6 +10,10 @@
 .mt-view .cfk-head-row .mt-upload-open { order:2; }
 .mt-view .cfk-head-row .cfk-ico { order:3; }
 .mt-view .mt-upload-open { min-height:32px; padding:4px 14px; font-size:14px; white-space:nowrap; }
+/* Макет 07.11: «Загрузить ролик» — главная кнопка шапки той же высоты, что иконки (32 px), на одной линии с ними.
+   Общее правило .view-panel button даёт кнопкам 44 px, поэтому селектор сильнее. */
+.view-panel .mt-view .cfk-head-row button.mt-upload-open { box-sizing:border-box; height:32px; min-height:32px; padding:0 14px; border-radius:8px;
+  line-height:30px; font-size:14px; font-weight:700; background:#a8cfff; border-color:#a8cfff; color:#0d203a; }
 @media (max-width:760px) {
   .mt-view .cfk-head-row .cfk-title { display:none; }
   .mt-view .cfk-head-row .mt-upload-open { order:0; }
