@@ -235,7 +235,7 @@ function create(container, context) {
     <div id="autoposting-head" class="ap-head"><h2 class="ap-head-fallback">Публикации</h2></div>
     <label class="ap-filter"><span class="ap-sr">Площадка</span><select id="autoposting-platform-filter" aria-label="Площадка"><option value="">Все площадки</option>${['instagram','tiktok','youtube_shorts','vk','telegram'].map(id=>`<option value="${esc(id)}">${esc(platformLabel(id))}</option>`).join("")}</select></label>
     <p id="autoposting-calendar-state" role="status"></p>
-    <div class="ap-feed-cols" aria-hidden="true"><span>Рилс</span><span>Выход</span><span>Instagram</span><span>TikTok</span><span>YouTube</span><span>VK</span><span>Telegram</span></div>
+    <div class="ap-feed-cols" aria-hidden="true"><span>Рилс</span><span>Выход</span><span>Статус</span><span>Instagram</span><span>TikTok</span><span>YouTube</span><span>VK</span><span>Telegram</span></div>
     <ol id="autoposting-feed" class="ap-feed" aria-label="Готовые рилсы по датам выхода"></ol>
     <div id="autoposting-batch"><p>Флажок на карточке — только выбор. Решение применяется к каждому выбранному материалу отдельно после нажатия кнопки ниже. Публикация не запускается.</p><fieldset id="autoposting-batch-platforms"><legend>Площадки решения</legend><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="all" checked>Все площадки выбранных материалов</label><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="subset">Только отмеченные ниже</label>${CAPTIONS.map(([id,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-batch-platform="${esc(id)}">${esc(label)}</label>`).join("")}<p class="autoposting-note">Решение применяется к пересечению отмеченных площадок с площадками каждой карточки. Материал без общих площадок пропускается — с указанием причины.</p></fieldset><div id="autoposting-selected-list"></div><button type="button" class="plain-button" id="autoposting-batch-approve" disabled>Согласовать выбранные (0)</button><label class="autoposting-batch-reason">Причина возврата на доработку (обязательна)<textarea id="autoposting-batch-reason" rows="2" maxlength="2000"></textarea></label><button type="button" class="danger" id="autoposting-batch-reject" disabled>Вернуть выбранные на доработку (0)</button></div><div id="autoposting-batch-results" role="status" aria-live="polite"></div><details id="autoposting-team" class="ap-team"><summary>Для команды · все материалы и согласование</summary><p class="autoposting-note">Черновики, согласование и материалы без даты. Карточка открывает редактор публикации.</p><div id="autoposting-posts"></div></details><details id="autoposting-archive" class="ap-archive"><summary>Удалённые материалы</summary><p class="autoposting-note">Черновики, удалённые из плана. Восстановленный материал вернётся черновиком — без согласования и даты отправки.</p><div id="autoposting-archive-list"></div></details></section>
     <details class="autoposting-workspace-tools"><summary>Компания и настройки</summary>
@@ -1271,8 +1271,14 @@ function create(container, context) {
   const buildHead=()=>{
     const k=kit(),host=get('autoposting-head');if(!k||!host)return;
     const open=strip?!strip.hidden:false;
-    head=k.header({title:'Публикации',actions:['calendar','sheet','sort'],sheetUrl,sortOptions:SORTS,sortKey:'autoposting',calendarOpen:open,
+    head=k.header({title:'Публикации',extraHtml:'<span class="ap-head-lead">· что и куда уходит</span>',actions:['calendar','sheet','sort'],sheetUrl,sortOptions:SORTS,sortKey:'autoposting',calendarOpen:open,
       onSort:id=>{feedSort=id;feedPlaced=false;renderCalendar();},onCalendar:value=>{strip?.setOpen(value);}});
+    /* Макет #post: на ПК «Постинг · что и куда уходит», фильтр площадок в строке шапки перед иконками;
+       на телефоне «Публикации», фильтр — отдельной строкой под шапкой (перенос — в CSS). */
+    const titleNode=head.querySelector('.cfk-title');
+    if(titleNode)titleNode.innerHTML='<span class="ap-t-pc">Постинг</span><span class="ap-t-ph">Публикации</span>';
+    const filter=container.querySelector('.ap-filter'),spacer=head.querySelector('.cfk-head-row > .cfk-sp');
+    if(filter&&spacer){spacer.after(filter);head.classList.add('ap-head-kit');}
     feedSort=SORTS.some(item=>item.id===head.getSort())?head.getSort():'time';
     strip=k.dateStrip({tz:zoneLabel(),timeZone:zone(),marked:[],selected:selectedDate||today(),onSelect:onStripSelect});stripMarked='';
     host.replaceChildren(head,strip);if(open)strip.setOpen(true);

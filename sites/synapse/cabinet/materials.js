@@ -252,13 +252,19 @@ function create(el, ctx) {
     return list.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || byDate(a, b));
   }
   const hasCut = item => item.reel && CUT.has(item.stage) && safeUrl(item.reel.currentVersion?.mediaUrl);
+  /* «№N тема»: если тема из плана уже начинается со своего номера («№3 …»), второй номер не добавляем. */
+  function numTitle(number, title) {
+    const text = String(title || "").trim();
+    if (!number || /^№\s?\d+/.test(text)) return text;
+    return `№${number} ${text}`;
+  }
   function cardHtml(item) {
     const media = hasCut(item) ? safeUrl(item.reel.currentVersion.mediaUrl) : "";
     const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata" src="${esc(media)}#t=0.5"></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
     const version = item.reel?.currentVersion ? ` · v${esc(item.reel.currentVersion.version ?? 1)}` : "";
     const when = item.date ? `${esc(dateShort(item.date))}${version}` : `${item.number ? "дата — по плану" : "без даты"}${version}`;
     const note = item.retired ? "" : AT_EDITOR.has(item.stage) ? "Идёт монтаж" : item.group === "ahead" ? "Материалы не загружены" : "";
-    const title = `${item.number ? `№${item.number} ` : ""}${item.title}`;
+    const title = numTitle(item.number, item.title);
     const stageChip = item.retired ? `<span class="cfk-chip mt-chip-retired" data-stage="unpublished">${item.retired === "cancelled" ? "Публикация отменена" : "Заменён в плане"}</span>` : chip(item.stage);
     const body = `${thumb}<span class="mt-card__body"><strong class="mt-card__title">${esc(title)}</strong><span class="mt-card__date">${when}</span>
       <span class="mt-card__foot"><span class="mt-card__st">${stageChip}${note ? `<span class="mt-card__note">${note}</span>` : ""}</span>
@@ -358,7 +364,7 @@ function create(el, ctx) {
     const stage = item?.stage || "edit_review";
     const targets = item?.platforms?.length ? item.platforms : platformList(reel.platforms);
     const switcher = platformList(["instagram", "tiktok", "youtube_shorts", "vk", "telegram", ...targets]);
-    const title = `${item?.number ? `№${item.number} ` : ""}${item?.title || reel.title}`;
+    const title = numTitle(item?.number, item?.title || reel.title);
     const caption = captionFor(posts, state.platform);
     const published = stage === "published";
     node.innerHTML = `<header class="mt-modal__head"><h2 id="mt-detail-title" tabindex="-1" data-title>${esc(title)}</h2><button type="button" class="mt-x" data-back aria-label="Закрыть">✕</button></header>
@@ -460,7 +466,7 @@ function create(el, ctx) {
     const atEditor = plan.filter(item => AT_EDITOR.has(item.stage)).sort(byDate), rest = plan.filter(item => !AT_EDITOR.has(item.stage)).sort(byDate);
     return {atEditor, rest};
   };
-  const ideaLabel = item => `№${item.number} ${item.title}${item.date ? " · " + dateShort(item.date) : ""} · ${STAGE_LABEL[item.stage] || item.stage}`;
+  const ideaLabel = item => `${numTitle(item.number, item.title)}${item.date ? " · " + dateShort(item.date) : ""} · ${STAGE_LABEL[item.stage] || item.stage}`;
   function fillIdeas(preselect) {
     const select = el.querySelector("[data-upload-idea]");if (!select) return;
     const {atEditor, rest} = planChoices();
@@ -475,7 +481,7 @@ function create(el, ctx) {
     const item = state.items.find(entry => entry.ideaId === ideaId && ideaId);
     const note = el.querySelector("[data-upload-link-note]");
     if (item) {
-      form.elements.title.value = `№${item.number} ${item.title}`.slice(0, 200);
+      form.elements.title.value = numTitle(item.number, item.title).slice(0, 200);
       form.elements.releaseDate.value = item.date || "";
       form.querySelectorAll("[name=platforms]").forEach(input => {input.checked = item.platforms.includes(input.value);});
       note.textContent = linksIdeas()

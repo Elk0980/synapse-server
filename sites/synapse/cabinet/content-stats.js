@@ -153,6 +153,9 @@
     el.querySelector('[data-cs-header]')?.replaceWith(K.header({ title: 'Статистика', actions: ['calendar', 'sheet', 'sort'], sortOptions: SORTS,
       sortKey: 'content-stats', calendarOpen: state.calOpen, onSort: (id) => { state.sort = id; state.redraw?.(); },
       onCalendar: (open) => { state.calOpen = open; state.strip?.setOpen(open); } }));
+    /* Макет #stat: вкладки площадок в одной строке с названием и иконками (ПК); на телефоне — строкой под шапкой. */
+    const head = el.querySelector('.cfk-head'), tabs = el.querySelector('.cs-tabs'), spacer = head?.querySelector('.cfk-head-row > .cfk-sp');
+    if (head && tabs && spacer) { spacer.after(tabs); head.classList.add('cs-head'); }
     const marked = new Set(pubs.posts.map((p) => p.date).filter(Boolean));
     if (!state.strip) state.strip = K.dateStrip({ tz: 'Время: Бангкок', timeZone: TZ, marked, selected: new Date(), onSelect: (date) => jumpTo(el, K.dayKey(date)) });
     else state.strip.setMarked(marked);

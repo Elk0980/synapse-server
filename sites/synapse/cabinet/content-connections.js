@@ -39,12 +39,16 @@
 
   function card(p, can = () => false) {
     const [icon, word] = STATUS[p.status] || STATUS.red, href = safeUrl(p.link);
-    const buttons = actions(p, can).map((a) => `<button type="button" class="cc-btn${a.act === 'check' ? ' cc-btn-ghost' : ''}" data-cc-act="${a.act}" data-cc-target="${esc(a.target)}"${a.enabled ? '' : ' disabled'} title="${esc(a.hint)}">${esc(a.label)}</button>`).join('');
+    const btn = (a) => `<button type="button" class="cc-btn${a.act === 'check' ? ' cc-btn-ghost' : ''}" data-cc-act="${a.act}" data-cc-target="${esc(a.target)}"${a.enabled ? '' : ' disabled'} title="${esc(a.hint)}">${esc(a.label)}</button>`;
+    const list = actions(p, can), buttons = list.map(btn).join('');
+    // Телефон (макет #conn): в строке одно действие — «Подключить» или «↗ ссылка»; «Проверить» и ссылка — в «Подробнее».
+    const checks = list.filter((a) => a.act === 'check').map(btn).join('');
     return `<article class="cc-card cc-${esc(p.status)}" data-cc-platform="${esc(p.id)}" data-cc-status="${esc(p.status)}">
       <div class="cc-row"><span class="cc-dot" aria-hidden="true"></span><h3>${esc(p.label)}</h3><span class="cc-word" title="${esc(p.statusText)}"><span class="cc-ico" aria-hidden="true">${icon}</span> ${esc(word)}</span>
         <span class="cc-sp"></span>${href ? `<a class="cc-page" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="Страница площадки из ссылок компании">↗ ссылка</a>` : ''}${buttons ? `<span class="cc-acts">${buttons}</span>` : ''}</div>
       <p class="cc-status-text">${esc(p.statusText)}${href ? '' : ' · <span class="cc-nolink">ссылки в карточке компании нет</span>'}</p>
       <details class="cc-more"><summary>Подробнее</summary>
+        ${href || checks ? `<p class="cc-more-acts">${href ? `<a class="cc-page" href="${esc(href)}" target="_blank" rel="noopener noreferrer">↗ ссылка</a>` : ''}${checks}</p>` : ''}
         <p class="cc-meta"><span class="cc-mode cc-mode-${esc(p.dataMode)}">${esc(MODE[p.dataMode] || MODE.none)}</span>
           ${p.lastDataDate ? `данные по ${esc(day(p.lastDataDate))}` : 'данных в ЛК нет'}</p>
         ${p.facts?.length ? `<ul class="cc-facts">${p.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
@@ -71,8 +75,12 @@
         <li>«Подключить» открывает существующий ввод ключа; у площадок без такого ввода в ЛК (Метрика, Директ, YCLIENTS, Яндекс Карты, Telegram-бот, сайт) — только «Что нужно» в «Подробнее».</li>
         <li>${esc(data.note || '')}</li></ul></details></div>`;
     if (K) {
-      el.querySelector('[data-cc-header]').replaceWith(K.header({ title: 'Подключения', actions: ['sheet', 'sort'], sortOptions: SORTS,
-        sortKey: 'content-connections', onSort: (id) => { state.sort = id; render(el, data, can); } }));
+      const head = K.header({ title: 'Подключения', actions: ['sheet', 'sort'], sortOptions: SORTS,
+        sortKey: 'content-connections', onSort: (id) => { state.sort = id; render(el, data, can); } });
+      // Макет #conn: на ПК «Подключения», на телефоне «Площадки».
+      const title = head.querySelector('.cfk-title');
+      if (title) { title.innerHTML = '<span class="cc-t-pc">Подключения</span><span class="cc-t-ph">Площадки</span>'; head.classList.add('cc-head'); }
+      el.querySelector('[data-cc-header]').replaceWith(head);
     }
   }
 

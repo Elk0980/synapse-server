@@ -81,3 +81,58 @@
   .cc-acts { margin-left: auto; }
   .cc-row h3 { font-size: .95rem; }
 }
+
+/* ---------- Макет 07.11 #conn и #stat: шапка и иконки в одну строку, кнопки одной высоты ----------
+   Общие кнопки кабинета (.view-panel button: 44 px) здесь возвращаются к размерам CfKit (32 px). */
+:is(.view-panel) :is(.cc-root, .cs-root) .cfk-head button.cfk-ico,
+:is(.view-panel) :is(.cc-root, .cs-root) .cfk-head a.cfk-ico { width: 32px; min-height: 32px; height: 32px; padding: 0; border-radius: 8px; background: transparent; font-size: 15px; }
+:is(.view-panel) :is(.cc-root, .cs-root) .cfk-head button.cfk-sort-item { min-height: 0; width: 100%; padding: 8px; border: 0; background: transparent; font-size: 13px; text-align: left; }
+:is(.view-panel) :is(.cc-root, .cs-root) .cfk-dates button.cfk-day { min-height: 0; padding: 0; border: 0; background: transparent; border-radius: 0; }
+:is(.view-panel) :is(.cc-root, .cs-root) .cfk-dates button.cfk-arrow { width: 30px; min-height: 30px; height: 30px; padding: 0; border-radius: 50%; background: transparent; font-size: 17px; }
+:is(.view-panel) :is(.cc-root, .cs-root) .cfk-dates button.cfk-dates-title { min-height: 0; padding: 4px 8px; border: 0; background: transparent; font-size: 14px; }
+/* Подключения: «Площадки» на телефоне, «Подключения» на ПК. */
+.cc-head .cc-t-pc { display: none; }
+/* Карточка: строка dot · название · статус · … · действие; ниже текст статуса и «Подробнее».
+   .cc-row раскрыт в сетку карточки, чтобы на ПК кнопки встали под текстом статуса, как в макете. */
+.cc-card { grid-template-columns: 9px minmax(0, max-content) max-content minmax(0, 1fr) max-content; column-gap: 8px; row-gap: 4px; align-items: center; }
+.cc-card > .cc-row { display: contents; }
+.cc-row > .cc-dot { grid-column: 1; grid-row: 1; }
+.cc-row > h3 { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cc-row > .cc-word { grid-column: 3; grid-row: 1; white-space: nowrap; }
+.cc-row > .cc-sp { grid-column: 4; grid-row: 1; }
+.cc-row > .cc-page, .cc-row > .cc-acts { grid-column: 5; grid-row: 1; justify-self: end; }
+.cc-card > .cc-status-text, .cc-card > .cc-more { grid-column: 1 / -1; }
+:is(.view-panel) .cc-root button.cc-btn { min-height: 32px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: .84rem; line-height: 1; white-space: nowrap;
+  background: var(--accent, #7d9bff); border-color: var(--accent, #7d9bff); color: #0b0f16; font-weight: 700; }
+:is(.view-panel) .cc-root button.cc-btn.cc-btn-ghost { background: transparent; border-color: var(--line, #3a4560); color: var(--text, #e8edf5); font-weight: 600; }
+.cc-acts { flex-wrap: nowrap; margin-left: 0; }
+.cc-more-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+@media (max-width: 1099px) {
+  .cc-row > .cc-acts .cc-btn-ghost { display: none; }
+  .cc-card:has(.cc-row > .cc-acts .cc-btn:not(.cc-btn-ghost)) .cc-row > .cc-page { display: none; }
+}
+@media (min-width: 1100px) {
+  .cc-head .cc-t-pc { display: inline; }
+  .cc-head .cc-t-ph { display: none; }
+  .cc-row > .cc-acts { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
+  .cc-card > .cc-status-text { grid-row: 2; }
+  .cc-card > .cc-more { grid-row: 4; }
+  .cc-more-acts { display: none; }
+}
+/* Статистика: вкладки площадок — в строке шапки на ПК, отдельной строкой под шапкой на телефоне. */
+.cs-head .cfk-head-row { flex-wrap: wrap; row-gap: 10px; }
+.cs-head .cfk-title { flex: 1 1 0; }
+.cs-head .cfk-head-row > .cfk-sp { display: none; }
+.cs-head .cfk-head-row > .cs-tabs { order: 9; flex: 1 0 100%; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+:is(.view-panel) .cs-root .cs-tabs button { min-height: 30px; height: 30px; padding: 0 12px; border-radius: 8px 8px 0 0; border-bottom-color: transparent; background: transparent;
+  font-size: .84rem; line-height: 1; white-space: nowrap; flex: none; }
+:is(.view-panel) .cs-root .cs-tabs button[aria-selected="true"] { background: var(--surface, #1d2533); }
+:is(.view-panel) .cs-root .cs-table button.cs-link { min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--accent, #7d9bff); }
+:is(.view-panel) .cs-root .cs-toolbar a.plain-button { min-height: 32px; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 8px; font-size: .84rem; box-sizing: border-box; }
+.cs-root .cs-toolbar select { height: 32px; }
+@media (min-width: 1100px) {
+  .cs-head .cfk-head-row { flex-wrap: nowrap; }
+  .cs-head .cfk-title { flex: 0 1 auto; }
+  .cs-head .cfk-head-row > .cfk-sp { display: block; flex: 1 1 auto; }
+  .cs-head .cfk-head-row > .cs-tabs { order: 0; flex: 0 1 auto; flex-wrap: nowrap; margin-right: 6px; }
+}

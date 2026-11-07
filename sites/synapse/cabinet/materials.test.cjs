@@ -23,7 +23,7 @@ const full = () => ({...reels()[0], versions: [{version: 1, mediaUrl: asset('a')
 const idea = (n, date, over = {}) => ({ideaId: `idea-${n}`, date, platform: 'instagram', format: 'reel', role: 'reach', topic: `Тема ${n}`,
   variants: {instagram: {}, tiktok: {}, youtube_shorts: {}, vk: {}, telegram: {}}, ...over});
 const mentor = () => ({companyCode: 'avokado', approval: {status: 'pending'},
-  plan: {days: [idea(1, '2026-11-01'), idea(2, '2026-11-03'), idea(3, '2026-11-04', {productionStatus: 'shot'}), idea(4, '2026-11-06'),
+  plan: {days: [idea(1, '2026-11-01'), idea(2, '2026-11-03'), idea(3, '2026-11-04', {productionStatus: 'shot', topic: '№3 Тема 3'}), idea(4, '2026-11-06'),
     idea(5, '2026-11-08'), idea(6, '2026-11-09'), idea(7, '2026-11-10', {format: 'post', platform: 'vk', variants: {vk: {}}})]},
   variants: [{ideaId: 'idea-5', platform: 'instagram', status: 'approved'}, {ideaId: 'idea-6', platform: 'instagram', status: 'pending'}]});
 const planReels = () => [
@@ -511,4 +511,12 @@ test('Макет 07.11: отменённый и заменённый ролик�
   const chips = [...box.querySelectorAll('.mt-card .cfk-chip')].map((n) => n.textContent);
   assert.deepEqual(chips, ['Публикация отменена', 'Заменён в плане']);
   assert.doesNotMatch(box.textContent, /Монтаж на согласовании/);
+});
+
+test('Макет 07.11: тема плана уже начинается с «№3» — номер в карточке не дублируется («№3 №3 …»)', async () => {
+  const f = fresh();
+  await f.mount();
+  const all = titles(f);
+  assert.ok(all.includes('№3 Тема 3'), all.join(' | '));
+  assert.ok(!all.some((t) => /^№(\d+)\s+№\1\b/.test(t)), all.join(' | '));
 });
