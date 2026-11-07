@@ -629,6 +629,8 @@ async function proxyCrm(request, response, url, cors) {
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
     if(identity.role!=='owner')requirePermission(request,readOnly?(/^\/(?:platform-demand|social-stats)/.test(crmPath)?'analytics.view':'crm.view'):'crm.edit',code);
     if (/^\/social-stats\/(?:accounts|import|baseline)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и замер до начала работы доступны владельцу');
+    // specs/217: метки рилсов в подписях меняют публичный текст — включает только владелец.
+    if (crmPath==='/social-stats/reel-attribution/settings' && !readOnly && identity.role!=='owner') fail(403,'Метки в подписях включает владелец');
     /* Аналитический доступ Onlypult — ключ к кабинету источника, а не настройка показа.
        Owner-only И на чтение тоже: список профилей an_… выдаётся общим кабинетом и
        клиентскому аккаунту с analytics.view не показывается. */

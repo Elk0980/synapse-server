@@ -648,7 +648,10 @@ const taskDispatch = createTaskDispatch(db,{onAccept:taskCoordination.acceptDisp
 const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
-const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow});
+// specs/217: метки рилсов в подписях (по умолчанию выключены) и отчёт «рилс → заявки → продажи → выручка».
+const reelAttribution = require('./reel-attribution').createReelAttribution(db, {information: companyInformation});
+const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow,captionLink:reelAttribution});
+const handleReelAttribution = require('./reel-attribution-http').createReelAttributionHandler({attribution: reelAttribution, companyModuleContext, readJson, send});
 const handleContentFactoryCompletion=require('./content-factory-completion-http').createContentFactoryCompletionHandler({autoposting,companyModuleContext,readJson,send});
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
@@ -2647,6 +2650,7 @@ async function route(request, response) {
   if (await handleVkTools(request,response,url,cors)) return;
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
+  if (await handleReelAttribution(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
   if (await handleContentConnections(request,response,url,cors)) return;
   if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/quote','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
