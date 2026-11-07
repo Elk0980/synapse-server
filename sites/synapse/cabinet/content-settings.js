@@ -5,6 +5,15 @@
   const WEEKDAYS = [[1, 'Пн'], [2, 'Вт'], [3, 'Ср'], [4, 'Чт'], [5, 'Пт'], [6, 'Сб'], [7, 'Вс']];
   const PLATFORM_NAMES = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram', max: 'MAX', dzen: 'Дзен' };
   const SIZE_NAMES = { s: 'Мелкий', m: 'Средний', l: 'Крупный' };
+  /* Готовые стили титров (замечание Влада 07.11). Сервер хранит только шрифт, размер, цвет и регистр — пресет заполняет
+     ровно эти поля; обводку, плашку и подсветку слова сервер не хранит, поэтому их не обещаем. Шрифт и размер берутся
+     только из списка сервера: пресет с недоступным значением не показывается. */
+  const CAPTION_PRESETS = Object.freeze([
+    { id: 'classic', label: 'Классика', hint: 'белый, обычный регистр', caption: { font: 'Inter', size: 'm', color: '#ffffff', uppercase: false } },
+    { id: 'yellow', label: 'Жёлтый акцент', hint: 'жёлтый, крупно, заглавными', caption: { font: 'Montserrat', size: 'l', color: '#ffd400', uppercase: true } },
+    { id: 'headline', label: 'Заголовок', hint: 'узкий шрифт, заглавными', caption: { font: 'Oswald', size: 'l', color: '#ffffff', uppercase: true } },
+    { id: 'bold', label: 'Яркий', hint: 'широкий шрифт, заглавными', caption: { font: 'Unbounded', size: 'm', color: '#ffffff', uppercase: true } },
+    { id: 'minimal', label: 'Минимал', hint: 'мелко, без капса', caption: { font: 'Manrope', size: 's', color: '#f2f2f2', uppercase: false } }]);
   const el = (tag, attrs = {}, ...children) => {
     const node = document.createElement(tag);
     Object.entries(attrs).forEach(([key, value]) => {
@@ -193,7 +202,20 @@
     const size = el('select', { name: 'size', disabled });
     data.options.sizes.forEach((name) => size.append(el('option', { value: name, selected: name === caption.size, text: SIZE_NAMES[name] || name })));
     const preview = el('p', { className: 'cs-preview', text: 'Так будут выглядеть титры' });
+    const presets = CAPTION_PRESETS.filter((preset) => (data.options.fonts || []).includes(preset.caption.font) && (data.options.sizes || []).includes(preset.caption.size));
+    const presetRow = presets.length ? el('div', { className: 'cs-presets', role: 'group', 'aria-label': 'Готовые стили титров' },
+      ...presets.map((preset) => {
+        const sample = el('span', { className: 'cs-preset__sample', text: 'Аа' });
+        sample.style.fontFamily = `"${preset.caption.font}", system-ui, sans-serif`;
+        sample.style.color = preset.caption.color;
+        sample.style.textTransform = preset.caption.uppercase ? 'uppercase' : 'none';
+        return el('button', { type: 'button', className: 'cs-preset', 'data-cs-preset': preset.id, 'aria-pressed': 'false', disabled,
+          title: `${preset.caption.font}, ${(SIZE_NAMES[preset.caption.size] || preset.caption.size).toLowerCase()}, ${preset.caption.color}${preset.caption.uppercase ? ', заглавными' : ''}` },
+          sample, el('span', { className: 'cs-preset__name', text: preset.label }), el('small', { className: 'cs-preset__hint', text: preset.hint }));
+      })) : null;
     const style = el('fieldset', { className: 'card cs-block' }, el('legend', { text: 'Стиль титров' }),
+      presetRow,
+      presetRow ? el('p', { className: 'muted cs-presets-note', text: 'Готовый стиль заполняет шрифт, размер, цвет и регистр — дальше можно поправить вручную и сохранить.' }) : null,
       el('div', { className: 'cs-grid' },
         el('label', { className: 'cs-field' }, el('span', { text: 'Шрифт' }), font),
         el('label', { className: 'cs-field' }, el('span', { text: 'Размер' }), size),
@@ -232,7 +254,24 @@
       preview.style.fontSize = { s: '18px', m: '24px', l: '32px' }[form.elements.size.value] || '24px';
       preview.style.color = form.elements.color.value;
       preview.style.textTransform = form.elements.uppercase.checked ? 'uppercase' : 'none';
+      const current = { font: form.elements.font.value, size: form.elements.size.value, color: String(form.elements.color.value).toLowerCase(), uppercase: form.elements.uppercase.checked };
+      form.querySelectorAll('[data-cs-preset]').forEach((button) => {
+        const preset = CAPTION_PRESETS.find((item) => item.id === button.dataset.csPreset)?.caption;
+        const on = Boolean(preset) && Object.keys(preset).every((key) => preset[key] === current[key]);
+        button.setAttribute('aria-pressed', String(on));
+      });
     };
+    form.addEventListener('click', (event) => {
+      const button = event.target.closest?.('[data-cs-preset]');
+      if (!button || button.disabled) return;
+      const preset = CAPTION_PRESETS.find((item) => item.id === button.dataset.csPreset)?.caption;
+      if (!preset) return;
+      form.elements.font.value = preset.font;
+      form.elements.size.value = preset.size;
+      form.elements.color.value = preset.color;
+      form.elements.uppercase.checked = preset.uppercase;
+      updatePreview();
+    });
     form.addEventListener('input', updatePreview);
     updatePreview();
     form.addEventListener('submit', async (event) => {

@@ -163,6 +163,13 @@
   }
 
   const SPEEDS = [1, 1.2, 1.5, 2];
+  /* «Aa» — размер шрифта по кругу S → M → L → XL; выбор запоминается в браузере (без localStorage — просто M). */
+  const FONT_SIZES = [{id: 'S', phone: 24, wide: 32}, {id: 'M', phone: 30, wide: 40}, {id: 'L', phone: 38, wide: 50}, {id: 'XL', phone: 46, wide: 60}];
+  const FONT_KEY = 'sb.prompter.font';
+  const readFont = () => {
+    try { const index = FONT_SIZES.findIndex((size) => size.id === root.localStorage?.getItem(FONT_KEY)); return index >= 0 ? index : 1; } catch { return 1; }
+  };
+  const saveFont = (index) => { try { root.localStorage?.setItem(FONT_KEY, FONT_SIZES[index].id); } catch { /* приватный режим — не запоминаем */ } };
   const BASE = 72; // px/с при 1× — прежняя скорость суфлёра по умолчанию (4 × 18)
 
   /* Суфлёр — окно во весь экран: «← Съёмка», справа актёр и «Поделиться»; сцены «Сцена №N», реплики
@@ -171,7 +178,9 @@
   function open({parsed, title, subtitle = '', backLabel = '← Съёмка'}) {
     const doc = root.document;
     const narrow = (root.innerWidth || 1024) < 600;
-    const state = {actor: '', speed: 0, font: narrow ? 30 : 40, playing: false, pos: 0};
+    const fontPx = (index) => FONT_SIZES[index][narrow ? 'phone' : 'wide'];
+    const fontIndex = readFont();
+    const state = {actor: '', speed: 0, fontSize: FONT_SIZES[fontIndex].id, font: fontPx(fontIndex), playing: false, pos: 0};
     let frame = 0, last = 0, lock = null, drag = null;
     const text = h('div', {class: 'prompter__text'});
     const viewport = h('div', {class: 'prompter__viewport', 'aria-label': 'Текст суфлёра. Коснитесь, чтобы запустить или остановить', onclick: () => toggle()}, text);
@@ -181,13 +190,25 @@
     const playButton = h('button', {type: 'button', class: 'prompter__play', 'data-act': 'play', onclick: () => toggle()});
     const speedButton = h('button', {type: 'button', class: 'prompter__speed', 'data-act': 'speed', 'aria-label': 'Скорость', title: 'Скорость: 1× → 1.2× → 1.5× → 2×',
       onclick: () => { state.speed = (state.speed + 1) % SPEEDS.length; render(); }});
+    const fontButton = h('button', {type: 'button', class: 'prompter__font', 'data-act': 'font', title: 'Размер текста: S → M → L → XL',
+      onclick: () => {
+        const next = (FONT_SIZES.findIndex((size) => size.id === state.fontSize) + 1) % FONT_SIZES.length;
+        const ratio = state.font ? state.pos / state.font : 0;
+        state.fontSize = FONT_SIZES[next].id; state.font = fontPx(next); saveFont(next);
+        state.pos = ratio * state.font; // место в тексте сохраняется примерно на той же строке
+        render();
+      }}, h('span', {'aria-hidden': 'true', text: 'Aa'}), h('small', {class: 'prompter__font-id'}));
+    /* «← Съёмка»: на узком экране остаётся стрелка (подпись — в aria-label), чтобы «Суфлёр №N» и роль помещались целиком. */
+    const [backArrow, ...backRest] = String(backLabel).split(' ');
+    const backButton = h('button', {type: 'button', class: 'prompter__back', 'data-act': 'close', 'aria-label': backLabel.replace(/^←\s*/, 'Назад: '), title: backLabel, onclick: () => close()},
+      backRest.length ? [h('span', {class: 'prompter__back-arrow', text: backArrow}), h('span', {class: 'prompter__back-text', text: ` ${backRest.join(' ')}`})] : backLabel);
     const overlay = h('div', {class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Суфлёр'},
       h('div', {class: 'prompter__bar'},
-        h('button', {type: 'button', class: 'prompter__back', 'data-act': 'close', text: backLabel, onclick: () => close()}),
+        backButton,
         h('span', {class: 'prompter__title', title: subtitle || null}, h('b', {text: title || 'Суфлёр'}), subtitle ? h('span', {text: ` ${subtitle}`}) : null),
         shareControls({parsed, title: [title, subtitle].filter(Boolean).join(' · '), state, onActor: () => layout()})),
       h('div', {class: 'prompter__body'}, viewport, track),
-      h('div', {class: 'prompter__controls'}, playButton, h('span', {class: 'prompter__sp'}), speedButton));
+      h('div', {class: 'prompter__controls'}, playButton, h('span', {class: 'prompter__sp'}), fontButton, speedButton));
     const maxPos = () => Math.max(0, text.scrollHeight - viewport.clientHeight * 0.5);
     function layout() {
       const rows = parsed.frames.map((item) => {
@@ -204,6 +225,9 @@
     }
     function render() {
       text.style.fontSize = `${state.font}px`;
+      overlay.style.setProperty('--prompter-font', `${state.font}px`);
+      fontButton.querySelector('.prompter__font-id').textContent = state.fontSize;
+      fontButton.setAttribute('aria-label', `Размер текста: ${state.fontSize}`);
       text.style.transform = `translateY(${-Math.round(state.pos)}px)`;
       overlay.classList.toggle('is-playing', state.playing);
       playButton.textContent = state.playing ? '⏸' : '▶';
@@ -264,5 +288,5 @@
     return {close, overlay, state, toggle, seek};
   }
 
-  return {open, shareControls, pdfFromJpeg, renderCanvas, SPEEDS};
+  return {open, shareControls, pdfFromJpeg, renderCanvas, SPEEDS, FONT_SIZES};
 });

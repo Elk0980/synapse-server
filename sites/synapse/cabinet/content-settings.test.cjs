@@ -165,3 +165,47 @@ test('specs/214: «Участники» — люди в ролях Контен�
   assert.deepEqual(puts[0].settings.rolePeople,{content:[2],shooting:[3],editor:[2]});
   assert.equal('notificationDelivery' in puts[0].settings,false,'форма не трогает режим рассылки');
 });
+
+/* Замечание Влада 07.11: готовые стили титров — только поля, которые сервер принимает (font/size/color/uppercase). */
+test('стиль титров: пресеты заполняют поля и превью, сохраняются тем же PUT без новых полей', async () => {
+  const server = require('../../../ops/content/content-settings.js');
+  const dom = new JSDOM('<main id="root"></main>', {runScripts: 'outside-only', url: 'https://sample.test'}), w = dom.window; let def, saved;
+  const data = {settings: base(), canEdit: true, candidates: [], options: {fonts: [...server.FONTS], sizes: [...server.SIZES], platforms: ['vk']}, version: 7};
+  w.SynapseModules = {register: (name, d) => { def = d; }}; w.eval(fs.readFileSync(path.join(__dirname, 'content-settings.js'), 'utf8'));
+  const root = w.document.querySelector('#root');
+  await def.mount(root, {signal: new w.AbortController().signal, settings: {content: {get: async () => data, save: async (settings, version) => { saved = {settings, version}; return {...data, settings, version: 8}; }}}});
+  const buttons = [...root.querySelectorAll('[data-cs-preset]')];
+  assert.deepEqual(buttons.map((b) => b.querySelector('.cs-preset__name').textContent), ['Классика', 'Жёлтый акцент', 'Заголовок', 'Яркий', 'Минимал']);
+  assert.equal(root.querySelector('[data-cs-preset="classic"]').getAttribute('aria-pressed'), 'true', 'текущий стиль совпадает с «Классикой»');
+  assert.doesNotMatch(root.textContent, /анимац|караоке/i, 'анимацию не обещаем');
+  root.querySelector('[data-cs-preset="yellow"]').click();
+  const form = root.querySelector('form');
+  assert.equal(form.elements.font.value, 'Montserrat'); assert.equal(form.elements.size.value, 'l');
+  assert.equal(form.elements.color.value, '#ffd400'); assert.equal(form.elements.uppercase.checked, true);
+  const preview = root.querySelector('.cs-preview');
+  assert.match(preview.style.fontFamily, /Montserrat/); assert.equal(preview.style.textTransform, 'uppercase'); assert.equal(preview.style.fontSize, '32px');
+  assert.equal(root.querySelector('[data-cs-preset="yellow"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(root.querySelector('[data-cs-preset="classic"]').getAttribute('aria-pressed'), 'false');
+  form.dispatchEvent(new w.Event('submit', {cancelable: true})); await new Promise(setImmediate);
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.settings.caption)), {font: 'Montserrat', size: 'l', color: '#ffd400', uppercase: true});
+  assert.deepEqual([...Object.keys(saved.settings.caption)].sort(), ['color', 'font', 'size', 'uppercase'], 'новых полей в caption нет');
+  // Каждый пресет проходит серверную проверку (те же списки FONTS/SIZES и формат цвета).
+  for (const button of buttons) {
+    button.click();
+    const c = {font: form.elements.font.value, size: form.elements.size.value, color: form.elements.color.value, uppercase: form.elements.uppercase.checked};
+    assert.ok(server.FONTS.includes(c.font) && server.SIZES.includes(c.size) && /^#[0-9a-f]{6}$/i.test(c.color), button.dataset.csPreset);
+  }
+  w.close();
+});
+
+test('стиль титров: пресет с шрифтом вне списка сервера не показывается; читатель не может нажать', async () => {
+  const dom = new JSDOM('<main id="root"></main>', {runScripts: 'outside-only', url: 'https://sample.test'}), w = dom.window; let def;
+  const data = {settings: base(), canEdit: false, candidates: [], options: {fonts: ['Inter'], sizes: ['s', 'm', 'l'], platforms: ['vk']}, version: 1};
+  w.SynapseModules = {register: (name, d) => { def = d; }}; w.eval(fs.readFileSync(path.join(__dirname, 'content-settings.js'), 'utf8'));
+  const root = w.document.querySelector('#root');
+  await def.mount(root, {signal: new w.AbortController().signal, settings: {content: {get: async () => data, save: async () => data}}});
+  const buttons = [...root.querySelectorAll('[data-cs-preset]')];
+  assert.deepEqual(buttons.map((b) => b.dataset.csPreset), ['classic']);
+  assert.equal(buttons[0].disabled, true);
+  w.close();
+});

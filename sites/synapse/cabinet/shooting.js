@@ -281,7 +281,7 @@
     openPrompter(reel, parsed) {
       if (!S.prompter) return;
       this.prompter?.close?.();
-      this.prompter = S.prompter.open({parsed, title: `Суфлёр · №${reel.number}`, subtitle: reel.idea.topic || '', backLabel: '← Съёмка'});
+      this.prompter = S.prompter.open({parsed, title: `Суфлёр №${reel.number}`, subtitle: reel.idea.topic || '', backLabel: '← Съёмка'});
     }
     openBoard(reel, parsed) {
       if (!S.board) return;

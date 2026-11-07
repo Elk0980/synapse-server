@@ -52,17 +52,26 @@
   padding: 4px 8px; border-radius: 8px; }
 .cfk-dates-title:hover { background: rgba(125, 155, 255, .1); }
 .cfk-rail { position: relative; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none;
-  padding: 4px calc(50% - var(--cfk-iw, 44px) / 2) 8px; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; touch-action: pan-x;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
+  padding: 2px calc(50% - var(--cfk-iw, 44px) / 2); -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; touch-action: pan-x; }
 .cfk-rail::-webkit-scrollbar { display: none; }
-.cfk-day { --k: 0; position: relative; flex: 0 0 var(--cfk-iw, 44px); display: grid; justify-items: center; gap: 2px; padding: 0; border: 0;
-  background: transparent; color: var(--text, #e8edf5); font: inherit; cursor: pointer; scroll-snap-align: center;
-  transform: scale(calc(1 + .3 * var(--k))); transform-origin: 50% 60%; opacity: calc(.55 + .45 * var(--k)); transition: transform .06s linear; }
-.cfk-wd { font-size: 11px; color: var(--muted, #8c97ab); }
-.cfk-dn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; font-size: 13px; }
+/* Замечание Влада 07.11: дни не обрезаются и не наезжают друг на друга. «Лупа» увеличивает только кружок с числом
+   внутри своей кнопки (место под увеличение заложено отступами), поэтому кнопки дней стоят встык без пересечений,
+   точка «есть рилс» лежит внутри кнопки, а края ленты не затемняются маской. */
+.cfk-day { --k: 0; position: relative; flex: 0 0 var(--cfk-iw, 44px); display: grid; justify-items: center; align-content: start; gap: 2px;
+  padding: 0 0 10px; border: 0; background: transparent; color: var(--text, #e8edf5); font: inherit; cursor: pointer; scroll-snap-align: center;
+  opacity: calc(.72 + .28 * var(--k)); }
+.view-panel .cfk-dates .cfk-rail button.cfk-day.cfk-day { box-sizing: border-box; width: auto; min-width: 0; height: auto; min-height: 0; margin: 0; padding: 0 0 10px;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.cfk-wd { font-size: 11px; line-height: 14px; color: var(--muted, #8c97ab); }
+.cfk-dn { width: 28px; height: 28px; margin: 5px 0; display: grid; place-items: center; border-radius: 50%; font-size: 13px;
+  transform: scale(calc(1 + .3 * var(--k))); transition: transform .06s linear; }
 .cfk-day.today .cfk-dn { box-shadow: inset 0 0 0 1px rgba(140, 151, 171, .45); }
 .cfk-day.on .cfk-dn { background: rgba(125, 155, 255, .25); font-weight: 800; box-shadow: 0 0 0 1px rgba(125, 155, 255, .5); }
-.cfk-day.has::after { content: ""; position: absolute; bottom: -4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent, #7d9bff); }
+.cfk-day.has::after { content: ""; position: absolute; bottom: 2px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent, #7d9bff); }
+.cfk-day:focus-visible { outline: 2px solid var(--accent, #7d9bff); outline-offset: -2px; }
+/* Общее .view-panel button (44 px, рамка, фон) не должно превращать стрелки и заголовок ленты в крупные плашки. */
+.view-panel .cfk-dates .cfk-dates-top button.cfk-arrow { box-sizing: border-box; width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 50%; background: transparent; font-size: 17px; }
+.view-panel .cfk-dates .cfk-dates-top button.cfk-dates-title { min-height: 0; height: auto; padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; font-size: 14px; }
 .cfk-tz { font-size: 11px; color: var(--muted, #8c97ab); text-align: center; }
 
 /* Месячный календарь: на телефоне во весь экран, на ПК окном */
@@ -87,7 +96,11 @@
 }
 
 /* Лента со стартовой точкой */
-.cfk-feed { position: relative; overflow-y: auto; overscroll-behavior: contain; max-height: var(--cfk-feed-h, calc(100dvh - 230px)); }
+/* Плавающая кнопка чата кабинета (52–58 px) не закрывает последний элемент ленты: снизу запас «кнопка + 16 px»,
+   последнюю карточку можно прокрутить из-под кнопки. */
+.cfk-feed { --cfk-fab-clear: 94px; position: relative; overflow-y: auto; overscroll-behavior: contain;
+  max-height: min(var(--cfk-feed-h, calc(100dvh - 230px)), max(260px, calc(100dvh - var(--cfk-feed-top, 0px) - var(--cfk-fab-clear))));
+  padding-bottom: var(--cfk-fab-room, 76px); scroll-padding-bottom: var(--cfk-fab-room, 76px); }
 .cfk-feed-sep { border-top: 1px dashed var(--line, #3a4458); padding: 0; text-align: center; font-size: 12px; color: var(--muted, #8c97ab); }
 .cfk-feed-sep td { padding: 0 !important; border: 0 !important; border-top: 1px dashed var(--line, #3a4458) !important; text-align: center; }
 tr.cfk-feed-sep { border-top: 0; }
@@ -97,7 +110,9 @@ tr.cfk-feed-sep { border-top: 0; }
 .cfk-feed-pad td { padding: 0 !important; border: 0 !important; }
 .cfk-feed-ahead { font-size: 12px; color: var(--muted, #8c97ab); text-align: center; padding: 4px 0; }
 .cfk-feed-ahead td { text-align: center; color: var(--muted, #8c97ab); }
-@media (prefers-reduced-motion: reduce) { .cfk-day, .cfk-feed-sep span { transition: none; } }
+/* Кнопка чата: ПК — 24 + 58 + запас 12; телефон — 76 + 52 + 12 над нижней панелью (как .main в shell.css). */
+@media (max-width: 760px) { .cfk-feed { --cfk-fab-clear: calc(140px + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .cfk-dn, .cfk-feed-sep span { transition: none; } }
 
 /* Вкладки Контент-завода: под шапкой приложения нет пустого зазора (макет 07.11). Служебная строка .content-header,
    в которой только скрытая ошибка запуска, места не занимает; появится ошибка — строка видна как раньше. */

@@ -23,6 +23,20 @@
 .cs-inline input { width: 96px; }
 .cs-preview { margin: 4px 0 0; padding: 18px 14px; overflow-wrap: anywhere; text-align: center; font-weight: 700;
   background: linear-gradient(135deg, #2b3445, #11151d); border-radius: 12px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.cs-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin: 0 0 6px; }
+.view-panel .cs-presets button.cs-preset { display: grid; justify-items: start; gap: 2px; min-width: 0; min-height: 0; height: auto; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(135deg, #2b3445, #11151d); color: var(--text); text-align: left; cursor: pointer; }
+.view-panel .cs-presets button.cs-preset[aria-pressed="true"] { border-color: var(--accent, #7d9bff); box-shadow: 0 0 0 1px var(--accent, #7d9bff) inset; }
+.view-panel .cs-presets button.cs-preset:disabled { opacity: .6; cursor: default; }
+.cs-preset__sample { font-size: 20px; font-weight: 800; line-height: 1.1; text-shadow: 0 2px 6px rgba(0, 0, 0, .6); }
+.cs-preset__name { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.cs-preset__hint { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.cs-presets-note { margin: 0 0 8px; font-size: 12px; }
+@media (max-width: 599px) {
+  .cs-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .view-panel .cs-presets button.cs-preset { padding: 6px 8px; }
+  .cs-preset__hint { display: none; }
+}
 .cs-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .cs-save { min-width: 160px; font-weight: 700; color: var(--text); }
 .cs-status { margin: 0; color: var(--muted); }
