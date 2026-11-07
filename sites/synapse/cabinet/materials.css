@@ -128,15 +128,18 @@ body.mt-modal-open { overflow:hidden; }
 .mt-list--retired .mt-card { opacity:.8; }
 
 /* specs/224-content-archive: «Убрать» в карточке ленты и в окне ролика, «Архив» в шапке, «Вернуть» в архиве.
-   Кнопка карточки стоит рядом с карточкой (вложить кнопку в кнопку-карточку нельзя) и не перекрывает её текст. */
+   Кнопку нельзя вложить в кнопку-карточку, поэтому она соседний элемент, наложенный в угол карточки. */
 .mt-view .cfk-head-row .mt-archive-toggle { order:2; }
 .view-panel .mt-view .cfk-head-row button.mt-archive-toggle { box-sizing:border-box; height:32px; min-height:32px; padding:0 12px; border-radius:8px;
   line-height:30px; font-size:14px; white-space:nowrap; }
 .view-panel .mt-view .cfk-head-row button.mt-archive-toggle[aria-pressed="true"] { border-color:#a8cfff; color:#a8cfff; }
 @media (max-width:760px) { .mt-view .cfk-head-row .mt-archive-toggle { order:0; } }
-.mt-card--act { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
-.view-panel .mt-view button.mt-card__remove { box-sizing:border-box; align-self:center; min-height:36px; height:36px; padding:0 12px; border-radius:8px;
-  font-size:13px; line-height:34px; white-space:nowrap; color:var(--muted,#b9afa7); background:transparent; }
+/* «Убрать» визуально внутри карточки (правый верхний угол), но остаётся отдельной кнопкой рядом с кнопкой-карточкой.
+   Заголовок получает отступ справа, чтобы кнопка его не перекрывала. */
+.mt-card--act { position:relative; }
+.mt-card--act .mt-card__title { padding-right:84px; }
+.view-panel .mt-view button.mt-card__remove { position:absolute; top:8px; right:8px; z-index:1; box-sizing:border-box; min-height:30px; height:30px; padding:0 10px; border-radius:8px;
+  font-size:13px; line-height:28px; white-space:nowrap; color:var(--muted,#b9afa7); background:rgba(15,18,24,.55); }
 .view-panel .mt-view button.mt-card__remove:hover { color:var(--text,#f4f0eb); border-color:rgba(240,138,93,.6); }
 .mt-archive { margin:4px 0 8px; }
 .mt-archive__title { margin:4px 0; font-size:16px; }
