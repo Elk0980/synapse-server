@@ -648,3 +648,52 @@ test('specs/225: окно ролика связанной темы показы�
   f.el.querySelector('[data-open="reel:22"]').click(); await settle();
   assert.equal(f.el.querySelector('[data-detail-modal] [data-folders]'), null, 'не https — ссылок нет');
 });
+
+/* specs/227-plan-caption-to-post: текст публикации из контент-плана в окне ролика и после «Создать публикацию». */
+const withPlanText = (text) => ({method, path}) => {
+  if (method === 'GET' && path === 'crm/media-mentor') { const m = mentor(); m.plan.days[1].variants = {instagram: {text}, tiktok: {text: ''}}; return m; }
+  return undefined;
+};
+test('specs/227: нет подписи в «Постинге» — показан текст из контент-плана; нет и в плане — «добавьте текст публикации в контент-плане»', async () => {
+  const f = fixture({plan: true, respond: withPlanText('SAMPLE <b>текст</b> из плана')});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  const box = f.el.querySelector('[data-caption-box]');
+  assert.equal(box.querySelector('[data-caption]').textContent, 'SAMPLE <b>текст</b> из плана'); assert.ok(box.querySelector('[data-from-plan]'));
+  assert.equal(box.querySelector('b'), null, 'текст плана выводится как текст');
+  assert.match(box.querySelector('[data-caption-source]').textContent, /Из контент-плана — подставится в черновик при «Создать публикацию»/);
+  // Маска TikTok: своей версии нет — основная площадка темы.
+  const tiktok = f.el.querySelector('input[name="mt-platform"][value="tiktok"]');
+  tiktok.checked = true; tiktok.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+  assert.equal(f.el.querySelector('[data-caption]').textContent, 'SAMPLE <b>текст</b> из плана');
+  const g = fixture({plan: true, respond: withPlanText('')});
+  await g.mount();
+  g.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  assert.equal(g.el.querySelector('[data-caption]').textContent, 'Текста публикации пока нет. Добавьте текст публикации в контент-плане.');
+  assert.equal(g.el.querySelector('[data-caption-source]'), null);
+  // У поста есть своя подпись — она важнее плана.
+  g.el.querySelector('[data-back]').click(); await settle();
+  g.el.querySelector('[data-open="reel:21"]').click(); await settle();
+  assert.equal(g.el.querySelector('[data-caption]').textContent, 'Подпись для Инсты'); assert.equal(g.el.querySelector('[data-from-plan]'), null);
+});
+
+test('specs/227: после «Создать публикацию» видно, подставлен ли текст из плана, и предупреждения о лимитах', async () => {
+  const answer = (planText) => ({method, path}) => path.endsWith('/publication') && method === 'POST'
+    ? {post: {id: 78}, planText, reel: {...planReels()[1], versions: [planReels()[1].currentVersion], edits: [], log: [], postId: 102}} : withPlanText('SAMPLE')({method, path});
+  const f = fixture({plan: true, respond: answer({source: 'plan', reason: '', planRevision: 7, mainPlatform: 'instagram', captionPlatforms: ['telegram'],
+    warnings: [{platform: 'telegram', code: 'CAPTION_TOO_LONG', message: 'Текст версии для Telegram длиннее 1024 символов — не подставлен. Сократите его в контент-плане.'}]})});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  f.el.querySelector('[data-publish]').click(); await settle();
+  const status = f.el.querySelector('[data-detail-status]');
+  assert.equal(status.dataset.planText, 'plan');
+  assert.match(status.textContent, /Черновик публикации №78 создан\. Ничего не отправлено: согласование и время — в «Постинге»\. Текст публикации подставлен из контент-плана \(версия плана 7\)\./);
+  assert.deepEqual([...f.el.querySelectorAll('[data-plan-warnings] li')].map((li) => li.textContent), ['Текст версии для Telegram длиннее 1024 символов — не подставлен. Сократите его в контент-плане.']);
+  const g = fixture({plan: true, respond: answer({source: 'none', reason: 'NO_TEXT', message: 'В контент-плане нет текста публикации для этой темы', warnings: []})});
+  await g.mount();
+  g.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  g.el.querySelector('[data-publish]').click(); await settle();
+  assert.equal(g.el.querySelector('[data-detail-status]').dataset.planText, 'none');
+  assert.match(g.el.querySelector('[data-detail-status]').textContent, /подпись, согласование и время — в «Постинге»\. В контент-плане нет текста публикации — добавьте текст публикации в контент-плане\./);
+  assert.equal(g.el.querySelector('[data-plan-warnings]'), null);
+});

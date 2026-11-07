@@ -159,3 +159,6 @@ body.mt-modal-open { overflow:hidden; }
   .mt-confirm.mt-modal__box { border-top:1px solid var(--line,#283143); border-radius:16px 16px 0 0; background:var(--surface,#171e2a); }
 }
 .mt-folders { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+/* specs/227-plan-caption-to-post: предупреждения о тексте из контент-плана после «Создать публикацию». */
+.mt-caption-src { font-size:13px; margin:-6px 0 10px; }
+.mt-plan-warn { margin:0 0 8px; padding:0 0 0 18px; color:#f0b35d; font-size:13px; overflow-wrap:anywhere; }

@@ -32,7 +32,6 @@
     const m = /^([^:]{1,40}):\s*(.+)$/.exec(line);
     return m ? {actor: m[1].trim(), line: m[2]} : {actor: '', line};
   });
-  const caption = (idea) => idea.variants?.[idea.platform]?.text || Object.values(idea.variants || {}).find((v) => v.text)?.text || '';
   const rolesTable = (lines) => `<table class="cp-script"><tbody>${lines.map((l) => `<tr><th scope="row">${esc(l.actor || '—')}</th><td>${esc(l.line)}</td></tr>`).join('')}</tbody></table>`;
   /* Макет Влада 07.11: значки площадок — цветные кружки с подписью, без логотипов. */
   const NET_ORDER = ['telegram', 'vk', 'youtube_shorts', 'youtube', 'tiktok', 'instagram', 'max', 'two_gis'];
@@ -406,6 +405,55 @@
     catch (err) { state.rowBusy = null; draw(); const node = state.container.querySelector('[data-cp-links-error]');
       if (node) { node.hidden = false; node.textContent = err.status === 403 ? 'Нет права менять ссылки этой компании.' : err.message || 'Не удалось сохранить ссылки'; } }
   }
+  /* specs/227-plan-caption-to-post: «Текст публикации» — текст каждой версии площадки идеи. Он подставляется в черновик
+     публикации, когда в «Монтаже» нажимают «Создать публикацию». Правка идёт обычным сохранением плана (PUT /plan):
+     у изменённой версии сервер выдаёт новую contentRevision — её прежнее согласование не действует, рилс снова
+     «На согласовании»; версии без изменений согласование сохраняют; отметки «Согласование плана целиком» ставятся заново. */
+  const VARIANT_STATUS = {approved: 'согласовано', pending: 'на согласовании', rejected: 'на доработке', empty: 'нет текста', excluded: 'исключено'};
+  function textsBlock(idea, edit) {
+    const {mentor} = state, vocab = mentor.vocabulary || {}, limits = vocab.captionLimits || {};
+    const label = (id) => (vocab.platforms || []).find((p) => p.id === id)?.label || id;
+    const rank = (id) => id === idea.platform ? -1 : (NET_ORDER.indexOf(id) < 0 ? NET_ORDER.length : NET_ORDER.indexOf(id));
+    const ids = Object.keys(idea.variants || {}).sort((a, b) => rank(a) - rank(b));
+    if (!ids.length) return '';
+    const stateOf = (id) => (mentor.variants || []).find((v) => v.ideaId === idea.ideaId && v.platform === id) || null;
+    const editing = edit && state.textsOpen === idea.ideaId, busy = state.rowBusy === idea.ideaId ? ' disabled' : '';
+    const empty = ids.filter((id) => !idea.variants[id]?.excluded && !String(idea.variants[id]?.text || '').trim()).length;
+    const item = (id) => { const v = idea.variants[id] || {}, body = String(v.text || ''), st = v.excluded ? 'excluded' : stateOf(id)?.status || (body.trim() ? 'pending' : 'empty');
+      const [abbr, color] = NET[id] || [String(id).slice(0, 3).toUpperCase(), '#667085'], max = limits[id];
+      return `<li class="cp-text" data-text-platform="${esc(id)}"><p class="cp-text-head"><span class="cp-nb" style="background:${color}" aria-hidden="true">${esc(abbr)}</span>
+        <b>${esc(label(id))}</b>${id === idea.platform ? '<small> · основная</small>' : ''}<small class="cp-text-st" data-status="${esc(st)}"> · ${esc(VARIANT_STATUS[st] || st)}</small>${body ? `<small> · ${body.length}${max ? ' / ' + max : ''}</small>` : ''}</p>
+        ${v.excluded ? '' : body.trim() ? `<p class="cp-text-body">${esc(body)}</p>` : '<p class="cp-note cp-text-none">Текста нет — добавьте, иначе в «Постинге» поле будет пустым.</p>'}</li>`; };
+    const field = (id) => { const v = idea.variants[id] || {}, max = limits[id], approved = stateOf(id)?.status === 'approved';
+      if (v.excluded) return '';
+      return `<label class="cp-note">${esc(label(id))}${max ? ` · до ${max} символов` : ''}<textarea name="text:${esc(id)}" rows="4"${max ? ` maxlength="${max}"` : ''} data-limit="${max || ''}">${esc(v.text || '')}</textarea>
+        ${approved ? '<small class="cp-text-warn">Сейчас согласовано. После изменения этой площадке понадобится новое согласование.</small>' : ''}</label>`; };
+    const form = !editing ? '' : `<form class="cp-fix cp-texts-form" data-cp-texts-form role="group" aria-label="Текст публикации по площадкам">
+      ${ids.map(field).join('')}
+      <p class="cp-note" data-cp-texts-rule>Изменённый текст площадки снова уходит на согласование (рилс вернётся в «На согласовании»). Согласование площадок без изменений сохраняется. Отметки «Согласование плана целиком» ставятся заново — меняется версия плана.</p>
+      <p class="cp-error" data-cp-texts-error role="alert" hidden></p>
+      <div class="cp-fix-btns"><button type="submit" class="plain-button"${busy}>Сохранить текст</button><button type="button" class="cp-act" data-cp-texts-cancel>Отмена</button></div></form>`;
+    return `<section class="cp-texts" data-cp-texts aria-label="Текст публикации"><div class="cp-texts-top"><b>Текст публикации</b>
+      ${edit ? `<button type="button" class="cp-act" data-cp-texts-edit aria-expanded="${editing}" aria-label="${esc('Изменить текст публикации «' + idea.topic + '»')}">Изменить текст</button>` : ''}</div>
+      <p class="cp-note">Подставится в черновик публикации при «Создать публикацию» в «Монтаже».${empty ? ` Без текста: ${empty}.` : ''}</p>
+      <ul class="cp-text-list">${ids.map(item).join('')}</ul>${form}</section>`;
+  }
+  async function saveTexts(form) {
+    const ideaId = form.closest('[data-idea]').dataset.idea, idea = state.mentor.plan.days.find((d) => d.ideaId === ideaId);
+    const err = form.querySelector('[data-cp-texts-error]'), changed = {};
+    for (const area of form.querySelectorAll('textarea[name^="text:"]')) {
+      const id = area.name.slice(5), value = area.value.replace(/\r\n?/g, '\n').trim(), max = Number(area.dataset.limit) || 0;
+      if (max && value.length > max) { err.hidden = false; err.textContent = `Текст для площадки длиннее ${max} символов — сократите.`; area.focus(); return; }
+      if (value !== String(idea.variants?.[id]?.text || '').trim()) changed[id] = value;
+    }
+    if (!Object.keys(changed).length) { state.textsOpen = null; draw(); return; }
+    const days = state.mentor.plan.days.map((d) => d.ideaId !== ideaId ? d : {...d, variants: Object.fromEntries(Object.entries(d.variants || {})
+      .map(([id, v]) => [id, Object.hasOwn(changed, id) ? {...v, text: changed[id]} : v]))});
+    state.rowBusy = ideaId; draw();
+    try { await savePlan(days, 'Текст публикации изменён'); state.textsOpen = null; state.rowBusy = null; }
+    catch (e) { state.rowBusy = null; draw(); const node = state.container.querySelector('[data-cp-texts-error]');
+      if (node) { node.hidden = false; node.textContent = e.status === 403 ? 'Нет права менять контент-план этой компании.' : e.status === 409 ? 'План уже изменили — обновите страницу.' : e.message || 'Не удалось сохранить текст'; } }
+  }
   function full(idea, edit, st, status, archiving = false) {
     const {mentor} = state, vocab = mentor.vocabulary || {};
     const line = (key, label, value) => value ? `<p data-key="${key}"><b>${label}:</b> ${esc(value)}</p>` : '';
@@ -425,14 +473,15 @@
     /* «До съёмки» — одной приглушённой строкой после сцен (как в макете), ниже — детали плана, которые есть. */
     const prep = beforeLines(idea.script);
     const before = [prep.length ? `<p><b>До съёмки:</b> ${prep.map(esc).join(' ')}</p>` : '', line('hook', 'Хук', idea.hook), line('broll', 'Вставки', idea.broll),
-      line('style', 'Стиль', idea.style), line('props', 'Реквизит', idea.props), line('caption', 'Подпись', caption(idea)),
+      line('style', 'Стиль', idea.style), line('props', 'Реквизит', idea.props),
       idea.mentorNote ? `<p><b>Задание Хью:</b> ${esc(idea.mentorNote)}</p>` : ''].join('');
     const fhead = `<p class="cp-fhead" aria-hidden="true"><b>№${(state.numbers?.get(idea.ideaId) ?? 0) + 1} ${esc(idea.topic)} — полный вид</b><span class="cp-chev">▴</span></p>`;
     return `<div class="cp-full">${fhead}<dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
       ${linksBlock(idea, edit)}${pinned}${secondsTable(idea.script, secs)}${before ? `<div class="cp-before">${before}</div>` : ''}
+      ${textsBlock(idea, edit)}
       ${edit ? `<details class="cp-edit"><summary>Изменить сценарий</summary><form data-edit="${esc(idea.ideaId)}">
-        ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
-        <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}
+        ${REEL.map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(idea[key] || '')}</textarea></label>`).join('')}
+        <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование. Текст публикации меняется в блоке «Текст публикации».</p></form></details>` : ''}
       ${archiving ? `<div class="cp-full-acts"><button type="button" class="cp-act cp-remove" data-cp-remove aria-label="${esc('Убрать «' + idea.topic + '» в архив')}">Убрать из плана</button></div>` : ''}</div>`;
   }
 
@@ -553,8 +602,6 @@
       if (idea.ideaId !== id) return idea;
       const next = {...idea};
       for (const key of REEL) next[key] = key === 'script' ? data[key].replace(/\r\n?/g, '\n') : data[key].trim();
-      const platform = idea.variants?.[idea.platform] ? idea.platform : Object.keys(idea.variants || {})[0] || idea.platform;
-      next.variants = {...idea.variants, [platform]: {...(idea.variants?.[platform] || {}), text: data.caption.trim()}};
       return next;
     });
     try { await savePlan(days, 'Строка плана изменена'); } catch (err) { error(err.message); }
@@ -640,6 +687,12 @@
     root.querySelectorAll('[data-cp-links-cancel]').forEach((button) => button.addEventListener('click', () => {
       const id = state.linksOpen; state.linksOpen = null; draw(); root.querySelector(`[data-idea="${id}"] [data-cp-links-edit]`)?.focus(); }));
     root.querySelectorAll('[data-cp-links-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void saveLinks(form); }));
+    root.querySelectorAll('[data-cp-texts-edit]').forEach((button) => button.addEventListener('click', () => {
+      const id = button.closest('[data-idea]').dataset.idea; state.textsOpen = state.textsOpen === id ? null : id; draw();
+      root.querySelector('[data-cp-texts-form] textarea')?.focus(); }));
+    root.querySelectorAll('[data-cp-texts-cancel]').forEach((button) => button.addEventListener('click', () => {
+      const id = state.textsOpen; state.textsOpen = null; draw(); root.querySelector(`[data-idea="${id}"] [data-cp-texts-edit]`)?.focus(); }));
+    root.querySelectorAll('[data-cp-texts-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void saveTexts(form); }));
     root.querySelectorAll('[data-cp-restore]').forEach((button) => button.addEventListener('click', () => void restoreIdea(button.dataset.cpRestore)));
     root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', (event) => openQuestionnaire('new', event.currentTarget));
     root.querySelector('[data-cp="settings-plan"]')?.addEventListener('click', (event) => openQuestionnaire('edit', event.currentTarget));
@@ -653,6 +706,8 @@
       state.sort = button.dataset.cpSort; state.sortOpen = false; state.feedReset = true; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
     });
     root.onkeydown = event => { if (event.key === 'Escape' && state?.qOpen) { event.preventDefault(); closeQuestionnaire(); return; }
+      if (event.key === 'Escape' && state?.textsOpen) { const id = state.textsOpen; state.textsOpen = null; draw();
+        root.querySelector(`[data-idea="${id}"] [data-cp-texts-edit]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.linksOpen) { const id = state.linksOpen; state.linksOpen = null; draw();
         root.querySelector(`[data-idea="${id}"] [data-cp-links-edit]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.removeOpen) { const id = state.removeOpen; state.removeOpen = null; draw();

@@ -291,3 +291,21 @@ a.cp-link:hover, a.cp-link:focus-visible { border-color:var(--accent,#f08a5d); }
 .cp-links-form p { margin:0; }
 .cp-links-form label { display:grid; gap:4px; min-width:0; }
 .cp-links-form input { box-sizing:border-box; width:100%; min-width:0; min-height:40px; font:inherit; font-size:16px; padding:6px 10px; border-radius:10px; border:1px solid var(--line,#333); background:var(--surface,#12100f); color:var(--text,#eee); }
+/* specs/227-plan-caption-to-post: «Текст публикации» по версиям площадок в раскрытой карточке темы. */
+.cp-texts { display:grid; gap:6px; margin:10px 0; padding-top:8px; border-top:1px solid var(--line,#333); min-width:0; }
+.cp-texts-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+.cp-texts > .cp-note { margin:0; }
+.view-panel .cp .cp-texts button.cp-act.cp-act { min-height:0 !important; height:34px; padding:0 12px; border-radius:8px; font-size:14px; background:transparent; }
+.cp-text-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; min-width:0; }
+.cp-text { display:grid; gap:4px; min-width:0; }
+.cp-text-head { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin:0; font-size:.9rem; }
+.cp-text-head .cp-nb { width:22px; height:22px; font-size:8px; }
+.cp-text-head small { color:var(--muted,#b9afa7); font-size:12px; }
+.cp-text-st[data-status="approved"] { color:#6fcf97; }
+.cp-text-st[data-status="rejected"] { color:#f08a5d; }
+.cp-text-body { margin:0; padding:8px 10px; border-radius:10px; background:var(--surface,#12100f); border:1px solid var(--line,#333); white-space:pre-wrap; overflow-wrap:anywhere; font-size:.92rem; max-height:240px; overflow:auto; }
+.cp-text-none { margin:0; font-style:italic; }
+.cp-texts-form { margin:0; max-width:none; border-color:var(--line,#333); }
+.cp-texts-form label { display:grid; gap:4px; min-width:0; }
+.cp-texts-form p { margin:0; }
+.cp-text-warn { color:#f0b35d; font-size:12px; }
