@@ -1,8 +1,10 @@
 'use strict';
 
-// Contract: https://onlypult.com/dev/openapi.yaml, inspected 2026-09-17.
+// Contract: https://onlypult.com/dev/openapi.yaml, inspected 2026-09-17, rechecked 2026-11-07.
 // Post has id/status/profile_ids; its schema DOES NOT document a published URL.
-// A provider status alone must therefore never become Synapse "published".
+/* Решение Влада 07.11 (specs/215-publish-verify, FR-3): выход подтверждает ПОВТОРНОЕ чтение задания
+   (GET /posts/{id}) со статусом published — ответ на отправку его не подтверждает. Ссылка на конкретный
+   пост берётся только из аналитики Onlypult (permalink ниже) и только для Instagram/TikTok; иначе url пустой. */
 const BASE = 'https://api.onlypult.com/v1';
 // Onlypult's live response on 2026-09-17 uses "vk"; OpenAPI documents "vkontakte".
 /* Соответствие площадок Synapse значениям Profile.platform у Onlypult.
@@ -36,8 +38,10 @@ const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(v
    проверен root 30.09.2026): PostCreateRequest.required = [profile_ids]; content — string без minLength,
    «Required unless media_ids or media_urls is provided». PlatformSettings.is_story — Story для Instagram,
    несовместим с is_reels/is_shorts. Поэтому при материале и пустом тексте content не отправляется вовсе. */
+// Поиск задания без идентификатора: страница списка и предел страниц (не больше 1000 заданий профиля за один поиск).
+const SEARCH_LIMIT = 100, SEARCH_PAGES = 10;
 function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
-  async function request(row,method,path,body) {
+  async function request(row,method,path,body,{whole = false} = {}) {
     const token = tokenFor(row), mutation = method !== 'GET';
     let response,data;
     try {
@@ -52,11 +56,17 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       const rejected = data && typeof data === 'object' && !Array.isArray(data) &&
         (([400,401,403,404,429].includes(response.status) && data.status === response.status && Number.isInteger(data.code)) ||
          (response.status === 422 && typeof data.error?.code === 'string' && typeof data.error?.retryable === 'boolean'));
-      if (rejected) throw failure([401,403].includes(response.status) ? 'ACCESS_DENIED' : 'PLATFORM_REJECTED');
+      if (rejected) {
+        // Код ответа и признак retryable нужны отправке: отличить «точно не создано» от «могло создаться».
+        const error = failure([401,403].includes(response.status) ? 'ACCESS_DENIED' : 'PLATFORM_REJECTED');
+        error.httpStatus = response.status;
+        if (response.status === 422) error.retryable = data.error.retryable;
+        throw error;
+      }
       throw failure('CONNECTION_UNCERTAIN',mutation);
     }
     if (!data || typeof data !== 'object' || !Object.hasOwn(data,'data')) throw failure('RESPONSE_UNCERTAIN',mutation);
-    return data.data;
+    return whole ? data : data.data;
   }
   async function inspectProfiles(row) {
     const profiles = await request(row,'GET','/profiles');
@@ -204,14 +214,21 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       extra.title = title;
       extra.platform_options = {youtube:{is_shorts:true,privacy:'public'}};
     }
-    /* С этой точки запрос ушёл провайдеру. Любая ошибка ниже (таймаут, неразобранный ответ и даже
-       документированный отказ) помечается submitted: задание могло быть создано, и сверка ищет его
-       по профилю и отпечатку текста (specs/215-publish-verify, FR-1). Повторной отправки нет. */
+    /* С этой точки запрос ушёл провайдеру (specs/215-publish-verify, FR-1). «Не отправлено» и «неизвестно» различаются:
+       - документированный разобранный отказ 400/401/403/404/429 и 422 с retryable:false — задание точно не создано.
+         Ошибка получает rejection (понятная причина), доставка становится failed, её можно исправить и отправить снова;
+       - таймаут, обрыв, 5xx, неразобранный ответ и 422 с retryable:true — задание могло быть создано. Ошибка помечается
+         submitted: доставка на проверке, сверка ищет задание только чтением. Повторной отправки нет. */
     try {
       return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],...(withoutText ? {} : {content:post.text}),
         publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {}),...extra}),row);
     } catch (error) {
-      if (error && typeof error === 'object') error.submitted = true;
+      if (error && typeof error === 'object') {
+        const status = error.httpStatus;
+        const notCreated = error.ambiguous === false && [400,401,403,404,422,429].includes(status) && !(status === 422 && error.retryable !== false);
+        if (notCreated) error.rejection = status === 429 ? 'RATE_LIMITED' : [401,403].includes(status) ? 'AUTH_FAILED' : 'PROVIDER_REJECTED';
+        else error.submitted = true;
+      }
       throw error;
     }
   }
@@ -219,16 +236,34 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (!id(providerPostId) || !id(row.target)) throw failure('PROVIDER_POST_REQUIRED');
     return receipt(await request(row,'GET',`/posts/${encodeURIComponent(providerPostId)}`),row,providerPostId);
   }
-  /* Поиск созданного задания без идентификатора (ответ на POST потерян или был ошибкой).
+  /* Поиск созданного задания без идентификатора (ответ на POST потерян или был неоднозначным).
      Только чтение GET /posts своего профиля. Совпадение строгое: тот же профиль, отпечаток SHA-256
-     нормализованного текста, создано в окне попытки, и такое задание ровно одно. Иначе — null. */
+     нормализованного текста, создано в окне попытки, и такое задание ровно одно. Иначе — null.
+     Читаются все страницы списка (limit=100, page=1…meta.pages), но не больше SEARCH_PAGES: у профиля с большим
+     числом заданий поиск неполон и завершается ошибкой RESPONSE_UNCERTAIN, а не «не найдено» — по неполному поиску
+     доставку нельзя признать неотправленной. null означает, что весь список прочитан и совпадения нет. */
   async function findSubmitted(row,{contentSha,submittedAt}) {
     if (!id(row.target) || typeof contentSha !== 'string' || !/^[a-f0-9]{64}$/.test(contentSha)) throw failure('PROVIDER_POST_REQUIRED');
     const since = Date.parse(submittedAt);
     if (Number.isNaN(since)) throw failure('PROVIDER_POST_REQUIRED');
-    const list = await request(row,'GET',`/posts?profile_id=${encodeURIComponent(row.target)}&limit=50`);
-    if (!Array.isArray(list)) throw failure('RESPONSE_UNCERTAIN');
-    const matches = list.filter(item => {
+    const seen = new Map();
+    for (let page = 1; ; page++) {
+      const body = await request(row,'GET',`/posts?profile_id=${encodeURIComponent(row.target)}&limit=${SEARCH_LIMIT}&page=${page}`,null,{whole:true});
+      const list = body.data;
+      if (!Array.isArray(list) || list.length > SEARCH_LIMIT) throw failure('RESPONSE_UNCERTAIN');
+      // Между страницами могут появиться новые задания и сдвинуть список: одно задание учитывается один раз.
+      for (const item of list) if (item && typeof item === 'object' && id(item.id) && !seen.has(item.id)) seen.set(item.id,item);
+      const pages = body.meta && typeof body.meta === 'object' ? body.meta.pages : undefined;
+      if (pages === undefined) {
+        // Без сведений о страницах полный ответ может означать продолжение — тогда поиск неполон.
+        if (list.length < SEARCH_LIMIT) break;
+        throw failure('RESPONSE_UNCERTAIN');
+      }
+      if (!Number.isSafeInteger(pages) || pages < 0) throw failure('RESPONSE_UNCERTAIN');
+      if (page >= pages) break;
+      if (page >= SEARCH_PAGES) throw failure('RESPONSE_UNCERTAIN');
+    }
+    const matches = Array.from(seen.values()).filter(item => {
       if (!item || typeof item !== 'object' || Array.isArray(item) || !id(item.id) || typeof item.content !== 'string') return false;
       if (profileOf(item) !== row.target || !['draft','scheduled','published','failed'].includes(item.status)) return false;
       const created = Date.parse(item.created_at);

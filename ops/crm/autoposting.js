@@ -1630,12 +1630,15 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
             .run(iso(),due.id,delivery.channel_id);
           review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
         }
-        /* Запрос уже ушёл сервису (submitted): даже документированный отказ не доказывает, что задание не создано
-           (07.11: рилс Instagram вышел при «не подтвердила»). Такая доставка не становится окончательной ошибкой —
-           она остаётся на проверке, и сверка ищет задание только чтением. Повторной отправки нет. */
+        /* specs/215-publish-verify, FR-1: «не отправлено» и «неизвестно» различаются.
+           submitted — запрос ушёл сервису и задание могло быть создано (таймаут, 5xx, неразобранный ответ, 422 retryable):
+           доставка на проверке, сверка ищет задание только чтением, повторной отправки нет.
+           rejection — документированный отказ, задание точно не создано: failed с понятной причиной, её можно исправить
+           и отправить снова (как до 215). */
         const submitted=error?.submitted===true;
         const ambiguous=error?.ambiguous!==false,status=ambiguous||submitted?'needs_review':'failed';
-        const code=ambiguous?'PUBLICATION_UNCERTAIN':submitted?'PROVIDER_UNCONFIRMED':'PUBLISH_FAILED';
+        const rejection=['PROVIDER_REJECTED','AUTH_FAILED','RATE_LIMITED'].includes(error?.rejection)?error.rejection:'PUBLISH_FAILED';
+        const code=ambiguous?'PUBLICATION_UNCERTAIN':submitted?'PROVIDER_UNCONFIRMED':rejection;
         db.prepare(`UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=?,provider_submitted_at=?,provider_content_sha=?
           WHERE post_id=? AND channel_id=? AND status='publishing'`)
           .run(status,code,iso(),submitted?iso():null,submitted&&sent.trim()?contentDigest(sent):null,due.id,delivery.channel_id);

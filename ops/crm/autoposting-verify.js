@@ -37,6 +37,16 @@ function createPublishVerifier(db, {transport, now = Date.now, logger = console,
         WHERE id=? AND status IN ('needs_review','failed')`).run(iso(), postId);
       return;
     }
+    /* Ни одной доставки на проверке или в работе, есть неудачная — карточка «ошибка» и снова доступна для исправления
+       и отправки (FR-10). Опубликованные доставки при этом не трогаются. */
+    if (!rows.some(row => ['needs_review', 'publishing', 'pending'].includes(row.status))) {
+      const failed = rows.find(row => row.status === 'failed');
+      if (failed) {
+        db.prepare(`UPDATE autoposting_posts SET status='failed',last_error_code=?,revision=revision+1,updated_at=?
+          WHERE id=? AND status='needs_review'`).run(failed.error_code || 'PUBLISH_FAILED', iso(), postId);
+        return;
+      }
+    }
     const open = rows.find(row => row.status === 'needs_review') || rows.find(row => row.status === 'failed');
     if (open) db.prepare(`UPDATE autoposting_posts SET last_error_code=?,revision=revision+1,updated_at=?
       WHERE id=? AND status IN ('needs_review','failed') AND COALESCE(last_error_code,'')<>?`).run(open.error_code || 'PROVIDER_PENDING', iso(), postId, open.error_code || 'PROVIDER_PENDING');
@@ -93,8 +103,11 @@ function createPublishVerifier(db, {transport, now = Date.now, logger = console,
 
   /* Задание без идентификатора: ответ на отправку потерян или был ошибкой, но запрос ушёл. Ищем у провайдера
      строго по профилю, отпечатку текста и окну времени. Нашли одно — идентификатор сохраняется и дальше
-     обычная сверка. Не нашли — отметка времени проверки, состояние прежнее. */
-  async function lookup(delivery, code) {
+     обычная сверка. Не нашли — отметка времени проверки, состояние прежнее.
+     final (FR-10): окно сверки N дней истекло. Полный успешный поиск без совпадения — доставка failed с кодом
+     PROVIDER_NOT_FOUND, блокировка повторной отправки снимается (отправить снова может только человек).
+     Ошибка или неполный поиск вердикта не дают: доставка остаётся на проверке до следующей попытки. */
+  async function lookup(delivery, code, final = false) {
     const text = sentText(delivery.post_id, delivery.channel_id);
     const contentSha = delivery.provider_content_sha || (text.trim() ? contentDigest(text) : '');
     const submittedAt = delivery.provider_submitted_at || (Number.isSafeInteger(delivery.started_at) ? new Date(delivery.started_at).toISOString() : '');
@@ -106,6 +119,13 @@ function createPublishVerifier(db, {transport, now = Date.now, logger = console,
       result = await transport.lookupSubmitted({companyCode: code, channelId: delivery.channel_id,
         channelRevision: delivery.channel_revision, contentSha, submittedAt});
     } catch {mark(); return;}
+    if (result === null && final) {
+      const changed = db.prepare(`UPDATE autoposting_deliveries SET status='failed',error_code='PROVIDER_NOT_FOUND',provider_checked_at=?,
+        finished_at=COALESCE(finished_at,?) WHERE post_id=? AND channel_id=? AND provider_post_id IS NULL AND status='needs_review'
+        AND error_code IN ('PROVIDER_UNCONFIRMED','PUBLICATION_UNCERTAIN')`).run(iso(), iso(), delivery.post_id, delivery.channel_id).changes;
+      if (changed) refreshPost(delivery.post_id);
+      return;
+    }
     if (!result || typeof result.providerPostId !== 'string' || !STATUSES.includes(result.providerStatus)) {mark(); return;}
     // Одно задание провайдера — одна доставка: уже присвоенный идентификатор второй раз не берётся.
     if (db.prepare('SELECT 1 FROM autoposting_deliveries WHERE channel_id=? AND provider_post_id=?').get(delivery.channel_id, result.providerPostId)) {mark(); return;}
@@ -148,7 +168,12 @@ function createPublishVerifier(db, {transport, now = Date.now, logger = console,
       AND d.channel_id IN ('instagram','tiktok') AND COALESCE(d.provider_published_at,d.finished_at,'')>=?
       AND (d.link_checked_at IS NULL OR d.link_checked_at<=?) ORDER BY d.link_checked_at LIMIT ?`)
       .all(...args, since(windowDays * 24 * HOUR), pick ? since(HOUR) : iso(), linksPerTick);
-    return {known, missing, links};
+    // Окно истекло, задание так и не найдено: последний полный поиск решает (FR-10). Раз в 10 минут, ручная — сразу.
+    const expired = db.prepare(`SELECT d.*,c.code ${base}${one} AND d.status='needs_review' AND d.provider_post_id IS NULL
+      AND d.error_code IN ('PROVIDER_UNCONFIRMED','PUBLICATION_UNCERTAIN') AND d.started_at IS NOT NULL AND d.started_at<? AND ${viaProvider()}
+      AND (d.provider_checked_at IS NULL OR d.provider_checked_at<=?) ORDER BY d.started_at LIMIT ?`)
+      .all(...args, now() - windowDays * 24 * HOUR, pick ? since(10 * MINUTE) : iso(), perTick);
+    return {known, missing, links, expired};
   }
   /* Искать задание у сервиса имеет смысл только для канала, подключённого через сервис. Прямые ВК/Telegram
      сразу получают ссылку от площадки и у сервиса не ищутся. Нет таблицы каналов — только каналы «только через сервис». */
@@ -160,13 +185,14 @@ function createPublishVerifier(db, {transport, now = Date.now, logger = console,
 
   let stopped = false;
   async function tick(postId = null) {
-    if (!transport.reconcile) return {known: 0, missing: 0, links: 0};
-    const {known, missing, links} = candidates(postId);
+    if (!transport.reconcile) return {known: 0, missing: 0, links: 0, expired: 0};
+    const {known, missing, links, expired} = candidates(postId);
     for (const delivery of known) {if (stopped) break; await checkKnown(delivery, delivery.code);}
     for (const delivery of missing) {if (stopped) break; await lookup(delivery, delivery.code);}
+    for (const delivery of expired) {if (stopped) break; await lookup(delivery, delivery.code, true);}
     for (const delivery of links) {if (stopped) break; await relink(delivery, delivery.code);}
-    if (known.length + missing.length + links.length) logger.warn?.(`[crm] autoposting verify known=${known.length} missing=${missing.length} links=${links.length}`);
-    return {known: known.length, missing: missing.length, links: links.length};
+    if (known.length + missing.length + links.length + expired.length) logger.warn?.(`[crm] autoposting verify known=${known.length} missing=${missing.length} expired=${expired.length} links=${links.length}`);
+    return {known: known.length, missing: missing.length, links: links.length, expired: expired.length};
   }
   return {tick, checkKnown, stop() {stopped = true;}};
 }

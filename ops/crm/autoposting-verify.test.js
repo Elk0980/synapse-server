@@ -62,7 +62,7 @@ async function reelFlow(t, {post, platform = 'instagram'} = {}) {
 const submittedAt = flow => new Date(flow.now() - 60000).toISOString();
 const createdNear = flow => new Date(flow.now() - 60000 + 5000).toISOString();
 
-test('FR-1: отказ Onlypult на уже ушедший POST — не окончательный failed; сверка находит задание, подтверждает выход и ссылку', async t => {
+test('FR-1: 422 retryable:true на ушедший POST — неоднозначно, не failed; сверка находит задание, подтверждает выход и ссылку', async t => {
   const flow = await reelFlow(t, {post: () => json({error: {code: 'media_processing', retryable: true}}, 422)});
   let card = flow.get();
   assert.equal(flow.posts().length, 1);
@@ -110,6 +110,116 @@ test('FR-1: отказ Onlypult на уже ушедший POST — не око�
   flow.advance(2 * 3600000);
   await flow.api.drain();
   assert.equal(flow.calls.length, before, 'идемпотентно: подтверждённая со ссылкой доставка больше не проверяется');
+});
+
+/* FR-1 (после ревью PR 607): документированный отказ на POST — задание точно не создано. Доставка failed с понятной
+   причиной, поиск у сервиса не идёт, человек может исправить и отправить снова (ровно одна новая отправка). */
+const REJECTIONS = [
+  ['400', () => json({name: 'Bad Request', message: 'fixture validation', code: 0, status: 400}, 400), 'PROVIDER_REJECTED'],
+  ['401', () => json({name: 'Unauthorized', message: 'fixture key revoked', code: 0, status: 401}, 401), 'AUTH_FAILED'],
+  ['403', () => json({name: 'Forbidden', message: 'fixture forbidden', code: 0, status: 403}, 403), 'AUTH_FAILED'],
+  ['404', () => json({name: 'Not Found', message: 'fixture profile gone', code: 0, status: 404}, 404), 'PROVIDER_REJECTED'],
+  ['429', () => json({name: 'Too Many Requests', message: 'fixture rate', code: 0, status: 429}, 429), 'RATE_LIMITED'],
+  ['422 retryable:false', () => json({error: {code: 'validation_error', message: 'fixture', retryable: false}}, 422), 'PROVIDER_REJECTED'],
+];
+for (const [name, reply, code] of REJECTIONS) test(`FR-1: отказ ${name} на POST — failed (${code}), повторная отправка разрешена`, async t => {
+  const flow = await reelFlow(t, {post: reply});
+  let card = flow.get();
+  assert.equal(flow.posts().length, 1);
+  assert.equal(card.deliveries[0].status, 'failed', 'задание точно не создано');
+  assert.equal(card.deliveries[0].errorCode, code);
+  assert.equal(card.status, 'failed');
+  assert.equal(card.lastErrorCode, code);
+  // Сверка не ищет то, чего точно нет, и ничего не отправляет сама — ни сразу, ни через окно N дней.
+  flow.advance(8 * 24 * 3600000);
+  await flow.api.drain();
+  assert.equal(flow.calls.filter(call => call.method === 'GET' && call.path === '/v1/posts').length, 0);
+  assert.equal(flow.posts().length, 1, 'автоповтора нет');
+  assert.equal(flow.get().status, 'failed');
+  // Человек исправил причину и отправил снова: блокировки PUBLICATION_REVIEW_REQUIRED нет.
+  const job = `fixture-resend-${name.replace(/\W+/g, '-')}`;
+  flow.routes['POST /v1/posts'] = () => ({id: job, profile_ids: [PROFILE], status: 'scheduled', platform: 'instagram_business'});
+  card = await flow.api.schedule(flow.id, 'alvi', {revision: flow.get().revision, scheduledAt: new Date(flow.now() + 60000).toISOString()});
+  assert.equal(card.status, 'scheduled');
+  flow.advance(60000);
+  await flow.api.drain();
+  card = flow.get();
+  assert.equal(flow.posts().length, 2, 'ровно одна новая отправка по решению человека');
+  assert.equal(card.deliveries[0].providerPostId, job);
+  assert.equal(card.deliveries[0].status, 'needs_review');
+  assert.deepEqual(flow.forbidden(), []);
+});
+
+test('FR-1: 5xx на POST — неоднозначно: на проверке, повторная отправка закрыта', async t => {
+  const flow = await reelFlow(t, {post: () => json({message: 'fixture gateway'}, 502)});
+  const card = flow.get();
+  assert.equal(card.deliveries[0].status, 'needs_review');
+  assert.equal(card.deliveries[0].errorCode, 'PUBLICATION_UNCERTAIN');
+  await assert.rejects(flow.api.schedule(flow.id, 'alvi', {revision: card.revision, scheduledAt: new Date(flow.now() + 60000).toISOString()}),
+    error => error.details?.code === 'PUBLICATION_REVIEW_REQUIRED');
+  assert.equal(flow.posts().length, 1);
+});
+
+test('FR-10: задание не найдено за окно N дней — failed PROVIDER_NOT_FOUND; ошибка поиска вердикта не даёт; затем отправка разрешена', async t => {
+  const flow = await reelFlow(t, {post: () => {throw new TypeError('fixture network timeout');}});
+  assert.equal(flow.get().deliveries[0].errorCode, 'PUBLICATION_UNCERTAIN');
+  let mode = 'empty';
+  flow.routes['GET /v1/posts'] = () => mode === 'down' ? json({message: 'fixture outage'}, 503)
+    : json({data: [{id: 'unrelated', profile_ids: [PROFILE], status: 'published', content: 'Другое', created_at: createdNear(flow)}], meta: {total: 1, page: 1, limit: 100, pages: 1}});
+  flow.advance(10 * 60000);
+  await flow.api.drain();
+  assert.equal(flow.get().deliveries[0].status, 'needs_review', 'в окне «не найдено» — ещё не вердикт');
+  flow.advance(6 * 24 * 3600000);
+  await flow.api.drain();
+  assert.equal(flow.get().deliveries[0].status, 'needs_review');
+
+  // Окно истекло, но поиск у сервиса не удался — вердикта нет, доставка остаётся на проверке.
+  mode = 'down';
+  flow.advance(2 * 24 * 3600000);
+  await flow.api.drain();
+  let card = flow.get();
+  assert.equal(card.deliveries[0].status, 'needs_review');
+  assert.equal(card.deliveries[0].errorCode, 'PUBLICATION_UNCERTAIN');
+
+  // Ручная «Проверить статус» после восстановления: полный поиск без совпадения → failed, причина понятна.
+  mode = 'empty';
+  card = await flow.api.reconcile(flow.id, 'alvi', {revision: card.revision});
+  assert.equal(card.deliveries[0].status, 'failed');
+  assert.equal(card.deliveries[0].errorCode, 'PROVIDER_NOT_FOUND');
+  assert.equal(card.status, 'failed');
+  assert.equal(card.lastErrorCode, 'PROVIDER_NOT_FOUND');
+  assert.equal(flow.posts().length, 1, 'сама система ничего не отправила повторно');
+  const searches = flow.calls.filter(call => call.method === 'GET' && call.path === '/v1/posts').length;
+  flow.advance(3600000);
+  await flow.api.drain();
+  assert.equal(flow.calls.filter(call => call.method === 'GET' && call.path === '/v1/posts').length, searches, 'после вердикта поиск прекращён');
+
+  flow.routes['POST /v1/posts'] = () => ({id: 'fixture-after-not-found', profile_ids: [PROFILE], status: 'scheduled', platform: 'instagram_business'});
+  card = await flow.api.schedule(flow.id, 'alvi', {revision: card.revision, scheduledAt: new Date(flow.now() + 60000).toISOString()});
+  flow.advance(60000);
+  await flow.api.drain();
+  assert.equal(flow.posts().length, 2);
+  assert.equal(flow.get().deliveries[0].providerPostId, 'fixture-after-not-found');
+  assert.deepEqual(flow.forbidden(), []);
+});
+
+test('FR-10: задание нашлось последним поиском после окна — опубликовано, не failed', async t => {
+  const flow = await reelFlow(t, {post: () => json({error: {code: 'validation_error', message: 'fixture', retryable: true}}, 422)});
+  assert.equal(flow.get().deliveries[0].errorCode, 'PROVIDER_UNCONFIRMED');
+  const job = 'fixture-late-found', created = createdNear(flow);
+  flow.routes['GET /v1/posts'] = () => [];
+  flow.advance(8 * 24 * 3600000);
+  flow.routes['GET /v1/posts'] = () => [{id: job, profile_ids: [PROFILE], status: 'published', content: CAPTION, created_at: created}];
+  flow.routes[`GET /v1/posts/${job}`] = () => ({id: job, profile_ids: [PROFILE], status: 'published', platform: 'instagram_business', published_at: created});
+  flow.routes['GET /v1/analytics/profiles'] = () => json({status: 403, code: 403, message: 'analytics_not_available'}, 403);
+  await flow.api.drain();
+  const card = flow.get();
+  assert.equal(card.deliveries[0].status, 'published');
+  assert.equal(card.deliveries[0].providerPostId, job);
+  assert.equal(card.status, 'published');
+  assert.equal(flow.posts().length, 1, 'двойной публикации нет');
+  await assert.rejects(flow.api.schedule(flow.id, 'alvi', {revision: card.revision, scheduledAt: new Date(flow.now() + 60000).toISOString()}),
+    error => [409].includes(error.status));
 });
 
 test('FR-1: таймаут ответа на POST → на проверке; чужие и двойные совпадения не принимаются', async t => {
@@ -246,6 +356,22 @@ test('Адаптер: permalink — только домен площадки, р
   assert.equal(await provider.findSubmitted(row, {contentSha: contentDigest('другое'), submittedAt: at}), null);
   assert.equal(await provider.findSubmitted(row, {contentSha: sha, submittedAt: '2026-11-08T03:00:00Z'}), null, 'вне окна попытки');
   await assert.rejects(provider.findSubmitted(row, {contentSha: 'bad', submittedAt: at}), error => error.code === 'PROVIDER_POST_REQUIRED');
+
+  // Все страницы списка в пределах SEARCH_PAGES; неполный поиск — ошибка, а не «не найдено».
+  const filler = n => Array.from({length: n}, (_, i) => ({id: `f${i}`, profile_ids: [PROFILE], status: 'published', content: 'Другое', created_at: at}));
+  const pages = [];
+  routes['/v1/posts'] = url => {
+    pages.push(url.searchParams.get('page'));
+    assert.equal(url.searchParams.get('limit'), '100');
+    return url.searchParams.get('page') === '1' ? json({data: filler(100), meta: {total: 101, page: 1, limit: 100, pages: 2}})
+      : json({data: [{id: 'j2', profile_ids: [PROFILE], status: 'published', content: CAPTION, created_at: at}], meta: {total: 101, page: 2, limit: 100, pages: 2}});
+  };
+  assert.equal((await provider.findSubmitted(row, {contentSha: sha, submittedAt: at})).providerPostId, 'j2', 'нужное задание на второй странице');
+  assert.deepEqual(pages, ['1', '2']);
+  routes['/v1/posts'] = url => json({data: filler(100), meta: {total: 1200, page: Number(url.searchParams.get('page')), limit: 100, pages: 12}});
+  await assert.rejects(provider.findSubmitted(row, {contentSha: sha, submittedAt: at}), error => error.code === 'RESPONSE_UNCERTAIN', 'больше 10 страниц — поиск неполон');
+  routes['/v1/posts'] = () => filler(100);
+  await assert.rejects(provider.findSubmitted(row, {contentSha: sha, submittedAt: at}), error => error.code === 'RESPONSE_UNCERTAIN', 'полная страница без meta — продолжение неизвестно');
 });
 
 test('Этап идеи: задание принято сервисом и ждёт сверки — «Запланировано к выходу», не «Ошибка публикации»', () => {
