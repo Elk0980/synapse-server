@@ -7,7 +7,7 @@
 |---|---|
 | `node --test ops/content/team-chat-ai.test.js` (настоящий HTTP `/reply`, `validateReplyPayload` рантайма) | 6/6 |
 | `node --test ops/content/team-chat-answers.test.js ops/content/team-chat-rooms.test.js ops/content/people-http.test.js ops/content/team-chat*.test.js ops/content/hugh-personas*.test.js ops/crm/people-http.test.js` | все проходят |
-| `node --test ops/content/*.test.js` | 841 pass, 1 fail: `media-mentor-proxy.test.js` — падает так же на `origin/main` без изменений (проверено `git stash`) |
+| `node --test ops/content/*.test.js` | 842 тестов: 832 pass, 1 fail, остальные пропущены самими тестами; `media-mentor-proxy.test.js` — падает так же на `origin/main` без изменений (проверено `git stash`) |
 | `node --test ops/crm/people*.test.js ops/crm/media-mentor*.test.js ops/crm/company-information*.test.js` | 148/149: `media-mentor-http.test.js` «импорт проверяет компанию…» падает так же на `origin/main` |
 | `python3 tools/spec-kit/gate.py check` | status ok |
 
