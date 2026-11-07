@@ -325,6 +325,20 @@ function createMediaMentor(db,{now=Date.now}={}) {
     BEGIN SELECT RAISE(ABORT,'Immutable media mentor feedback'); END;
     CREATE TRIGGER IF NOT EXISTS media_mentor_plan_feedback_immutable_delete BEFORE DELETE ON media_mentor_plan_feedback
     BEGIN SELECT RAISE(ABORT,'Immutable media mentor feedback'); END;`);
+  /* Архив идей плана (specs/224-content-archive): пометка рядом с планом, а не правка плана. Убранная идея
+     не видна в плане, согласовании и съёмке, версия плана и решения по остальным идеям не меняются.
+     Копия идеи на момент архивации хранится здесь же — восстановление не зависит от последующих сохранений плана. */
+  db.exec(`CREATE TABLE IF NOT EXISTS media_mentor_idea_archive (
+    company_id INTEGER NOT NULL REFERENCES companies(id),idea_id TEXT NOT NULL,idea TEXT NOT NULL,
+    archived_at TEXT NOT NULL,archived_by INTEGER,archived_by_name TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(company_id,idea_id));
+    CREATE TABLE IF NOT EXISTS media_mentor_idea_archive_events (
+    id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),idea_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('archived','restored')),idea TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,actor_id INTEGER,actor_name TEXT NOT NULL DEFAULT '');`);
+  const archiveMarks=owner=>new Map(db.prepare(`SELECT idea_id ideaId,idea,archived_at archivedAt,archived_by archivedBy,
+    archived_by_name archivedByName,reason FROM media_mentor_idea_archive WHERE company_id=? ORDER BY archived_at DESC,idea_id`).all(owner.id)
+    .map(row=>[row.ideaId,{...row}]));
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
 
@@ -333,11 +347,13 @@ function createMediaMentor(db,{now=Date.now}={}) {
     if(!row)return {revision:0,updatedAt:null,fields:structuredClone(EMPTY_BRIEF)};
     return {revision:row.revision,updatedAt:row.updatedAt,fields:{...structuredClone(EMPTY_BRIEF),...parse(row.brief,{})}};
   }
-  function planOf(owner) {
+  function planOf(owner,{raw=false}={}) {
     const row=db.prepare('SELECT revision,brief_revision briefRevision,plan,updated_at updatedAt FROM media_mentor_plans WHERE company_id=?').get(owner.id);
     if(!row)return null;
     const stored=parse(row.plan,{days:[],startDate:null,endDate:null,windowDays:0});
-    return {revision:row.revision,briefRevision:row.briefRevision,updatedAt:row.updatedAt,days:stored.days,
+    const marks=raw?null:archiveMarks(owner);
+    return {revision:row.revision,briefRevision:row.briefRevision,updatedAt:row.updatedAt,
+      days:marks?.size?(stored.days||[]).filter(day=>!marks.has(day?.ideaId)):stored.days,
       startDate:stored.startDate,endDate:stored.endDate,windowDays:stored.windowDays};
   }
   // Строки SQLite копируются в обычные объекты: ответ модуля не зависит от прототипа драйвера.
@@ -421,6 +437,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
       /* Состояние каждой версии площадки отдельно: кабинет и перенос читают его, а не
          догадываются по решению о плане целиком. */
       variants:plan?planVariantStates(owner,plan,brief.revision):[],
+      archivedIdeas:archivedIdeas(owner),
       vocabulary:{platforms:labels(CAPTION_PLATFORMS),formats:labels(FORMATS),roles:labels(ROLES),
         shootingComfort:labels(COMFORT),assetKinds:labels(ASSET_KINDS),minDays:MIN_DAYS,maxDays:MAX_DAYS,
         variantScopes:VARIANT_SCOPES,captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS)
@@ -429,6 +446,53 @@ function createMediaMentor(db,{now=Date.now}={}) {
   }
 
   function get(code){return transaction(()=>snapshot(company(db,code)));}
+
+  function archivedIdeas(owner) {
+    const stored=new Set((planOf(owner,{raw:true})?.days||[]).map(day=>day?.ideaId));
+    return [...archiveMarks(owner).values()].map(mark=>{const idea=parse(mark.idea,{});
+      return {ideaId:mark.ideaId,date:idea.date||'',platform:idea.platform||'',format:idea.format||'',topic:idea.topic||'',
+        inPlan:stored.has(mark.ideaId),archive:{archivedAt:mark.archivedAt,archivedBy:mark.archivedBy,archivedByName:mark.archivedByName,reason:mark.reason}};});
+  }
+  const IDEA_ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
+  function archiveIdea(code,ideaId,body={},actor={}) {
+    if(typeof ideaId!=='string'||!IDEA_ID.test(ideaId))fail(404,'Идея плана не найдена','NOT_FOUND');
+    object(body,['reason']);const reason=body.reason===undefined?'':text(body.reason,500);
+    const who=person(actor);
+    return transaction(()=>{
+      const owner=company(db,code),marks=archiveMarks(owner);
+      if(marks.has(ideaId))fail(409,'Идея уже в архиве','IDEA_ARCHIVED');
+      const idea=(planOf(owner,{raw:true})?.days||[]).find(day=>day?.ideaId===ideaId);
+      if(!idea)fail(404,'Идея плана не найдена','NOT_FOUND');
+      const time=iso(),copy=JSON.stringify(idea);
+      db.prepare(`INSERT INTO media_mentor_idea_archive(company_id,idea_id,idea,archived_at,archived_by,archived_by_name,reason)
+        VALUES(?,?,?,?,?,?,?)`).run(owner.id,ideaId,copy,time,who.userId,who.userName,reason);
+      db.prepare(`INSERT INTO media_mentor_idea_archive_events(company_id,idea_id,action,idea,reason,created_at,actor_id,actor_name)
+        VALUES(?,?,'archived',?,?,?,?,?)`).run(owner.id,ideaId,copy,reason,time,who.userId,who.userName);
+      return snapshot(owner);
+    });
+  }
+  /* Вернуть идею. Она ещё в сохранённом плане — снимается только пометка (версия плана прежняя).
+     План успели пересохранить без неё — идея добавляется обычным сохранением плана из архивной копии
+     (новая версия плана; согласование этой идеи начинается заново). Не прошла проверку плана — пометка остаётся. */
+  function restoreIdea(code,ideaId,body={},actor={}) {
+    if(typeof ideaId!=='string'||!IDEA_ID.test(ideaId))fail(404,'Идея плана не найдена','NOT_FOUND');
+    object(body,[]);const who=person(actor);
+    const owner=company(db,code),mark=archiveMarks(owner).get(ideaId);
+    if(!mark)fail(409,'Идея не в архиве','IDEA_NOT_ARCHIVED');
+    const plan=planOf(owner,{raw:true});
+    if(!(plan?.days||[]).some(day=>day?.ideaId===ideaId)){
+      const brief=briefOf(owner),visible=planOf(owner);
+      const days=[...(visible?.days||[]),parse(mark.idea,{})].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+      savePlan(code,{planRevision:visible?visible.revision:0,briefRevision:brief.revision,days,reason:'Идея возвращена из архива'},actor);
+    }
+    return transaction(()=>{
+      const removed=db.prepare('DELETE FROM media_mentor_idea_archive WHERE company_id=? AND idea_id=?').run(owner.id,ideaId).changes;
+      if(!removed)fail(409,'Идея не в архиве','IDEA_NOT_ARCHIVED');
+      db.prepare(`INSERT INTO media_mentor_idea_archive_events(company_id,idea_id,action,idea,reason,created_at,actor_id,actor_name)
+        VALUES(?,?,'restored',?,'',?,?,?)`).run(owner.id,ideaId,mark.idea,iso(),who.userId,who.userName);
+      return snapshot(owner);
+    });
+  }
 
   function saveBrief(code,body,actor={}) {
     object(body,['revision','brief','reason']);revision(body.revision);
@@ -530,7 +594,8 @@ function createMediaMentor(db,{now=Date.now}={}) {
     if(!Number.isSafeInteger(body.dayIndex)||body.dayIndex<0)fail(400,'Выберите строку плана');
     const message=text(body.message,1000,true),who=person(actor,true);
     return transaction(()=>{
-      const owner=company(db,code),plan=planOf(owner);
+      // Замечание привязано к индексу строки сохранённой версии — считаем по ней, а не по видимому плану без архива.
+      const owner=company(db,code),plan=planOf(owner,{raw:true});
       if(!plan)fail(404,'План ещё не составлен','NOT_FOUND');
       if(body.planRevision!==plan.revision)fail(409,'План уже изменился. Обновите страницу.','STALE_PLAN');
       if(body.dayIndex>=plan.days.length)fail(400,'Строка плана не найдена');
@@ -648,7 +713,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
   /* Вводные контент-завода (CF1) живут рядом с брифом на той же базе, но отдельно от него:
      их правка не создаёт версию брифа и не снимает согласования плана. */
   const inputs=createContentFactoryInputs(db,{now});
-  return {get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,
+  return {get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,archiveIdea,restoreIdea,
     planVariantStates,variantDecisions,inputs};
 }
 

@@ -618,3 +618,42 @@ test('пакет H: при сохранении строки вычисленн�
   assert.ok(put.body.days.every((d) => !('stage' in d) && !('stageSource' in d) && !('publications' in d)));
   assert.equal(put.body.days.find((d) => d.ideaId === 's-1').hook, 'Новый хук');
 });
+
+/* specs/224-content-archive: «Убрать» строки плана с подтверждением и причиной, вкладка «Архив» с «Вернуть». */
+test('specs/224: «Убрать» в списке и в полном виде — подтверждение, причина, POST archive; «Архив» — «Вернуть»', async () => {
+  const archivedIdeas = [{ ideaId: 's-9', date: '2026-11-19', platform: 'vk', format: 'reel', topic: 'SAMPLE убранная', inPlan: true,
+    archive: { archivedAt: '2026-11-07T03:00:00Z', archivedBy: 7, archivedByName: 'SAMPLE', reason: 'дубль' } }];
+  const a = api({ role: 'editor', permissions: ['autoposting.view', 'autoposting.edit'], mentorExtra: { archivedIdeas } });
+  const post = a.ctx.api.post, writes = [];
+  a.ctx.api.post = async (p, b) => { if (/\/plan\/ideas\//.test(p)) { writes.push([p, plain(b)]); return {}; } return post(p, b); };
+  await a.mount();
+  const row = () => a.root.querySelector('[data-idea="s-1"]');
+  assert.ok(row().querySelector('.cp-acts [data-cp-remove]'), 'в списке есть «Убрать»');
+  assert.equal(row().querySelector('[data-cp-menu]'), null, 'не владельцу «Сменить статус» не показывается — только «Убрать»');
+  row().querySelector('.cp-acts [data-cp-remove]').click();
+  const form = row().querySelector('[data-cp-remove-form]');
+  assert.match(form.textContent, /Убрать «SAMPLE тема 1» в архив\?/); assert.match(form.textContent, /вернуть можно во вкладке «Архив»/);
+  assert.equal(writes.length, 0, 'без подтверждения ничего не пишется');
+  form.querySelector('[data-cp-remove-cancel]').click(); assert.equal(row().querySelector('[data-cp-remove-form]'), null, '«Отмена» закрывает');
+  row().querySelector('[data-toggle]').click();
+  assert.ok(row().querySelector('.cp-full [data-cp-remove]'), 'в раскрытой карточке — «Убрать из плана»');
+  row().querySelector('.cp-full [data-cp-remove]').click();
+  row().querySelector('[data-cp-remove-form] [name="reason"]').value = 'дубль темы';
+  row().querySelector('[data-cp-remove-form]').dispatchEvent(new a.window.Event('submit', { cancelable: true }));
+  await tick(); await tick();
+  assert.deepEqual(writes, [['crm/media-mentor/plan/ideas/s-1/archive', { reason: 'дубль темы' }]]);
+  const tab = a.root.querySelector('[data-cp-tab="archive"]');
+  assert.equal(tab.textContent.trim(), 'Архив · 1'); tab.click();
+  const item = a.root.querySelector('[data-archived-idea="s-9"]');
+  assert.match(item.textContent, /SAMPLE убранная/); assert.match(item.textContent, /Причина: дубль/);
+  item.querySelector('[data-cp-restore]').click(); await tick(); await tick();
+  assert.deepEqual(writes.at(-1), ['crm/media-mentor/plan/ideas/s-9/restore', {}]);
+});
+
+test('specs/224: без права правки и со старым сервером (нет archivedIdeas) кнопок «Убрать» и вкладки «Архив» нет', async () => {
+  const viewer = api({ role: 'editor', permissions: ['autoposting.view'], mentorExtra: { archivedIdeas: [] } }); await viewer.mount();
+  assert.equal(viewer.root.querySelector('[data-cp-remove]'), null);
+  assert.ok(viewer.root.querySelector('[data-cp-tab="archive"]'), 'архив виден для просмотра');
+  const old = api(); await old.mount();
+  assert.equal(old.root.querySelector('[data-cp-remove]'), null); assert.equal(old.root.querySelector('[data-cp-tab="archive"]'), null);
+});

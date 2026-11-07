@@ -448,3 +448,9 @@ body[data-cabinet-view="autoposting"] #content-factory-header > .factory-tabs { 
   .ap-cell a { color:inherit; }
   .ap-feed-note { grid-column:1 / -1; grid-row:2; }
 }
+
+/* specs/224-content-archive: «Убрать» в карточке списка и подтверждение с причиной. */
+.view-panel .ap-card-state .ap-card-remove { width:auto; min-height:32px; padding:0 10px; font-size:13px; }
+.ap-archive-reason { display:grid; gap:4px; font-size:14px; }
+.ap-archive-reason input { box-sizing:border-box; width:100%; min-height:40px; }
+.ap-archive-warning { padding:8px 10px; border:1px solid rgba(240,138,93,.45); border-radius:10px; }

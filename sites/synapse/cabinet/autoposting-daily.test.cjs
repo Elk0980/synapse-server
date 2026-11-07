@@ -835,12 +835,12 @@ const cf5Server=({archive='ok',restore='ok',archived=[],readFails=false}={})=>{c
   throw Error('mode '+mode);
 }};};
 const writesOf=f=>f.calls.filter(call=>call.method!=='GET');
-test('CF5: «Удалить черновик» — понятное подтверждение, «Отмена» ничего не пишет; удаление одним archive {revision}, карточка уходит с доски в «Удалённые»',async()=>{
+test('CF5: «Убрать» — понятное подтверждение, «Отмена» ничего не пишет; удаление одним archive {revision}, карточка уходит с доски в «Удалённые»',async()=>{
   const server=cf5Server();const f=await fixture({entries:[row(1,{title:'Отзыв клиента',reviewNotes:[],reviewTasks:[]}),row(2)],override:server.override});try{
     await f.click('[data-open-post="1"]');
-    assert.equal(f.node('autoposting-archive-button').textContent,'Удалить черновик');assert.equal(f.node('autoposting-archive-yes'),null,'без подтверждения кнопки «Удалить» нет');
+    assert.equal(f.node('autoposting-archive-button').textContent,'Убрать');assert.equal(f.node('autoposting-archive-yes'),null,'без подтверждения кнопки «Убрать» нет');
     await f.click('#autoposting-archive-button');
-    assert.match(f.node('autoposting-archive-question').textContent,/^Удалить «Отзыв клиента»\? Материал уйдёт из плана в «Удалённые материалы»\. Текст, файлы, замечания и задачи сохранятся — его можно вернуть\.$/);
+    assert.match(f.node('autoposting-archive-question').textContent,/^Убрать «Отзыв клиента»\? Материал уйдёт из плана в «Удалённые материалы»\. Текст, файлы, замечания и задачи сохранятся — его можно вернуть\.$/);
     assert.equal(f.d.activeElement,f.node('autoposting-archive-no'),'фокус на безопасном «Отмена»');
     await f.click('#autoposting-archive-no');assert.ok(f.node('autoposting-archive-button'));assert.equal(writesOf(f).length,0,'отмена ничего не пишет');
     await f.click('#autoposting-archive-button');await f.click('#autoposting-archive-yes');
@@ -856,11 +856,15 @@ test('CF5: «Удалить черновик» — понятное подтве
     assert.equal(f.w.eval('(()=>{const e=new Event("beforeunload",{cancelable:true});dispatchEvent(e);return e.defaultPrevented;})()'),false,'после удаления несохранённого нет');
   }finally{f.close();}
 });
-test('CF5: что удалить нельзя — запланированное сначала снять с публикации; отправляемое, опубликованное, без права правки и с несохранённой правкой',async()=>{
+test('CF5 / specs/224: что убрать нельзя — запланированное сначала снять с публикации; отправляемое, без права правки и с несохранённой правкой; опубликованное — только с предупреждением',async()=>{
   const server=cf5Server();const f=await fixture({entries:[row(1,{status:'scheduled'}),row(2,{status:'publishing'}),row(3,{status:'published'}),row(4,{externalReceipts:[{platform:'telegram',url:'https://t.me/c/1',publishedAt:'2026-09-24T10:00:00Z'}]}),row(5,{status:'failed'}),row(6,{status:'cancelled'}),row(7)],override:server.override});try{
-    await f.click('[data-open-post="1"]');assert.equal(f.node('autoposting-archive-button'),null);assert.match(f.node('autoposting-archive-zone').textContent,/^Чтобы удалить материал, сначала снимите его с публикации\.$/);
+    await f.click('[data-open-post="1"]');assert.equal(f.node('autoposting-archive-button'),null);assert.match(f.node('autoposting-archive-zone').textContent,/^Чтобы убрать материал, сначала снимите его с публикации\.$/);
     assert.equal(f.node('autoposting-cancel').hidden,false,'рядом — «Снять с публикации»');
-    for(const id of ['2','3','4']){f.node('autoposting-editor').open=false;await f.click(`[data-open-post="${id}"]`);assert.equal(f.node('autoposting-archive-zone').textContent,'',id);}
+    for(const id of ['2']){f.node('autoposting-editor').open=false;await f.click(`[data-open-post="${id}"]`);assert.equal(f.node('autoposting-archive-zone').textContent,'',id);}
+    // specs/224: опубликованное (статус или подтверждение вне ЛК) убирается только после явного предупреждения; из соцсетей ничего не удаляется.
+    for(const id of ['3','4']){f.node('autoposting-editor').open=false;await f.click(`[data-open-post="${id}"]`);assert.ok(f.node('autoposting-archive-button'),id);
+      await f.click('#autoposting-archive-button');assert.match(f.node('autoposting-archive-published').textContent,/уже опубликован.*Из соцсетей он не удаляется/,id);
+      assert.equal(f.node('autoposting-archive-yes').textContent,'Убрать опубликованный',id);await f.click('#autoposting-archive-no');}
     for(const id of ['5','6','7']){f.node('autoposting-editor').open=false;await f.click(`[data-open-post="${id}"]`);assert.ok(f.node('autoposting-archive-button'),id);}
     f.node('autoposting-text').value='Несохранённая правка';f.node('autoposting-text').dispatchEvent(new f.w.Event('input',{bubbles:true}));await f.settle();
     assert.equal(f.node('autoposting-archive-button').disabled,true);assert.match(f.node('autoposting-archive-note').textContent,/Сначала сохраните правки/);
@@ -1027,5 +1031,28 @@ test('CF6: история замечаний свёрнута, последня�
     assert.equal(f.d.querySelector('[data-review-history="1"]').open,true,'и история осталась раскрытой');
     assert.ok(f.calls.every(call=>call.method==='GET'),'раскрытие истории ничего не запрашивает и не пишет');
     assert.ok(!f.calls.some(call=>/history|notes/.test(call.path)),'отдельной серверной загрузки истории нет');
+  }finally{f.close();}
+});
+
+/* specs/224-content-archive: «Убрать» в карточке списка; опубликованное — с предупреждением и confirmPublished, причина уходит на сервер. */
+test('specs/224: «Убрать» в списке открывает подтверждение; опубликованный — confirmPublished и причина; соцсети не трогаются',async()=>{
+  const log=[];
+  const override=(call,posts)=>{
+    const match=call.path.match(/\/posts\/(\d+)\/archive$/);if(!match)return undefined;
+    const body=JSON.parse(call.options.body);log.push(body);assert.equal(call.options.headers['X-CSRF-Token'],'fixture');
+    const item=posts.find(value=>value.id===Number(match[1]));item.revision++;item.archive={archivedAt:'2026-09-25T02:00:00Z',archivedBy:1,reason:body.reason||''};
+    posts.splice(posts.indexOf(item),1);return clone(item);
+  };
+  const f=await fixture({entries:[row(1,{title:'Черновик'}),row(3,{title:'Вышедший',status:'published'})],override});try{
+    const remove=f.d.querySelector('[data-archive-post="1"]');assert.ok(remove,'в карточке списка есть «Убрать»');assert.equal(remove.textContent,'Убрать');
+    await f.click('[data-archive-post="1"]');
+    assert.equal(f.node('autoposting-editor').open,true);assert.ok(f.node('autoposting-archive-question'),'сразу подтверждение');
+    assert.equal(f.d.activeElement,f.node('autoposting-archive-no'),'фокус на «Отмена»');assert.equal(log.length,0);
+    await f.click('#autoposting-archive-no');f.node('autoposting-editor').open=false;
+    await f.click('[data-open-post="3"]');await f.click('#autoposting-archive-button');
+    assert.match(f.node('autoposting-archive-published').textContent,/Из соцсетей он не удаляется/);
+    f.node('autoposting-archive-reason').value='старый пост';await f.click('#autoposting-archive-yes');
+    assert.deepEqual(log,[{revision:4,reason:'старый пост',confirmPublished:true}]);
+    assert.ok(f.calls.every(call=>!/unpublish|cancel|delete/.test(call.path)),'с площадок ничего не снимается');
   }finally{f.close();}
 });

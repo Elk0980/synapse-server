@@ -574,3 +574,62 @@ test('Живые данные: ролик с ideaId — этап идеи с с�
   assert.equal(card.dataset.group, 'above');
   assert.ok(!f.calls.some((c) => c.path === 'crm/autoposting/posts/999'));
 });
+
+/* specs/224-content-archive: «Убрать» ролика в ленте и в окне, «Убрать версию», «Архив» с «Вернуть». */
+test('specs/224: «Убрать» в ленте — подтверждение с причиной, POST archive, карточка уходит; «Архив» показывает её с «Вернуть»', async () => {
+  const archivedReel = {...reels()[0], archive: {archivedAt: '2026-11-07T03:00:00Z', archivedBy: '7', reason: 'лишняя версия'}};
+  const f = fixture({respond: ({method, path, body, params}) => {
+    if (path === 'crm/autoposting/reels' && method === 'GET' && params?.archived === '1') return {companyCode: 'avokado', reels: [archivedReel]};
+    if (path === 'crm/autoposting/reels/4/archive') return archivedReel;
+    if (path === 'crm/autoposting/reels/4/restore') return {...reels()[0], archive: {archivedAt: null}};
+    return undefined;
+  }});
+  await f.mount();
+  const remove = f.el.querySelector('[data-remove="reel:4"]');
+  assert.ok(remove, 'у ролика есть «Убрать»');assert.equal(remove.textContent, 'Убрать');
+  assert.ok(f.el.querySelector('[data-remove="post:11"]'), 'и у ролика из плана (берётся в монтаж при уборке)');
+  remove.click();
+  const box = f.el.querySelector('[data-confirm]');
+  assert.equal(box.hidden, false);assert.match(box.textContent, /Убрать «Рилс про мастера» в архив\?/);assert.match(box.textContent, /Публикации в «Постинге» не меняются/);
+  assert.equal(f.calls.filter(c => c.method === 'POST').length, 0, 'без подтверждения ничего не пишется');
+  f.el.querySelector('[data-confirm-no]').click();assert.equal(box.hidden, true);
+  remove.click();box.elements.reason.value = 'лишняя версия';
+  box.dispatchEvent(new f.w.Event('submit', {cancelable: true}));await settle();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.calls.filter(c => c.method === 'POST').map(c => [c.path, c.body]))), [['crm/autoposting/reels/4/archive', {reason: 'лишняя версия'}]]);
+  assert.ok(!titles(f).includes('Рилс про мастера'), 'карточка ушла из ленты');
+  assert.match(f.el.querySelector('[data-status]').textContent, /убран в архив/);
+  f.el.querySelector('[data-archive-toggle]').click();await settle();
+  assert.equal(f.el.querySelector('[data-archive-toggle]').getAttribute('aria-pressed'), 'true');
+  assert.equal(f.el.querySelector('[data-grid]').hidden, true);assert.equal(f.el.querySelector('[data-archive]').hidden, false);
+  const row = f.el.querySelector('[data-archived-reel="4"]');assert.match(row.textContent, /Рилс про мастера/);assert.match(row.textContent, /лишняя версия/);
+  row.querySelector('[data-restore="4"]').click();await settle();
+  assert.equal(f.calls.at(-1).path, 'crm/autoposting/reels/4/restore');
+  assert.equal(f.el.querySelector('[data-archived-reel="4"]'), null);assert.match(f.el.querySelector('[data-archive-status]').textContent, /возвращён/);
+  f.el.querySelector('[data-archive-toggle]').click();await settle();
+  assert.ok(titles(f).includes('Рилс про мастера'), 'снова в ленте');
+});
+
+test('specs/224: в окне ролика — «Убрать версию» (не последнюю) и «Убрать»; убранные версии возвращаются; без права правки кнопок нет', async () => {
+  const afterVersion = {...full(), versions: [{version: 1, mediaUrl: asset('a')}], currentVersion: {version: 1, mediaUrl: asset('a')}, versionCount: 1,
+    archivedVersionList: [{version: 2, mediaUrl: asset('b'), archive: {archivedAt: '2026-11-07T03:00:00Z', reason: 'не та'}}]};
+  const f = fixture({respond: ({path}) => {
+    if (path === 'crm/autoposting/reels/4/versions/2/archive') return afterVersion;
+    if (path === 'crm/autoposting/reels/4/versions/2/restore') return full();
+    return undefined;
+  }});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:4"]').click();await settle();
+  assert.equal(f.el.querySelector('[data-remove-version]').textContent, 'Убрать версию v2');assert.ok(f.el.querySelector('[data-remove-open]'));
+  f.el.querySelector('[data-remove-version]').click();
+  const box = f.el.querySelector('[data-confirm]');assert.match(box.textContent, /Убрать версию v2 в архив\?/);
+  box.dispatchEvent(new f.w.Event('submit', {cancelable: true}));await settle();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.calls.filter(c => c.method === 'POST').map(c => [c.path, c.body]))), [['crm/autoposting/reels/4/versions/2/archive', {}]]);
+  assert.equal(f.el.querySelector('[data-remove-version]'), null, 'последнюю версию убрать нельзя — только ролик целиком');
+  assert.match(f.el.querySelector('.mt-archived-versions').textContent, /v2 · не та/);
+  f.el.querySelector('[data-restore-version="2"]').click();await settle();
+  assert.equal(f.calls.at(-1).path, 'crm/autoposting/reels/4/versions/2/restore');assert.ok(f.el.querySelector('[data-remove-version]'));
+  const viewer = fixture({permissions: ['autoposting.view']});await viewer.mount();
+  assert.equal(viewer.el.querySelector('[data-remove]'), null);assert.ok(viewer.el.querySelector('[data-archive-toggle]'), '«Архив» можно смотреть');
+  viewer.el.querySelector('[data-open="reel:4"]').click();await settle();
+  assert.equal(viewer.el.querySelector('[data-remove-open]'), null);assert.equal(viewer.el.querySelector('[data-remove-version]'), null);
+});

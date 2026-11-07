@@ -472,7 +472,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
   }
   function reviewBatch(rows,owner){return {notes:reviewNotes.listMany(rows,owner.id),tasks:reviewTasks?.listMany?reviewTasks.listMany(rows,owner.id):null};}
   function dto(row,owner,batch) {
-    return {archive:{archivedAt:row.archived_at||null,archivedBy:row.archived_by??null},id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,contentRevision:row.content_revision,status:row.status,title:row.title,text:row.text,
+    return {archive:{archivedAt:row.archived_at||null,archivedBy:row.archived_by??null,reason:row.archive_reason||''},id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,contentRevision:row.content_revision,status:row.status,title:row.title,text:row.text,
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
       dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',platformOptions:JSON.parse(row.platform_options||'{}'),
       readiness:readiness(row),approval:cardApprovalDto(row),platformApprovals:platformApprovals(row),

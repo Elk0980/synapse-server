@@ -104,12 +104,18 @@ function create(el, ctx) {
   const canEdit = ctx.can("autoposting.edit");
   const sameCompany = data => data && (!data.companyCode || String(data.companyCode).toLowerCase() === String(ctx.companyCode).toLowerCase());
   const state = {reels: [], mentor: null, posts: [], shooting: {}, settings: null, info: null, items: [], sort: "date", open: null, item: null,
-    platform: "", version: null, busy: false, epoch: 0, uploadIdea: null};
+    platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null};
   const api = {
     list: () => ctx.api.get("crm/autoposting/reels"),
     get: id => ctx.api.get("crm/autoposting/reels/" + id),
     adopt: postId => ctx.api.post("crm/autoposting/reels", {postId}),
-    publication: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/publication", body)
+    publication: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/publication", body),
+    /* specs/224-content-archive: «Убрать» — мягкое удаление ролика или версии, «Вернуть» — восстановление. */
+    archived: () => ctx.api.get("crm/autoposting/reels", {archived: "1"}),
+    archive: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/archive", body),
+    restore: id => ctx.api.post("crm/autoposting/reels/" + id + "/restore", {}),
+    archiveVersion: (id, version, body) => ctx.api.post(`crm/autoposting/reels/${id}/versions/${version}/archive`, body),
+    restoreVersion: (id, version) => ctx.api.post(`crm/autoposting/reels/${id}/versions/${version}/restore`, {})
   };
   /* Дополнительные данные необязательны: без плана или публикаций экран показывает ролики как есть. */
   const optional = promise => Promise.resolve().then(() => promise()).catch(() => null);
@@ -117,6 +123,9 @@ function create(el, ctx) {
   el.innerHTML = `<div class="mt-top" data-top></div><div data-dates></div>
     <p class="mt-status" role="status" data-status></p>
     <ul class="mt-list" data-grid aria-label="Рилсы монтажа"></ul>
+    <section class="mt-archive" data-archive hidden aria-labelledby="mt-archive-title"><h3 id="mt-archive-title" class="mt-archive__title">Архив монтажа</h3>
+      <p class="muted mt-hint">Убранные ролики. Файлы, версии и правки сохранены; «Вернуть» возвращает ролик в ленту. Публикации и соцсети архив не трогает.</p>
+      <p class="mt-status" role="status" data-archive-status></p><ul class="mt-list mt-list--archive" data-archive-list aria-label="Убранные ролики"></ul></section>
     <details class="mt-retired" data-retired hidden><summary>Отменённые и заменённые</summary><p class="muted mt-hint">Ролики, чья публикация отменена или чей рилс заменён в контент-плане. Открываются как обычно; в общую ленту не входят.</p><ul class="mt-list mt-list--retired" data-retired-list aria-label="Отменённые и заменённые ролики"></ul></details>
     ${canEdit ? `<div class="mt-modal" data-upload-modal hidden><form class="mt-modal__box mt-upload" data-upload hidden role="dialog" aria-modal="true" aria-labelledby="mt-upload-title">
       <header class="mt-modal__head"><h2 id="mt-upload-title">Загрузить ролик</h2><button type="button" class="mt-x" data-upload-cancel aria-label="Закрыть">✕</button></header>
@@ -130,14 +139,21 @@ function create(el, ctx) {
       <p class="mt-status" role="status" data-upload-status></p>
       <div class="mt-actions"><button type="submit" class="plain-button primary" data-upload-submit>Загрузить</button><button type="button" class="plain-button" data-upload-cancel>Отмена</button></div>
     </form></div>` : ""}
-    <div class="mt-modal" data-detail-modal hidden><section class="mt-modal__box mt-detail" data-detail hidden role="dialog" aria-modal="true" aria-labelledby="mt-detail-title"></section></div>`;
+    <div class="mt-modal" data-detail-modal hidden><section class="mt-modal__box mt-detail" data-detail hidden role="dialog" aria-modal="true" aria-labelledby="mt-detail-title"></section></div>
+    ${canEdit ? `<div class="mt-modal mt-modal--confirm" data-confirm-modal hidden><form class="mt-modal__box mt-confirm" data-confirm role="alertdialog" aria-modal="true" aria-labelledby="mt-confirm-title" aria-describedby="mt-confirm-text">
+      <h2 id="mt-confirm-title" data-confirm-title>Убрать в архив?</h2><p id="mt-confirm-text" data-confirm-text></p>
+      <label>Причина (необязательно)<input type="text" name="reason" maxlength="500" placeholder="Например: лишняя версия"></label>
+      <p class="mt-status" role="status" data-confirm-status></p>
+      <div class="mt-actions"><button type="submit" class="plain-button primary" data-confirm-yes>Убрать</button><button type="button" class="plain-button" data-confirm-no>Отмена</button></div>
+    </form></div>` : ""}`;
   const $ = selector => el.querySelector(selector);
   const status = text => {$("[data-status]").textContent = text || "";};
   const fail = error => status(error?.status === 403 ? "Нет доступа к монтажу этой компании." : "Не удалось загрузить: " + (error?.message || "ошибка сети"));
 
   /* ---------- Шапка: «Монтаж», «Загрузить ролик», календарь ▦ ⇅ в одну строку ---------- */
   let head = null, strip = null;
-  const uploadButton = canEdit ? `<button type="button" class="plain-button primary mt-upload-open" data-upload-open>Загрузить ролик</button>` : "";
+  const uploadButton = (canEdit ? `<button type="button" class="plain-button primary mt-upload-open" data-upload-open>Загрузить ролик</button>` : "")
+    + `<button type="button" class="plain-button mt-archive-toggle" data-archive-toggle aria-pressed="false" aria-controls="mt-archive-title">Архив</button>`;
   function renderHead() {
     const K = kit(), top = $("[data-top]");
     const sheetUrl = state.settings?.settings?.contentPlanSheetUrl || "";
@@ -290,9 +306,11 @@ function create(el, ctx) {
       <span class="mt-card__foot"><span class="mt-card__st">${stageChip}${note ? `<span class="mt-card__note">${note}</span>` : ""}</span>
       <span class="mt-card__pf">${item.platforms.map(id => esc(platformOf(id).short)).join(" · ")}</span></span></span>`;
     const clickable = item.reel || (canEdit && AT_EDITOR.has(item.stage));
+    const removable = canEdit && item.reel && (item.reel.id || item.reel.postId != null);
+    const remove = removable ? `<button type="button" class="plain-button mt-card__remove" data-remove="${esc(item.key)}" aria-label="${esc("Убрать " + title + " в архив")}">Убрать</button>` : "";
     const attrs = `data-group="${item.group}" data-stage="${esc(item.stage)}" data-date="${esc(item.date)}"`;
     return clickable
-      ? `<li class="mt-card" ${attrs}><button type="button" class="mt-card__open" ${item.reel ? `data-open="${esc(item.key)}"` : `data-upload-for="${esc(item.ideaId)}"`} aria-label="${esc(item.reel ? "Открыть " + title : "Загрузить ролик к " + title)}">${body}</button></li>`
+      ? `<li class="mt-card${remove ? " mt-card--act" : ""}" ${attrs}><button type="button" class="mt-card__open" ${item.reel ? `data-open="${esc(item.key)}"` : `data-upload-for="${esc(item.ideaId)}"`} aria-label="${esc(item.reel ? "Открыть " + title : "Загрузить ролик к " + title)}">${body}</button>${remove}</li>`
       : `<li class="mt-card" ${attrs}><div class="mt-card__open mt-card__open--static">${body}</div></li>`;
   }
   function renderGrid() {
@@ -301,7 +319,7 @@ function create(el, ctx) {
     list.innerHTML = items.map(cardHtml).join("");
     const retired = state.retired || [], box = $("[data-retired]");
     if (box) {
-      box.hidden = !retired.length;
+      box.hidden = !retired.length || state.archiveMode;
       box.querySelector("summary").textContent = `Отменённые и заменённые · ${retired.length}`;
       box.querySelector("[data-retired-list]").innerHTML = retired.slice().sort(byDate).map(cardHtml).join("");
     }
@@ -406,7 +424,10 @@ function create(el, ctx) {
             ${media ? `<a class="plain-button" href="${esc(media)}" download="${esc(reel.title)} v${esc(version?.version ?? 1)}.mp4" data-download>Скачать</a>` : ""}
             ${canEdit ? (sb.reelEditor ? `<button type="button" class="plain-button" data-edit>Редактировать</button>` : `<button type="button" class="plain-button" disabled aria-disabled="true" title="Редактор монтажа скоро">Редактировать · скоро</button>`) : ""}
             ${canEdit && !published ? (reel.id ? `<button type="button" class="plain-button primary" data-publish>Создать публикацию</button>` : `<button type="button" class="plain-button" data-open-post>Открыть публикацию в «Постинге»</button>`) : ""}
+            ${canEdit && versions.length > 1 && reel.id ? `<button type="button" class="plain-button" data-remove-version>Убрать версию v${esc(version?.version ?? state.version)}</button>` : ""}
+            ${canEdit && (reel.id || reel.postId != null) ? `<button type="button" class="plain-button mt-remove" data-remove-open>Убрать</button>` : ""}
           </div>
+          ${(reel.archivedVersionList || []).length ? `<h3>Убранные версии</h3><ul class="mt-archived-versions">${reel.archivedVersionList.map(v => `<li><span>v${esc(v.version)}${v.archive?.reason ? " · " + esc(v.archive.reason) : ""}</span>${canEdit ? `<button type="button" class="plain-button" data-restore-version="${esc(v.version)}">Вернуть</button>` : ""}</li>`).join("")}</ul>` : ""}
           ${canEdit && reel.id && !published ? `<fieldset class="mt-targets" data-targets><legend>Площадки публикации</legend>${PLATFORMS.map(p => `<label><input type="checkbox" value="${p.id}"${(targets.length ? targets : [state.platform]).includes(p.id) ? " checked" : ""}> ${esc(p.label)}</label>`).join("")}</fieldset>` : ""}
           <p class="mt-status" role="status" data-detail-status></p>
           ${(reel.edits || []).length ? `<h3>Правки</h3><ul class="mt-edits">${reel.edits.map(e => `<li><strong>№${esc(e.id)}</strong> к v${esc(e.baseVersion)} · ${esc(STATE[e.status] || e.status)}${e.resultVersion ? " → v" + esc(e.resultVersion) : ""}<br><span class="muted">${esc(e.kind === "request" ? e.comment : "список правок монтажа" + (e.comment ? ": " + e.comment : ""))}</span></li>`).join("")}</ul>` : ""}
@@ -447,6 +468,110 @@ function create(el, ctx) {
     } catch (error) {detailStatus("Не удалось открыть редактор: " + (error?.message || "ошибка"));}
     finally {state.busy = false;}
   }
+
+  /* ---------- Архив (specs/224-content-archive) ----------
+     «Убрать» — мягкое удаление: ролик или версия уходят из ленты, файлы, версии и правки остаются, «Вернуть» возвращает.
+     Публикации автопостинга и посты в соцсетях архив ролика не трогает. Права проверяет сервер (правка контента компании). */
+  const findItem = key => state.items.find(entry => entry.key === key) || (state.retired || []).find(entry => entry.key === key) || null;
+  const confirmStatus = text => {const target = el.querySelector("[data-confirm-status]");if (target) target.textContent = text || "";};
+  function askRemove(request) {
+    const form = el.querySelector("[data-confirm]");if (!form || state.busy) return;
+    const item = findItem(request.key), reel = request.kind === "version" ? state.open : item?.reel || (state.open?.key === request.key ? state.open : null);
+    if (!reel) return;
+    const title = numTitle(item?.number, item?.title || reel.title);
+    const published = item?.stage === "published" || (item?.posts || []).some(post => post.status === "published");
+    state.confirm = {...request, reel, title, opener: document.activeElement};
+    form.querySelector("[data-confirm-title]").textContent = request.kind === "version" ? `Убрать версию v${request.version} в архив?` : `Убрать «${title}» в архив?`;
+    form.querySelector("[data-confirm-text]").textContent = request.kind === "version"
+      ? `Версия v${request.version} пропадёт из выбора версий. Файл сохранится — её можно вернуть в блоке «Убранные версии».`
+      : (published ? "Ролик уже вышел: на площадках он останется, архив уберёт его только из кабинета. " : "")
+        + "Ролик уйдёт из ленты монтажа. Файлы, версии и правки сохранятся — вернуть можно через «Архив». Публикации в «Постинге» не меняются.";
+    form.reset();confirmStatus("");form.hidden = false;modal("confirm", true);
+    form.querySelector("[data-confirm-no]").focus({preventScroll: true});
+  }
+  function closeConfirm() {
+    const form = el.querySelector("[data-confirm]");if (!form) return;
+    const opener = state.confirm?.opener;state.confirm = null;form.hidden = true;modal("confirm", false);
+    if (opener?.isConnected) opener.focus?.({preventScroll: true});
+  }
+  const archiveError = error => error?.code === "EDIT_IN_PROGRESS" || error?.details?.code === "EDIT_IN_PROGRESS" ? "Правку этого ролика уже монтируют — уберите его после новой версии."
+    : error?.code === "LAST_VERSION" || error?.details?.code === "LAST_VERSION" ? "Это единственная версия — уберите ролик целиком."
+    : error?.status === 403 ? "Нет права убирать материалы этой компании." : "Не удалось убрать: " + (error?.message || "ошибка сети");
+  async function doRemove(event) {
+    event.preventDefault();const request = state.confirm;if (!request || state.busy) return;
+    const form = event.target, reason = form.elements.reason.value.trim(), body = reason ? {reason} : {};
+    const yes = form.querySelector("[data-confirm-yes]");state.busy = true;yes.disabled = true;confirmStatus("Убираем…");
+    try {
+      let reel = request.reel;
+      if (!reel.id) reel = await api.adopt(reel.postId);
+      if (ctx.signal.aborted) return;
+      if (request.kind === "version") {
+        const next = await api.archiveVersion(reel.id, request.version, body);if (ctx.signal.aborted) return;
+        state.busy = false;closeConfirm();state.open = next;state.version = next.currentVersion?.version ?? 1;
+        state.reels = state.reels.map(entry => entry.key === next.key ? {...entry, ...next} : entry);build();renderGrid();renderDetail();
+        detailStatus(`Версия v${request.version} убрана в архив. Вернуть — в блоке «Убранные версии».`);
+      } else {
+        const next = await api.archive(reel.id, body);if (ctx.signal.aborted) return;
+        state.busy = false;closeConfirm();if (state.open && [request.key, next.key].includes(state.open.key)) close();
+        state.reels = state.reels.filter(entry => entry.key !== request.key && entry.key !== next.key);
+        if (state.archived) state.archived = [next, ...state.archived.filter(entry => entry.key !== next.key)];
+        build();renderHead();renderGrid();status(`«${request.title}» убран в архив. Вернуть — кнопка «Архив» вверху.`);
+      }
+    } catch (error) {if (!ctx.signal.aborted) confirmStatus(archiveError(error));}
+    finally {state.busy = false;if (yes.isConnected) yes.disabled = false;}
+  }
+  const archiveStatus = text => {const target = el.querySelector("[data-archive-status]");if (target) target.textContent = text || "";};
+  async function toggleArchive() {
+    state.archiveMode = !state.archiveMode;
+    const button = el.querySelector("[data-archive-toggle]");
+    if (button) {button.setAttribute("aria-pressed", String(state.archiveMode));button.textContent = state.archiveMode ? "← К ленте" : "Архив";}
+    $("[data-grid]").hidden = state.archiveMode;$("[data-archive]").hidden = !state.archiveMode;renderGrid();
+    if (state.archiveMode) await loadArchive();
+  }
+  async function loadArchive() {
+    archiveStatus("Загружаем архив…");
+    try {
+      const result = await api.archived();if (ctx.signal.aborted) return;
+      if (String(result?.companyCode).toLowerCase() !== String(ctx.companyCode).toLowerCase()) return;
+      state.archived = Array.isArray(result.reels) ? result.reels : [];archiveStatus("");
+    } catch (error) {if (!ctx.signal.aborted) {state.archived = [];archiveStatus(error?.status === 403 ? "Нет доступа к архиву этой компании." : "Не удалось загрузить архив: " + (error?.message || "ошибка сети"));}}
+    renderArchive();
+  }
+  function renderArchive() {
+    const list = el.querySelector("[data-archive-list]");if (!list) return;
+    const rows = (state.archived || []).slice().sort((a, b) => String(b.archive?.archivedAt || "").localeCompare(String(a.archive?.archivedAt || "")));
+    if (state.archived && !rows.length && !el.querySelector("[data-archive-status]").textContent) archiveStatus("В архиве пусто.");
+    list.innerHTML = rows.map(reel => {
+      const when = reel.archive?.archivedAt ? "Убран " + timeIn(reel.archive.archivedAt, state.timeZone) : "Убран";
+      const reason = reel.archive?.reason ? " · " + esc(reel.archive.reason) : "";
+      const restore = canEdit && reel.id ? `<button type="button" class="plain-button mt-card__remove" data-restore="${esc(reel.id)}" aria-label="${esc("Вернуть " + reel.title)}">Вернуть</button>` : "";
+      return `<li class="mt-card${restore ? " mt-card--act" : ""}" data-archived-reel="${esc(reel.id)}"><div class="mt-card__open mt-card__open--static"><span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>
+        <span class="mt-card__body"><strong class="mt-card__title">${esc(reel.title)}</strong><span class="mt-card__date">${esc(when)}${reason}</span>
+        <span class="mt-card__foot"><span class="mt-card__note">v${esc(reel.currentVersion?.version ?? 1)}${reel.releaseDate ? " · " + esc(dateShort(reel.releaseDate)) : ""}</span>
+        <span class="mt-card__pf">${platformList(reel.platforms).map(id => esc(platformOf(id).short)).join(" · ")}</span></span></span></div>${restore}</li>`;
+    }).join("");
+  }
+  async function restoreReel(id, button) {
+    if (state.busy) return;state.busy = true;if (button) button.disabled = true;archiveStatus("Возвращаем…");
+    try {
+      const reel = await api.restore(Number(id));if (ctx.signal.aborted) return;
+      state.archived = (state.archived || []).filter(entry => entry.key !== reel.key);
+      state.reels = [reel, ...state.reels.filter(entry => entry.key !== reel.key)];build();renderHead();renderGrid();renderArchive();
+      archiveStatus(`«${reel.title}» возвращён в ленту монтажа.`);
+    } catch (error) {if (!ctx.signal.aborted) {archiveStatus(error?.status === 403 ? "Нет права возвращать материалы этой компании." : "Не удалось вернуть: " + (error?.message || "ошибка сети"));if (button) button.disabled = false;}}
+    finally {state.busy = false;}
+  }
+  async function restoreVersion(version) {
+    if (state.busy || !state.open?.id) return;state.busy = true;detailStatus("Возвращаем версию…");
+    try {
+      const next = await api.restoreVersion(state.open.id, Number(version));if (ctx.signal.aborted) return;
+      state.busy = false;state.open = next;state.version = next.currentVersion?.version ?? state.version;
+      state.reels = state.reels.map(entry => entry.key === next.key ? {...entry, ...next} : entry);build();renderGrid();renderDetail();
+      detailStatus(`Версия v${version} возвращена.`);
+    } catch (error) {if (!ctx.signal.aborted) detailStatus("Не удалось вернуть версию: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;}
+  }
+  el.querySelector("[data-confirm]")?.addEventListener("submit", doRemove);
 
   /* ---------- «Загрузить ролик» (№145): тот же путь, что у агента монтажа, но под сессией кабинета ----------
      1) POST publishing-assets — сырой файл, сервер проверяет формат и лимит 60 МБ, отдаёт {url, sha256};
@@ -580,7 +705,8 @@ function create(el, ctx) {
     });
   }
   el.addEventListener("click", event => {
-    if (event.target.matches?.(".mt-modal")) {if (event.target.hasAttribute("data-detail-modal")) close();else if (!state.busy) toggleUpload(false);return;}
+    if (event.target.matches?.(".mt-modal")) {if (event.target.hasAttribute("data-confirm-modal")) {if (!state.busy) closeConfirm();}
+      else if (event.target.hasAttribute("data-detail-modal")) close();else if (!state.busy) toggleUpload(false);return;}
     const target = event.target.closest("button,a");if (!target || !el.contains(target)) return;
     if (target.dataset.open) void open(target.dataset.open);
     else if (target.dataset.uploadFor) toggleUpload(true, target.dataset.uploadFor);
@@ -590,9 +716,18 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-publish")) void publish();
     else if (target.hasAttribute("data-open-post")) openPost(state.open.postId);
     else if (target.hasAttribute("data-edit")) void edit();
+    else if (target.dataset.remove) askRemove({kind: "reel", key: target.dataset.remove});
+    else if (target.hasAttribute("data-remove-open")) askRemove({kind: "reel", key: state.open.key});
+    else if (target.hasAttribute("data-remove-version")) askRemove({kind: "version", key: state.open.key, version: state.version});
+    else if (target.dataset.restoreVersion) void restoreVersion(target.dataset.restoreVersion);
+    else if (target.dataset.restore) void restoreReel(target.dataset.restore, target);
+    else if (target.hasAttribute("data-confirm-no")) {if (!state.busy) closeConfirm();}
+    else if (target.hasAttribute("data-archive-toggle")) void toggleArchive();
   });
   el.addEventListener("keydown", event => {
     if (event.key !== "Escape" || event.target.closest?.(".re-editor")) return;
+    const confirmBox = el.querySelector("[data-confirm-modal]");
+    if (confirmBox && !confirmBox.hidden) {if (!state.busy) closeConfirm();return;}
     if (!$("[data-detail-modal]").hidden) close();else if (uploadForm && !uploadForm.hidden && !state.busy) toggleUpload(false);
   });
   el.addEventListener("change", event => {

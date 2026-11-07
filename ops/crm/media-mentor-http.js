@@ -57,6 +57,8 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
     const inputsMonth = /^\/media-mentor\/inputs\/months\/([^/]+)$/.exec(url.pathname);
     const generationJob = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
     const generationImport = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)\/drafts$/.exec(url.pathname);
+    // specs/224-content-archive: убрать идею плана в архив и вернуть. Право — правка контента компании.
+    const ideaArchive = /^\/media-mentor\/plan\/ideas\/([A-Za-z0-9][A-Za-z0-9_-]{0,99})\/(archive|restore)$/.exec(url.pathname);
     let result, status = 200;
     // №98 Б: анкета контент-плана и отметки согласующих. Отметку ставит только сам согласующий.
     const workspaceRoute = ['/media-mentor/questionnaire', '/media-mentor/plan/signoffs'].includes(url.pathname);
@@ -70,6 +72,13 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
       if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
       result = workspace.signoff(code, body, fresh.identity, configuredApprovers(request));
     } else if (workspaceRoute) fail(405, 'Метод не поддерживается');
+    else if (ideaArchive) {
+      if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
+      const body = await readJson(request), fresh = companyModuleContext(request, code, 'autoposting.edit');
+      if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
+      const who = {userId: fresh.identity.userId, userName: fresh.identity.userName};
+      result = served(ideaArchive[2] === 'archive' ? mentor.archiveIdea(code, ideaArchive[1], body, who) : mentor.restoreIdea(code, ideaArchive[1], body, who));
+    }
     else if(url.pathname==='/media-mentor/plan/import-preview'&&request.method==='POST') {
       const body=await readJson(request,1500000);
       if(companyModuleContext(request,code,'autoposting.edit').identity.userId!==actor.userId)fail(403,'Доступ изменился во время операции','FORBIDDEN');

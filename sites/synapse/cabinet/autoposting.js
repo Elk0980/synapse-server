@@ -125,6 +125,10 @@ const META_HINTS = {audience:"Для кого снимаем. Например: 
    запланированное сначала снимается с публикации отдельной кнопкой. Сервер проверяет то же самое. */
 const PLATFORMS_LEGEND = `<legend class="ap-field-legend"><span id="ap-platforms-title">Куда опубликовать</span>${hintButton("f-autoposting-platforms","Куда опубликовать","Где должен выйти материал. Отметка — это план и согласование, а не отправка. Например: Telegram и ВКонтакте.")}</legend>`;
 const ARCHIVABLE = new Set(["draft","failed","cancelled"]);
+/* specs/224-content-archive: вышедший материал тоже можно убрать из кабинета — с явным предупреждением.
+   Сервер требует confirmPublished; на площадках пост остаётся (снятие с публикации — отдельное действие). */
+const publishedPost = item => item?.status==="published"||(item?.externalReceipts||[]).some(receipt=>!receipt.stale)||(item?.deliveries||[]).some(delivery=>delivery.status==="published");
+const archivable = item => Boolean(item)&&!archivedAt(item)&&(publishedPost(item)?!["publishing","scheduled","needs_review"].includes(item.status):ARCHIVABLE.has(item.status));
 const archivedAt = item => item?.archive?.archivedAt||null;
 const isActive = item => Boolean(item)&&!archivedAt(item);
 const MONTHS_GEN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
@@ -915,12 +919,13 @@ function create(container, context) {
   const when=value=>{const local=time.toLocal(value,zone());return local?`${local.slice(8,10)}.${local.slice(5,7)}.${local.slice(0,4)}, ${local.slice(11,16)}`:"";};
   const renderArchiveZone=()=>{
     const zone_=get("autoposting-archive-zone");if(!zone_)return;
-    if(!post||!edit()||archivedAt(post)||receiptsOf(post).length||["publishing","published","needs_review"].includes(post.status)){zone_.innerHTML="";return;}
-    if(post.status==="scheduled"){zone_.innerHTML='<p class="autoposting-note">Чтобы удалить материал, сначала снимите его с публикации.</p>';return;}
-    if(!ARCHIVABLE.has(post.status)){zone_.innerHTML="";return;}
+    if(!post||!edit()||archivedAt(post)){zone_.innerHTML="";return;}
+    if(post.status==="scheduled"){zone_.innerHTML='<p class="autoposting-note">Чтобы убрать материал, сначала снимите его с публикации.</p>';return;}
+    if(!archivable(post)){zone_.innerHTML="";return;}
+    const live=publishedPost(post);
     zone_.innerHTML=archiveConfirm
-      ?`<div class="ap-archive-confirm" role="group" aria-labelledby="autoposting-archive-question"><p id="autoposting-archive-question">Удалить «${esc(post.title||"Без названия")}»? Материал уйдёт из плана в «Удалённые материалы». Текст, файлы, замечания и задачи сохранятся — его можно вернуть.</p><div class="ap-archive-actions"><button type="button" class="danger" id="autoposting-archive-yes">Удалить</button><button type="button" class="plain-button" id="autoposting-archive-no">Отмена</button></div></div>`
-      :'<button type="button" class="plain-button ap-archive-button" id="autoposting-archive-button">Удалить черновик</button><p class="autoposting-note" id="autoposting-archive-note"></p>';
+      ?`<div class="ap-archive-confirm" role="group" aria-labelledby="autoposting-archive-question"><p id="autoposting-archive-question">Убрать «${esc(post.title||"Без названия")}»? Материал уйдёт из плана в «Удалённые материалы». Текст, файлы, замечания и задачи сохранятся — его можно вернуть.</p>${live?'<p class="autoposting-note ap-archive-warning" id="autoposting-archive-published"><strong>Материал уже опубликован.</strong> Из соцсетей он не удаляется: архив убирает его только из кабинета. Снять пост с площадки — отдельное действие.</p>':''}<label class="ap-archive-reason">Причина (необязательно)<input type="text" id="autoposting-archive-reason" maxlength="500"></label><div class="ap-archive-actions"><button type="button" class="danger" id="autoposting-archive-yes">${live?"Убрать опубликованный":"Убрать"}</button><button type="button" class="plain-button" id="autoposting-archive-no">Отмена</button></div></div>`
+      :`<button type="button" class="plain-button ap-archive-button" id="autoposting-archive-button">Убрать</button><p class="autoposting-note" id="autoposting-archive-note"></p>`;
   };
   const renderArchive=()=>{
     const node=get("autoposting-archive-list");if(!node)return;
@@ -928,7 +933,7 @@ function create(container, context) {
     if(!archived){node.innerHTML=archivedState==="error"?'<p role="status">Не удалось загрузить удалённые материалы. <button type="button" class="plain-button" data-archive-reload>Повторить</button></p>':archivedState==="loading"?'<p class="autoposting-note" role="status">Загружаем…</p>':"";return;}
     if(!archived.length){node.innerHTML='<p class="autoposting-note">Удалённых материалов нет.</p>';return;}
     node.innerHTML=`<ul class="ap-archive-items">${archived.map(item=>{const notes=(item.reviewNotes||[]).reduce((sum,group)=>sum+(group.annotations||[]).length,0);
-      return `<li class="ap-archive-item" data-archived-post="${esc(item.id)}"${archiveFocus===item.id?' data-focus="true"':''}><div><strong>${esc(item.title||"Без названия")}</strong><span class="autoposting-note">Удалено ${esc(when(archivedAt(item)))}${notes?` · замечаний: ${notes}`:""}</span></div>${edit()?`<button type="button" class="plain-button" data-restore-post="${esc(item.id)}">Восстановить</button>`:""}</li>`;}).join("")}</ul>${archivedLimited?'<p class="autoposting-note">Показаны 200 последних удалённых.</p>':""}`;
+      return `<li class="ap-archive-item" data-archived-post="${esc(item.id)}"${archiveFocus===item.id?' data-focus="true"':''}><div><strong>${esc(item.title||"Без названия")}</strong><span class="autoposting-note">Удалено ${esc(when(archivedAt(item)))}${notes?` · замечаний: ${notes}`:""}</span></div>${item.archive?.reason?`<span class="autoposting-note">Причина: ${esc(item.archive.reason)}</span>`:""}${edit()?`<button type="button" class="plain-button" data-restore-post="${esc(item.id)}">Вернуть</button>`:""}</li>`;}).join("")}</ul>${archivedLimited?'<p class="autoposting-note">Показаны 200 последних удалённых.</p>':""}`;
   };
   const loadArchive=async()=>{
     const version=epoch,mine=++archivedEpoch,code=companyCode;archived=null;archivedState="loading";renderArchive();
@@ -952,11 +957,13 @@ function create(container, context) {
     renderBatch();renderList();renderArchive();controls();void loadCalendar();
   };
   const archivePost=()=>{
-    if(busy||!edit()||!post||!ARCHIVABLE.has(post.status)||dirty()||archivedAt(post))return;
+    if(busy||!edit()||!post||!archivable(post)||dirty())return;
     const target=post,title=target.title||"Без названия",code=companyCode;
+    const reason=String(get("autoposting-archive-reason")?.value||"").trim(),body={revision:target.revision};
+    if(reason)body.reason=reason;if(publishedPost(target))body.confirmPublished=true;
     void run(async current=>{
       let result;
-      try{result=await request("/autoposting/posts/"+encodeURIComponent(target.id)+"/archive","POST",{revision:target.revision});}
+      try{result=await request("/autoposting/posts/"+encodeURIComponent(target.id)+"/archive","POST",body);}
       catch(error){
         if(!current())return;
         if(error.status===400||error.status===403){message(`Сервер не принял удаление: ${error.message}. Ничего не изменено.`);return;}
@@ -1127,7 +1134,7 @@ function create(container, context) {
     return `<li class="ap-card${url?' has-thumb':''}" data-daily-post="${esc(id)}" data-platform="${esc(platforms[0]||'none')}">
       <button type="button" class="ap-card-open" data-open-post="${esc(id)}" aria-label="Открыть публикацию: ${esc(item.title||'Без названия')}">${thumb}<span class="ap-card-title">${esc(item.title||'Без названия')}</span></button>
       <p class="ap-chips">${chips}</p>${meta?`<p class="ap-card-meta">${esc(meta)}</p>`:''}
-      <p class="ap-card-state"><span class="ap-status" data-status="${esc(status)}">${esc(label)}</span>${select}</p>
+      <p class="ap-card-state"><span class="ap-status" data-status="${esc(status)}">${esc(label)}</span>${select}${edit()&&archivable(item)?`<button type="button" class="plain-button ap-card-remove" data-archive-post="${esc(id)}" aria-label="Убрать: ${esc(item.title||'Без названия')}">Убрать</button>`:''}</p>
       ${approved?`<p class="ap-card-note">${esc(approved)}</p>`:''}${item.publishDate&&item.plannedDate&&item.publishDate!==item.plannedDate?`<p class="ap-card-note">Дата плана: ${esc(item.plannedDate)}</p>`:''}
       ${hasLocalChanges(item)?'<p class="ap-card-note ap-card-warning">Есть несохранённые правки в этом окне</p>':''}</li>`;
   };
@@ -1356,7 +1363,7 @@ function create(container, context) {
       <div class="ap-pub-info"><p class="ap-pub-line">${chipHtml(stage)}<span>${esc(whenLabel(item))} · ${esc(localTime(item)||'время не задано')}</span></p>
         <h4>Площадки</h4><ul class="ap-pub-platforms">${rows||'<li data-kind="off">Площадки не выбраны</li>'}</ul>
         <h4>Текст публикации · ${esc(platformLabel(pubPlatform))}${item.captions?.[pubPlatform]?'':item.text?' · общий текст':''}</h4><pre class="ap-pub-text">${esc(caption)||'Текст не задан.'}</pre>
-        <div class="ap-pub-actions">${download?`<a class="plain-button" href="${esc(download)}" download target="_blank" rel="noopener noreferrer" data-pub-download>Скачать</a>`:''}<button type="button" class="plain-button" data-pub-edit data-pub-free>Открыть в редакторе</button>${unpublishOffer(item)}</div></div></div>`;
+        <div class="ap-pub-actions">${download?`<a class="plain-button" href="${esc(download)}" download target="_blank" rel="noopener noreferrer" data-pub-download>Скачать</a>`:''}<button type="button" class="plain-button" data-pub-edit data-pub-free>Открыть в редакторе</button>${unpublishOffer(item)}${edit()&&archivable(item)?'<button type="button" class="plain-button" data-pub-remove data-pub-free>Убрать</button>':''}</div></div></div>`;
     // Перерисовка той же карточки не сбрасывает ролик, который уже смотрят.
     if(playing&&video&&playing.getAttribute('src')===video){const fresh=node.querySelector('.ap-pub-screen video');fresh?.replaceWith(playing);}
   };
@@ -1383,6 +1390,9 @@ function create(container, context) {
     const tab=event.target.closest('[data-pub-tab]');if(tab){pubPlatform=tab.dataset.pubTab;renderPub();node.querySelector(`[data-pub-tab="${pubPlatform}"]`)?.focus?.();return;}
     const id=pubId;
     if(event.target.closest('[data-pub-edit]')&&id){closePub(true);selectPost(id);return;}
+    // specs/224: «Убрать» из развёрнутой карточки — то же подтверждение в окне публикации, с предупреждением для вышедшего.
+    if(event.target.closest('[data-pub-remove]')&&id){if(busy)return;closePub(true);selectPost(id);if(!post||dirty())return;
+      archiveConfirm=true;renderArchiveZone();controls();get("autoposting-archive-zone")?.scrollIntoView?.({block:"nearest"});get("autoposting-archive-no")?.focus?.();return;}
     if(event.target.closest('[data-pub-unpublish]')&&id&&!busy){closePub(true);selectPost(id);get('autoposting-unpublish-open')?.click();}
   });
   container.addEventListener('keydown',event=>{if(event.key==='Escape'&&pubId){event.preventDefault();closePub();}});
@@ -1802,6 +1812,10 @@ function create(container, context) {
   });
   for(const id of ["autoposting-posts","autoposting-queue"])get(id).addEventListener("click",event=>{
     if(event.target.closest('input,label,select,textarea,a,video'))return;
+    const remove=event.target.closest("[data-archive-post]");
+    if(remove){if(busy)return;editorOpenerId=remove.dataset.archivePost;selectPost(remove.dataset.archivePost);
+      if(!post||dirty())return;archiveConfirm=true;renderArchiveZone();controls();
+      get("autoposting-archive-zone")?.scrollIntoView?.({block:"nearest"});get("autoposting-archive-no")?.focus?.();return;}
     const button=event.target.closest("[data-open-post]")||event.target.closest("[data-daily-post]")?.querySelector("[data-open-post]");
     if(button){editorOpenerId=button.dataset.openPost;selectPost(button.dataset.openPost);}});
   const channelValues=node=>{

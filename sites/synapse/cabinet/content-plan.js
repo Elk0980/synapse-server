@@ -168,7 +168,10 @@
     /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
        Плана нет — порядок прежний: анкета сверху и открыта, пока не заполнена. */
     const number = new Map(allDays.map((idea, index) => [idea.ideaId, index])); state.numbers = number;
-    const days = allDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
+    /* specs/224-content-archive: «Убрать» доступно, когда сервер отдаёт архив идей (archivedIdeas); старый сервер — без кнопок. */
+    const archiving = edit && Array.isArray(mentor.archivedIdeas), archivedIdeas = Array.isArray(mentor.archivedIdeas) ? mentor.archivedIdeas : [];
+    if (state.tab === 'archive' && !Array.isArray(mentor.archivedIdeas)) state.tab = 'plan';
+    const days = state.tab === 'archive' ? [] : allDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
       const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru')
         : state.sort === 'status' ? (STATUS_RANK[statusOf(a)] ?? 9) - (STATUS_RANK[statusOf(b)] ?? 9)
         : state.sort === 'number' ? number.get(a.ideaId) - number.get(b.ideaId) : 0;
@@ -188,6 +191,7 @@
     const head = `<nav class="cp-tabs cp-head" aria-label="Планы"><div role="tablist" aria-label="Список публикаций">
       <span class="cp-tab-plan"><button type="button" role="tab" data-cp-tab="plan" aria-selected="${state.tab === 'plan'}" aria-controls="cp-publications">Контент-план</button><button type="button" class="cp-gear" data-cp="settings-plan" aria-label="Настройка контент-плана: анкета генерации" title="Настройка контент-плана" aria-haspopup="dialog">⚙</button></span>
       <button type="button" role="tab" data-cp-tab="drafts" aria-selected="${state.tab === 'drafts'}" aria-controls="cp-publications">Черновики</button>
+      ${Array.isArray(mentor.archivedIdeas) ? `<button type="button" role="tab" data-cp-tab="archive" aria-selected="${state.tab === 'archive'}" aria-controls="cp-publications">Архив${archivedIdeas.length ? ` · ${archivedIdeas.length}` : ''}</button>` : ''}
       ${edit ? '<button type="button" class="cp-new" data-cp="questionnaire">+ Новый</button>' : ''}</div>
       </nav>`;
     /* №186: анкеты нет на вкладке. Окно поверх открывают «+ Новый» (новый план) и ⚙ (настройка текущего). На телефоне — на весь экран:
@@ -219,7 +223,7 @@
       <div class="cp-tools">${sheetUrl ? `<a class="cp-sheet-link" href="${esc(sheetUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть Google Таблицу" title="Google Таблица">▦</a>` : ''}
       <div class="cp-sort"><button type="button" data-cp-sort-toggle aria-label="Сортировать публикации" aria-expanded="${state.sortOpen}" aria-controls="cp-sort-menu">⇅</button>
       <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${SORTS.map(({id, label}) => `<button type="button" data-cp-sort="${id}" aria-pressed="${state.sort === id}">${state.sort === id ? '✓ ' : ''}${esc(label)}</button>`).join('')}</div></div></div></div>`;
-    const plan = `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}">${listHead}
+    const plan = state.tab === 'archive' ? archiveList(archivedIdeas, edit) : `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}">${listHead}
       ${!days.length ? `<p class="cp-note">${allDays.length ? 'В этом списке пока нет публикаций.' : 'Плана пока нет. Нажмите «+ Новый», чтобы заполнить анкету и сформировать план.'}</p>` : ''}
       ${state.view === 'full' ? sheet(days, platforms, status) : `${days.length ? '<div class="cp-thead" aria-hidden="true"><span>Дата</span><span>Тема</span><span>Площадки</span><span>Статус</span><span></span></div>' : ''}
       <ol class="cp-list">${days.map((idea) => {
@@ -229,9 +233,9 @@
         const rework = kit() && ['script_rework', 'edit_rework'].includes(stageOf(idea, st));
         return `<li class="cp-row${open ? ' cp-open' : ''}${rework ? ' cp-rework' : ''}"data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea, true)}</div>
           <button type="button" class="cp-line" data-toggle aria-expanded="${open}"><span class="cp-topic">${esc(idea.topic)}</span><span class="cp-chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
-          ${open ? full(idea, edit, st, status) : ''}
-          <div class="cp-acts">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${nets(idea, platformLabel)}</div>
-          ${owner && state.menuOpen === idea.ideaId ? rowMenu(idea, st) : ''}</li>`; }).join('')}</ol>`}</section>`;
+          ${open ? full(idea, edit, st, status, archiving) : ''}
+          <div class="cp-acts"><span class="cp-btns">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${archiving ? `<button type="button" class="cp-act cp-remove" data-cp-remove aria-expanded="${state.removeOpen === idea.ideaId}" aria-label="${esc('Убрать «' + idea.topic + '» в архив')}">Убрать</button>` : ''}</span>${nets(idea, platformLabel)}</div>
+          ${owner && state.menuOpen === idea.ideaId ? rowMenu(idea, st) : ''}${archiving && state.removeOpen === idea.ideaId ? removeForm(idea) : ''}</li>`; }).join('')}</ol>`}</section>`;
     const keepScroll = container.querySelector('.cp-list')?.scrollTop || 0;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
       ${plan}${approve}
@@ -338,7 +342,37 @@
     return (shots.length ? shots.join('; ') : String(idea.broll || '').trim()).slice(0, 300);
   }
   /* Полный вид: поля идеи, которые есть в плане (чего нет — не показываем), затем «Сценарий по секундам» и детали рилса. */
-  function full(idea, edit, st, status) {
+  /* «Убрать» (specs/224): подтверждение прямо под строкой. Идея уходит в «Архив» с причиной; версия плана и решения
+     по остальным строкам не меняются. Опубликованное остаётся на площадках — архив убирает строку только из кабинета. */
+  function removeForm(idea) {
+    const busy = state.rowBusy === idea.ideaId ? ' disabled' : '', live = ['published', 'unpublished'].includes(serverStage(idea));
+    return `<form class="cp-fix cp-remove-form" data-cp-remove-form role="group" aria-label="Убрать в архив"><b>Убрать «${esc(idea.topic)}» в архив?</b>
+      <p class="cp-note">${live ? 'Рилс уже выходил: посты на площадках останутся, архив уберёт строку только из кабинета. ' : ''}Строка уйдёт из плана, согласования и «Съёмки». Сценарий и подписи сохранятся — вернуть можно во вкладке «Архив». Ролики и публикации не меняются.</p>
+      <label class="cp-note">Причина (необязательно)<input type="text" name="reason" maxlength="500" placeholder="Например: дубль темы"></label>
+      <div class="cp-fix-btns"><button type="submit" class="plain-button"${busy}>Убрать</button><button type="button" class="cp-act" data-cp-remove-cancel>Отмена</button></div></form>`;
+  }
+  function archiveList(list, edit) {
+    const when = (iso) => { try { return new Intl.DateTimeFormat('ru-RU', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tzName(state.ctx, state.mentor) || undefined}).format(new Date(iso)); } catch { return String(iso || '').slice(0, 16).replace('T', ' '); } };
+    return `<section class="cp-plan cp-archive" id="cp-publications" role="tabpanel" aria-label="Архив">
+      <p class="cp-note">Убранные строки плана. Сценарий, подписи и история сохранены. «Вернуть» ставит строку обратно в план${list.some((i) => !i.inPlan) ? '; строки, убранные до пересохранения плана, вернутся новой версией плана и согласуются заново' : ''}.</p>
+      ${list.length ? `<ol class="cp-archive-list">${list.map((idea) => `<li class="cp-arow" data-archived-idea="${esc(idea.ideaId)}"><div class="cp-arow-main"><span class="cp-date">${esc(day(idea.date))}</span>
+        <b class="cp-arow-topic">${esc(idea.topic || 'Без темы')}</b><span class="cp-note">Убрано ${esc(when(idea.archive?.archivedAt))}${idea.archive?.archivedByName ? ' · ' + esc(idea.archive.archivedByName) : ''}${idea.archive?.reason ? ' · Причина: ' + esc(idea.archive.reason) : ''}</span></div>
+        ${edit ? `<button type="button" class="cp-act" data-cp-restore="${esc(idea.ideaId)}"${state.rowBusy === idea.ideaId ? ' disabled' : ''}>Вернуть</button>` : ''}</li>`).join('')}</ol>`
+        : '<p class="cp-note">В архиве пусто.</p>'}</section>`;
+  }
+  async function archiveIdea(ideaId, reason) {
+    const {api, container, ctx} = state; state.rowBusy = ideaId; draw();
+    try {
+      await api.post(`/plan/ideas/${encodeURIComponent(ideaId)}/archive`, reason ? {reason} : {});
+      state.removeOpen = null; state.rowBusy = null; state.open.delete(ideaId); await mount(container, ctx);
+    } catch (err) { state.rowBusy = null; draw(); error(err.status === 403 ? 'Нет права убирать строки плана этой компании.' : err.message || 'Не удалось убрать строку'); }
+  }
+  async function restoreIdea(ideaId) {
+    const {api, container, ctx} = state; state.rowBusy = ideaId; draw();
+    try { await api.post(`/plan/ideas/${encodeURIComponent(ideaId)}/restore`, {}); state.rowBusy = null; await mount(container, ctx); }
+    catch (err) { state.rowBusy = null; draw(); error(err.status === 403 ? 'Нет права возвращать строки плана этой компании.' : err.message || 'Не удалось вернуть строку'); }
+  }
+  function full(idea, edit, st, status, archiving = false) {
     const {mentor} = state, vocab = mentor.vocabulary || {};
     const line = (key, label, value) => value ? `<p data-key="${key}"><b>${label}:</b> ${esc(value)}</p>` : '';
     const comments = [...new Set((mentor.variants || []).filter((v) => v.ideaId === idea.ideaId && v.comment)
@@ -364,7 +398,8 @@
       ${pinned}${secondsTable(idea.script, secs)}${before ? `<div class="cp-before">${before}</div>` : ''}
       ${edit ? `<details class="cp-edit"><summary>Изменить сценарий</summary><form data-edit="${esc(idea.ideaId)}">
         ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
-        <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}</div>`;
+        <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}
+      ${archiving ? `<div class="cp-full-acts"><button type="button" class="cp-act cp-remove" data-cp-remove aria-label="${esc('Убрать «' + idea.topic + '» в архив')}">Убрать из плана</button></div>` : ''}</div>`;
   }
 
   const error = (message) => { const node = state.container.querySelector('[data-cp-error]'); if (node) { node.hidden = !message; node.textContent = message || ''; } };
@@ -558,6 +593,14 @@
     root.querySelectorAll('[data-cp-fix-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault();
       const comment = form.querySelector('textarea').value.trim(); if (!comment) { form.querySelector('textarea').focus(); return; }
       void decide(form.closest('[data-idea]').dataset.idea, 'rejected', comment); }));
+    root.querySelectorAll('[data-cp-remove]').forEach((button) => button.addEventListener('click', () => {
+      const id = button.closest('[data-idea]').dataset.idea; state.removeOpen = state.removeOpen === id ? null : id; state.menuOpen = null; state.fixOpen = null; draw();
+      root.querySelector('[data-cp-remove-form] [data-cp-remove-cancel]')?.focus(); }));
+    root.querySelectorAll('[data-cp-remove-cancel]').forEach((button) => button.addEventListener('click', () => {
+      const id = state.removeOpen; state.removeOpen = null; draw(); root.querySelector(`[data-idea="${id}"] .cp-acts [data-cp-remove]`)?.focus(); }));
+    root.querySelectorAll('[data-cp-remove-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault();
+      void archiveIdea(form.closest('[data-idea]').dataset.idea, form.querySelector('[name="reason"]').value.trim()); }));
+    root.querySelectorAll('[data-cp-restore]').forEach((button) => button.addEventListener('click', () => void restoreIdea(button.dataset.cpRestore)));
     root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', (event) => openQuestionnaire('new', event.currentTarget));
     root.querySelector('[data-cp="settings-plan"]')?.addEventListener('click', (event) => openQuestionnaire('edit', event.currentTarget));
     root.querySelectorAll('[data-cp-close]').forEach((button) => button.addEventListener('click', closeQuestionnaire));
@@ -570,6 +613,8 @@
       state.sort = button.dataset.cpSort; state.sortOpen = false; state.feedReset = true; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
     });
     root.onkeydown = event => { if (event.key === 'Escape' && state?.qOpen) { event.preventDefault(); closeQuestionnaire(); return; }
+      if (event.key === 'Escape' && state?.removeOpen) { const id = state.removeOpen; state.removeOpen = null; draw();
+        root.querySelector(`[data-idea="${id}"] .cp-acts [data-cp-remove]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.menuOpen) { const id = state.menuOpen; state.menuOpen = null; state.fixOpen = null; draw();
         root.querySelector(`[data-idea="${id}"] [data-cp-menu]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.sortOpen) { state.sortOpen = false; draw(); root.querySelector('[data-cp-sort-toggle]')?.focus(); } };
