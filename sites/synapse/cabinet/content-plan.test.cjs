@@ -657,3 +657,13 @@ test('specs/224: без права правки и со старым серве�
   const old = api(); await old.mount();
   assert.equal(old.root.querySelector('[data-cp-remove]'), null); assert.equal(old.root.querySelector('[data-cp-tab="archive"]'), null);
 });
+
+test('specs/225: «Указать таблицу» видит и не-владелец с правом менять настройки контента; без права — нет', async () => {
+  const hint = (root) => [...root.querySelectorAll('button')].some((b) => b.textContent === 'Указать таблицу');
+  const editor = api({ role: 'editor', permissions: ['autoposting.view', 'autoposting.edit', 'settings.edit'], settings: { canEdit: true, settings: { approverUserIds: [] }, candidates: [] } });
+  await editor.mount(); openQ(editor);
+  assert.equal(hint(editor.root), true);
+  const viewer = api({ role: 'editor', permissions: ['autoposting.view', 'autoposting.edit'], settings: { canEdit: false, settings: { approverUserIds: [] }, candidates: [] } });
+  await viewer.mount(); openQ(viewer);
+  assert.equal(hint(viewer.root), false);
+});

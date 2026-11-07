@@ -243,7 +243,9 @@
     container.querySelectorAll('[data-edit] textarea').forEach(n => { const key = n.closest('[data-edit]').dataset.edit + ':' + n.name; if (drafts.has(key)) n.value = drafts.get(key); });
     wire();
     mountKit(keepScroll);
-    if (!sheetUrl && ctx.user?.role === 'owner') {
+    /* specs/225-cf-lena-onboarding: таблицу указывает тот, кому сервер разрешает менять «Настройки → Контент»
+       (владелец или право settings.edit), а не только владелец. */
+    if (!sheetUrl && (ctx.user?.role === 'owner' || state.settings?.canEdit === true)) {
       const hint = document.createElement('button'); hint.type = 'button'; hint.className = 'plain-button'; hint.textContent = 'Указать таблицу'; hint.onclick = () => ctx.navigate('settings/content');
       container.querySelector('.cp-q')?.append(hint);
     }
