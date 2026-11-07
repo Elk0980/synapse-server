@@ -5,14 +5,16 @@
    POST crm/autoposting/reels/:id/edits (kind=request) и задачей для агента монтажа. Новая версия vK+1 появляется,
    когда агент загрузит её (specs/102-reel-materials/plan.md).
    «Исходники ▾» показывает реальные загрузки съёмки (GET shooting/reels/:ideaId, kind=take) по сценам сценария;
-   нажатие на дубль добавляет в запрос «заменить 0:12–0:18 на сцену 3 дубль 2». «＋» — та же загрузка частями, что на «Съёмке». */
+   нажатие на дубль добавляет в запрос «заменить 0:12–0:18 на сцену 3 дубль 2». «＋» — та же загрузка частями, что на «Съёмке».
+   «Ручные правки ▾» (по умолчанию свёрнуто) — прежние правки списком EDL v1: разделить, удалить кусок, переставить
+   (← → или перетаскивание клипа), громкость/«без звука» клипа звука, скорость. Черновик хранится в этом браузере,
+   «Отправить в монтаж» — тот же маршрут правки с kind=edl. */
 const sb = window.SbCabinet = window.SbCabinet || {};
 const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 const safeUrl = value => {try {const url = new URL(value, location.href);return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";} catch (_) {return "";}};
 const MIN = 100;
 const len = clip => clip.outMs - clip.inMs;
-/* Операции EDL v1 — чистые функции, тот же формат, что проверяет сервер (validateEdl). Окно по макету их не показывает,
-   но набор оставлен для агента монтажа и проверок. */
+/* Операции EDL v1 — чистые функции, тот же формат, что проверяет сервер (validateEdl). Порядок массива = порядок на дорожке. */
 const ops = {
   initial: durationMs => ({v: 1, video: [{inMs: 0, outMs: durationMs}], audio: [{inMs: 0, outMs: durationMs, gain: 1, muted: false}], captions: [], coverMs: null, speed: 1}),
   total: track => track.reduce((sum, clip) => sum + len(clip), 0),
@@ -63,6 +65,12 @@ function layoutScenes(scenes, durationMs) {
   return scenes.map((s, i) => timed ? {...s, fromMs: Math.min(s.fromMs, durationMs), toMs: Math.min(s.toMs, durationMs)}
     : {...s, fromMs: Math.round(i * step), toMs: Math.round((i + 1) * step)});
 }
+const sec = ms => (Math.round(ms / 100) / 10).toLocaleString("ru-RU", {minimumFractionDigits: 1});
+const SPEEDS = [1, 1.25, 1.5];
+/* Черновик ручных правок — только удобство этого браузера: хранилище может быть недоступно, поэтому всё в try/catch. */
+const draftKey = (code, reel, version) => `sb-reel-edl:${code}:${reel}:v${version}`;
+const readDraft = key => {try {const value = JSON.parse(localStorage.getItem(key) || "null");return value?.v === 1 && Array.isArray(value.video) && value.video.length ? value : null;} catch (_) {return null;}};
+const writeDraft = (key, value) => {try {value ? localStorage.setItem(key, JSON.stringify(value)) : localStorage.removeItem(key);} catch (_) {}};
 const requestId = () => (crypto.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2)).slice(0, 80);
 
 function open(host, {ctx, reel, version, onChange, number = null, idea = null}) {
@@ -72,6 +80,7 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   let base = versionOf(version) || current.currentVersion || {version: version || 1};
   let duration = base.durationMs || 0, busy = false, sources = false;
   let mark = {from: null, to: null}, take = null, shooting = null, shootingError = "";
+  let manual = false, key = "", edl = null, selected = {track: "video", index: 0};
   const takeDurations = new Map(), canUpload = ctx.can?.("autoposting.edit") !== false;
   const scenes = parseScenes(idea);
   const root = document.createElement("section");
@@ -96,6 +105,16 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
         <p class="re-take" data-take hidden></p>
         <label class="re-ask"><span class="re-sr">Что изменить</span><textarea rows="3" maxlength="1800" data-ask placeholder="Хью, измени: …"></textarea></label>
         <div class="re-row"><button type="button" class="plain-button primary" data-send>Отправить Хью</button><button type="button" class="plain-button" data-clear>Отменить отметку</button></div>
+        <div class="re-row re-manbar"><button type="button" class="plain-button" data-manual aria-expanded="false" aria-controls="re-manual">Ручные правки ▾</button><span class="muted re-hint">разделить, удалить, переставить, звук, скорость</span></div>
+        <div class="re-man" id="re-manual" data-man hidden>
+          <div class="re-edl" data-edl></div>
+          <div class="re-ops"><button type="button" class="plain-button" data-op="split">Разделить здесь</button><button type="button" class="plain-button" data-op="remove">Удалить кусок</button>
+            <button type="button" class="plain-button" data-op="left" aria-label="Переставить левее">←</button><button type="button" class="plain-button" data-op="right" aria-label="Переставить правее">→</button></div>
+          <div class="re-row re-gain" data-gain-row></div>
+          <div class="re-row re-speed"><label>Скорость<select data-speed>${SPEEDS.map(v => `<option value="${v}">${String(v).replace(".", ",")}×</option>`).join("")}</select></label><span class="re-total" data-total></span></div>
+          <label class="re-comment"><span class="re-sr">Комментарий к правкам</span><input type="text" maxlength="500" autocomplete="off" data-comment placeholder="Комментарий к правкам (необязательно)"></label>
+          <div class="re-foot"><button type="button" class="plain-button" data-op="reset">Сбросить правки</button><button type="button" class="plain-button primary" data-op="submit">Отправить в монтаж</button></div>
+        </div>
         <p class="re-status" role="status" data-status></p>
         <p class="muted re-note" data-note></p>
         <div class="re-vers" data-versions></div>
@@ -228,6 +247,76 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
     renderMarks();
   }
 
+  /* ---------- Ручные правки: EDL v1 к выбранной версии ---------- */
+  function loadEdl() {
+    key = draftKey(ctx.companyCode, current.id, base.version);
+    edl = readDraft(key) || (duration ? ops.initial(duration) : null);selected = {track: "video", index: 0};
+  }
+  const pristine = () => !edl || JSON.stringify(edl) === JSON.stringify(ops.initial(duration || ops.total(edl.video)));
+  const edlTrack = () => edl[selected.track];
+  function renderEdl() {
+    const strip = $("[data-edl]");
+    if (!edl) {strip.innerHTML = `<p class="muted">Загружаем длительность ролика…</p>`;$("[data-gain-row]").innerHTML = "";$("[data-total]").textContent = "";return;}
+    const lane = (name, label) => `<div class="re-track re-track--edl"><span class="re-track__name">${label}</span><ol class="re-clips">${edl[name].map((clip, i) => {
+      const on = selected.track === name && selected.index === i;
+      return `<li style="flex-grow:${len(clip)}"><button type="button" draggable="true" data-track="${name}" data-index="${i}" class="re-eclip re-eclip--${name}${on ? " is-on" : ""}${clip.muted ? " is-muted" : ""}"
+        aria-pressed="${on}" aria-label="${label}, клип ${i + 1}: ${clock(clip.inMs)}–${clock(clip.outMs)}" title="${esc(`${clock(clip.inMs)}–${clock(clip.outMs)} исходника`)}">${sec(len(clip))} с${name === "audio" ? (clip.muted ? " · без звука" : ` · ${Math.round(clip.gain * 100)}%`) : ""}</button></li>`;
+    }).join("")}</ol></div>`;
+    strip.innerHTML = lane("video", "Видео") + lane("audio", "Звук");
+    const clip = edl.audio[selected.index];
+    $("[data-gain-row]").innerHTML = selected.track === "audio" && clip
+      ? `<label class="re-vol">Громкость<input type="range" min="0" max="200" step="5" value="${Math.round(clip.gain * 100)}" data-field="gain"${clip.muted ? " disabled" : ""}><output data-gain-out>${Math.round(clip.gain * 100)}%</output></label>
+         <label class="re-check"><input type="checkbox" data-field="muted"${clip.muted ? " checked" : ""}> Без звука</label>`
+      : `<span class="muted re-hint">Выберите клип звука — появятся громкость и «Без звука».</span>`;
+    $("[data-speed]").value = String(edl.speed);
+    $("[data-total]").textContent = `Итог: ${sec(ops.total(edl.video) / edl.speed)} с${edl.speed !== 1 ? ` (скорость ${String(edl.speed).replace(".", ",")}×)` : ""}`;
+  }
+  const update = next => {edl = next;writeDraft(key, edl);renderEdl();};
+  /* Место на дорожке по текущему кадру исходника; если кадр вырезан — 0 (разделить там нельзя, будет подсказка). */
+  const timelineNow = name => {
+    const src = (player.currentTime || 0) * 1000;let start = 0;
+    for (const clip of edl[name]) {if (src >= clip.inMs && src < clip.outMs) return start + src - clip.inMs;start += len(clip);}
+    return 0;
+  };
+  function op(name) {
+    if (!edl) {status("Сначала дождитесь длительности ролика.");return;}
+    const t = selected.track, list = edlTrack();
+    if (name === "split") {const next = ops.split(list, timelineNow(t));if (next === list) {status("Поставьте курсор внутрь клипа (не ближе 0,1 с к краю) и нажмите «Разделить здесь».");return;}status("");update({...edl, [t]: next});}
+    else if (name === "remove") {
+      const next = ops.remove(list, selected.index, t === "video");
+      if (next === list) {status("На видеодорожке должен остаться хотя бы один клип.");return;}
+      status("");selected.index = Math.max(0, Math.min(selected.index, next.length - 1));update({...edl, [t]: next});
+    } else if (name === "left" || name === "right") {
+      const delta = name === "left" ? -1 : 1, next = ops.move(list, selected.index, delta);if (next === list) return;
+      selected.index += delta;update({...edl, [t]: next});
+    } else if (name === "reset") {writeDraft(key, null);edl = duration ? ops.initial(duration) : null;selected = {track: "video", index: 0};$("[data-comment]").value = "";renderEdl();status("Ручные правки сброшены.");}
+    else if (name === "submit") void submitEdl();
+  }
+  async function submitEdl() {
+    if (busy) return;
+    if (pristine()) {status("Ручных правок пока нет.");return;}
+    if (!current.id) {status("Ролик ещё не взят в Монтаж — откройте его заново.");return;}
+    const comment = $("[data-comment]").value.trim().slice(0, 500), sent = edl, sentKey = key, version = base.version;
+    busy = true;status("Отправляем в монтаж…");$("[data-op=submit]").disabled = true;
+    try {
+      const result = await ctx.api.post(`crm/autoposting/reels/${current.id}/edits`, {clientRequestId: requestId(), baseVersion: version, kind: "edl", edl: sent, comment});
+      if (ctx.signal.aborted || !root.isConnected) return;
+      const edit = result.edit || {};
+      writeDraft(sentKey, null);
+      notifyHugh(ctx, current, edit, `Правки монтажа к ${number ? "№" + number : "«" + current.title + "»"} v${version} отправлены${edit.taskId ? ` (задача №${edit.taskId})` : ""}${comment ? ": " + comment : ""}.`);
+      if (result.reel) {current = result.reel;base = versionOf(base.version) || base;onChange?.(result.reel);}
+      if (key === sentKey) {edl = duration ? ops.initial(duration) : null;selected = {track: "video", index: 0};$("[data-comment]").value = "";}
+      renderHead();renderEdl();
+      status(`Список правок отправлен в монтаж${edit.taskId ? `: задача №${edit.taskId}` : ""}. Новая версия придёт в чат и появится здесь как v${nextVersion()}.`);
+    } catch (error) {if (!ctx.signal.aborted) status("Не отправлено: " + (error?.message || "ошибка сети") + ". Правки сохранены в этом браузере.");}
+    finally {busy = false;$("[data-op=submit]").disabled = false;}
+  }
+  function toggleManual() {
+    manual = !manual;root.classList.toggle("is-manual", manual);
+    const button = $("[data-manual]");button.textContent = manual ? "Ручные правки ▴" : "Ручные правки ▾";button.setAttribute("aria-expanded", String(manual));
+    $("[data-man]").hidden = !manual;if (manual) renderEdl();
+  }
+
   /* ---------- Отметка перетаскиванием по дорожкам, нажатие — курсор ---------- */
   const lane = () => root.querySelector("[data-lane=video]").getBoundingClientRect();
   const msAt = clientX => {const r = lane();return r.width ? Math.round(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * duration / 100) * 100 : 0;};
@@ -286,6 +375,13 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
     if (button.hasAttribute("data-close")) return close();
     if (button.hasAttribute("data-play") || button === player) {if (player.paused) void player.play()?.catch?.(() => {});else player.pause();return;}
     if (button.hasAttribute("data-sources")) return toggleSources();
+    if (button.hasAttribute("data-manual")) return toggleManual();
+    if (button.dataset.op) return op(button.dataset.op);
+    if (button.dataset.track) {
+      selected = {track: button.dataset.track, index: Number(button.dataset.index)};
+      const clip = edlTrack()[selected.index];if (clip) {try {player.currentTime = clip.inMs / 1000;} catch (_) {}renderMarks();}
+      renderEdl();root.querySelector(`[data-track="${selected.track}"][data-index="${selected.index}"]`)?.focus({preventScroll: true});return;
+    }
     if (button.hasAttribute("data-send")) return void send();
     if (button.hasAttribute("data-clear")) {take = null;setMark(null, null);if (sources) renderSources();status("");return;}
     if (button.hasAttribute("data-untake")) {take = null;renderTake();renderSources();return;}
@@ -298,27 +394,43 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
     }
     if (button.dataset.version) {
       const next = versionOf(Number(button.dataset.version));if (!next || next.version === base.version) return;
-      player.pause();base = next;take = null;setMark(null, null);loadVersion();renderHead();renderTracks();status("");
+      player.pause();base = next;take = null;setMark(null, null);loadVersion();loadEdl();renderHead();renderTracks();renderEdl();status("");
     }
   });
   root.addEventListener("change", event => {
     const t = event.target;
     if (t.dataset.mark) readMarkFields();
+    else if (t.dataset.field === "gain" && edl) update({...edl, audio: ops.set(edl.audio, selected.index, {gain: Math.max(0, Math.min(200, Number(t.value))) / 100})});
+    else if (t.dataset.field === "muted" && edl) update({...edl, audio: ops.set(edl.audio, selected.index, {muted: t.checked})});
+    else if (t.matches("[data-speed]") && edl) {const v = Number(t.value);if (SPEEDS.includes(v)) {update({...edl, speed: v});player.playbackRate = v;}}
     else if (t.dataset.add !== undefined && t.files?.[0]) {const file = t.files[0];t.value = "";void addTake(file, t.dataset.add === "" ? null : Number(t.dataset.add));}
   });
+  root.addEventListener("input", event => {
+    const t = event.target;if (t.dataset.field === "gain") {const out = root.querySelector("[data-gain-out]");if (out) out.textContent = `${t.value}%`;}
+  });
+  /* Перетаскивание клипа на место другого клипа той же дорожки — то же «переставить», что ← →. */
+  let dragged = null;
+  root.addEventListener("dragstart", event => {const b = event.target.closest?.("[data-track]");if (b) {dragged = {track: b.dataset.track, index: Number(b.dataset.index)};try {event.dataTransfer?.setData("text/plain", "clip");} catch (_) {}}});
+  root.addEventListener("dragover", event => {if (dragged && event.target.closest?.(`[data-track="${dragged.track}"]`)) event.preventDefault();});
+  root.addEventListener("drop", event => {
+    const b = event.target.closest?.("[data-track]");if (!dragged || !b || b.dataset.track !== dragged.track || !edl) {dragged = null;return;}event.preventDefault();
+    const list = [...edl[dragged.track]], [clip] = list.splice(dragged.index, 1), to = Number(b.dataset.index);list.splice(to, 0, clip);
+    selected = {track: dragged.track, index: to};dragged = null;update({...edl, [selected.track]: list});
+  });
+  root.addEventListener("dragend", () => {dragged = null;});
   player.addEventListener("click", () => {if (player.paused) void player.play()?.catch?.(() => {});else player.pause();});
   player.addEventListener("play", () => {$("[data-play]").hidden = true;});
   player.addEventListener("pause", () => {$("[data-play]").hidden = !safeUrl(base.mediaUrl);});
   player.addEventListener("loadedmetadata", () => {
-    if (Number.isFinite(player.duration) && player.duration > 0) {const measured = Math.round(player.duration * 1000);if (!duration || Math.abs(measured - duration) > 500) {duration = measured;renderTracks();}}
+    if (Number.isFinite(player.duration) && player.duration > 0) {const measured = Math.round(player.duration * 1000);if (!duration || Math.abs(measured - duration) > 500) {const fresh = pristine();duration = measured;if (!edl || fresh) edl = readDraft(key) || ops.initial(duration);renderTracks();renderEdl();}}
   });
   player.addEventListener("timeupdate", renderMarks);
   root.addEventListener("keydown", event => {if (event.key === "Escape") {event.stopPropagation();close();}});
   ctx.signal.addEventListener("abort", () => {player.pause?.();root.remove();}, {once: true});
   function close() {player.pause?.();root.remove();host.querySelector("[data-edit]")?.focus();}
-  loadVersion();renderHead();renderTracks();
+  loadVersion();loadEdl();renderHead();renderTracks();renderEdl();
   $("#re-title").focus({preventScroll: true});
-  return {root, close, get mark() {return {...mark};}, get take() {return take ? {...take} : null;}, get version() {return base.version;}};
+  return {root, close, get mark() {return {...mark};}, get take() {return take ? {...take} : null;}, get version() {return base.version;}, get edl() {return edl;}, get selected() {return {...selected};}};
 }
 /* Запись в личный чат пользователя с Хью: точка «hugh-chat» слушает это событие.
    Сервер хранит тот же журнал в правках ролика, поэтому запись не теряется, если чат ещё не открыт. */
