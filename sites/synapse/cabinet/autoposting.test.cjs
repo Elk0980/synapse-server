@@ -1060,3 +1060,55 @@ test('Telegram через Onlypult — «фото или одно видео»: 
     assert.equal(f.node('autoposting-schedule').disabled,false);
   }finally{f.close();}
 });
+
+/* №231 (правка Лены 07.11): «Кто увидит» TikTok на виду, если TikTok выбран и режим не задан;
+   предупреждение — ссылка, которая раскрывает и фокусирует поле. */
+test('№231: «Кто увидит» TikTok сразу на виду и не прыгает при выборе; предупреждение — ссылка на поле',async()=>{
+  const f=await fixture({entries:[optionsEntry({platformOptions:{}}),optionsEntry({id:804,title:'С режимом'})]});try{
+    f.set('autoposting-select','801','change');await f.settle();
+    const zone=f.node('autoposting-tiktok-privacy-zone'),select=()=>f.d.querySelector('[data-option="tiktok.privacy"]');
+    assert.equal(zone.hidden,false,'поле на виду');
+    assert.ok(zone.contains(select()),'поле перенесено под площадки');
+    assert.equal(select().closest('details.autoposting-options'),null,'не внутри свёрнутых опций');
+    const link=f.d.querySelector('#autoposting-approval [data-focus-privacy]');
+    assert.equal(link.textContent,'Выберите, кто увидит видео TikTok');
+    link.click();await f.settle();assert.equal(f.d.activeElement,select(),'ссылка фокусирует поле');
+    await f.click('autoposting-preview');
+    const issue=[...f.node('autoposting-preview-content').querySelectorAll('[data-focus-privacy]')];
+    assert.equal(issue.length,1,'в замечаниях предпросмотра — ссылка');
+    // Выбор значения не переносит поле обратно, пока карточка открыта.
+    select().value='PUBLIC_TO_EVERYONE';select().dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.ok(zone.contains(select()),'поле не прыгает во время выбора');
+    // Снятие TikTok возвращает поле в «Публикуемые опции».
+    f.node('autoposting-platforms').querySelector('[value=tiktok]').click();await f.settle();
+    assert.equal(zone.hidden,true);assert.ok(select().closest('fieldset[data-options="tiktok"]'));
+  }finally{f.close();}
+  const g=await fixture({entries:[optionsEntry({id:804,title:'С режимом'})]});try{
+    g.set('autoposting-select','804','change');await g.settle();
+    assert.equal(g.node('autoposting-tiktok-privacy-zone').hidden,true,'режим задан — поле остаётся в опциях');
+    assert.ok(g.d.querySelector('[data-option="tiktok.privacy"]').closest('details.autoposting-options'));
+    assert.equal(g.d.querySelector('#autoposting-approval [data-focus-privacy]'),null);
+    // Ссылка из скрытого места раскрывает свёрнутые опции.
+    const details=g.d.querySelector('details.autoposting-options');details.open=false;
+    g.d.querySelector('#autoposting-approval').insertAdjacentHTML('beforeend','<a href="#" data-focus-privacy>x</a>');
+    g.d.querySelector('#autoposting-approval [data-focus-privacy]').click();await g.settle();
+    assert.equal(details.open,true);assert.equal(g.d.activeElement,g.d.querySelector('[data-option="tiktok.privacy"]'));
+  }finally{g.close();}
+});
+
+/* №232 (правка Лены 07.11): серая «Поставить в план» объясняет, что сначала нужен «Предпросмотр», и даёт его рядом. */
+test('№232: у серой «Поставить в план» — подпись и «Предпросмотр» рядом; после предпросмотра кнопка активна',async()=>{
+  const f=await fixture();try{
+    fill(f);await f.click('autoposting-save');
+    const hint=f.node('autoposting-schedule-hint'),again=f.node('autoposting-schedule-preview');
+    assert.equal(f.node('autoposting-schedule').disabled,true);
+    assert.equal(hint.hidden,false);assert.equal(hint.textContent,'Сначала нажмите «Предпросмотр»');
+    assert.equal(again.hidden,false);assert.equal(again.disabled,false);
+    assert.equal(again.parentElement,f.node('autoposting-schedule').parentElement,'кнопка рядом с «Поставить в план»');
+    await f.click('autoposting-schedule-preview');
+    assert.equal(f.node('autoposting-schedule').disabled,false,'после предпросмотра кнопка активна');
+    assert.equal(hint.hidden,true);assert.equal(again.hidden,true);
+    f.set('autoposting-text','Правка');
+    assert.equal(hint.textContent,'Сначала сохраните черновик, затем нажмите «Предпросмотр»');assert.equal(again.disabled,true);
+  }finally{f.close();}
+});

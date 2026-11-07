@@ -51,6 +51,8 @@ const PLATFORM_OPTIONS = [
   ["tiktok",[["disable_comment","Отключить комментарии"],["disable_duet","Запретить дуэты"],["disable_stitch","Запретить склейки"]]],
   ["max",[["pin_message","Закрепить сообщение"]]],
 ];
+/* №231: формулировка предупреждения — она же ключ ссылки, раскрывающей поле «Кто увидит». */
+const TIKTOK_PRIVACY_ISSUE = "Выберите, кто увидит видео TikTok";
 const TIKTOK_PRIVACY = [["","Не выбрано — отправка не пойдёт"],["PUBLIC_TO_EVERYONE","Публично для всех"],["SELF_ONLY","Только для себя"]];
 /* Человеческие формулировки сохранённых опций для предпросмотра: владелец должен видеть
    утверждаемое поведение рядом с текстом, а не технические названия полей. */
@@ -227,7 +229,7 @@ const DELETABLE_STATUSES=new Set(["draft","cancelled","failed","needs_review"]);
 function create(container, context) {
   const time = cabinet.companyTime;
   let ctx=context, companyCode="", settings=null, information=null, starterPlan=null, posts=[], post=null, busy=false, epoch=0, baseline=null, reviewed=null;
-  let selectedDate="", month="", feedPlaced=false, calendarSettled=false, feedSort="time", head=null, strip=null, stripMarked="", sheetUrl="", pubId=null, pubPlatform="", pubOpener=null, editorOpener=null, calendarData=null, calendarEpoch=0, calendarPending=false;
+  let draftFocus="", selectedDate="", month="", feedPlaced=false, calendarSettled=false, feedSort="time", head=null, strip=null, stripMarked="", sheetUrl="", pubId=null, pubPlatform="", pubOpener=null, editorOpener=null, calendarData=null, calendarEpoch=0, calendarPending=false;
   const approvalSelection=new Map(), approvalResults=new Map(), approvalBlocked=new Set();
   let archived=null, archivedState="", archivedLimited=false, archivedEpoch=0, archiveConfirm=false, archiveFocus=null;
   const drafts=new Map(), selections=new Map(), channelDrafts=new Map(), providerProfiles=new Map();
@@ -240,7 +242,7 @@ function create(container, context) {
     <label class="ap-filter"><span class="ap-sr">Площадка</span><select id="autoposting-platform-filter" aria-label="Площадка"><option value="">Все площадки</option>${['instagram','tiktok','youtube_shorts','vk','telegram'].map(id=>`<option value="${esc(id)}">${esc(platformLabel(id))}</option>`).join("")}</select></label>
     <p id="autoposting-calendar-state" role="status"></p>
     <div class="ap-feed-cols" aria-hidden="true"><span>Рилс</span><span>Выход</span><span>Статус</span><span>Instagram</span><span>TikTok</span><span>YouTube</span><span>VK</span><span>Telegram</span></div>
-    <ol id="autoposting-feed" class="ap-feed" aria-label="Готовые рилсы по датам выхода"></ol>
+    <ol id="autoposting-feed" class="ap-feed" aria-label="Рилсы по датам выхода: готовые и черновики из «Монтажа»"></ol>
     <div id="autoposting-batch"><p>Флажок на карточке — только выбор. Решение применяется к каждому выбранному материалу отдельно после нажатия кнопки ниже. Публикация не запускается.</p><fieldset id="autoposting-batch-platforms"><legend>Площадки решения</legend><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="all" checked>Все площадки выбранных материалов</label><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="subset">Только отмеченные ниже</label>${CAPTIONS.map(([id,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-batch-platform="${esc(id)}">${esc(label)}</label>`).join("")}<p class="autoposting-note">Решение применяется к пересечению отмеченных площадок с площадками каждой карточки. Материал без общих площадок пропускается — с указанием причины.</p></fieldset><div id="autoposting-selected-list"></div><button type="button" class="plain-button" id="autoposting-batch-approve" disabled>Согласовать выбранные (0)</button><label class="autoposting-batch-reason">Причина возврата на доработку (обязательна)<textarea id="autoposting-batch-reason" rows="2" maxlength="2000"></textarea></label><button type="button" class="danger" id="autoposting-batch-reject" disabled>Вернуть выбранные на доработку (0)</button></div><div id="autoposting-batch-results" role="status" aria-live="polite"></div><details id="autoposting-team" class="ap-team"><summary>Для команды · все материалы и согласование</summary><p class="autoposting-note">Черновики, согласование и материалы без даты. Карточка открывает редактор публикации.</p><div id="autoposting-posts"></div></details><details id="autoposting-archive" class="ap-archive"><summary>Удалённые материалы</summary><p class="autoposting-note">Черновики, удалённые из плана. Восстановленный материал вернётся черновиком — без согласования и даты отправки.</p><div id="autoposting-archive-list"></div></details></section>
     <details class="autoposting-workspace-tools"><summary>Компания и настройки</summary>
     <div class="ap-more"><p id="autoposting-calendar-zone" class="autoposting-note"></p><p id="autoposting-plan-gaps" role="status" hidden></p>
@@ -253,13 +255,13 @@ function create(container, context) {
     <details class="card autoposting-trash" id="autoposting-trash" hidden><summary>Корзина · <span id="autoposting-trash-count">0</span></summary><p class="autoposting-note">Удалённые материалы не показываются в списках и календаре, не согласуются и не публикуются. Файлы, тексты и история сохраняются; материал можно восстановить.</p><ul id="autoposting-trash-list" class="autoposting-daily-list"></ul></details>
     <details id="autoposting-editor" class="autoposting-editor" role="dialog" aria-modal="true" aria-labelledby="autoposting-editor-title"><summary>Редактор публикации</summary><div class="ap-editor-bar"><strong id="autoposting-editor-title" tabindex="-1">Публикация</strong><span id="autoposting-editor-note" class="autoposting-note"></span><button class="plain-button" id="autoposting-editor-close" type="button">Закрыть</button></div><div class="autoposting-editor-grid"><section class="card ap-editor-fields" aria-labelledby="ap-editor-fields-title"><h3 id="ap-editor-fields-title">Материал</h3>${field("autoposting-select","Открыть материал",'<select id="autoposting-select"><option value="">Новый черновик</option></select>',"Какую карточку править. «Новый черновик» — пустая форма. Например: «Отзыв клиента — Черновик».")}<p id="autoposting-post-state" class="ap-editor-state"></p><p id="autoposting-post-error" role="status" hidden></p><div id="autoposting-deliveries"></div>
     <form id="autoposting-form">${field("autoposting-title","Название в кабинете",'<input id="autoposting-title" maxlength="200" required>',"Видно в кабинете и на доске. Для YouTube Shorts это ещё и заголовок ролика — до 100 символов. Например: «Шары на выписку — отзыв».")}
-    <fieldset id="autoposting-platforms" aria-labelledby="ap-platforms-title">${PLATFORMS_LEGEND}</fieldset>
+    <fieldset id="autoposting-platforms" aria-labelledby="ap-platforms-title">${PLATFORMS_LEGEND}</fieldset><div id="autoposting-tiktok-privacy-zone" class="ap-tiktok-privacy" hidden><p class="autoposting-note">TikTok выбран: укажите, кто увидит видео. Без этого отправка в TikTok не пойдёт.</p></div>
     <div class="autoposting-date-fields ap-editor-plan-fields">${field("autoposting-format","Формат",`<select id="autoposting-format"><option value="">Не указан</option>${FORMATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select>`,"Вид материала. В подпись не попадает. Например: «Reels / Shorts / клип».")}${field("autoposting-role","Цель (ОВП)",`<select id="autoposting-role"><option value="">Не указана</option>${ROLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select>`,"Зачем материал: Охват → Влюбление → Продажи. В подпись не попадает. Например: «Охват» — для тех, кто видит вас впервые.")}</div>
     <div class="autoposting-date-fields">${field("autoposting-date","Дата и время",'<input id="autoposting-date" type="datetime-local">',"Когда отправить. Можно оставить пустым — черновик сохранится без даты. Например: 15.10.2026, 18:00.")}${field("autoposting-timezone","Часовой пояс",'<input id="autoposting-timezone" maxlength="80" required placeholder="Asia/Irkutsk">',"Пояс, в котором указано время, — не пояс вашего компьютера. Например: Europe/Moscow.")}</div>
     ${field("autoposting-text","Текст публикации",'<textarea id="autoposting-text" rows="9" maxlength="20000"></textarea>',"Общая подпись. Идёт на все площадки, где не задана своя. Например: «Шары к выписке за 2 часа — пишите в Telegram».")}
     ${field("autoposting-photo","Фото или видео с устройства",'<input id="autoposting-photo" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm">',"Фото JPEG, PNG или WebP до 10 МБ; видео MP4 или WebM до 60 МБ. Выберите файл и нажмите «Загрузить файл». Для фото во ВКонтакте нужно подключение Onlypult. Например: ролик 9:16 в MP4.")}<button class="plain-button" id="autoposting-upload" type="button">Загрузить файл</button><input type="hidden" id="autoposting-media-sha"><p id="autoposting-media-check" class="autoposting-note"></p>
     <details class="autoposting-captions"><summary>Подписи площадок (7)</summary><div class="ap-field ap-field-group"><span class="ap-field-title">Своя подпись для площадки</span>${hintButton("f-autoposting-captions","Подписи площадок",`Пустая подпись — значит, используется общий текст. Например, для TikTok короче: «Шары за 2 часа». Подтверждённые лимиты площадок: ${CAPTIONS.filter(([,,,,source])=>source==="confirmed").map(([,l,n])=>`${l} — ${n}`).join(", ")}. Для 2ГИС официальный лимит не подтверждён: ${CAPTIONS.find(item=>item[0]==="two_gis")[2]} — это наш внутренний предел поля, а не ограничение 2ГИС.`)}</div>${CAPTIONS.map(([id,label,limit,,source])=>`<label>${label}${source==="internal"?" · внутренний предел поля":""}<textarea data-caption="${id}" rows="3" maxlength="${limit}"></textarea><span class="autoposting-note" data-caption-count="${id}"></span></label>`).join("")}</details>
-    <details class="autoposting-options"><summary>Публикуемые опции площадок</summary><div class="ap-field ap-field-group"><span class="ap-field-title">Настройки выхода на площадке</span>${hintButton("f-autoposting-options","Публикуемые опции","Меняют то, что выйдет на площадке, поэтому их правка снимает согласование. Для TikTok обязательно выберите, кто увидит. Например: TikTok — «Все».")}</div>${PLATFORM_OPTIONS.map(([platform,fields])=>`<fieldset data-options="${platform}"><legend>${esc(CAPTIONS.find(item=>item[0]===platform)[1])}</legend>${platform==='tiktok'?`<label>Кто увидит<select data-option="tiktok.privacy">${TIKTOK_PRIVACY.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>`:''}${fields.map(([key,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-option="${platform}.${key}">${label}</label>`).join("")}</fieldset>`).join("")}</details>
+    <details class="autoposting-options"><summary>Публикуемые опции площадок</summary><div class="ap-field ap-field-group"><span class="ap-field-title">Настройки выхода на площадке</span>${hintButton("f-autoposting-options","Публикуемые опции","Меняют то, что выйдет на площадке, поэтому их правка снимает согласование. Для TikTok обязательно выберите, кто увидит. Например: TikTok — «Все».")}</div>${PLATFORM_OPTIONS.map(([platform,fields])=>`<fieldset data-options="${platform}"><legend>${esc(CAPTIONS.find(item=>item[0]===platform)[1])}</legend>${platform==='tiktok'?`<label data-privacy-label>Кто увидит<select data-option="tiktok.privacy">${TIKTOK_PRIVACY.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label>`:''}${fields.map(([key,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-option="${platform}.${key}">${label}</label>`).join("")}</fieldset>`).join("")}</details>
     <details class="autoposting-meta"><summary>Для команды · источники и ссылки</summary>    <div class="autoposting-date-fields">${field("autoposting-day","День карточки",`<select id="autoposting-day">${DAYS.map(d=>`<option value="${d}">${d||"—"}</option>`).join("")}</select>`,"День в пакете из семи карточек — нужен для импорта. Обычно не меняется. Например: D3.")}${field("autoposting-origin","Происхождение материала",'<input id="autoposting-origin" maxlength="200" placeholder="например: видео Gemini, без надписи ИИ">',"Откуда материал — видно только команде. Например: «видео Gemini, без надписи ИИ».")}</div>
     ${field("autoposting-media","Материалы по ссылкам",'<textarea id="autoposting-media" rows="3" placeholder="https://example.com/video.mp4"></textarea>',"Открытые ссылки на файлы, по одной в строке, до 10. Например: https://example.com/video.mp4.")}
 </details>
@@ -269,7 +271,7 @@ function create(container, context) {
     <section class="card autoposting-preview-section ap-editor-preview" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3>
     <div class="ap-editor-media"><ul id="autoposting-media-preview" class="autoposting-media-preview" data-empty="Файл ещё не добавлен"></ul></div>
     <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div><details class="autoposting-workspace-tools"><summary>Дополнительные действия</summary><button class="plain-button" id="autoposting-delete" type="button" hidden>Удалить в корзину</button></details><div id="autoposting-archive-zone" class="ap-archive-zone"></div>
-    <div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-variant" class="ap-variant-zone"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
+    <div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-variant" class="ap-variant-zone"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><div class="ap-schedule-row"><button class="plain-button" id="autoposting-schedule" type="button" disabled aria-describedby="autoposting-schedule-hint">Поставить в план</button><span id="autoposting-schedule-hint" class="autoposting-note" hidden></span><button class="plain-button" id="autoposting-schedule-preview" type="button" hidden>Предпросмотр</button></div><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Согласование относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и согласование ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без согласования; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></details>`;
   const get=id=>container.querySelector("#"+id), form=get("autoposting-form");
@@ -348,6 +350,39 @@ function create(container, context) {
         TIKTOK_PRIVACY.some(([id])=>id&&id===saved.privacy)?saved.privacy:'';
       for(const [key] of fields)container.querySelector(`[data-option="${platform}.${key}"]`).checked=saved[key]===true;
     }
+    placePrivacy(true);
+  };
+  /* №231: «Кто увидит» TikTok — обязательный выбор. Если TikTok выбран, а режим не задан, поле переносится
+     из свёрнутых «Публикуемых опций» сразу под площадки. Пока человек выбирает значение, поле не прыгает:
+     обратно оно возвращается при открытии другой карточки или снятии TikTok. Узел один — readOptions не меняется. */
+  const privacyLabel=()=>container.querySelector('[data-privacy-label]');
+  const tiktokChosen=()=>Boolean(container.querySelector('#autoposting-platforms input[value="tiktok"]:checked'));
+  const placePrivacy=(reset=false)=>{
+    const label=privacyLabel(),zone=get('autoposting-tiktok-privacy-zone'),home=container.querySelector('fieldset[data-options="tiktok"]');
+    if(!label||!zone||!home)return;
+    const empty=!label.querySelector('select').value,inZone=zone.contains(label);
+    const want=tiktokChosen()&&(empty||(inZone&&!reset));
+    if(want&&!inZone)zone.append(label);
+    else if(!want&&inZone)home.querySelector('legend').after(label);
+    zone.hidden=!want;
+  };
+  const focusPrivacy=()=>{
+    const label=privacyLabel();if(!label)return;
+    if(tiktokChosen())placePrivacy();
+    for(let fold=label.closest('details');fold;fold=fold.parentElement?.closest('details'))fold.open=true;
+    const select=label.querySelector('select');
+    select.scrollIntoView?.({block:'center',behavior:window.matchMedia?.("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+    select.focus({preventScroll:true});
+  };
+  /* №232: серая «Поставить в план» объясняет, чего не хватает, и рядом даёт «Предпросмотр». */
+  const scheduleHint=()=>{
+    const hint=get('autoposting-schedule-hint'),again=get('autoposting-schedule-preview');if(!hint||!again)return;
+    const blocked=get('autoposting-schedule').disabled,editable=Boolean(post)&&edit()&&EDITABLE.has(post.status);
+    const needPreview=editable&&reviewed!==post.revision;
+    const text=!blocked||!editable||busy?'':dirty()?'Сначала сохраните черновик, затем нажмите «Предпросмотр»'
+      :needPreview?'Сначала нажмите «Предпросмотр»':'Не готово к плану: см. замечания предпросмотра выше';
+    hint.textContent=text;hint.hidden=!text;
+    again.hidden=!(text&&needPreview);again.disabled=busy||!post||dirty();
   };
   const raw=()=>({title:get("autoposting-title").value,text:get("autoposting-text").value,media:get("autoposting-media").value,
     date:get("autoposting-date").value,timezone:get("autoposting-timezone").value,dayKey:get("autoposting-day").value,origin:get("autoposting-origin").value,mediaSha256:get("autoposting-media-sha").value,
@@ -397,6 +432,7 @@ function create(container, context) {
     const targets=approving?data.platformIds:scheduleTargets(post,data.platformIds);
     // Требования YouTube проверяются только если этот канал действительно уходит в план:
     // несогласованный YouTube не должен блокировать согласованный Telegram.
+    if(targets.includes('tiktok')&&!data.platformOptions?.tiktok?.privacy)result.push(TIKTOK_PRIVACY_ISSUE);
     if(targets.includes('youtube_shorts')){
       if(data.title.length>100)result.push('YouTube Shorts: название станет публичным заголовком, сократите его до 100 символов.');
       if(data.mediaUrls.length!==1||!data.mediaUrls.every(isShortsVideoUrl))
@@ -448,7 +484,7 @@ function create(container, context) {
     const importButton2=get("autoposting-import");if(importButton2)importButton2.disabled=busy||!edit()||!settings;get("autoposting-import-json").disabled=busy||!edit()||!settings;
     // Счётчик сам объясняет происхождение предела: внутренний предел поля не выдаётся за лимит площадки.
     for(const [id,,limit,,source] of CAPTIONS){const node=container.querySelector(`[data-caption-count="${id}"]`);const len=container.querySelector(`[data-caption="${id}"]`).value.length;node.textContent=`${len} / ${limit}`+(source==="internal"?" · внутренний предел поля, лимит площадки не подтверждён":"");node.classList.toggle("autoposting-over",len>limit);}
-    get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();
+    get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();scheduleHint();
     const approveSchedule=get('autoposting-approve-schedule');if(approveSchedule)approveSchedule.disabled=busy||!readyToApproveAndSchedule();
     get("autoposting-cancel").hidden=!post||!["scheduled","publishing"].includes(post.status);
     get("autoposting-cancel").disabled=busy||!edit();
@@ -731,6 +767,7 @@ function create(container, context) {
     node.innerHTML=`<p>Версия ${esc(post.revision)} · содержимое v${esc(post.contentRevision||"")} · <strong data-review-state="${esc(rv.state)}">${esc(REVIEW[rv.state]||rv.state)}</strong>${rv.byName?` (${esc(rv.byName)}${rv.at?", "+esc(time.toLocal(rv.at,zone()).replace("T"," ")):""})`:""}</p>
       ${rv.state==="rejected"&&rv.comment?`<p class="autoposting-issues" data-review-comment>Причина отклонения: ${esc(rv.comment)}</p>`:""}
       <p>${r.ready?"Материал готов к согласованию":"Материал не готов: "+esc((r.issues||[]).join("; "))}</p>
+      ${(post.platformIds||[]).includes("tiktok")&&!post.platformOptions?.tiktok?.privacy?`<p class="autoposting-issues" data-privacy-issue><a href="#" data-focus-privacy>${esc(TIKTOK_PRIVACY_ISSUE)}</a></p>`:""}
       ${(post.platformApprovals||[]).length?`<ul class="autoposting-platform-approvals">${post.platformApprovals.map(item=>`<li data-platform-state="${esc(item.state)}">${owner?`<label class="autoposting-checkbox"><input type="checkbox" data-approval-platform="${esc(item.platformId)}" checked>${esc(item.platformLabel)}</label>`:`<strong>${esc(item.platformLabel)}</strong>`} <span class="autoposting-badge">${esc(item.stateLabel)}</span>${item.stale?' <span class="autoposting-badge">решение относилось к прежней версии</span>':""}${item.comment?`<p class="autoposting-issues">Причина: ${esc(item.comment)}</p>`:""}${item.byName?`<p class="autoposting-note">${esc(item.byName)}${item.at?" · "+esc(time.toLocal(item.at,zone()).replace("T"," ")):""}</p>`:""}</li>`).join("")}</ul>${owner?'<p class="autoposting-note">Решение относится только к отмеченным площадкам.</p>':""}`:""}
       ${rv.state!=="pending"&&!a.approved&&requiresApproval(post)?`<button class="plain-button" type="button" id="autoposting-submit-review"${canEdit?"":" disabled"}>Отправить на согласование</button>`:""}
       <button type="button" class="primary-action ap-approve" id="autoposting-approve" data-approved="${a.approved?"true":"false"}"${owner?"":" disabled"}>${a.approved?"Снять согласование":"Согласовать"}${Number.isSafeInteger(post.contentRevision)?` · версия v${esc(post.contentRevision)}`:""}</button>
@@ -1142,7 +1179,9 @@ function create(container, context) {
      выше стартовой точки, экран открывается на ближайшем неопубликованном. Шапка, полоса дат, этапы и
      стартовая точка — общий набор CfKit (если он загружен). Недельная доска и «Обзор месяца» убраны:
      план по дням — только в «Контент-плане». «Создать публикацию» — в «Монтаже». Прочие материалы
-     (черновики, согласование, без даты) остаются в свёрнутом «Для команды» с прежним редактором. */
+     (черновики, согласование, без даты) остаются в свёрнутом «Для команды» с прежним редактором.
+     №228 (правка Лены 07.11): черновик рилса из «Монтажа» (origin «Материалы: ролик №…» или видео) виден в ленте сразу —
+     строкой «Черновик» со списком недостающих шагов; нажатие открывает его редактор. После согласования с датой — обычный этап. */
   const kit=()=>window.CfKit&&window.CfKit.version?window.CfKit:null;
   const SORTS=[{id:'time',label:'Время выхода'},{id:'platform',label:'Площадка'},{id:'status',label:'Статус: ошибки и ожидание → вышло'}];
   const SHORT={instagram:'IG',tiktok:'TT',youtube_shorts:'YT',vk:'VK',telegram:'TG',max:'MAX',two_gis:'2ГИС',yandex_maps:'ЯК'};
@@ -1150,8 +1189,8 @@ function create(container, context) {
   const PUB_TABS=['instagram','tiktok','youtube_shorts','vk','telegram'];
   const WEEKDAY_FULL=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
   const READY_STATUSES=new Set(['scheduled','publishing','published','failed','needs_review']);
-  const FALLBACK_STAGE={ready:'Готово к выходу',scheduled:'Запланировано к выходу',published:'Опубликовано',publish_error:'Ошибка публикации',unpublished:'Снято с публикации'};
-  const STAGE_RANK={publish_error:0,scheduled:1,ready:2,unpublished:3,published:4};
+  const FALLBACK_STAGE={draft:'Черновик',ready:'Готово к выходу',scheduled:'Запланировано к выходу',published:'Опубликовано',publish_error:'Ошибка публикации',unpublished:'Снято с публикации'};
+  const STAGE_RANK={publish_error:0,draft:0.5,scheduled:1,ready:2,unpublished:3,published:4};
   const ZONE_NAMES={'Asia/Irkutsk':'Иркутское время','Europe/Moscow':'Московское время','Asia/Bangkok':'Время Бангкока','Asia/Novosibirsk':'Новосибирское время','Asia/Yekaterinburg':'Екатеринбургское время','Asia/Krasnoyarsk':'Красноярское время','Asia/Vladivostok':'Владивостокское время'};
   const zoneLabel=()=>{const value=zone();if(ZONE_NAMES[value])return ZONE_NAMES[value];
     try{const name=new Intl.DateTimeFormat('ru-RU',{timeZone:value,timeZoneName:'long'}).formatToParts(new Date()).find(part=>part.type==='timeZoneName')?.value;if(name)return name;}catch(_){}
@@ -1159,6 +1198,24 @@ function create(container, context) {
   // Готов к выходу: есть дата выхода и версия согласована, стоит в очереди, уже отправлялась или вышла.
   const isReady=item=>Boolean(item.effectiveDate)&&(READY_STATUSES.has(item.status)||receiptsOf(item).length>0||Boolean(item.approval?.approved&&!item.approval?.stale));
   /* Отметки «вышло вне ЛК» текущей версии (stale=false): площадка опубликована, даже если доставка по ней не удалась. */
+  /* №228: черновик рилса из «Монтажа» — ещё не готов к выходу, но уже должен быть виден в ленте «Постинга».
+     Текстовые и фото-черновики из плана остаются в «Для команды», чтобы лента оставалась лентой рилсов. */
+  const MONTAGE_ORIGIN=/^Материалы: ролик №/;
+  const isFeedDraft=item=>item.status==='draft'&&!isReady(item)&&(MONTAGE_ORIGIN.test(String(item.origin||''))||(item.mediaUrls||[]).some(url=>isVideo(String(url||''))));
+  /* Недостающие шаги — из readiness сервера (текст, материал, лимиты) и из полей карточки: TikTok «кто увидит», время выхода, согласование.
+     Кабинет ничего не досчитывает за сервер: сама проверка готовности остаётся на сервере при согласовании и постановке. */
+  const needsOf=item=>{
+    const out=[];
+    for(const issue of item.readiness?.issues||[]){const text=String(issue||'').trim();if(!text)continue;
+      out.push(/^Нет текста/.test(text)?'текст публикации':/^Нет материала/.test(text)?'ролик':text);}
+    if(platformsOf(item).includes('tiktok')&&!item.platformOptions?.tiktok?.privacy)out.push('TikTok: кто увидит');
+    if(!item.scheduledAt)out.push('дата и время выхода');
+    if(!(item.approval?.approved&&!item.approval?.stale))out.push(item.review?.state==='pending'?'решение по согласованию':'согласование');
+    return [...new Set(out)];
+  };
+  const DRAFT_TONE={draft:'gray',pending:'yellow',rework:'coral',partial:'yellow',approved:'green'};
+  const draftChip=item=>{const status=boardStatus(item);
+    return `<span class="cfk-chip cfk-tone-${DRAFT_TONE[status]||'gray'}" data-stage="draft" data-draft-status="${esc(status)}">${esc(statusLabel(item))}</span>`;};
   const liveReceipts=item=>receiptsOf(item).filter(receipt=>receipt&&!receipt.stale);
   // Площадки ленты: выбранные в карточке плюс площадки с отметкой «вышло» (иначе такая площадка показывалась «—»).
   const feedPlatforms=item=>[...new Set([...platformsOf(item),...liveReceipts(item).map(receipt=>receipt.platform).filter(Boolean)])];
@@ -1224,13 +1281,14 @@ function create(container, context) {
     if(['published','failed','needs_review','publishing'].includes(item.status))return state('off','не отправлялось из кабинета');
     if(item.status==='scheduled')return state('wait','ждёт времени выхода');
     if(item.status==='cancelled')return state('off','снято с публикации');
+    if(isFeedDraft(item))return state('draft','черновик — ещё не согласован и не поставлен в план');
     if(PLAN_DELIVERY.get(platform)==='manual')return state('wait','выкладывается вручную');
     return state('wait','готово · не в очереди');
   };
   const badge=(item,platform)=>{const st=platformState(item,platform);
     return `<span class="ap-pf" data-platform="${esc(platform)}" data-kind="${esc(st.kind)}" title="${esc(platformLabel(platform)+': '+st.text)}">${esc(SHORT[platform]||platform)}</span>`;};
   /* ПК: та же карточка строкой таблицы — по колонке на площадку (IG/TT/YT/VK/TG), как в макете. */
-  const CELL={published:'вышло',wait:'ждёт',error:'ошибка',off:'не отпр.'};
+  const CELL={published:'вышло',wait:'ждёт',error:'ошибка',off:'не отпр.',draft:'черновик'};
   const cell=(item,platform)=>{
     if(!feedPlatforms(item).includes(platform))return '<span class="ap-cell" data-kind="none">—</span>';
     const st=platformState(item,platform),label=st.kind==='published'&&!st.href?'ссылка позже':CELL[st.kind]||st.text;
@@ -1245,22 +1303,27 @@ function create(container, context) {
     return byDate;
   };
   const feedCard=item=>{
-    const {n,rest}=numberOf(item),stage=stageOf(item),video=videoOf(item),platforms=sortedPlatforms(item);
+    const draft=isFeedDraft(item),{n,rest}=numberOf(item),stage=draft?'draft':stageOf(item),video=videoOf(item),platforms=sortedPlatforms(item);
     // Превью-кадр — только у смонтированного ролика (видео есть в карточке); кадр с 0,5 с, без загрузки всего файла.
     // Макет: превью слева у каждой карточки; без смонтированного ролика — серая заглушка того же размера.
     const thumb=video?`<span class="ap-feed-thumb"><video preload="metadata" muted playsinline src="${esc(frameOf(video))}" aria-hidden="true" tabindex="-1"></video></span>`:'<span class="ap-feed-thumb" data-empty="true" aria-hidden="true"></span>';
     const note=stage==='publish_error'&&item.lastErrorCode?`<p class="ap-feed-note">${esc(ERRORS[item.lastErrorCode]||'Публикация не подтверждена.')}</p>`
-      :item.status==='publishing'?'<p class="ap-feed-note">Публикуется…</p>':'';
+      :item.status==='publishing'?'<p class="ap-feed-note">Публикуется…</p>'
+      :draft?`<p class="ap-feed-need" data-feed-need>Не хватает: ${esc(needsOf(item).join(' · ')||'проверки в редакторе')}</p>`:'';
     const when=`${whenLabel(item)} · ${localTime(item)||'время не задано'}`;
-    return `<li class="ap-feed-card has-thumb" data-feed-post="${esc(item.id)}" data-date="${esc(item.effectiveDate)}" data-stage="${esc(stage)}"${selectedDate&&selectedDate===item.effectiveDate?' data-day="selected"':''}>
-      <button type="button" class="ap-feed-open" data-feed-open="${esc(item.id)}" aria-haspopup="dialog" aria-label="Открыть публикацию №${esc(n)} ${esc(rest)}">${thumb}<span class="ap-feed-main"><span class="ap-feed-title"><b>№${esc(n)}</b> ${esc(rest)}</span><span class="ap-feed-when">${esc(when)}</span></span></button>
+    return `<li class="ap-feed-card has-thumb" data-feed-post="${esc(item.id)}" data-date="${esc(item.effectiveDate)}" data-stage="${esc(stage)}"${selectedDate&&selectedDate===item.effectiveDate?' data-day="selected"':''}${draftFocus===String(item.id)?' data-focus="true"':''}>
+      <button type="button" class="ap-feed-open" data-feed-open="${esc(item.id)}" aria-haspopup="dialog" aria-label="${draft?'Открыть черновик':'Открыть публикацию'} №${esc(n)} ${esc(rest)}">${thumb}<span class="ap-feed-main"><span class="ap-feed-title"><b>№${esc(n)}</b> ${esc(rest)}</span><span class="ap-feed-when">${esc(when)}</span></span></button>
       <span class="ap-feed-out">${esc(shortWhen(item))}</span>
-      <p class="ap-feed-foot">${chipHtml(stage)}<span class="ap-pfs">${platforms.map(platform=>badge(item,platform)).join('')||'<span class="ap-pf" data-kind="off">площадки не выбраны</span>'}</span></p><span class="ap-feed-cells">${PUB_TABS.map(platform=>cell(item,platform)).join('')}</span>${note}</li>`;
+      <p class="ap-feed-foot">${draft?draftChip(item):chipHtml(stage)}<span class="ap-pfs">${platforms.map(platform=>badge(item,platform)).join('')||'<span class="ap-pf" data-kind="off">площадки не выбраны</span>'}</span></p><span class="ap-feed-cells">${PUB_TABS.map(platform=>cell(item,platform)).join('')}</span>${note}</li>`;
   };
   const renderFeed=all=>{
     const feed=get('autoposting-feed'),pick=get('autoposting-platform-filter')?.value||'';
-    const ready=all.map(withReceiptDate).filter(isReady).filter(item=>!pick||feedPlatforms(item).includes(pick)).sort(feedCompare);
-    const marks=[...new Set(ready.map(item=>item.effectiveDate))].sort();
+    const shown=all.map(withReceiptDate).filter(item=>(isReady(item)||isFeedDraft(item))&&(!pick||feedPlatforms(item).includes(pick)));
+    const marks=[...new Set(shown.filter(isReady).map(item=>item.effectiveDate))].sort();
+    /* №228: черновики без даты — в начале ленты; при сортировке по времени — сразу за опубликованными, на стартовой точке. */
+    const dated=shown.filter(item=>item.effectiveDate).sort(feedCompare),undated=shown.filter(item=>!item.effectiveDate).sort(byTime);
+    const at=feedSort==='time'?dated.findIndex(item=>stageOf(item)!=='published'):0;
+    const ready=[...dated];ready.splice(at<0?dated.length:at,0,...undated);
     if(strip&&marks.join()!==stripMarked){stripMarked=marks.join();strip.setMarked(marks);}
     const cols=container.querySelector('.ap-feed-cols');if(cols)cols.hidden=!ready.length;
     if(!ready.length){
@@ -1270,7 +1333,7 @@ function create(container, context) {
     }
     feed.innerHTML=ready.map(feedCard).join('');
     // Есть опубликованные над стартовой точкой — лента во всю высоту, чтобы встать на ближайший неопубликованный.
-    feed.classList.toggle('has-above',feedSort==='time'&&ready.some(item=>stageOf(item)==='published')&&ready.some(item=>stageOf(item)!=='published'));
+    feed.classList.toggle('has-above',feedSort==='time'&&ready.some(item=>!isFeedDraft(item)&&stageOf(item)==='published')&&ready.some(item=>isFeedDraft(item)||stageOf(item)!=='published'));
     const k=kit();
     // Встаём на стартовую точку один раз — когда список месяца уже пришёл; до этого и после — без сброса прокрутки.
     const place=!feedPlaced&&calendarSettled&&!calendarPending;
@@ -1382,6 +1445,8 @@ function create(container, context) {
   get('autoposting-platform-filter')?.addEventListener('change',()=>{feedPlaced=false;renderCalendar();});
   get('autoposting-feed').addEventListener('click',event=>{
     const card=event.target.closest('[data-feed-post]');if(!card||event.target.closest('a'))return;
+    // №228: черновик открывается сразу в редакторе — там заполняются недостающие шаги и согласование.
+    if(card.dataset.stage==='draft'){editorOpenerId=null;selectPost(card.dataset.feedPost);return;}
     openPub(card.dataset.feedPost,card.querySelector('[data-feed-open]'));
   });
   get('autoposting-pub').addEventListener('click',event=>{
@@ -1531,7 +1596,7 @@ function create(container, context) {
     if(refresh)handledLink='';
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
     get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
-    closePub(true);unpublishApi.clear();sheetUrl="";feedPlaced=false;calendarSettled=false;
+    closePub(true);unpublishApi.clear();sheetUrl="";feedPlaced=false;calendarSettled=false;draftFocus="";
     companyCode=code;const version=++epoch;fullHistory.clear();trashPosts=[];renderTrash();calendarEpoch++;archivedEpoch++;archived=null;archivedState="";archiveFocus=null;renderArchive();calendarData=null;calendarPending=false;approvalSelection.clear();approvalResults.clear();approvalBlocked.clear();renderBatch();posts=[];get('autoposting-posts').replaceChildren();get('autoposting-batch-results').replaceChildren();get('autoposting-calendar-state').textContent='';get('autoposting-calendar-zone').textContent='';get('autoposting-plan-gaps').hidden=true;get('autoposting-plan-gaps').textContent='';get('autoposting-editor').open=false;syncEditor();busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
     get('autoposting-channels').querySelectorAll('[data-channel-links]').forEach(node=>node.replaceChildren());get('autoposting-planning').replaceChildren();
     get("vk-connection-guide").innerHTML='<h3 id="vk-connection-title">Подключение ВКонтакте</h3><p>Загружаем настройки выбранной компании…</p>';controls();
@@ -1565,12 +1630,14 @@ function create(container, context) {
     if(!same&&lower(ctx.selectedProjectId)===lower(req.companyCode))return;
     pendingOpen=null;const slot=cabinet.pendingMaterialOpen;if(slot&&slot.companyCode===req.companyCode&&Number(slot.postId)===Number(req.postId))cabinet.pendingMaterialOpen=null;
     const id=Number(req.postId),source=['stats','sources','materials'].includes(req.source)?req.source:'proposal';
-    const FROM={stats:'из статистики',sources:'из «Исходников»',materials:'из «Материалов»'};
+    const FROM={stats:'из статистики',sources:'из «Исходников»',materials:'из «Монтажа»'};
     if(!same||!Number.isSafeInteger(id)||id<1){if(FROM[source])message(`Материал ${FROM[source]} не открыт: выбрана другая компания.`);return;}
     const version=epoch;busy=true;controls();
     void (async()=>{try{const item=await request('/autoposting/posts/'+id);if(version!==epoch)return;
       if(item.companyCode!==companyCode||item.id!==id)throw Error('Wrong material scope');
       if(archivedAt(item)){showArchived(item);return;}
+      // №228: черновик из «Монтажа» подсвечивается в ленте — после закрытия редактора видно, где он стоит.
+      if(source==='materials')draftFocus=String(item.id);
       posts=[item,...posts.filter(value=>value.id!==item.id)];renderList();selectPost(item.id);
       // Состояние — по текущему DTO: ранее созданный материал мог быть уже согласован, запланирован или опубликован.
       const approval=item.approval?(item.approval.approved&&!item.approval.stale?'согласован':item.approval.stale?'согласование снято после правки':'не согласован'):'';
@@ -1588,7 +1655,7 @@ function create(container, context) {
      явное false, а не «поля нет». Отметка ставится до пересчёта формы. */
   const markOption=event=>{const node=event.target.closest('[data-option]');if(node&&node.type==='checkbox')optionTouched.add(node.dataset.option);};
   form.addEventListener("input",event=>{markOption(event);stash();invalidate();syncVariantDirty();if(event.target.id==="autoposting-media")renderMediaPreview();});
-  form.addEventListener("change",event=>{markOption(event);stash();invalidate();syncVariantDirty();});
+  form.addEventListener("change",event=>{markOption(event);if(event.target.closest('#autoposting-platforms'))placePrivacy();stash();invalidate();syncVariantDirty();});
   get("autoposting-import-state").addEventListener("click",event=>{
     const target=event.target.closest("[data-import-archive]");if(!target)return;
     const id=Number(target.dataset.importArchive);archiveFocus=Number.isSafeInteger(id)&&id>0?id:null;
@@ -1662,12 +1729,14 @@ function create(container, context) {
         const internal=source==="internal";
         const over=caption.length>limit?(internal?" · превышен внутренний предел поля":" · превышен лимит"):"";
         return `<details${post.captions?.[id]?" open":""}><summary>${label} · ${caption.length} / ${limit}${internal?" · внутренний предел поля, лимит площадки не подтверждён":""}${over}${post.captions?.[id]?"":" · общий текст"}${deliveryState(id).ready?"":" · "+deliveryState(id).label}</summary><pre>${esc(caption)}</pre></details>`;}).join("")}</div>`:""}
-      ${issues.length?`<ul class="autoposting-issues">${issues.map(item=>`<li>${esc(item)}</li>`).join("")}</ul>`:"<p>Материал готов к постановке в план.</p>"}`;
+      ${issues.length?`<ul class="autoposting-issues">${issues.map(item=>`<li>${item===TIKTOK_PRIVACY_ISSUE?`<a href="#" data-focus-privacy>${esc(item)}</a>`:esc(item)}</li>`).join("")}</ul>`:"<p>Материал готов к постановке в план.</p>"}`;
     // Файл показан один раз: после предпросмотра — в нём, а не ещё и в списке файлов формы.
     if((post.mediaUrls||[]).length)get("autoposting-media-preview").closest(".ap-editor-media").hidden=true;controls();
     const heading=get("autoposting-preview-title");heading.focus({preventScroll:true});
     heading.scrollIntoView?.({block:"start",behavior:window.matchMedia?.("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
   });
+  get("autoposting-schedule-preview").addEventListener("click",()=>get("autoposting-preview").click());
+  container.addEventListener("click",event=>{const link=event.target.closest('[data-focus-privacy]');if(!link)return;event.preventDefault();focusPrivacy();});
   get("autoposting-schedule").addEventListener("click",()=>{
     if(!edit()||!readyToSchedule())return;
     const selectedTargets=scheduleTargets(post,read().platformIds);

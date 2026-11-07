@@ -297,6 +297,10 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-pf[data-kind="error"] { border-color:#f08c8c; color:#f5b3b3; }
 .ap-pf[data-kind="off"] { opacity:.6; }
 .ap-feed-note { margin:0; font-size:12.5px; color:#f5b3b3; overflow-wrap:anywhere; }
+/* №228: черновик из «Монтажа» в ленте — пунктирная рамка и список недостающих шагов. */
+.ap-feed-card[data-stage="draft"] { border-style:dashed; }
+.ap-feed-card[data-focus="true"] { border-color:var(--accent); border-style:solid; box-shadow:0 0 0 1px var(--accent) inset; }
+.ap-feed-need { margin:0; font-size:12.5px; color:#e3c37a; overflow-wrap:anywhere; }
 .ap-feed-empty { padding:14px; border:1px dashed var(--line); border-radius:12px; }
 .ap-feed-empty p { margin:0 0 6px; }
 .ap-team { margin-top:6px; }
@@ -362,7 +366,7 @@ body.autoposting-modal-open { overflow:hidden; }
   .ap-cell[data-kind="wait"] { color:#e3c37a; }
   .ap-cell[data-kind="error"] { color:#f08c8c; }
   .ap-cell a { color:var(--accent); font-weight:600; text-decoration:none; }
-  .ap-feed-note { grid-column:1 / -1; }
+  .ap-feed-note, .ap-feed-need { grid-column:1 / -1; }
   .ap-feed-title { -webkit-line-clamp:1; }
 }
 
@@ -446,7 +450,7 @@ body[data-cabinet-view="autoposting"] #content-factory-header > .factory-tabs { 
   .ap-cell[data-kind="error"] { border-color:rgba(240,140,140,.6); color:#f5b3b3; }
   .ap-cell[data-kind="off"] { border-color:var(--line); }
   .ap-cell a { color:inherit; }
-  .ap-feed-note { grid-column:1 / -1; grid-row:2; }
+  .ap-feed-note, .ap-feed-need { grid-column:1 / -1; grid-row:2; }
 }
 
 /* specs/224-content-archive: «Убрать» в карточке списка и подтверждение с причиной. */
@@ -454,3 +458,17 @@ body[data-cabinet-view="autoposting"] #content-factory-header > .factory-tabs { 
 .ap-archive-reason { display:grid; gap:4px; font-size:14px; }
 .ap-archive-reason input { box-sizing:border-box; width:100%; min-height:40px; }
 .ap-archive-warning { padding:8px 10px; border:1px solid rgba(240,138,93,.45); border-radius:10px; }
+
+/* №231: «Кто увидит» TikTok на виду, пока режим не выбран; №232: подпись и «Предпросмотр» у серой «Поставить в план». */
+.ap-tiktok-privacy { margin:8px 0 12px; padding:10px 12px; border:1px solid #e3c37a; border-radius:10px; display:grid; gap:6px; }
+.ap-tiktok-privacy p { margin:0; color:#e3c37a; }
+.ap-tiktok-privacy label { display:grid; gap:4px; }
+.ap-tiktok-privacy select { min-height:40px; max-width:100%; }
+[data-focus-privacy] { color:var(--accent); text-decoration:underline; cursor:pointer; }
+.ap-schedule-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:12px 0 4px; }
+.ap-schedule-row .autoposting-note { margin:0; flex:1 1 200px; min-width:0; overflow-wrap:anywhere; }
+@media (max-width: 720px) {
+  .ap-schedule-row { flex-direction:column; align-items:stretch; }
+  .ap-schedule-row > button { width:100%; min-height:44px; }
+  .ap-schedule-row .autoposting-note { flex:none; }
+}
