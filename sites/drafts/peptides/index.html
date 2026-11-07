@@ -402,6 +402,9 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 }
 @media (min-width:701px) and (max-width:1180px){.hint{display:none}}
 @media (min-width:701px) and (max-width:1180px){.panel{max-width:440px}}
+.rv{opacity:0;transform:translateY(26px);transition:opacity .9s cubic-bezier(.2,.7,.1,1),transform .9s cubic-bezier(.2,.7,.1,1)}
+.rv.in{opacity:1;transform:none}
+html{scroll-behavior:smooth}
 </style>
 
 <div class="splash" id="splash" role="status" aria-live="polite">
@@ -883,7 +886,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   function posFor(t){return trackTop()+trackMax()*Math.max(0,Math.min(1,t/DUR))}
   function curTime(){return target*DUR}
   function nearestStop(){var t=curTime(),best=0,bd=1e9;STOPS.forEach(function(s,i){var d=Math.abs(s-t);if(d<bd){bd=d;best=i}});return best}
-  function proofTop(){var el=document.getElementById('proof');return el?el.getBoundingClientRect().top+window.scrollY-40:posFor(DUR)+innerHeight}
+  function proofTop(){var el=document.querySelector('.after section');return el?Math.max(posFor(DUR)+8,el.getBoundingClientRect().top+window.scrollY-24):posFor(DUR)+innerHeight}
   function inZone(){var y=window.scrollY;return y>=trackTop()-4 && y<=proofTop()+4}
   var lastSetY=-1;function setScroll(y){ourScrollUntil=performance.now()+120;window.scrollTo({top:y,left:0,behavior:'instant'});lastSetY=window.scrollY;}
   function smooth(x){x=Math.max(0,Math.min(1,x));return x*x*(3-2*x)}
@@ -925,7 +928,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     tv.addEventListener('seeked',function h(){tv.removeEventListener('seeked',h);clearTimeout(to);go();});
     try{tv.currentTime=from;}catch(e){clearTimeout(to);done=true;finish();animScroll(posFor(t1),2500,function(){startLoop(idx)});}
   }
-  function release(){animScroll(proofTop(),1100);}
+  function release(){animScroll(proofTop(),1500);}
   function gesture(dir){
     if(busy){if(dir>0&&mode==='video')boost=true;return;}
     var y=window.scrollY,last=STOPS.length-1;
@@ -978,6 +981,16 @@ document.querySelectorAll('.copy').forEach(function(b){
     if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(function(){done(true)},function(){done(false)}); } else done(false);
   });
 });
+
+/* v4.2: sections after the tour fade in gently while scrolling */
+(function(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches||!('IntersectionObserver' in window))return;
+  var els=[].slice.call(document.querySelectorAll('.after section.block > *, .after section.block .paingrid > *, .after section.block .molgrid > *, .after section.block .dirs > *, .after section.block .evgrid > *'));
+  els=els.filter(function(e){return !e.matches('.paingrid,.molgrid,.dirs,.evgrid')});
+  els.forEach(function(e){e.classList.add('rv')});
+  var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){var e=x.target,sib=e.parentNode?[].indexOf.call(e.parentNode.children,e):0;e.style.transitionDelay=Math.min(sib,5)*60+'ms';e.classList.add('in');io.unobserve(e);}})},{rootMargin:'0px 0px -8% 0px',threshold:0.08});
+  els.forEach(function(e){io.observe(e)});
+})();
 
 /* lead form: saves to the artifact store when available, always gives a ready message */
 (function(){
