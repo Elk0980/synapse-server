@@ -3,7 +3,8 @@
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const stages=['code','connected','verified','accepted'];
 const {assigneeMatches}=require('./people-assignee');
-function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}) {
+const {shootingFacts}=require('./content-stages');
+function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send,contentStages=null}) {
   function access(request,code,permission) {
     const actor=identity(request);
     if(!actor||!['owner','editor'].includes(actor.role)||!Number.isSafeInteger(actor.userId)||actor.userId<1||
@@ -38,7 +39,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     const values=url.searchParams.getAll('companyCode'),code=values[0];
     if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset',...(url.pathname.endsWith('/ownerDecisionEvents')?['taskId']:[])].includes(key)))fail(400,'Укажите один проект');
     const action=url.pathname.slice('/internal/people/'.length),method=request.method;
-    const plan=action==='mediaMentor'||action==='planVariantsDecision';
+    const plan=action==='mediaMentor'||action==='planVariantsDecision'||action==='contentStages';
     const write=['task_update','teamChatTask','hughTask','myBoardAction','taskChatComment'].includes(action);
     const actor=access(request,code,plan?'content-plan.approve':write?'tasks.self.edit':'tasks.self.view');
     let result;
@@ -62,6 +63,15 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
         action==='myBoardAction'?board.action(code,fresh,body):board.comment(code,fresh,body);
     } else if(action==='myBoard'&&method==='GET')result=board.board(code,actor);
     else if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
+    else if(action==='contentStages'&&method==='GET') {
+      // Рассылка по этапам (specs/214): только владелец, только этап и подпись идеи своей компании.
+      if(actor.role!=='owner')fail(403,'Только владелец');
+      if(!contentStages)fail(503,'Этапы идей не подключены');
+      const facts=shootingFacts(request,code),snapshot=contentStages.apply(mentor.get(code),code,facts);
+      if(String(snapshot.companyCode||'').toLowerCase()!==code)fail(502,'Источник другого проекта');
+      result={companyCode:code,shooting:Boolean(facts),ideas:(snapshot.plan?.days||[]).map((day,index)=>({ideaId:day.ideaId,number:index+1,
+        topic:String(day.topic||'').slice(0,200),date:day.date,stage:day.stage||null}))};
+    }
     else if(action==='planVariantsDecision'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'content-plan.approve');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');

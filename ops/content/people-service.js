@@ -6,7 +6,7 @@ const {createPeopleNotificationTransport}=require('./people-notification-transpo
 const {createPeopleRuntime,createPeopleTelegramResolver}=require('./people-runtime');
 const {createPeopleHttp}=require('./people-http');
 const {createPeoplePlan}=require('./people-plan');
-function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,requireCsrf,readJson,sendJson,env=process.env}) {
+function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,requireCsrf,readJson,sendJson,env=process.env,contentSettings=null,shootingFacts=null}) {
   const enabled=env.PEOPLE_NOTIFICATIONS_ENABLED==='1'&&env.PEOPLE_NOTIFICATIONS_TEXT_APPROVED==='1';
   const call=createPeopleCrmClient({crmUrl,apiKey:crmKey,authStore});
   const tasks=createPeopleTasks({authStore,db,call});
@@ -32,10 +32,19 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
           return task.assignee_name===`person:${userId}`&&task.coordination.revision===Number(match[2])&&task.status===match[3];
         }catch(error){if([403,404].includes(error.status))return false;throw error;}
       }
+      // Этапы Контент-завода (specs/214): своё событие проверяет только модуль рассылки по матрице.
+      if(eventKey.startsWith('cf-stage:'))return stageNotify?stageNotify.validateEvent({userId,companyCode,eventKey}):false;
       return runtime.validateEvent({userId,companyCode,eventKey,payload});
     }});
+  // Рассылка по матрице «этап × роль»: включается владельцем на компанию (по умолчанию выкл.), доставка — эта же очередь.
+  const stageNotify=contentSettings?require('./content-stage-notify').createContentStageNotify({db,authStore,settings:contentSettings,call,
+    notifications,shootingFacts:typeof shootingFacts==='function'?shootingFacts:()=>'',peopleDeliveryEnabled:enabled,requireSession,sendJson,
+    cabinetUrl:env.CABINET_PUBLIC_URL||undefined}):null;
   const runtime=createPeopleRuntime({db,authStore,tasks,call,notifications,enabled});
-  const handle=createPeopleHttp({authStore,team,tasks,chat:teamChat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson});
-  return {handle,start:runtime.start,stop:runtime.stop};
+  const peopleHandle=createPeopleHttp({authStore,team,tasks,chat:teamChat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson});
+  const handle=async(request,response,url)=>(stageNotify&&await stageNotify.handle(request,response,url))||peopleHandle(request,response,url);
+  return {handle,stageNotify,
+    start(){runtime.start();stageNotify?.start();},
+    async stop(){await Promise.all([runtime.stop(),stageNotify?.stop()]);}};
 }
 module.exports={createPeopleService};

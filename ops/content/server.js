@@ -240,7 +240,7 @@ const contentSettings=require('./content-settings').createContentSettings({db,au
 const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,providers:hughProviders,
   config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
-  crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
+  crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send,contentSettings,shootingFacts:shooting.factsHeader});
 // Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
 const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,

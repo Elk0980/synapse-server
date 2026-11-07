@@ -105,3 +105,63 @@ test('макет 07.11: три вкладки по порядку, раздел�
   const people=await open({path:'people'});
   assert.equal(people.root.querySelector('[data-cs-pane="people"]').hidden,false,'адрес settings/content/people');
 });
+
+/* specs/214: выключатель «Отправлять уведомления», журнал «что ушло бы» и люди в ролях. */
+async function openDelivery({canDeliver=true,canEdit=true,mode='off',log={items:[]},logError=null,tab='notifications'}={}){
+  const dom=new JSDOM('<main id="root"></main>',{runScripts:'outside-only',url:'https://sample.test'}),w=dom.window;let def;const puts=[],gets=[];
+  let data={settings:{...base(),notificationMatrix:JSON.parse(JSON.stringify(MATRIX)),notificationDelivery:mode,rolePeople:{content:[2],shooting:[],editor:[]}},
+    canEdit,canDeliver,candidates:[],people:[{id:1,name:'Влад',role:'owner'},{id:2,name:'Лена',role:'editor'},{id:3,name:'Оператор',role:'editor'}],
+    delivery:{mode,enabledAt:mode==='off'?null:'2026-11-07T03:00:00.000Z'},options:{fonts:['Inter'],sizes:['m'],platforms:['vk']},version:7};
+  w.SynapseModules={register:(name,d)=>{def=d}};w.eval(fs.readFileSync(path.join(__dirname,'content-settings.js'),'utf8'));
+  const api={get:async()=>data,save:async(settings,version)=>{puts.push({settings:JSON.parse(JSON.stringify(settings)),version});
+    data={...data,settings:{...settings},delivery:{...data.delivery,mode:settings.notificationDelivery},version:version+1};return data;}};
+  const root=w.document.querySelector('#root');
+  await def.mount(root,{signal:new w.AbortController().signal,companyName:'Пример',route:{path:tab,params:new w.URLSearchParams()},settings:{content:api},
+    api:{get:async(route)=>{gets.push(route);if(logError)throw logError;return log;}}});
+  await new Promise(r=>setTimeout(r,5));
+  return {w,root,puts,gets};
+}
+
+test('specs/214: по умолчанию «Выкл.»; владелец переключает режим — сохраняется notificationDelivery с текущей версией',async()=>{
+  const {w,root,puts}=await openDelivery();
+  const radios=[...root.querySelectorAll('[data-csn-delivery] input[name="csn-mode"]')];
+  assert.deepEqual(radios.map(r=>[r.value,r.checked,r.disabled]),[['off',true,false],['trial',false,false],['on',false,false]]);
+  radios[1].checked=true;radios[1].dispatchEvent(new w.Event('change',{bubbles:true}));await new Promise(r=>setTimeout(r,5));
+  assert.equal(puts.length,1);assert.equal(puts[0].version,7);assert.equal(puts[0].settings.notificationDelivery,'trial');
+  assert.deepEqual(puts[0].settings.notificationMatrix,MATRIX,'матрица уходит без изменений');
+  assert.equal(root.querySelector('[data-csn-delivery] input[value="trial"]').checked,true);
+  assert.match(root.querySelector('[data-csn-delivery-status]').textContent,/Пробно · версия 8/);
+});
+
+test('specs/214: не владелец видит режим только для чтения; журнал показывает, что ушло бы и кому',async()=>{
+  const log={peopleDeliveryEnabled:false,baselineAt:'2026-11-07T03:00:00Z',labels:{script_review:'Сценарий на согласовании',planned:'Запланировано'},
+    items:[{id:1,title:'№3 Тема',from:'script_review',to:'planned',person:'Лена',roles:['content'],status:'trial',createdAt:'2026-11-07T04:00:00Z'},
+      {id:2,title:'№4 Тема',from:'script_review',to:'planned',person:null,roles:[],status:'no_recipients',createdAt:'2026-11-07T04:00:00Z'}]};
+  const {root,gets}=await openDelivery({canDeliver:false,mode:'trial',log});
+  assert.ok([...root.querySelectorAll('input[name="csn-mode"]')].every(r=>r.disabled));
+  assert.match(root.querySelector('.csn-mode-hint').textContent,/только владелец/);
+  assert.deepEqual(gets,['content-stage-notify/log']);
+  const items=[...root.querySelectorAll('[data-csn-log] li')];
+  assert.equal(items.length,2);
+  assert.match(items[0].textContent,/№3 Тема/);assert.match(items[0].textContent,/Сценарий на согласовании → Запланировано/);
+  assert.match(items[0].textContent,/Лена \(Контент \(СММ\)\) — ушло бы/);assert.match(items[1].textContent,/некому/);
+  assert.match(root.querySelector('[data-csn-journal]').textContent,/на сервере пока выключена/);
+});
+
+test('specs/214: старый сервер — без выключателя и журнала, честная подпись; журнал 404 — подпись',async()=>{
+  const {root}=await open();
+  assert.match(root.querySelector('[data-csn-delivery]').textContent,/после обновления сервера/);
+  assert.equal(root.querySelector('input[name="csn-mode"]'),null);
+  const missing=await openDelivery({logError:Object.assign(new Error('nf'),{status:404})});
+  assert.match(missing.root.querySelector('[data-csn-journal]').textContent,/после обновления сервера/);
+});
+
+test('specs/214: «Участники» — люди в ролях Контент/Съёмка/Монтажёр сохраняются вместе с формой',async()=>{
+  const {w,root,puts}=await openDelivery({tab:'people'});
+  const box=(role,id)=>root.querySelector(`[data-cs-role="${role}"] input[value="${id}"]`);
+  assert.equal(box('content',2).checked,true);assert.equal(box('shooting',3).checked,false);
+  box('shooting',3).checked=true;box('editor',2).checked=true;
+  root.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await new Promise(r=>setTimeout(r,5));
+  assert.deepEqual(puts[0].settings.rolePeople,{content:[2],shooting:[3],editor:[2]});
+  assert.equal('notificationDelivery' in puts[0].settings,false,'форма не трогает режим рассылки');
+});
