@@ -1,5 +1,8 @@
 /* Настройки → Контент (№98). */
-.cs-form { display: grid; gap: 14px; max-width: 880px; }
+/* Макет 07.11 (#common): на ПК карточки в одну колонку на всю ширину. */
+.cs-form, .cs-pane { display: grid; gap: 14px; min-width: 0; }
+.cs-pane[hidden] { display: none; }
+.cs-block-title { margin: 0; font-size: 1rem; }
 .cs-block { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); }
 .cs-block legend { padding: 0 6px; font-weight: 700; }
 .cs-block p { margin: 0; }
@@ -38,7 +41,13 @@
 .csn-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
 .csn-tab { min-height: 34px; padding: 5px 14px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: .9rem; cursor: pointer; }
 .csn-tab[aria-selected="true"] { color: var(--text); border-color: var(--text); font-weight: 700; background: var(--surface); }
-.csn-notify { max-width: 880px; }
+.csn-notify { display: grid; gap: 10px; }
+.csn-lead, .csn-foot { margin: 0; }
+.csn-foot { font-size: .85rem; }
+.csn-tab { flex: none; }
+/* Общее .view-panel button (44 px, фон) не должно менять вид вкладок: как в макете — рамка, выбранная залита. */
+.view-panel .csn-tabs button.csn-tab { min-height: 36px; padding: 5px 14px; border-radius: 8px; background: transparent; color: var(--muted); }
+.view-panel .csn-tabs button.csn-tab[aria-selected="true"] { color: var(--text); border-color: var(--text); background: var(--surface); font-weight: 700; }
 .csn-notify-title { margin: 0; font-size: 1.05rem; }
 .csn-matrix-wrap { max-width: 100%; overflow-x: auto; }
 .csn-matrix { width: 100%; border-collapse: collapse; font-size: .9rem; }

@@ -66,7 +66,7 @@ test('№208: старый сервер отклоняет ключ — поня
   assert.equal(puts.length,1);assert.match(status(),/Сохранение заработает после обновления сервера/);
   await toggle('ready','editor');
   assert.equal(puts.length,1,'после отказа старого сервера запросы не повторяются');
-  root.querySelector('[data-csn-tab="main"]').click();
+  root.querySelector('[data-csn-tab="platforms"]').click();
   assert.equal(root.querySelector('form.cs-form').hidden,false);
   root.querySelector('form.cs-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await new Promise(r=>setTimeout(r,5));
   assert.equal(puts.length,2);assert.equal('notificationMatrix' in puts[1].settings,false,'основная форма не шлёт новый ключ старому серверу');
@@ -82,4 +82,26 @@ test('№208: только просмотр — галочки выключен�
   assert.match(conflict.status(),/изменил другой пользователь/);
   const main=await open({path:''});
   assert.equal(main.root.querySelector('form.cs-form').hidden,false,'без адреса вкладки открывается основная форма');
+});
+
+/* Макет 07.11: вкладки «Площадки · Участники · Уведомления»; одна форма и одно сохранение на «Площадки» и «Участники». */
+test('макет 07.11: три вкладки по порядку, разделы на своих местах, сохранение прежнее',async()=>{
+  const {root,w,puts}=await open({path:''});
+  assert.deepEqual([...root.querySelectorAll('[data-csn-tab]')].map(n=>n.textContent),['Площадки','Участники','Уведомления']);
+  const pane=id=>root.querySelector(`[data-cs-pane="${id}"]`);
+  assert.equal(pane('platforms').hidden,false);assert.equal(pane('people').hidden,true);
+  for(const name of ['platform','weekday','deadlineDays','contentPlanSheetUrl','font','size','color','uppercase'])assert.ok(pane('platforms').querySelector(`[name="${name}"]`),name+' — во вкладке «Площадки»');
+  assert.ok(pane('people').querySelector('[data-cs-approvers]'),'кто согласует — во вкладке «Участники»');
+  root.querySelector('[data-csn-tab="people"]').click();
+  assert.equal(pane('people').hidden,false);assert.equal(pane('platforms').hidden,true);
+  assert.equal(root.querySelector('form.cs-form').hidden,false);assert.ok(root.querySelector('.cs-actions .cs-save'),'кнопка «Сохранить» видна и в «Участниках»');
+  root.querySelector('form.cs-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await new Promise(r=>setTimeout(r,5));
+  assert.equal(puts.length,1);
+  assert.deepEqual(Object.keys(puts[0].settings).sort(),['approverUserIds','caption','contentPlanSheetUrl','deadlineDays','platforms','shootingWeekdays']);
+  root.querySelector('[data-csn-tab="notifications"]').click();
+  assert.equal(root.querySelector('form.cs-form').hidden,true);assert.equal(root.querySelector('[data-csn-notify]').hidden,false);
+  root.querySelector('[data-csn-goto="people"]').click();
+  assert.equal(pane('people').hidden,false,'ссылка «Участники» из уведомлений открывает вкладку');
+  const people=await open({path:'people'});
+  assert.equal(people.root.querySelector('[data-cs-pane="people"]').hidden,false,'адрес settings/content/people');
 });

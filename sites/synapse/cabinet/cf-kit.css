@@ -25,6 +25,10 @@
 .cfk-ico { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 8px;
   border: 1px solid var(--line, #283143); background: transparent; color: var(--text, #e8edf5); font: inherit; font-size: 15px;
   line-height: 1; cursor: pointer; text-decoration: none; }
+/* Общее правило кабинета .view-panel button (44 px, отступы) не должно растягивать иконки шапки: на всех вкладках 32 × 32. */
+.view-panel .cfk-head .cfk-head-row button.cfk-ico, .view-panel .cfk-head .cfk-head-row a.cfk-ico { box-sizing: border-box; width: 32px; height: 32px;
+  min-height: 32px; padding: 0; border-radius: 8px; background: transparent; }
+.view-panel .cfk-head .cfk-head-row .cfk-ico:is([aria-pressed="true"], [aria-expanded="true"]) { background: rgba(125, 155, 255, .2); border-color: rgba(125, 155, 255, .55); }
 .cfk-ico:hover:not(:disabled) { border-color: var(--accent, #7d9bff); }
 .cfk-ico:focus-visible { outline: 2px solid var(--accent, #7d9bff); outline-offset: 1px; }
 .cfk-ico[aria-pressed="true"], .cfk-ico[aria-expanded="true"] { background: rgba(125, 155, 255, .2); border-color: rgba(125, 155, 255, .55); }
