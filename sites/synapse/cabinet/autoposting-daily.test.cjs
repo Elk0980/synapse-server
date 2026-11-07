@@ -189,6 +189,56 @@ test('№209 Публикации: шапка CfKit, только готовые
     assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
+/* №228 (правка Лены 07.11): черновик рилса из «Монтажа» без даты и согласования виден в ленте «Постинга». */
+const montageDraft=(id,extra={})=>row(id,{title:'№3 «500 ₽»',origin:`Материалы: ролик №8 v5`,mediaUrls:['https://example.test/reel8-v5.mp4'],scheduledAt:null,text:'',
+  captions:{tiktok:''},platformIds:['telegram'],readiness:{ready:false,issues:['Нет текста и подписей площадок']},...extra});
+test('№228: черновик из «Монтажа» без даты и согласования — строка «Черновик» со списком недостающих шагов; фото-черновик плана в ленту не попадает',async()=>{
+  const f=await fixture({kit:true,entries:[...feedRows(),montageDraft(79)]});try{
+    assert.deepEqual(feedIds(f),['1','79','6','3','2'],'черновик без даты — на стартовой точке, сразу за опубликованными; №4 и №5 (фото, план) — нет');
+    const card=f.d.querySelector('#autoposting-feed [data-feed-post="79"]');
+    assert.equal(card.dataset.stage,'draft');
+    assert.equal(f.d.querySelector('#autoposting-feed .cfk-feed-sep').nextElementSibling,card,'экран открывается на черновике');
+    assert.equal(card.querySelector('.cfk-chip').textContent,'Черновик');
+    assert.equal(card.querySelector('[data-feed-need]').textContent,'Не хватает: текст публикации · TikTok: кто увидит · дата и время выхода · согласование');
+    assert.equal(card.querySelector('.ap-feed-out').textContent,'дата не задана');
+    const cells=[...card.querySelectorAll('.ap-feed-cells .ap-cell')].map(node=>node.textContent);
+    assert.deepEqual(cells,['—','черновик','—','—','черновик'],'выбранные площадки — «черновик», а не «ждёт»');
+    assert.match(card.querySelector('[data-feed-open]').getAttribute('aria-label'),/Открыть черновик №3/);
+    assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}
+});
+test('№228: нажатие на черновик открывает его редактор; после согласования с датой — обычный этап ленты',async()=>{
+  const f=await fixture({kit:true,entries:[montageDraft(79,{text:'Текст',readiness:{ready:true,issues:[]},platformOptions:{tiktok:{privacy:'PUBLIC_TO_EVERYONE'}}})]});try{
+    let card=f.d.querySelector('#autoposting-feed [data-feed-post="79"]');
+    assert.equal(card.querySelector('[data-feed-need]').textContent,'Не хватает: дата и время выхода · согласование');
+    card.querySelector('[data-feed-open]').click();await f.settle();
+    assert.equal(f.node('autoposting-editor').open,true,'редактор черновика');assert.equal(f.node('autoposting-select').value,'79');
+    assert.equal(f.node('autoposting-pub').hidden,true,'окно готовой публикации не открывается');
+    assert.ok(f.calls.every(call=>call.method==='GET'),'открытие ничего не пишет');
+    // Согласовано, но без даты — остаётся строкой со статусом «Согласовано» и одним шагом.
+    const item=f.posts.find(value=>value.id===79);Object.assign(item,{approval:{approved:true,approvedRevision:3,stale:false},revision:5});
+    f.w.dispatchEvent(new f.w.CustomEvent('sb:content-factory-drafts',{detail:{companyCode:'alpha'}}));await f.settle();
+    card=f.d.querySelector('#autoposting-feed [data-feed-post="79"]');
+    assert.equal(card.dataset.stage,'draft');assert.equal(card.querySelector('.cfk-chip').textContent,'Согласовано');
+    assert.equal(card.querySelector('[data-feed-need]').textContent,'Не хватает: дата и время выхода');
+    // Дата выхода назначена — обычный этап, без списка шагов; нажатие — окно публикации.
+    Object.assign(item,{scheduledAt:'2026-09-26T11:30:00Z',revision:6});
+    f.w.dispatchEvent(new f.w.CustomEvent('sb:content-factory-drafts',{detail:{companyCode:'alpha'}}));await f.settle();
+    card=f.d.querySelector('#autoposting-feed [data-feed-post="79"]');
+    assert.equal(card.dataset.stage,'ready');assert.equal(card.querySelector('.cfk-chip').textContent,'Готово к выходу');
+    assert.equal(card.querySelector('[data-feed-need]'),null);assert.equal(card.querySelector('.ap-feed-out').textContent,'26.09 19:30');
+  }finally{f.close();}
+});
+test('№228: «Открыть публикацию в «Постинге»» из «Монтажа» открывает именно этот черновик и подсвечивает его строку',async()=>{
+  const f=await fixture({kit:true,entries:[row(1),montageDraft(79)],listIds:[1]});try{
+    f.w.dispatchEvent(new f.w.CustomEvent('sb:content-factory-open-draft',{detail:{companyCode:'alpha',postId:79,source:'materials'}}));await f.settle();
+    assert.ok(f.calls.some(call=>call.method==='GET'&&call.path.endsWith('/posts/79')),'прямой GET созданного черновика');
+    assert.equal(f.node('autoposting-editor').open,true);assert.equal(f.node('autoposting-select').value,'79');
+    assert.match(f.node('autoposting-status').textContent,/Материал №79 открыт из «Монтажа»\. Текущее состояние: Черновик/);
+    const card=f.d.querySelector('#autoposting-feed [data-feed-post="79"]');assert.ok(card,'строка черновика в ленте');assert.equal(card.dataset.focus,'true');
+    assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}
+});
 test('Макет 07.11 #post: «Все площадки» фильтрует ленту; часовой пояс, «Исходники», «Настройки модуля» и «Как подключить» — в свёрнутом блоке внизу',async()=>{
   const f=await fixture({kit:true,entries:feedRows()});try{
     const view=f.d.querySelector('.autoposting-view'),tools=f.d.querySelector('.autoposting-workspace-tools');

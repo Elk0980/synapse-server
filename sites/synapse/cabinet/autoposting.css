@@ -297,6 +297,10 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-pf[data-kind="error"] { border-color:#f08c8c; color:#f5b3b3; }
 .ap-pf[data-kind="off"] { opacity:.6; }
 .ap-feed-note { margin:0; font-size:12.5px; color:#f5b3b3; overflow-wrap:anywhere; }
+/* №228: черновик из «Монтажа» в ленте — пунктирная рамка и список недостающих шагов. */
+.ap-feed-card[data-stage="draft"] { border-style:dashed; }
+.ap-feed-card[data-focus="true"] { border-color:var(--accent); border-style:solid; box-shadow:0 0 0 1px var(--accent) inset; }
+.ap-feed-need { margin:0; font-size:12.5px; color:#e3c37a; overflow-wrap:anywhere; }
 .ap-feed-empty { padding:14px; border:1px dashed var(--line); border-radius:12px; }
 .ap-feed-empty p { margin:0 0 6px; }
 .ap-team { margin-top:6px; }
@@ -362,7 +366,7 @@ body.autoposting-modal-open { overflow:hidden; }
   .ap-cell[data-kind="wait"] { color:#e3c37a; }
   .ap-cell[data-kind="error"] { color:#f08c8c; }
   .ap-cell a { color:var(--accent); font-weight:600; text-decoration:none; }
-  .ap-feed-note { grid-column:1 / -1; }
+  .ap-feed-note, .ap-feed-need { grid-column:1 / -1; }
   .ap-feed-title { -webkit-line-clamp:1; }
 }
 
@@ -446,7 +450,7 @@ body[data-cabinet-view="autoposting"] #content-factory-header > .factory-tabs { 
   .ap-cell[data-kind="error"] { border-color:rgba(240,140,140,.6); color:#f5b3b3; }
   .ap-cell[data-kind="off"] { border-color:var(--line); }
   .ap-cell a { color:inherit; }
-  .ap-feed-note { grid-column:1 / -1; grid-row:2; }
+  .ap-feed-note, .ap-feed-need { grid-column:1 / -1; grid-row:2; }
 }
 
 /* specs/224-content-archive: «Убрать» в карточке списка и подтверждение с причиной. */

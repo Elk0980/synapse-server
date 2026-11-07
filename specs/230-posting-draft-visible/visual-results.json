@@ -1,0 +1,42 @@
+[
+  {
+    "width": 390,
+    "file": "posting-390.png",
+    "editorFile": "posting-390-editor.png",
+    "scroll": 390,
+    "overlaps": [],
+    "order": [
+      "71:published",
+      "79:draft",
+      "80:scheduled"
+    ],
+    "need": "Не хватает: текст публикации · TikTok: кто увидит · дата и время выхода · согласование",
+    "chip": "Черновик",
+    "outside": [],
+    "opened": {
+      "editor": true,
+      "select": "79"
+    },
+    "errors": 0
+  },
+  {
+    "width": 1440,
+    "file": "posting-1440.png",
+    "editorFile": "posting-1440-editor.png",
+    "scroll": 1440,
+    "overlaps": [],
+    "order": [
+      "71:published",
+      "79:draft",
+      "80:scheduled"
+    ],
+    "need": "Не хватает: текст публикации · TikTok: кто увидит · дата и время выхода · согласование",
+    "chip": "Черновик",
+    "outside": [],
+    "opened": {
+      "editor": true,
+      "select": "79"
+    },
+    "errors": 0
+  }
+]

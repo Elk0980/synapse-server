@@ -209,6 +209,22 @@ test('Предпросмотр: маска меняется, версии, «С�
   assert.equal(f.w.SbCabinet.pendingMaterialOpen.postId, 77);
 });
 
+test('№228: после «Создать публикацию» кнопка «Открыть публикацию в «Постинге»» ведёт на созданный черновик, а не создаёт второй', async () => {
+  const f = fixture();
+  await f.mount();
+  f.el.querySelector('[data-open="reel:4"]').click(); await settle();
+  f.el.querySelector('[data-publish]').click(); await settle();
+  const open = f.el.querySelector('[data-detail] [data-open-post]');
+  assert.ok(open, 'кнопка видна в окне ролика сразу после создания');
+  assert.equal(open.textContent, 'Открыть публикацию в «Постинге»');
+  assert.ok(open.classList.contains('primary'), 'следующий шаг — главная кнопка');
+  assert.ok(!f.el.querySelector('[data-publish]').classList.contains('primary'), '«Создать публикацию» больше не главная');
+  open.click();
+  assert.deepEqual([...f.navigations], ['content-factory/plan']);
+  assert.deepEqual({...f.w.SbCabinet.pendingMaterialOpen}, {companyCode: 'avokado', postId: 77, source: 'materials'});
+  assert.equal(f.calls.filter((c) => c.path.endsWith('/publication')).length, 1, 'второй черновик не создаётся');
+});
+
 test('Права: без autoposting.edit нет «Создать публикацию», «Редактировать» и загрузки; рилс плана ведёт в «Постинг»', async () => {
   const viewer = fixture({permissions: ['autoposting.view']});
   await viewer.mount();

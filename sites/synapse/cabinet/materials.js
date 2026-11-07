@@ -461,7 +461,8 @@ function create(el, ctx) {
           <div class="mt-actions">
             ${media ? `<a class="plain-button" href="${esc(media)}" download="${esc(reel.title)} v${esc(version?.version ?? 1)}.mp4" data-download>Скачать</a>` : ""}
             ${canEdit ? (sb.reelEditor ? `<button type="button" class="plain-button" data-edit>Редактировать</button>` : `<button type="button" class="plain-button" disabled aria-disabled="true" title="Редактор монтажа скоро">Редактировать · скоро</button>`) : ""}
-            ${canEdit && !published ? (reel.id ? `<button type="button" class="plain-button primary" data-publish>Создать публикацию</button>` : `<button type="button" class="plain-button" data-open-post>Открыть публикацию в «Постинге»</button>`) : ""}
+            ${canEdit && !published && reel.id ? `<button type="button" class="plain-button${postOf(reel) ? "" : " primary"}" data-publish>Создать публикацию</button>` : ""}
+            ${postOf(reel) ? `<button type="button" class="plain-button${reel.id && canEdit && !published ? " primary" : ""}" data-open-post>Открыть публикацию в «Постинге»</button>` : ""}
             ${canEdit && versions.length > 1 && reel.id ? `<button type="button" class="plain-button" data-remove-version>Убрать версию v${esc(version?.version ?? state.version)}</button>` : ""}
             ${canEdit && (reel.id || reel.postId != null) ? `<button type="button" class="plain-button mt-remove" data-remove-open>Убрать</button>` : ""}
           </div>
@@ -483,7 +484,8 @@ function create(el, ctx) {
     state.busy = true;detailStatus("Создаём черновик публикации…");
     try {
       const result = await api.publication(state.open.id, {version: state.version, platformIds: targets});if (ctx.signal.aborted) return;
-      state.open = result.reel;renderDetail();
+      /* №228: «Открыть публикацию в «Постинге»» ведёт именно на созданный сейчас черновик, а не на первый привязанный к ролику. */
+      state.open = {...result.reel, lastPostId: Number(result.post?.id) || null};renderDetail();
       /* specs/227: сервер сообщает, подставлен ли текст публикации из контент-плана (planText). Старый сервер — прежняя фраза. */
       const plan = result.planText, fromPlan = plan?.source === "plan";
       const source = !plan ? "" : fromPlan ? ` Текст публикации подставлен из контент-плана (версия плана ${plan.planRevision}).`
@@ -500,6 +502,11 @@ function create(el, ctx) {
         status.after(list);}
     } catch (error) {detailStatus(error?.code === "PROFILE_CHANGED" ? "Данные компании изменились — обновите страницу и повторите." : "Не удалось создать публикацию: " + (error?.message || "ошибка"));}
     finally {state.busy = false;}
+  }
+  /* №228: публикация ролика — только что созданная из этого окна, иначе привязанная к ролику на сервере (postId). */
+  function postOf(reel) {
+    const id = Number(reel?.lastPostId || reel?.postId);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
   }
   function openPost(postId) {
     sb.pendingMaterialOpen = {companyCode: ctx.companyCode, postId, source: "materials"};
@@ -763,7 +770,7 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-upload-cancel")) {if (!state.busy) toggleUpload(false);}
     else if (target.hasAttribute("data-back")) close();
     else if (target.hasAttribute("data-publish")) void publish();
-    else if (target.hasAttribute("data-open-post")) openPost(state.open.postId);
+    else if (target.hasAttribute("data-open-post")) {const id = postOf(state.open);if (id) openPost(id);}
     else if (target.hasAttribute("data-edit")) void edit();
     else if (target.dataset.remove) askRemove({kind: "reel", key: target.dataset.remove});
     else if (target.hasAttribute("data-remove-open")) askRemove({kind: "reel", key: state.open.key});
