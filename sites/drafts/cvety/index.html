@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Пион и лён</title>
+<meta name="description" content="Демо-сайт цветочной мастерской: свежие цветы, авторские букеты, конструктор букета и доставка за 2 часа. Пример для Synapse Business.">
+<meta name="robots" content="noindex, nofollow">
+<meta property="og:title" content="Пион и лён — цветы, которые говорят за вас">
+<meta property="og:description" content="Демо-сайт цветочной мастерской от Synapse Business.">
+<meta property="og:image" content="poster.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: scroll-driven film of real workshop frames with cream glass cards; then a bouquet constructor, delivery strip and order form. Single light "linen and petals" theme. */
+:root{
+  color-scheme:light;
+  --bg:#FBF6EE; --bg2:#F3EADB; --fg:#2B1E22; --fg2:#5E4B50; --fg3:#8E7B7F;
+  --line:rgba(43,30,34,.14); --glass:rgba(251,246,238,.78);
+  --fuchsia:#C2185B; --coral:#F06A55; --lemon:#E9C53A; --leaf:#5C7F4F;
+  --disp:"Cormorant Garamond",Georgia,serif; --body:"Golos Text",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{display:block;max-width:100%}
+[hidden]{display:none!important}
+.bar{position:fixed;inset:0 0 auto 0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px clamp(16px,4vw,40px);background:linear-gradient(#FBF6EEee,#FBF6EE00)}
+.logo{font:600 26px/1 var(--disp);font-style:italic;text-decoration:none;color:var(--fg);white-space:nowrap;display:flex;align-items:baseline;gap:8px}
+.logo b{color:var(--fuchsia);font-weight:600}
+.logo small{font:500 10px var(--body);font-style:normal;letter-spacing:.1em;color:var(--fg3);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.bar nav{display:flex;gap:22px;font-size:14px;color:var(--fg2)}
+.bar nav a{color:inherit;text-decoration:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;font:600 15px var(--body);background:var(--fuchsia);color:#fff;border:0;border-radius:999px;padding:12px 22px;cursor:pointer;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 30px #c2185b33}
+.btn:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--fuchsia);outline-offset:2px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+.bar .short{display:none}
+
+.story{position:relative}
+.film{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;background:var(--bg2)}
+.film .fr{position:absolute;inset:0;opacity:0;will-change:opacity,transform}
+.film .fr img{width:100%;height:100%;object-fit:cover}
+.film .breath{position:absolute;inset:0;animation:breath 10s ease-in-out infinite alternate}
+@keyframes breath{from{transform:scale(1)}to{transform:scale(1.035)}}
+.film::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 60%,#FBF6EE99 100%);pointer-events:none}
+.petals{position:absolute;inset:0;pointer-events:none}
+.chapters{position:relative;margin-top:-100vh;margin-top:-100svh}
+.ch{height:150vh;display:flex;align-items:flex-start;padding:0 clamp(16px,5vw,64px)}
+.ch>.card{position:sticky;top:calc(100vh - var(--h,340px) - 8vh);top:calc(100svh - var(--h,340px) - 8vh)}
+.ch:first-child{align-items:center}
+.ch:first-child>.card{position:relative;top:auto}
+.ch.right{justify-content:flex-end}
+.card{max-width:520px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #fff8;border-radius:28px;padding:26px 30px;box-shadow:0 20px 60px #2b1e2218;opacity:0;transform:translateY(30px);transition:opacity .6s,transform .6s}
+.ch.on .card{opacity:1;transform:none}
+.stage{font:500 12px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--fuchsia);margin-bottom:10px}
+.card h2{font:600 clamp(32px,4vw,52px)/1.02 var(--disp);text-wrap:balance;margin-bottom:12px}
+.card h2 i{color:var(--fuchsia)}
+.card p{color:var(--fg2)}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.facts span{font-size:13.5px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:#fff8}
+.pain{margin-top:14px;font-size:14px;color:var(--fg3);border-left:2px solid var(--coral);padding-left:12px}
+.pain em{font-style:normal;color:var(--fg)}
+.hero{max-width:640px}
+.hero h1{font:600 clamp(44px,6vw,84px)/.92 var(--disp);letter-spacing:-.01em;text-wrap:balance}
+.hero h1 i{color:var(--fuchsia)}
+.hero p{font-size:clamp(17px,1.6vw,20px);margin:16px 0 22px}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+.rail{position:fixed;right:clamp(10px,2vw,26px);top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:9px;transition:opacity .4s}
+.rail button{width:10px;height:10px;border-radius:50%;border:1px solid var(--fg2);background:#fff8;cursor:pointer;padding:0}
+.rail button.on{background:var(--fuchsia);border-color:var(--fuchsia);transform:scale(1.3)}
+.rail.off{opacity:0;pointer-events:none}
+
+section.block{position:relative;padding:clamp(70px,10vw,130px) clamp(16px,5vw,64px)}
+.eyebrow{font:500 12px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--fuchsia);margin-bottom:10px}
+.h2{font:600 clamp(38px,5.5vw,72px)/1 var(--disp);max-width:900px;text-wrap:balance}
+.h2 i{color:var(--fuchsia)}
+.lead{color:var(--fg2);max-width:620px;margin-top:14px;font-size:18px}
+
+/* constructor */
+.builder{display:grid;grid-template-columns:1.2fr .8fr;gap:28px;margin-top:36px;align-items:start}
+.vase{position:relative;aspect-ratio:1024/575;max-width:100%;border-radius:28px;overflow:hidden;background:var(--bg2);border:1px solid var(--line)}
+.vase img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .7s,transform .9s cubic-bezier(.2,.8,.2,1)}
+.vase img.on{opacity:1}
+.vase canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.vase .tag{position:absolute;left:16px;top:16px;font:500 13px var(--body);background:#fffc;border-radius:999px;padding:6px 12px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:28px;padding:26px;display:grid;gap:20px;min-width:0}
+.panel h3{font:600 34px/1 var(--disp)}
+.opt small{display:block;font-size:13px;color:var(--fg3);margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{font:500 14px var(--body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:9px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.chips button i{width:14px;height:14px;border-radius:50%;display:inline-block}
+.chips button.on{border-color:var(--fuchsia);box-shadow:inset 0 0 0 1px var(--fuchsia)}
+.total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px dashed var(--line);padding-top:16px}
+.total b{font:600 44px/1 var(--disp);font-variant-numeric:tabular-nums}
+.total span{color:var(--fg3);font-size:13px}
+.disc{color:var(--fg3);font-size:12.5px}
+
+.how{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:24px;overflow:hidden;margin-top:36px}
+.how div{background:#fff;padding:22px 20px}
+.how b{display:block;font:600 46px/1 var(--disp);color:var(--fuchsia)}
+.how h4{font:600 16px var(--body);margin:10px 0 6px}
+.how p{color:var(--fg3);font-size:14.5px}
+
+.faq{max-width:860px;margin-top:30px}
+.faq details{border-bottom:1px solid var(--line);padding:18px 0}
+.faq summary{cursor:pointer;font:600 18px var(--body);list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::after{content:"+";color:var(--fuchsia);font-size:24px;line-height:1}
+.faq details[open] summary::after{content:"–"}
+.faq p{color:var(--fg2);margin-top:10px}
+
+.final{overflow:hidden;min-height:88vh;display:flex;align-items:center}
+.final>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.final::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#FBF6EEf2 0%,#FBF6EEcc 45%,#FBF6EE10 100%);z-index:1}
+.final .inner{position:relative;z-index:2;max-width:500px}
+form{display:grid;gap:12px;margin-top:22px}
+input[type=text],input[type=tel],select{font:16px var(--body);color:var(--fg);background:#fffd;border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:100%}
+input:focus,select:focus{outline:2px solid var(--fuchsia);outline-offset:1px}
+.ok{background:#fff;border:1px solid var(--leaf);color:#2f4a26;border-radius:14px;padding:14px 16px;font-size:15px}
+footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 30px;justify-content:space-between}
+
+@media (max-width:900px){
+  .bar nav,.logo small,.bar .long{display:none}
+  .bar .short{display:inline}
+  .bar .btn{padding:10px 16px;font-size:14px}
+  .ch{height:130vh}
+  .ch.right{justify-content:flex-start}
+  .card{padding:20px}
+  .rail{display:none}
+  .builder{grid-template-columns:1fr}
+  .vase{aspect-ratio:4/3}
+  .how{grid-template-columns:1fr 1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  .film .breath{animation:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="logo" href="#top">Пион <b>&amp;</b> лён<small>ДЕМО</small></a>
+  <nav><a href="#build">Собрать букет</a><a href="#how">Доставка</a><a href="#faq">Вопросы</a></nav>
+  <a class="btn" href="#order"><span class="long">Заказать букет</span><span class="short">Заказать</span></a>
+</header>
+
+<div class="story" id="top">
+  <div class="film" aria-hidden="true"><div class="breath" id="film"></div><canvas class="petals" id="petals"></canvas></div>
+  <div class="chapters">
+    <div class="ch" data-i="0">
+      <div class="hero card">
+        <div class="stage">Цветочная мастерская</div>
+        <h1>Цветы, которые <i>говорят</i> за вас</h1>
+        <p>Авторские букеты из свежих пионов, роз и ранункулюсов. Соберём за 40 минут и привезём за 2 часа.</p>
+        <div class="row"><a class="btn" href="#build">Собрать свой букет</a><a class="btn ghost" href="#order">Заказать звонок</a></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="1">
+      <div class="card">
+        <div class="stage">Свежесть</div>
+        <h2>Поставка — <i>дважды</i> в неделю</h2>
+        <p>Цветы хранятся в холодильной комнате при +4 °C. Берём для букета только то, что пришло недавно и стоит долго.</p>
+        <div class="pain">Главный страх — <em>букет завянет через день</em>. Даём гарантию свежести: не простоял 5 дней — заменим (пример условий).</div>
+      </div>
+    </div>
+    <div class="ch" data-i="2">
+      <div class="card">
+        <div class="stage">Руками флориста</div>
+        <h2>Собираем вручную, <i>за 40 минут</i></h2>
+        <p>Каждый букет флорист собирает под ваш повод и человека. Перед отправкой присылаем фото.</p>
+        <div class="facts"><span>Фото до отправки</span><span>Без шаблонов</span></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="3">
+      <div class="card">
+        <div class="stage">Палитра «Нежный»</div>
+        <h2>Для тех, кто <i>говорит тихо</i></h2>
+        <p>Бело-розовые пионы, кремовые розы и эвкалипт. Для мамы, на годовщину или просто так.</p>
+      </div>
+    </div>
+    <div class="ch" data-i="4">
+      <div class="card">
+        <div class="stage">Палитра «Яркий»</div>
+        <h2>Когда хочется <i>праздника</i></h2>
+        <p>Фуксия, коралловые пионы и лимонные ранункулюсы. Для дня рождения и любой радости.</p>
+      </div>
+    </div>
+    <div class="ch right" data-i="5">
+      <div class="card">
+        <div class="stage">Палитра «Закат»</div>
+        <h2>Тёплый и <i>глубокий</i></h2>
+        <p>Персиковые и оранжевые розы, бордовые ранункулюсы, сухоцветы. Для коллег, мужчин и осенних вечеров.</p>
+      </div>
+    </div>
+    <div class="ch" data-i="6">
+      <div class="card">
+        <div class="stage">Упаковка</div>
+        <h2>Лён, крафт и <i>открытка от вас</i></h2>
+        <p>Упаковываем в натуральные материалы и подписываем открытку вашими словами. Можно в коробке с бантом.</p>
+      </div>
+    </div>
+    <div class="ch right" data-i="7">
+      <div class="card">
+        <div class="stage">Доставка</div>
+        <h2>Привезём <i>за 2 часа</i></h2>
+        <p>Курьер везёт букет в термосумке и звонит заранее. Можно заказать доставку к точному времени.</p>
+        <div class="pain">Боится, что не довезут вовремя? <em>Присылаем фото вручения</em> — вы видите, что цветы у адресата.</div>
+      </div>
+    </div>
+    <div class="ch" data-i="8">
+      <div class="card">
+        <div class="stage">Ради этого</div>
+        <h2>Вот <i>этот</i> момент</h2>
+        <p>Открытая дверь, удивлённая улыбка и цветы в руках. Мы делаем букеты ради таких секунд.</p>
+      </div>
+    </div>
+    <div class="ch right" data-i="9">
+      <div class="card">
+        <div class="stage">Ваша очередь</div>
+        <h2>Соберите <i>свой</i> букет</h2>
+        <p>Выберите палитру и размер — увидите букет и цену сразу.</p>
+        <div class="row" style="margin-top:16px"><a class="btn" href="#build">Открыть конструктор</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+<nav class="rail" id="rail" aria-label="Главы"></nav>
+
+<section class="block" id="build">
+  <div class="eyebrow">Конструктор букета</div>
+  <h2 class="h2">Соберите <i>свой</i></h2>
+  <p class="lead">Выберите палитру и размер. Лепестки разлетятся и соберутся в новый букет.</p>
+  <div class="builder">
+    <div class="vase" id="vase"><canvas id="burst"></canvas><span class="tag" id="vTag">Нежный · M</span></div>
+    <div class="panel">
+      <h3 id="bName">Букет «Нежный»</h3>
+      <div class="opt"><small>Палитра</small><div class="chips" id="pal"></div></div>
+      <div class="opt"><small>Размер</small><div class="chips" id="size"></div></div>
+      <div class="opt"><small>Добавить</small><div class="chips" id="add"></div></div>
+      <div class="total"><b id="sum">—</b><span>цена-пример</span></div>
+      <a class="btn" href="#order" id="takeIt">Заказать этот букет</a>
+      <p class="disc">Цены — пример для демонстрации. Состав может немного меняться в зависимости от свежей поставки.</p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="how" style="background:var(--bg2)">
+  <div class="eyebrow">Как это работает</div>
+  <h2 class="h2">От заказа до <i>улыбки</i></h2>
+  <div class="how">
+    <div><b>1</b><h4>Заказ</h4><p>На сайте, в мессенджере или по телефону</p></div>
+    <div><b>2</b><h4>Сборка</h4><p>40 минут, фото букета вам до отправки</p></div>
+    <div><b>3</b><h4>Доставка</h4><p>От 2 часов или к точному времени</p></div>
+    <div><b>4</b><h4>Вручение</h4><p>Фото момента — вам в мессенджер</p></div>
+  </div>
+</section>
+
+<section class="block" id="faq">
+  <div class="eyebrow">Частые вопросы</div>
+  <h2 class="h2">Коротко о <i>важном</i></h2>
+  <div class="faq">
+    <details><summary>Сколько стоит доставка?</summary><p>В пределах города — фиксированная цена, при заказе от определённой суммы бесплатно (пример). Точные условия — у менеджера.</p></details>
+    <details><summary>Можно ли сделать сюрприз анонимно?</summary><p>Да. Курьер не назовёт отправителя, а открытку подпишем так, как скажете.</p></details>
+    <details><summary>Как долго простоит букет?</summary><p>При свежей воде и подрезке стеблей — обычно 5–7 дней. Кладём в каждый заказ инструкцию по уходу.</p></details>
+    <details><summary>Что, если адресата нет дома?</summary><p>Курьер позвонит заранее. Если не дозвонится, согласуем с вами новое время или адрес.</p></details>
+  </div>
+</section>
+
+<section class="block final" id="order">
+  <img src="m/story/10.jpg" alt="Витрина мастерской вечером" loading="lazy">
+  <div class="inner">
+    <div class="eyebrow">Заказ букета</div>
+    <h2 class="h2">Кому дарим <i>сегодня</i>?</h2>
+    <p class="lead" id="orderLead">Оставьте телефон — флорист перезвонит за 5 минут и уточнит детали.</p>
+    <form id="form" novalidate>
+      <input type="text" id="fName" placeholder="Как к вам обращаться" autocomplete="name">
+      <input type="tel" id="fPhone" placeholder="Телефон" autocomplete="tel">
+      <select id="fWhen"><option value="">Когда доставить</option><option>Как можно скорее</option><option>Сегодня к вечеру</option><option>Завтра</option><option>К точному времени</option></select>
+      <button class="btn" type="submit">Заказать букет</button>
+      <div class="ok" id="ok" hidden>Это демо-сайт Synapse Business: заказ не отправляется. На настоящем сайте он сразу попадёт в CRM и флористу в мессенджер.</div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <span>«Пион и лён» — вымышленная мастерская. Демо-сайт Synapse Business.</span>
+  <span>Изображения сгенерированы. Цены и сроки — примеры.</span>
+</footer>
+
+<script>
+(()=>{
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+
+/* story film */
+const N = 10, film = $('film'), frames = [];
+for (let i = 1; i <= N; i++) { const d = document.createElement('div'); d.className = 'fr'; const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; if (i > 2) im.loading = 'lazy'; d.append(im); film.append(d); frames.push(d); }
+const chapters = [...document.querySelectorAll('.ch')], rail = $('rail'), story = document.querySelector('.story');
+chapters.forEach((c, i) => { const b = document.createElement('button'); b.setAttribute('aria-label', 'Глава ' + (i + 1)); b.onclick = () => c.scrollIntoView({behavior: RM ? 'auto' : 'smooth'}); rail.append(b); });
+const railBtns = [...rail.children];
+let prog = 0;
+function renderStory() {
+  const r = story.getBoundingClientRect(), vh = innerHeight;
+  const p = Math.min(Math.max(-r.top / (r.height - vh), 0), 1) * (N - 1); prog = p;
+  const i = Math.floor(p), f = p - i, t = Math.min(Math.max((f - .55) / .45, 0), 1), e = t * t * (3 - 2 * t);
+  frames.forEach((fr, k) => { let o = 0, s = 1, x = 0; if (k === i) { o = 1; s = 1 + .06 * f + (RM ? 0 : .06 * e); x = -f; } else if (k === i + 1) { o = e; s = 1.1 - .1 * e; x = 1.5 * (1 - e); } fr.style.opacity = o; if (!RM) fr.style.transform = `scale(${s.toFixed(4)}) translateX(${x.toFixed(2)}%)`; });
+  chapters.forEach((c, k) => { const cr = c.getBoundingClientRect(); c.classList.toggle('on', k === 0 ? cr.bottom > vh * .5 : (cr.top < vh * .6 && cr.bottom > vh * 1.02)); });
+  railBtns.forEach((b, k) => b.classList.toggle('on', k === Math.round(p)));
+  rail.classList.toggle('off', r.bottom < vh * .6);
+}
+let tk = false;
+addEventListener('scroll', () => { if (!tk) { tk = true; requestAnimationFrame(() => { renderStory(); tk = false; }); } }, {passive: true});
+const setH = () => document.querySelectorAll('.ch>.card').forEach(c => c.parentElement.style.setProperty('--h', c.offsetHeight + 'px'));
+addEventListener('resize', () => { setH(); renderStory(); sizeCanvas(); });
+setH(); document.fonts && document.fonts.ready.then(setH); renderStory();
+
+/* drifting petals over the film */
+const pc = $('petals'), px = pc.getContext('2d');
+const COLORS = ['#C2185B', '#F06A55', '#F7B7C8', '#E9C53A', '#FFFFFF'];
+let petals = [];
+function sizeCanvas() { pc.width = innerWidth * devicePixelRatio; pc.height = innerHeight * devicePixelRatio; }
+sizeCanvas();
+for (let k = 0; k < 26; k++) petals.push({x: Math.random(), y: Math.random(), r: 5 + Math.random() * 9, a: Math.random() * 6.28, s: .2 + Math.random() * .5, c: COLORS[k % COLORS.length], w: Math.random() * 6.28});
+function drawPetal(ctx, x, y, r, a, c, alpha) { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.globalAlpha = alpha; ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, r, r * .55, 0, 0, 6.28); ctx.fill(); ctx.restore(); }
+function loop(t) {
+  const W = pc.width, H = pc.height, d = devicePixelRatio;
+  px.clearRect(0, 0, W, H);
+  const fade = Math.max(0, 1 - prog / 2.2);
+  if (fade > 0) petals.forEach(p => { p.y += p.s * .0012; p.w += .01; if (p.y > 1.05) { p.y = -.05; p.x = Math.random(); } drawPetal(px, (p.x + Math.sin(p.w) * .02) * W, p.y * H, p.r * d, p.a + p.w, p.c, .75 * fade); });
+  requestAnimationFrame(loop);
+}
+if (!RM) requestAnimationFrame(loop);
+
+/* bouquet constructor */
+const PAL = [
+  {id: 'soft', n: 'Нежный', img: 'm/story/4.jpg', base: 4900, cols: ['#F7D4DC', '#FFFFFF', '#E8C9C0', '#A9BFA0'], dot: '#F7B7C8'},
+  {id: 'bright', n: 'Яркий', img: 'm/story/5.jpg', base: 5400, cols: ['#C2185B', '#F06A55', '#E9C53A', '#6E9B5A'], dot: '#C2185B'},
+  {id: 'sunset', n: 'Закат', img: 'm/story/6.jpg', base: 5200, cols: ['#F4A261', '#E76F51', '#7B2335', '#D9B38C'], dot: '#E76F51'},
+];
+const SIZES = [{n: 'S', k: .7, s: .86}, {n: 'M', k: 1, s: 1}, {n: 'L', k: 1.55, s: 1.12}];
+const ADDS = [{n: 'Открытка', p: 0}, {n: 'Коробка с бантом', p: 900}, {n: 'Конфеты', p: 1200}];
+let pal = 0, size = 1, adds = new Set([0]);
+const vase = $('vase'), imgs = PAL.map(p => { const im = new Image(); im.src = p.img; im.alt = 'Букет «' + p.n + '»'; vase.prepend(im); return im; });
+function chip(host, label, on, fn, dot) { const b = document.createElement('button'); if (dot) { const i = document.createElement('i'); i.style.background = dot; b.append(i); } b.append(label); b.onclick = fn; if (on) b.classList.add('on'); host.append(b); return b; }
+PAL.forEach((p, i) => chip($('pal'), p.n, i === pal, () => { if (pal !== i) { pal = i; burst(); } render(); }, p.dot));
+SIZES.forEach((s, i) => chip($('size'), s.n, i === size, () => { size = i; render(); }));
+ADDS.forEach((a, i) => chip($('add'), a.n + (a.p ? ' +' + a.p + ' ₽' : ''), adds.has(i), () => { adds.has(i) ? adds.delete(i) : adds.add(i); render(); }));
+function render() {
+  [...$('pal').children].forEach((b, k) => b.classList.toggle('on', k === pal));
+  [...$('size').children].forEach((b, k) => b.classList.toggle('on', k === size));
+  [...$('add').children].forEach((b, k) => b.classList.toggle('on', adds.has(k)));
+  imgs.forEach((im, k) => { im.classList.toggle('on', k === pal); im.style.transform = `scale(${SIZES[size].s})`; });
+  const p = PAL[pal], total = p.base * SIZES[size].k + [...adds].reduce((s, k) => s + ADDS[k].p, 0);
+  $('bName').textContent = 'Букет «' + p.n + '»';
+  $('vTag').textContent = p.n + ' · ' + SIZES[size].n;
+  $('sum').textContent = fmt(total);
+  $('orderLead').textContent = `Ваш букет: «${p.n}», размер ${SIZES[size].n}, ${fmt(total)} (пример). Оставьте телефон — флорист перезвонит за 5 минут.`;
+}
+/* petal burst on palette change */
+const bc = $('burst'), bx = bc.getContext('2d');
+function burst() {
+  if (RM) return;
+  const r = vase.getBoundingClientRect(), d = devicePixelRatio; bc.width = r.width * d; bc.height = r.height * d;
+  const cx = bc.width / 2, cy = bc.height * .45, cols = PAL[pal].cols;
+  const ps = Array.from({length: 90}, (_, k) => { const a = Math.random() * 6.28, v = (2 + Math.random() * 7) * d; return {x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2 * d, r: (4 + Math.random() * 8) * d, a: Math.random() * 6.28, c: cols[k % cols.length]}; });
+  const t0 = performance.now();
+  (function f(t) { const k = (t - t0) / 1100; bx.clearRect(0, 0, bc.width, bc.height); if (k > 1) return;
+    ps.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += .18 * d; p.vx *= .985; p.a += .08; drawPetal(bx, p.x, p.y, p.r, p.a, p.c, 1 - k); });
+    requestAnimationFrame(f); })(t0);
+}
+render();
+$('form').onsubmit = e => { e.preventDefault(); $('ok').hidden = false; };
+})();
+</script>
+</body>
+</html>
