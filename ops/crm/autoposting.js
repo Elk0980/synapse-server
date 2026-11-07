@@ -196,7 +196,7 @@ function captions(value) {
   return result;
 }
 const mediaKind=urls=>urls.some(u=>VIDEO_RE.test(u))?'video':urls.some(u=>IMAGE_RE.test(u))?'image':urls.length?'file':'none';
-function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,now=Date.now,logger=console}={}) {
+function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,captionLink=null,now=Date.now,logger=console}={}) {
   if(!information||!transport)throw Error('Autoposting requires company information and publication adapters');
   /* Охрана связи с версией контент-плана включена всегда: отдельного «выключателя» нет,
      иначе появился бы путь отправки в обход согласования. Подменить её из запроса нельзя. */
@@ -1588,7 +1588,14 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       try{
         const result=await transport.publish({companyCode:due.code.toLowerCase(),channelId:delivery.channel_id,channelRevision:delivery.channel_revision,
           // Подпись площадки, если задана, заменяет общий текст именно для этого канала.
-          post:(()=>{const view=dto(due,company(db,due.code));sent=view.captions?.[channel.platform||channel.id]||view.text;return {...view,title:view.title||'',text:sent,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
+          post:(()=>{const view=dto(due,company(db,due.code)),platform=channel.platform||channel.id,caption=view.captions?.[platform]||view.text;
+            /* specs/217: метка рилса дописывается к подписи только здесь, в момент отправки, если владелец включил её
+               для компании; сохранённая подпись карточки не меняется. Без модуля меток подпись уходит как была. */
+            const media=JSON.parse(due.media_urls||'[]').length,limits=[CAPTION_PLATFORMS[platform]?.limit,channel.caps?.maxText,media?channel.caps?.maxCaption:undefined];
+            const text=captionLink?captionLink.decorate({code:due.code,post:freshPost,channelId:delivery.channel_id,platform,caption,limits}):caption;
+            // Отпечаток для сверки выхода (specs/215) — именно от отправленного текста, с меткой.
+            sent=text;
+            return {...view,title:view.title||'',text,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
           beforePublish:()=>{
             // Подтверждение могло появиться, пока транспорт ждал предварительные запросы: адаптер вызывает
             // этот барьер перед самой передачей, и до неё отправка ещё отменима.

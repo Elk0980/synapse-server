@@ -66,9 +66,9 @@ function createPublishVerifier(db, {transport, now = Date.now, logger = console,
 
   async function findLink(delivery, code, publishedAt) {
     if (!LINK_PLATFORMS.includes(delivery.channel_id) || !transport.postLink) return null;
+    /* Подпись карточки без метки рилса (specs/217 дописывает её только при отправке). Правка содержимого удаляет
+       доставки, поэтому у существующей доставки подпись та же; метка в конце не мешает сравнению по началу. */
     const text = sentText(delivery.post_id, delivery.channel_id);
-    // Отпечаток сохранён при отправке: текст сменился — сопоставление по подписи уже не доказательство.
-    if (delivery.provider_content_sha && contentDigest(text) !== delivery.provider_content_sha) return null;
     try {
       return await transport.postLink({companyCode: code, channelId: delivery.channel_id, channelRevision: delivery.channel_revision,
         providerPostId: delivery.provider_post_id, publishedAt, text}) || null;

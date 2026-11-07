@@ -18,7 +18,7 @@
   const localDay = (iso) => { const ms = Date.parse(String(iso || '')); return Number.isFinite(ms) ? new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)) : ''; };
   const RUN = { ok: 'успешно', partial: 'частично', missing_access: 'нет доступа', unsupported: 'не поддерживается', failed: 'ошибка' };
   const kit = () => (typeof window !== 'undefined' && window.CfKit && typeof window.CfKit.header === 'function' ? window.CfKit : null);
-  const state = { days: 30, tab: 'summary', sort: 'date', calOpen: false, strip: null };
+  const state = { days: 30, tab: 'summary', sort: 'date', calOpen: false, strip: null, funnel: null, funnelError: '', funnelBusy: false };
   const NO_DATA = 'нет данных с площадки';
 
   /* Метка по фактическим провайдерам строк периода и последнего lifetime-замера. */
@@ -133,11 +133,51 @@
         ${dates.map((d) => `<tr><th scope="row">${day(d)}</th>${DAILY.map((m) => `<td data-label="${esc(METRICS[m])}">${num(p.days[d][m]?.value)}${p.days[d][m]?.provider === 'manual' ? ' <small>ручн.</small>' : ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>` : ''}</section>`;
   }
 
+  /* specs/217: «рилс → переходы → заявки → продажи → выручка → ROMI» из GET /social-stats/reel-attribution.
+     Все числа — строки CRM этой компании (LIVE). Нет меток/заявок — честное «нет данных», не ноль. ROMI — только при внесённом
+     расходе cf-post-<N>; иначе прочерк с причиной. Включает метки в подписях только владелец. */
+  const money = (v) => (typeof v === 'number' && Number.isFinite(v) ? `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v)} ₽` : '—');
+  const LINK_STATUS = { added: 'ссылка в подписи', present: 'ссылка уже была в подписи', skipped_limit: 'ссылка не влезла в лимит подписи', skipped_empty: 'подписи нет — ссылка не ставилась' };
+  const PF_LABEL = { instagram: 'IG', tiktok: 'TT', youtube: 'YT', vk: 'VK', telegram: 'TG', max: 'MAX', unknown: '?' };
+  function romiCell(life) {
+    if (!life || typeof life.romi !== 'number') return `<span class="cs-dash" title="${esc(life?.romiReason || 'нет данных о расходах')}">—</span>`;
+    return `${esc(num(life.romi))}%${life.romiReason ? ` <small title="${esc(life.romiReason)}">*</small>` : ''}`;
+  }
+  function funnelRows(list, kind) {
+    return list.map((r) => {
+      const pf = kind === 'reel' ? `<span class="cs-pfchips">${r.platforms.map((p) => `<span class="cs-pfchip" title="${esc(LINK_STATUS[p.linkStatus] || 'метка из заявки или визита')}">${esc(PF_LABEL[p.platform] || p.platform)}</span>`).join(' ')}</span>` : `${esc(r.postIds.length)} шт.`;
+      const name = kind === 'reel' ? `№${esc(r.postId)} ${esc(r.title)}` : esc(r.title);
+      return `<tr data-cs-funnel-${kind}="${esc(kind === 'reel' ? r.postId : r.themeId)}"><th scope="row">${name}</th><td data-label="${kind === 'reel' ? 'Площадки' : 'Рилсов'}">${pf}</td>
+        <td data-label="Переходы">${esc(num(r.visits))}</td><td data-label="Заявки">${esc(num(r.leads))}</td><td data-label="Продажи">${esc(num(r.sales))}${r.salesWithoutAmount ? ` <small title="Продажи без суммы: выручка занижена">(${esc(r.salesWithoutAmount)} без суммы)</small>` : ''}</td>
+        <td data-label="Выручка">${esc(money(r.revenue))}</td><td data-label="ROMI, всё время">${romiCell(r.lifetime)}</td></tr>`;
+    }).join('');
+  }
+  function funnelHtml(ctxUser) {
+    const f = state.funnel;
+    if (state.funnelError) return `<section class="cs-funnel" data-cs-funnel><h3 class="cs-sub">Рилс → переходы → заявки → продажи → выручка</h3><p class="cs-empty" data-cs-funnel-empty>${esc(state.funnelError)}</p></section>`;
+    if (!f) return '<section class="cs-funnel" data-cs-funnel><h3 class="cs-sub">Рилс → переходы → заявки → продажи → выручка</h3><p class="cs-note" role="status">Загружаем связь рилсов с заявками…</p></section>';
+    const set = f.settings || {}, owner = ctxUser?.role === 'owner';
+    const state_ = set.active ? `включены — ссылка на ${esc(set.siteUrl)} с меткой рилса дописывается к подписи при отправке` : set.enabled ? esc(set.reason || 'включены, но не работают') : 'выключены — подписи уходят как есть';
+    const toggle = owner ? ` <button type="button" class="plain-button cs-funnel-toggle" data-cs-funnel-toggle="${set.enabled ? 'off' : 'on'}"${state.funnelBusy ? ' disabled' : ''}>${set.enabled ? 'Выключить метки' : 'Включить метки'}</button>` : '';
+    const head = `<h3 class="cs-sub">Рилс → переходы → заявки → продажи → выручка ${badge(f.mode === 'LIVE' ? ['live', 'LIVE · CRM'] : ['none', 'НЕТ ДАННЫХ'])}</h3>
+      <p class="cs-note" data-cs-funnel-settings>Метки в подписях: ${state_}.${toggle}</p>`;
+    const reels = Array.isArray(f.reels) ? f.reels : [], themes = Array.isArray(f.themes) ? f.themes : [];
+    const cols = '<tr><th scope="col">Рилс</th><th scope="col">Площадки</th><th scope="col">Переходы</th><th scope="col">Заявки</th><th scope="col">Продажи</th><th scope="col">Выручка</th><th scope="col">ROMI, всё время</th></tr>';
+    const unmatched = f.unmatched && (f.unmatched.leads || f.unmatched.visits) ? `<p class="cs-note">С меткой cf, но без карточки этой компании: заявок ${esc(f.unmatched.leads)}, переходов ${esc(f.unmatched.visits)} — не приписаны ни одному рилсу.</p>` : '';
+    const body = reels.length
+      ? `<div class="cs-table-wrap"><table class="cs-table cs-funnel-table" data-cs-funnel-reels><thead>${cols}</thead><tbody>${funnelRows(reels, 'reel')}</tbody>
+          <tfoot><tr><th scope="row">Итого за период</th><td></td><td data-label="Переходы">${esc(num(f.totals?.visits))}</td><td data-label="Заявки">${esc(num(f.totals?.leads))}</td><td data-label="Продажи">${esc(num(f.totals?.sales))}</td><td data-label="Выручка">${esc(money(f.totals?.revenue))}</td><td></td></tr></tfoot></table></div>
+         ${themes.length ? `<details class="cs-acc"><summary class="cs-sub">По темам (исходная идея и её адаптации)</summary><div class="cs-table-wrap"><table class="cs-table cs-funnel-table" data-cs-funnel-themes><thead>${cols.replace('Рилс', 'Тема').replace('Площадки', 'Рилсов')}</thead><tbody>${funnelRows(themes, 'theme')}</tbody></table></div></details>` : ''}`
+      : `<p class="cs-empty" data-cs-funnel-empty>Нет данных: ${set.active ? 'публикаций с меткой ещё не выходило или по ним пока нет переходов и заявок' : 'метки в подписях не включены, а заявок с меткой cf/post-№ нет'}.</p>`;
+    return `<section class="cs-funnel" data-cs-funnel>${head}${body}${unmatched}
+      <p class="cs-note">Переход — посетитель сайта с меткой рилса, заявка — заявка CRM с этой меткой, продажа — этап «продажа», выручка — её сумма; сутки UTC. ROMI — за всё время метки и только если расход рилса внесён в «Расходы» с источником <code>cf-post-№</code>. В Instagram и TikTok ссылка в подписи не кликабельна.</p></section>`;
+  }
+
   function render(el, data, titles = new Map()) {
     const tabs = [['summary', 'Сводная', 'Все'], ...PLATFORMS];
     const pubs = publications(data, titles), K = kit();
     const body = state.tab === 'summary'
-      ? `<h3 class="cs-sub">Публикации</h3>${pubTable(order(pubs.rows, state.sort), '')}${accounts(data)}`
+      ? `${funnelHtml(state.user)}<h3 class="cs-sub">Публикации</h3>${pubTable(order(pubs.rows, state.sort), '')}${accounts(data)}`
       : platformTab(data, state.tab, PLATFORMS.find(([id]) => id === state.tab)[1], pubs);
     el.innerHTML = `<div class="cs-root">${K ? '<div data-cs-header></div><div data-cs-dates></div>' : '<div class="content-header"><h1>Статистика</h1></div>'}
       <div class="cs-tabs" role="tablist">${tabs.map(([id, label, short]) => `<button type="button" role="tab" data-cs-tab="${id}" aria-selected="${id === state.tab}"><span class="cs-long">${esc(label)}</span><span class="cs-short" aria-hidden="true">${esc(short)}</span></button>`).join('')}</div>
@@ -179,6 +219,30 @@
     const code = String(ctx.companyCode || '').toLowerCase();
     let data = null, titles = new Map(), epoch = 0;
     state.redraw = () => { if (data) render(el, data, titles); };
+    state.user = ctx.user; state.funnel = null; state.funnelError = '';
+    /* Отчёт загружается вторым запросом: его сбой или старый сервер не мешают остальной статистике. */
+    const loadFunnel = async (mine, from, to) => {
+      try {
+        const report = await ctx.crm('/social-stats/reel-attribution', { companyCode: code, from, to }, { signal: ctx.signal });
+        if (mine !== epoch || ctx.signal?.aborted) return;
+        if (String(report?.companyCode || '').toLowerCase() !== code || !Array.isArray(report?.reels)) { state.funnel = null; state.funnelError = 'Отчёт о заявках по рилсам недоступен.'; }
+        else { state.funnel = report; state.funnelError = ''; }
+      } catch (error) {
+        if (mine !== epoch || ctx.signal?.aborted) return;
+        state.funnel = null; state.funnelError = error?.status === 404 ? 'Связь рилсов с заявками появится после обновления сервера.' : `Связь рилсов с заявками не загрузилась: ${error?.message || 'ошибка запроса'}.`;
+      }
+      if (data) render(el, data, titles);
+    };
+    const toggleFunnel = async (enable) => {
+      const settings = state.funnel?.settings; if (!settings || state.funnelBusy) return;
+      state.funnelBusy = true; render(el, data, titles);
+      try {
+        const saved = await ctx.crm('/social-stats/reel-attribution/settings', { companyCode: code }, { method: 'PUT', headers: { 'X-CSRF-Token': ctx.csrfToken || '' },
+          body: JSON.stringify({ revision: settings.revision, enabled: enable }) });
+        if (String(saved?.companyCode || '').toLowerCase() === code && state.funnel) state.funnel = { ...state.funnel, settings: saved };
+      } catch (error) { state.funnelError = `Настройка меток не сохранена: ${error?.message || 'ошибка запроса'}. Обновите страницу.`; }
+      state.funnelBusy = false; render(el, data, titles);
+    };
     const load = async () => {
       const mine = ++epoch;
       el.innerHTML = '<p class="cs-loading" role="status">Загружаем статистику…</p>';
@@ -195,18 +259,20 @@
           for (const post of [...(calendar.posts || []), ...(calendar.undatedPosts || [])]) if (post?.id && post.title) titles.set(post.id, String(post.title));
         }
         data = result; render(el, data, titles);
+        void loadFunnel(mine, from, to);
       } catch (error) {
         if (mine === epoch && !ctx.signal?.aborted) el.innerHTML = `<div class="card" role="alert"><p>Статистика не загрузилась: ${esc(error?.message || 'ошибка запроса')}.</p></div>`;
       }
     };
-    el.onclick = (event) => { const tab = event.target.closest('[data-cs-tab]'); if (tab && data) { state.tab = tab.dataset.csTab; render(el, data, titles); } };
+    el.onclick = (event) => { const toggle = event.target.closest('[data-cs-funnel-toggle]'); if (toggle) { void toggleFunnel(toggle.dataset.csFunnelToggle === 'on'); return; }
+      const tab = event.target.closest('[data-cs-tab]'); if (tab && data) { state.tab = tab.dataset.csTab; render(el, data, titles); } };
     el.onchange = (event) => { if (event.target.matches('[data-cs-days]')) { state.days = Number(event.target.value) || 30; void load(); } };
     await load();
   }
-  function unmount(el) { el.onclick = null; el.onchange = null; state.strip = null; state.redraw = null; }
+  function unmount(el) { el.onclick = null; el.onchange = null; state.strip = null; state.redraw = null; state.funnel = null; state.funnelError = ''; state.funnelBusy = false; }
 
   const definition = { title: 'Статистика', mount, unmount };
-  (window.SbCabinet = window.SbCabinet || {}).contentStats = { render, mode, engagement, publications, order, definition, state, SORTS };
+  (window.SbCabinet = window.SbCabinet || {}).contentStats = { render, mode, engagement, publications, order, definition, state, SORTS, funnelHtml };
   const register = () => window.SynapseModules?.register?.('content-stats', definition);
   if (window.SynapseModules) register(); else document.addEventListener('DOMContentLoaded', register, { once: true });
 })();
