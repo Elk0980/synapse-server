@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="Пептидная терапия для клиник: документы на каждую партию, холодовая цепь, обучение врачей и честная доказательная база. CELL LAB.">
+<meta name="description" content="Ваши пациенты уже колют пептиды из Telegram. CELL LAB помогает вернуть их в кабинет врача: документы на каждую партию, протоколы, обучение и честная доказательная база по каждой молекуле Rejuva.">
 <meta name="robots" content="noindex, nofollow">
 <meta property="og:title" content="Путь пептида — CELL LAB для клиник">
-<meta property="og:description" content="От пациентки до её клетки — и обратно к бизнесу клиники. Экскурсия в пептидную терапию для медицинских специалистов.">
+<meta property="og:description" content="Ваши пациенты уже колют пептиды. Только не у вас. Экскурсия для врачей: от проблемы — к решению для клиники.">
 <meta property="og:image" content="poster.jpg">
 <title>Путь пептида</title>
 <style>html{color-scheme:dark}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -322,6 +322,52 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .gate .btn{min-height:48px}
 .gate .alt{color:var(--fg3);font:400 13px var(--body);background:none;border:0;text-decoration:underline;cursor:pointer;min-height:36px}
 @media (prefers-reduced-motion: reduce){[data-reveal] .vmedia,[data-reveal] .vtext>*{transition:none;clip-path:none;opacity:1;transform:none}}
+
+/* ===== v4: pain → solution ===== */
+:root{--pain:#E8857A}
+.panel .pain-k{color:var(--pain)}.panel .pain-k::before{background:var(--pain)}
+.panel .fix-k{color:var(--teal)}.panel .fix-k::before{background:var(--teal)}
+.panel .pain-tag{border-color:rgba(232,133,122,.45);color:#F2B3AA}
+.panel.intro .k{margin-bottom:18px;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+.panel.intro h1 b{color:#FFD9D3}
+.panel-btn{margin-top:20px;min-height:48px;font-size:15px}
+.stage{position:absolute;right:max(20px,env(safe-area-inset-right,0px));top:calc(48px + env(safe-area-inset-top,0px));font:500 10px/1 var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--pain);transition:color .6s}
+.stage.mid{color:var(--signal)}.stage.fix{color:var(--teal)}
+.skip{top:calc(70px + env(safe-area-inset-top,0px))!important}
+@media (max-width:700px){.stage{top:calc(44px + env(safe-area-inset-top,0px))}.skip{top:calc(62px + env(safe-area-inset-top,0px))!important}}
+.paintint{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(40,60,75,.0) 30%,rgba(6,14,20,.55) 100%),linear-gradient(180deg,rgba(30,50,70,.28),rgba(30,50,70,.28));opacity:0;mix-blend-mode:normal}
+.pains .pain-top{display:flex;gap:28px;align-items:center;margin-top:30px;max-width:900px}
+.pains .pain-top .big{flex:none;font-family:var(--display);font-weight:200;font-size:clamp(54px,7vw,96px);line-height:1;color:var(--pain)}
+.pains .pain-top .big small{font-size:18px;margin-left:6px;color:var(--fg2)}
+.pains .pain-top p{color:var(--fg2);font-size:17px;max-width:52ch}
+.paingrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:40px}
+.pain{background:var(--glass2);border:1px solid var(--line);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.pain .pz{padding:24px 22px 20px;background:linear-gradient(160deg,rgba(232,133,122,.12),rgba(232,133,122,0) 70%);display:grid;gap:10px}
+.pain .fx{padding:18px 22px 22px;border-top:1px dashed rgba(180,203,201,.25);display:grid;gap:8px;margin-top:auto}
+.pain .pl{font:600 11px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--pain)}
+.pain .fx .pl{color:var(--teal)}
+.pain h3{font-size:19px}
+.pain p{color:var(--fg2);font-size:14.5px}
+.pain .fx p{color:var(--fg)}
+.pain-cta{padding:26px 22px;gap:14px;justify-content:center;background:linear-gradient(160deg,rgba(69,203,208,.14),rgba(242,164,68,.08)),var(--glass2)}
+.pain-cta .btn{align-self:flex-start;margin-top:6px}
+@media (max-width:980px){.paingrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.paingrid{grid-template-columns:1fr}.pains .pain-top{flex-direction:column;align-items:flex-start;gap:10px}}
+.dirs{grid-template-columns:repeat(3,minmax(0,1fr))}
+.dir .ev{min-width:44px}
+@media (max-width:980px){.dirs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.dirs{grid-template-columns:1fr}}
+.molgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:40px}
+.mol{background:var(--glass2);border:1px solid var(--line);border-radius:18px;padding:20px 20px 18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.mol .mh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.mol h3{font-size:17px}
+.mol .ev{flex:none}
+.mol .prod{font-size:12.5px;color:var(--teal);letter-spacing:.02em}
+.mol p{color:var(--fg2);font-size:14px;line-height:1.5}
+.mol .st{margin-top:auto;padding-top:10px;border-top:1px solid var(--line);color:var(--fg);font-size:13.5px}
+@media (max-width:980px){.molgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.molgrid{grid-template-columns:1fr}}
+.author+.author{margin-top:14px}
 </style>
 
 <div class="splash" id="splash" role="status" aria-live="polite">
@@ -342,14 +388,16 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 <video id="tv" muted playsinline preload="none" aria-hidden="true"></video>
 <div id="loops" aria-hidden="true"></div>
 <div class="grade" aria-hidden="true"></div>
+<div class="paintint" id="paintint" aria-hidden="true"></div>
 <div class="scrim" id="scrim" aria-hidden="true"></div>
 <div class="fade" id="fade" aria-hidden="true"></div>
 
 <div class="hud" id="hud">
   <div class="brand">CELL LAB<small>Пептиды Rejuva · для клиник</small></div>
   <div class="counter" aria-live="polite"><span id="cnt">01</span><small>/ 08</small></div>
+  <div class="stage" id="stage">Проблема</div>
   <a class="skip" href="#start">Сразу к контактам <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
-  <button type="button" class="hint" id="hint">Пептидная терапия. Начать экскурсию <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+  <button type="button" class="hint" id="hint">От проблемы к решению. Листайте <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
   <div class="loader" id="loader">Загружаем экскурсию… <b id="pct">0%</b></div>
   <button type="button" class="play" id="playBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Смотреть ролик</button>
   <nav class="dots" aria-label="Шаги экскурсии" id="dots"></nav>
@@ -363,27 +411,29 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 <div class="track" id="track">
   <div class="panel intro" data-t="0,1.6" id="tour-1">
     <div class="card">
-      <h1>Пептидная терапия — <b>новое направление</b> для вашей клиники</h1>
-      <p>Корейские пептиды Rejuva, готовые протоколы на 12 недель и 6 месяцев, обучение врачей и программа, которая удерживает пациента на годы. Экскурсия: от пациентки до её клетки — и обратно к бизнесу клиники.</p>
+      <div class="k pain-k">01 · Проблема</div>
+      <h1>Ваши пациенты уже колют пептиды. <b>Только не у вас.</b></h1>
+      <p>Увидели «до и после» у блогера, купили в мессенджере ручку «для исследований» и колют дома — без диагноза, анализов и врача. Клиника теряет выручку и пациента, а осложнения потом приходят к вам на приём.</p>
       <div class="meta"><span><i></i>Косметология</span><span><i></i>Эндокринология</span><span><i></i>Спортивная медицина</span><span><i></i>Реабилитация</span></div>
     </div>
   </div>
 
   <div class="panel right" data-t="3.4,5.6" id="tour-2">
     <div class="card">
-      <div class="k">02 · Пациентка</div>
-      <h2>Она приходит за результатом, который держится</h2>
-      <p>Кожа, суставы, сосуды, сон, вес. Каждая из этих систем управляется собственными пептидными сигналами. С возрастом и после повреждений их становится меньше, ткани восстанавливаются медленнее — и пациентка идёт к вам.</p>
+      <div class="k pain-k">02 · Проблема</div>
+      <h2>Она спрашивает врача о пептидах — и уходит, если ответа нет</h2>
+      <p>Пациентка приходит подготовленной: знает названия молекул и видела чужие результаты. Если врач отвечает «не знаю» или «это всё ерунда», она находит продавца в Telegram. В опросе пользователей пептидов в США (2026) среди купивших в мессенджерах и соцсетях 45% обращались за неотложной помощью — против 16% в среднем.</p>
+      <span class="tag pain-tag">Серый рынок · без диагностики и контроля</span>
       <div class="scale"><i></i><b>≈ 1,7 м</b> масштаб ×1</div>
     </div>
   </div>
 
   <div class="panel" data-t="13.9,16.1" id="tour-3">
     <div class="card">
-      <div class="k">03 · Кожа и ткань</div>
+      <div class="k">03 · Что говорит наука</div>
       <h2>Ткань сама говорит на языке пептидов</h2>
-      <p>При повреждении ткань выделяет короткие сигнальные пептиды. Один из самых изученных — медный трипептид GHK-Cu: в контролируемых исследованиях наружных средств (12 недель, до 71 участницы) отмечены рост плотности и толщины кожи и уменьшение морщин.</p>
-      <span class="tag">GHK-Cu · доказательность B · наружно</span>
+      <p>При повреждении ткань выделяет короткие сигнальные пептиды. Медный трипептид GHK-Cu — один из самых изученных: в исследованиях наружных средств (12 недель, до 71 участницы) отмечены рост плотности и толщины кожи и уменьшение морщин. Для инъекционного GHK-Cu контролируемых исследований на людях пока нет — врач должен это знать.</p>
+      <span class="tag">GHK-Cu · B наружно · D инъекционно</span>
       <div class="scale"><i></i><b>≈ 2 мм</b> дерма</div>
     </div>
   </div>
@@ -392,10 +442,9 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <div class="card">
       <div class="k">04 · Капилляр</div>
       <h2>Кровь доставляет сигнал к клеткам-мишеням</h2>
-      <p>Через микроциркуляцию сигнальные молекулы доходят до нужных клеток. Регенеративные пептиды (BPC-157, TB-500) пока изучены в основном в доклинических работах и пилотных наблюдениях — мы прямо называем врачам уровень доказательности каждой молекулы.</p>
-      <span class="tag">Исследуемые молекулы · уровень C–D</span>
+      <p>Регенеративные пептиды BPC-157 и TB-500 изучены в основном на животных, на людях опубликовано лишь несколько небольших работ. В июле 2026 года консультативный комитет FDA голосами 8 против 6 рекомендовал разрешить их аптечное изготовление в США — это не регистрация лекарства. Обе молекулы запрещены ВАДА.</p>
+      <span class="tag">BPC-157 · TB-500 · уровень C–D</span>
       <div class="scale"><i></i><b>≈ 50 мкм</b> сосуд</div>
-    </div>
     </div>
   </div>
 
@@ -403,10 +452,9 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <div class="card">
       <div class="k">05 · Рецептор</div>
       <h2>Ключ подходит только к своему замку</h2>
-      <p>Пептид связывается с конкретным рецептором на мембране — отсюда специфичность действия. Самый доказанный пример — агонисты рецепторов GLP-1: в исследовании STEP-1 (NEJM, 2021) масса тела снизилась на 14,9% за 68 недель против 2,4% на плацебо.</p>
-      <span class="tag">GLP-1 · доказательность A</span>
+      <p>Пептид связывается с конкретным рецептором — отсюда точность действия. Самый доказанный класс — агонисты GLP-1: в STEP-1 масса тела снизилась на 14,9% за 68 недель (плацебо −2,4%). Тройной агонист ретатрутид в фазе 3 TRIUMPH-1 дал до −28,3% за 80 недель, но пока не зарегистрирован ни в одной стране.</p>
+      <span class="tag">GLP-1 · A · ретатрутид — фаза 3</span>
       <div class="scale"><i></i><b>≈ 10 нм</b> рецептор</div>
-    </div>
     </div>
   </div>
 
@@ -414,40 +462,39 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <div class="card">
       <div class="k">06 · Внутри клетки</div>
       <h2>Клетка получает команду и выполняет её</h2>
-      <p>Сигнал запускает каскад внутри клетки и меняет её работу: например, фибробласт усиливает синтез компонентов матрикса. Выполнив задачу, пептид распадается на аминокислоты и не накапливается в тканях.</p>
-      <span class="tag">Механизм · сигнальная регуляция</span>
+      <p>Сигнал запускает каскад внутри клетки: фибробласт усиливает синтез матрикса, митохондрии меняют энергетический обмен. На митохондрии нацелены NAD+ и MOTS-c — данные по ним пока в основном лабораторные. Природные короткие пептиды быстро распадаются до аминокислот, а модифицированные аналоги вроде GLP-1 действуют до недели.</p>
+      <span class="tag">NAD+ · MOTS-c · уровень C–D</span>
       <div class="scale"><i></i><b>≈ 1 мкм</b> ядро</div>
-    </div>
     </div>
   </div>
 
   <div class="panel wide" data-t="46.5,48.7" id="tour-7">
-    <div class="head"><div class="k">07 · Для клиники</div><h2>Не разовая процедура, а <b>программа ведения</b> пациента</h2></div>
+    <div class="head"><div class="k fix-k">07 · Решение</div><h2>Пептиды — не из мессенджера, а <b>в кабинете врача</b></h2></div>
     <div class="trio">
       <div class="card">
         <div class="k">Протоколы</div>
         <h3>Готовые программы на 12 недель и 6 месяцев</h3>
         <ul>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Дозы, титрация по неделям, контрольные анализы</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Отбор, противопоказания, стартовые анализы</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Титрация по неделям и контрольные точки</li>
           <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>«План Б» на случай плато</li>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Критерии отбора и противопоказания</li>
         </ul>
       </div>
       <div class="card">
         <div class="k">Обучение</div>
-        <h3>Врачи понимают механизм, а не просто колют</h3>
+        <h3>Врач отвечает пациентке — с цифрами, а не «не знаю»</h3>
         <ul>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Профессиональный учебник: 5 категорий пептидов</li>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Скрипты разговора: старт, плато, продление</li>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Ответы по сочетаемости в рабочем порядке</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Учебник: 5 категорий пептидов</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Уровень доказательности каждой молекулы</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Скрипты: старт, плато, продление</li>
         </ul>
       </div>
       <div class="card">
         <div class="k">Удержание</div>
-        <h3>Из курса — в многолетнее ведение</h3>
+        <h3>Из одной процедуры — в программу на 6–12 визитов</h3>
         <ul>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Дневник прогресса каждые 4 недели</li>
-          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Программа maintenance вместо «что дальше?»</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Контроль прогресса каждые 4 недели</li>
+          <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Поддерживающая программа вместо «что дальше?»</li>
           <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Кросс-назначения с процедурами клиники</li>
         </ul>
       </div>
@@ -456,14 +503,34 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 
   <div class="panel" data-t="49.5,51.7" id="tour-8">
     <div class="card">
-      <div class="k">08 · Итог</div>
-      <h2>Один сигнал — и клетка работает. Одна программа — и пациентка остаётся</h2>
-      <p>Ниже — четыре линейки под профиль клиники, границы применения и контакт менеджера. Начнём с одной программы.</p>
+      <div class="k fix-k">08 · Результат</div>
+      <h2>Она остаётся у вас: под контролем врача, с анализами и документами на каждый флакон</h2>
+      <p>Ниже — пять проблем, с которыми к нам приходят клиники, что известно о каждой молекуле линейки Rejuva и как начать с одной тестовой программы.</p>
+      <a class="btn panel-btn" href="#start">Разобрать мою клинику — 30 минут</a>
     </div>
   </div>
 </div>
 
 <div class="after">
+
+  <!-- PAINS -->
+  <section class="wrap block pains" id="pains">
+    <p class="eyebrow">Знакомо?</p>
+    <h2>Пять проблем, с которыми к нам <b>приходят клиники</b></h2>
+    <div class="pain-top">
+      <div class="big"><b>12,3</b><small>тыс.</small></div>
+      <p>компаний бьюти-сферы закрылось в России за январь–июль 2026 года — на 52,5% больше, чем годом ранее. Остаются клиники, которые удерживают пациента, а не покупают его заново.</p>
+    </div>
+    <div class="paingrid">
+      <article class="pain"><div class="pz"><span class="pl">Боль 01</span><h3>Пациенты лечатся в Telegram</h3><p>Пептиды покупают у продавцов «для исследований» и колют дома. Клиника теряет выручку, а с осложнениями пациентка всё равно приходит к врачу.</p></div><div class="fx"><span class="pl">Как решаем</span><p>Легальный маршрут в клинике: осмотр, анализы, протокол и контроль каждые 4 недели.</p></div></article>
+      <article class="pain"><div class="pz"><span class="pl">Боль 02</span><h3>Привлечение дорожает</h3><p>Стоимость заявки в медицинской рекламе за год выросла примерно на 38%. Пациент на одну процедуру не окупает рекламу.</p></div><div class="fx"><span class="pl">Как решаем</span><p>Программа на 12 недель — 6 месяцев: 6–12 визитов и регулярный контакт вместо разовой продажи.</p></div></article>
+      <article class="pain"><div class="pz"><span class="pl">Боль 03</span><h3>Сезонные провалы</h3><p>Зимний и летний спад съедает до 40% выручки косметологии, а аренда и зарплаты не снижаются.</p></div><div class="fx"><span class="pl">Как решаем</span><p>Курсовые программы не зависят от сезона и сочетаются с процедурами, которые у вас уже есть.</p></div></article>
+      <article class="pain"><div class="pz"><span class="pl">Боль 04</span><h3>Страх проверок и серых поставщиков</h3><p>Препарат без документов — риск для лицензии и репутации. На сером рынке ошибки маркировки находят примерно в каждом пятом образце.</p></div><div class="fx"><span class="pl">Как решаем</span><p>Сертификат анализа на каждую партию, матрица правового статуса каждой позиции до поставки, логгер температуры.</p></div></article>
+      <article class="pain"><div class="pz"><span class="pl">Боль 05</span><h3>Врачи не готовы к вопросам</h3><p>Пациентка знает о пептидах из блогов больше, чем врач на приёме, — и доверие уходит вместе с ней.</p></div><div class="fx"><span class="pl">Как решаем</span><p>Учебник, семинар и честные уровни доказательности: врач объясняет, что доказано, а что нет.</p></div></article>
+      <article class="pain pain-cta"><h3>Узнали свою клинику?</h3><p>За 30 минут медицинский советник разберёт ваш профиль и предложит одну тестовую программу на 1–2 пациентов.</p><a class="btn" href="#start">Записаться на разбор</a></article>
+    </div>
+    <p class="src">Источники: Sostav.ru, «Медицинская реклама в 2026 году» (выборка 47 клиник, октябрь 2025 — май 2026); «Контур», гайд для косметологических клиник, 2025; Sostav.ru / AdIndex, август 2026 (ликвидации бьюти-компаний); TIME, февраль 2026 (ошибки маркировки на сером рынке); Chain Drug Review, 2026 (опрос пользователей пептидов в США).</p>
+  </section>
 
   <!-- PROOF: video rows -->
   <section class="proof" id="proof">
@@ -520,32 +587,56 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <p class="eyebrow">Наука без преувеличений</p>
     <h2>Что доказано — <b>и насколько</b></h2>
     <div class="evgrid">
-      <article class="evcard"><span class="ev ev-a">A</span><h3>Агонисты GLP-1 / GIP</h3>
-        <div class="evnums"><div><b>−14,9%</b><span>семаглутид, 68 недель<br>плацебо −2,4%</span></div><div><b>−20,9%</b><span>тирзепатид, 72 недели<br>плацебо −3,1%</span></div></div>
-        <p>STEP-1 (NEJM, 2021) и SURMOUNT-1 (NEJM, 2022; 2539 участников). В РФ зарегистрированы отечественные препараты; применяются по назначению врача в соответствии с инструкцией.</p></article>
+      <article class="evcard"><span class="ev ev-a">A</span><h3>Инкретины: GLP-1, GIP, глюкагон</h3>
+        <div class="evnums"><div><b>−20,9%</b><span>тирзепатид, 72 недели<br>плацебо −3,1%</span></div><div><b>−28,3%</b><span>ретатрутид, 80 недель<br>плацебо −2,2%</span></div></div>
+        <p>SURMOUNT-1 (NEJM, 2022; 2539 участников) — зарегистрированный препарат. TRIUMPH-1 (2339 участников) — данные компании Eli Lilly, май 2026; ретатрутид пока не зарегистрирован, подача в FDA планируется в I квартале 2027 года.</p></article>
       <article class="evcard"><span class="ev ev-b">B</span><h3>GHK-Cu, наружно</h3>
         <div class="evnums"><div><b>12 нед.</b><span>крем, 71 участница<br>с фотостарением</span></div><div><b>↑</b><span>плотность и толщина<br>кожи, ↓ морщины</span></div></div>
-        <p>Обзор Pickart &amp; Margolina (2018). Исследования небольшие, часть финансировалась производителями; данные получены для наружного применения.</p></article>
+        <p>Обзор Pickart &amp; Margolina (2018). Исследования небольшие, часть финансировалась производителями. Данные получены для наружного применения — на инъекционную форму их переносить нельзя.</p></article>
       <article class="evcard"><span class="ev ev-c">C–D</span><h3>Исследуемые молекулы</h3>
-        <div class="evnums"><div><b>BPC-157</b><span>3 пилотных работы<br>на людях</span></div><div><b>Эпиталон</b><span>одна научная группа,<br>без репликаций</span></div></div>
-        <p>BPC-157, TB-500, эпиталон, MOTS-c изучены в основном доклинически. Мы не обещаем лечебных эффектов и обсуждаем их только со специалистами.</p></article>
+        <div class="evnums"><div><b>BPC-157</b><span>3 небольшие работы<br>на людях, одна группа</span></div><div><b>8 : 6</b><span>голосование комитета<br>FDA, июль 2026</span></div></div>
+        <p>BPC-157, TB-500, KPV, MOTS-c, эпиталон изучены в основном доклинически. Комитет FDA рекомендовал допустить их аптечное изготовление в США, но окончательного решения нет, и это не регистрация лекарства.</p></article>
     </div>
     <div class="market">
       <div><b data-count="59">59</b><small>млрд ₽</small><span>инъекционная косметология в РФ за 2025 год, +34%</span></div>
       <div><b data-count="24">24</b><small>млрд ₽</small><span>аптечные продажи семаглутида за январь–август 2026, +60%</span></div>
-      <div><b data-count="22">22</b><small>РУ</small><span>на семаглутид в ГРЛС: направление легально и растёт</span></div>
+      <div><b data-count="22">22</b><small>РУ</small><span>на семаглутид в ГРЛС: пептидная терапия веса легально растёт</span></div>
     </div>
-    <p class="src">Источники: Wilding et al., NEJM 2021 (STEP-1); Jastreboff et al., NEJM 2022 (SURMOUNT-1); Pickart &amp; Margolina, Int J Mol Sci 2018; «Право на здоровье» / «Коммерсантъ», 2026; DSM Group / РБК, 2026. Уровни: A — крупные РКИ, B — небольшие исследования на людях, C — пилоты, D — доклинические данные.</p>
+    <p class="src">Источники: Wilding et al., NEJM 2021 (STEP-1); Jastreboff et al., NEJM 2022 (SURMOUNT-1); Eli Lilly, пресс-релизы TRIUMPH-1 (21.05.2026) и TRIUMPH-2/3 (23.07.2026); Pickart &amp; Margolina, Int J Mol Sci 2018; FDA, Pharmacy Compounding Advisory Committee, 23–24.07.2026; «Право на здоровье» / «Коммерсантъ», 2026; DSM Group / РБК, 2026. Уровни: A — крупные РКИ (фаза 3), B — небольшие исследования на людях, C — пилоты и наблюдения, D — только доклинические данные.</p>
+  </section>
+  <!-- LINE: product-by-product evidence -->
+  <section class="wrap block" id="line">
+    <p class="eyebrow">Линейка Rejuva · 13 молекул</p>
+    <h2>Что внутри каждой позиции <b>и что о ней известно</b></h2>
+    <p class="sub">Весь ассортимент CELL LAB с селл-лаб.рф — с честным уровнем доказательности. Уровень относится к молекуле, а не к продукту: клинических исследований готовых форм Rejuva нет. Правовой статус каждой позиции в РФ передаём в матрице до поставки.</p>
+    <div class="molgrid">
+      <article class="mol"><div class="mh"><h3>Ретатрутид</h3><span class="ev ev-a">A</span></div><p class="prod">Fatkiller G3 — ручка и картридж 30 мг / 3 мл</p><p>Тройной агонист рецепторов GIP, GLP-1 и глюкагона. TRIUMPH-1: −28,3% массы тела за 80 недель на дозе 12 мг; TRIUMPH-4: −28,7% за 68 недель. Частые нежелательные явления — желудочно-кишечные; в TRIUMPH-3 из-за них прекратили лечение 13,5% на дозе 12 мг против 4,8% на плацебо.</p><p class="st">Не зарегистрирован ни в одной стране. Ограничения класса GLP-1: медуллярный рак щитовидной железы и МЭН-2 в анамнезе, панкреатит, беременность.</p></article>
+      <article class="mol"><div class="mh"><h3>NAD+</h3><span class="ev ev-c">C</span></div><p class="prod">RejuvaNAD+ — лиофилизат 500 мг; ручка и картридж 900 мг / 3 мл</p><p>Кофермент энергетического обмена, уровень в тканях снижается с возрастом. Рандомизированные исследования проведены в основном с пероральными предшественниками (NR, NMN): NAD+ в крови растёт, клинические эффекты непостоянны. По инъекционному NAD+ — небольшие работы.</p><p class="st">Обещания «омоложения» не подтверждены. При быстром введении описаны дискомфорт, тошнота, приливы.</p></article>
+      <article class="mol"><div class="mh"><h3>MOTS-c</h3><span class="ev ev-c">D</span></div><p class="prod">RejuvaMOTS-c — ручка и картридж 50 мг / 3 мл</p><p>Пептид, закодированный в ДНК митохондрий. На животных улучшает чувствительность к инсулину и переносимость нагрузки через путь AMPK; у людей изучались лишь ранние формы аналогов.</p><p class="st">Не одобрен. Комитет FDA — 7 : 5 за аптечное изготовление (июль 2026). Запрещён ВАДА.</p></article>
+      <article class="mol"><div class="mh"><h3>GHK-Cu</h3><span class="ev ev-b">B / D</span></div><p class="prod">RejuvaGHK-Cu 100 мг / 3 мл; в составе GLOW и KLOW</p><p>Медный трипептид, стимулирует синтез коллагена и компонентов матрикса. Наружно: 12 недель, рост плотности кожи и уменьшение морщин. Для инъекций контролируемых исследований на людях нет.</p><p class="st">Инъекционная форма — в списке FDA на пересмотр до февраля 2027 года.</p></article>
+      <article class="mol"><div class="mh"><h3>BPC-157</h3><span class="ev ev-c">C–D</span></div><p class="prod">RejuvaBPC157 10 мг; в составе GLOW, KLOW, BPC+TB, REGEN G7</p><p>Фрагмент белка желудочного сока. Десятки работ на животных (слизистая ЖКТ, сухожилия, связки); на людях — 3 небольшие работы одной исследовательской группы.</p><p class="st">Не одобрен. Комитет FDA — 8 : 6 (июль 2026), окончательного решения нет. Запрещён ВАДА (S0).</p></article>
+      <article class="mol"><div class="mh"><h3>TB-500</h3><span class="ev ev-c">D</span></div><p class="prod">RejuvaTB 500 10 мг; в составе GLOW, KLOW, BPC+TB</p><p>Синтетический фрагмент тимозина β4. FDA отдельно подчёркивает: клинические данные по тимозину β4 нельзя переносить на TB-500.</p><p class="st">Не одобрен. Комитет FDA — 8 : 6. Запрещён ВАДА.</p></article>
+      <article class="mol"><div class="mh"><h3>KPV</h3><span class="ev ev-c">D</span></div><p class="prod">В составе KLOW (10 мг)</p><p>Трипептид — фрагмент α-меланоцитстимулирующего гормона. Противовоспалительное действие показано в моделях колита и на клетках; исследований на людях нет.</p><p class="st">Не одобрен. Комитет FDA — 8 : 6 (июль 2026).</p></article>
+      <article class="mol"><div class="mh"><h3>Эпиталон</h3><span class="ev ev-c">C–D</span></div><p class="prod">RejuvaEPITALON — ручка и картридж 30 мг</p><p>Тетрапептид Ala-Glu-Asp-Gly. Работы о теломеразе и мелатониновом ритме выполнены в основном одной научной группой, независимых репликаций нет.</p><p class="st">Не одобрен. Комитет FDA — 7 : 4 (июль 2026).</p></article>
+      <article class="mol"><div class="mh"><h3>Тимозин α1</h3><span class="ev ev-b">B</span></div><p class="prod">RejuvaTimosin A — ручка 30 мг</p><p>28-аминокислотный пептид тимуса, модулирует функцию Т-клеток и дендритных клеток. Как лекарство (тимальфазин) зарегистрирован в ряде стран Азии и Европы — при хроническом гепатите B и как дополнение к терапии.</p><p class="st">В США не одобрен. Иммуномодулятор — с осторожностью при аутоиммунных заболеваниях и после трансплантации.</p></article>
+      <article class="mol"><div class="mh"><h3>PT-141, бремеланотид</h3><span class="ev ev-a">A</span></div><p class="prod">RejuvaIntimaX — ручка 20 мг / 3 мл</p><p>Агонист меланокортиновых рецепторов. Одобрен FDA в 2019 году для женщин в пременопаузе с гипоактивным расстройством сексуального влечения; эффект умеренный, частая тошнота.</p><p class="st">Нельзя при неконтролируемой артериальной гипертензии и сердечно-сосудистых заболеваниях.</p></article>
+      <article class="mol"><div class="mh"><h3>MelanX, меланокортин</h3><span class="ev ev-c">D</span></div><p class="prod">RejuvaMelanX — ручка 10 мг / 3 мл</p><p>Аналог α-меланоцитстимулирующего гормона, усиливает пигментацию кожи. Описаны появление и изменение невусов, тошнота, приапизм.</p><p class="st">Меланотан II остаётся в списке FDA с вопросами безопасности. Только с осмотром дерматолога и дерматоскопией.</p></article>
+      <article class="mol"><div class="mh"><h3>REGEN G7</h3><span class="ev ev-c">D</span></div><p class="prod">Флаконы 1 мл × 5; ручка и картридж 30 мг / 3 мл</p><p>Смесь IGF-1, SOD-1, тимозина β4, BPC-157, NGF, FGF и карнозина. Исследований этой комбинации на людях нет. Факторы роста стимулируют деление клеток.</p><p class="st">Противопоказан при онкологических заболеваниях, в том числе в анамнезе. IGF-1 запрещён ВАДА.</p></article>
+      <article class="mol"><div class="mh"><h3>UltimateDetox</h3><span class="ev ev-c">C</span></div><p class="prod">Глутатион 600 мг, NAC 600 мг, глицин 1000 мг, селен 200 мкг</p><p>Ацетилцистеин (NAC) — зарегистрированное лекарство: муколитик и антидот при отравлении парацетамолом. Доказательств «детокса» у здоровых людей нет.</p><p class="st">Регуляторы ряда стран предупреждали о рисках инъекционного глутатиона для осветления кожи.</p></article>
+    </div>
+    <p class="src">Источники: Eli Lilly (TRIUMPH-1, -3, -4), 2025–2026; FDA PCAC, 23–24.07.2026; FDA, список веществ с вопросами безопасности для аптечного изготовления, 2023–2026; Vyleesi (bremelanotide), инструкция FDA, 2019; Pickart &amp; Margolina, 2018; обзоры по NAD+-предшественникам и BPC-157, 2023–2026; Запрещённый список ВАДА, 2026. Данные для специалистов, не для пациентов.</p>
   </section>
   <section class="wrap block" id="dirs">
     <p class="eyebrow">Направления</p>
-    <h2>Четыре направления — с честным <b>уровнем доказательности</b></h2>
-    <p class="sub">Буква на карточке — уровень доказательности: A — крупные РКИ и регистрация, B — небольшие исследования на людях, C — пилоты и наблюдения, D — только доклинические данные.</p>
+    <h2>Шесть направлений — с честным <b>уровнем доказательности</b></h2>
+    <p class="sub">Буква на карточке — уровень доказательности: A — крупные РКИ, B — небольшие исследования на людях, C — пилоты и наблюдения, D — только доклинические данные.</p>
     <div class="dirs">
-      <article class="dir"><span class="ev ev-a">A</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l7 -5 7 5M5 16l7 5 7 -5"/></svg></span><h3>Метаболизм и вес</h3><p>Агонисты GLP-1/GIP — класс с наивысшим уровнем доказательности: −14,9% массы тела (STEP-1) и −20,9% (SURMOUNT-1). Зарегистрированные в РФ препараты, по назначению врача. Помогаем выстроить программу сопровождения.</p><span class="who">Эндокринология · снижение веса</span></article>
-      <article class="dir"><span class="ev ev-b">B</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/><path d="M9 10h.01M15 10h.01"/></svg></span><h3>Эстетическая медицина</h3><p>Медный трипептид GHK-Cu — один из наиболее изученных косметических пептидов: в исследованиях наружных средств отмечены рост плотности кожи и уменьшение морщин. Сочетается с процедурами клиники.</p><span class="who">Косметология · трихология</span></article>
-      <article class="dir"><span class="ev ev-c">C–D</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h4l3 -8 4 14 3 -6h2"/></svg></span><h3>Регенерация и реабилитация</h3><p>BPC-157, TB-500 — исследуемые молекулы: данные в основном доклинические и пилотные. Обсуждаем только со специалистами, с указанием статуса в РФ. Важно для спортивной медицины: вещества входят в список ВАДА.</p><span class="who">Только для специалистов</span></article>
-      <article class="dir"><span class="ev ev-c">C</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3>Anti-age и интегративная медицина</h3><p>Эпиталон, NAD+, MOTS-c — направления исследований без обещаний «омоложения». Акцент программы — на диагностике, мониторинге маркеров и честной коммуникации с пациентом.</p><span class="who">Превентивная медицина</span></article>
+      <article class="dir"><span class="ev ev-a">A / D</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l7 -5 7 5M5 16l7 5 7 -5"/></svg></span><h3>Метаболизм и вес</h3><p>Fatkiller G3 (ретатрутид) — молекула с самыми сильными данными фазы 3, но без регистрации. MOTS-c — только доклиника. Программа строится вокруг диагностики, питания и мониторинга.</p><span class="who">Эндокринология · снижение веса</span></article>
+      <article class="dir"><span class="ev ev-b">B / D</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/><path d="M9 10h.01M15 10h.01"/></svg></span><h3>Эстетика и кожа</h3><p>GHK-Cu, комплексы GLOW и KLOW, MelanX. Доказательства есть для наружного GHK-Cu; инъекционные формы — исследуемые. Сочетаются с процедурами клиники.</p><span class="who">Косметология · трихология</span></article>
+      <article class="dir"><span class="ev ev-c">C–D</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h4l3 -8 4 14 3 -6h2"/></svg></span><h3>Регенерация и реабилитация</h3><p>BPC-157, TB-500, BPC+TB, REGEN G7. Данные в основном на животных. Для спортсменов: все молекулы направления запрещены ВАДА.</p><span class="who">Только для специалистов</span></article>
+      <article class="dir"><span class="ev ev-c">C</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3>Энергия и anti-age</h3><p>NAD+, эпиталон, UltimateDetox и стеки. Без обещаний «омоложения»: акцент на маркерах, сне, нагрузке и честном разговоре с пациентом.</p><span class="who">Превентивная медицина</span></article>
+      <article class="dir"><span class="ev ev-b">B</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span><h3>Иммунитет</h3><p>Тимозин α1 — единственная молекула линейки, зарегистрированная как лекарство в ряде стран. Назначается после оценки иммунного статуса.</p><span class="who">Терапия · инфекционисты</span></article>
+      <article class="dir"><span class="ev ev-a">A</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg></span><h3>Сексуальное здоровье</h3><p>IntimaX (PT-141, бремеланотид) — одобрен FDA для одного показания у женщин в пременопаузе. Контроль давления обязателен.</p><span class="who">Гинекология · урология</span></article>
     </div>
   </section>
 
@@ -570,21 +661,28 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
         <p class="eyebrow">Документы и база</p>
         <h2>Что мы покажем <b>до первой поставки</b></h2>
         <div class="doclist">
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg><div><b>Реквизиты и выписка ЕГРЮЛ</b><span>Юрлицо, ИНН/ОГРН, адрес склада — чтобы проверить контрагента до встречи</span></div><em>до встречи</em></div>
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><div><b>Правовой статус каждой позиции</b><span>Матрица: позиция → статус в РФ → документ (РУ, декларация ЕАЭС)</span></div><em>до поставки</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg><div><b>Реквизиты и выписка ЕГРЮЛ</b><span>ООО «РУТРЕЙД», ИНН 9724215102, ОГРН 1257700081726 — проверьте контрагента до встречи</span></div><em>до встречи</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><div><b>Правовой статус каждой позиции</b><span>Матрица: позиция → статус в РФ → документ. Исследуемые молекулы помечены отдельно</span></div><em>до поставки</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg><div><b>Сертификаты производства</b><span>EU-GMP и K-GMP производителя, документы по NAD+ и MOTS-c, хроматограммы</span></div><em>до поставки</em></div>
           <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><div><b>Сертификат анализа партии (COA)</b><span>Чистота по ВЭЖХ, масс-спектрометрия, эндотоксины, стерильность</span></div><em>к каждой партии</em></div>
           <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19"/></svg><div><b>Холодовая цепь</b><span>Термоконтейнер и данные логгера температуры по каждой отправке</span></div><em>к каждой партии</em></div>
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><div><b>Протоколы и учебник для врачей</b><span>Программы по направлениям, мониторинг, противопоказания, 33-страничный учебник</span></div><em>с обучением</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><div><b>Протоколы и учебник для врачей</b><span>Программы по направлениям, мониторинг, противопоказания, учебник и CELL.LAB Academy с баллами НМО</span></div><em>с обучением</em></div>
           <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><div><b>Медицинский советник</b><span>Врач, который отвечает команде клиники на вопросы по механизмам и сочетаемости</span></div><em>на встрече</em></div>
         </div>
       </div>
-      <aside class="author">
+      <div><aside class="author">
         <div class="ava" aria-hidden="true">АЕ</div>
         <p class="eyebrow">Автор учебника</p>
         <h3>Аскар Ермуханбетов</h3>
         <p class="role">Врач, автор профессионального учебника по пептидной терапии для врачей интегративной медицины</p>
         <blockquote>«Пептиды — сильный инструмент, требующий грамотного применения и мониторинга, но при правильном подборе они открывают новые горизонты в интегративной медицине для улучшения здоровья и качества жизни пациентов».</blockquote>
       </aside>
+      <aside class="author">
+        <div class="ava" aria-hidden="true">ЮЭ</div>
+        <p class="eyebrow">Ведущий преподаватель</p>
+        <h3>Юлия Этлис</h3>
+        <p class="role">Кандидат медицинских наук, врач-терапевт, диетолог. Ведущий преподаватель CELL.LAB Academy, более 20 лет в медицине</p>
+      </aside></div>
     </div>
   </section>
 
@@ -593,27 +691,30 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <p class="eyebrow">Вопросы главврача</p>
     <h2>Что спрашивают <b>перед стартом</b></h2>
     <div class="faq">
-      <details><summary>Как проверить вас как поставщика?</summary><p>До встречи передаём реквизиты и выписку ЕГРЮЛ, до поставки — матрицу правового статуса каждой позиции с подтверждающими документами и сертификаты анализа партии. Всё это можно проверить самостоятельно.</p></details>
+      <details><summary>Как проверить вас как поставщика?</summary><p>Юрлицо — ООО «РУТРЕЙД», ИНН 9724215102, ОГРН 1257700081726 (Москва). До встречи передаём выписку ЕГРЮЛ, до поставки — матрицу правового статуса каждой позиции, сертификаты производства EU-GMP и K-GMP и сертификаты анализа партии. Всё это можно проверить самостоятельно.</p></details>
+      <details><summary>Все ли позиции зарегистрированы в РФ как лекарства?</summary><p>Нет, и мы говорим об этом прямо. Большинство молекул линейки — исследуемые: у них нет регистрации как лекарственного средства ни в РФ, ни в США. До поставки передаём матрицу «позиция → статус → документ» и рекомендуем согласовать ассортимент с юристом клиники. Позиции без регистрации не рекламируются пациентам.</p></details>
+      <details><summary>Правда ли, что FDA одобрило BPC-157?</summary><p>Нет. В июле 2026 года консультативный комитет FDA голосами 8 против 6 рекомендовал включить BPC-157 в список веществ для аптечного изготовления в США. Это рекомендация, окончательного решения FDA нет, и это не регистрация лекарства. На правовой статус в РФ это не влияет.</p></details>
       <details><summary>Можно ли рассказывать пациентам о пептидах в рекламе?</summary><p>Реклама медицинских услуг и препаратов регулируется законом «О рекламе» (ст. 24): обязательны предупреждения о противопоказаниях, а описание методов лечения и рецептурных препаратов допустимо только для специалистов. На обучении передаём памятку с безопасными формулировками для сайта и соцсетей клиники.</p></details>
-      <details><summary>Насколько это безопасно для пациентов?</summary><p>Пептиды в целом хорошо переносятся: многие из них эндогенны, серьёзные побочные явления редки. У каждого препарата свой профиль — например, у агонистов GLP-1 самые частые реакции гастроинтестинальные и проходят по мере адаптации при постепенной титрации. Полный перечень по каждому препарату — в главе 5 учебника.</p></details>
-      <details><summary>Кому пептиды назначать нельзя?</summary><p>Абсолютные противопоказания — беременность и лактация, активные онкологические процессы. Относительные — тяжёлая декомпенсация печени или почек, нестабильное состояние. У препаратов есть свои ограничения: агонисты GLP-1 не применяют при раке щитовидной железы в анамнезе и диабете 1 типа, PT-141 — при неконтролируемой гипертензии.</p></details>
-      <details><summary>Сочетаются ли пептиды с нашими процедурами?</summary><p>Да, и это основа кросс-назначений: GHK-Cu сочетают с ретиноидами и факторами роста в косметологии, BPC-157 — с физиотерапией и ЛФК, GLP-1 — с диетой низкого гликемического индекса. Пептиды разных категорий можно комбинировать в одной программе, так как они работают через разные рецепторы.</p></details>
-      <details><summary>Что делать, если у пациента плато?</summary><p>Предупредить заранее и иметь «план Б»: скорректировать дозу, сменить препарат внутри категории или добавить второй пептид. Плато в середине программы — ожидаемый этап, и пациент, который о нём знает, не бросает терапию. Скрипты и варианты коррекции входят в протоколы.</p></details>
-      <details><summary>Какой мониторинг нужен?</summary><p>Контрольные точки заложены в каждую программу: базовые анализы на старте, затем панели маркеров по ходу курса (например, липидограмма, глюкоза, высокочувствительный СРБ каждые 2 месяца в антиэйдж-программах) и еженедельные короткие контакты с пациентом.</p></details>
-      <details><summary>Нужно ли дополнительное обучение врачей?</summary><p>Да, и мы его даём: учебник, разбор категорий и механизмов, протоколы и скрипты разговора с пациентом. Врач, который может объяснить «почему», получает приверженного пациента — это доказано в исследованиях комплаенса.</p></details>
-      <details><summary>Как пептиды хранятся и вводятся?</summary><p>Большинство препаратов — подкожные инъекции, часть выпускается в назальной, наружной или капсульной форме. Условия хранения и сопроводительные документы передаём вместе с поставкой.</p></details>
+      <details><summary>Насколько это безопасно для пациентов?</summary><p>Зависит от молекулы. У зарегистрированных пептидов (агонисты GLP-1, бремеланотид) профиль безопасности описан в крупных исследованиях: у GLP-1 чаще всего тошнота и другие реакции ЖКТ, они уменьшаются при постепенной титрации. У исследуемых молекул долгосрочных данных на людях нет; теоретические риски — иммунные реакции, примеси, стимуляция роста тканей. Поэтому решения принимает врач, а партии сопровождаются анализом чистоты. Подробный перечень — в главе 5 учебника.</p></details>
+      <details><summary>Кому пептиды назначать нельзя?</summary><p>Беременность и лактация, онкологические заболевания (активные и в анамнезе — особенно для факторов роста IGF-1, FGF, NGF), тяжёлая декомпенсация печени или почек, нестабильное состояние. Ограничения отдельных молекул: GLP-1 и ретатрутид — медуллярный рак щитовидной железы и МЭН-2 в личном или семейном анамнезе, панкреатит; PT-141 — неконтролируемая гипертензия и сердечно-сосудистые заболевания; меланокортины — только после осмотра кожи. Спортсменам: BPC-157, TB-500, MOTS-c и IGF-1 запрещены ВАДА.</p></details>
+      <details><summary>Сочетаются ли пептиды с нашими процедурами?</summary><p>Наружный GHK-Cu сочетают с ретиноидами и процедурами для кожи, программы веса — с питанием и нагрузкой, восстановительные — с физиотерапией и ЛФК. При этом комбинации исследуемых пептидов между собой в клинических исследованиях не изучались: решение о стеке принимает врач и фиксирует его в карте пациента.</p></details>
+      <details><summary>Что делать, если у пациента плато?</summary><p>Предупредить заранее и иметь «план Б»: скорректировать дозу, пересмотреть питание и нагрузку или сменить программу. Плато в середине курса — ожидаемый этап, и пациент, который о нём знает, не бросает терапию. Скрипты и варианты коррекции входят в протоколы.</p></details>
+      <details><summary>Какой мониторинг нужен?</summary><p>Контрольные точки заложены в каждую программу: базовые анализы на старте, затем панели маркеров по ходу курса (например, липидограмма, глюкоза, высокочувствительный СРБ каждые 2 месяца в антиэйдж-программах), давление для меланокортинов и короткие контакты с пациентом раз в неделю.</p></details>
+      <details><summary>Нужно ли дополнительное обучение врачей?</summary><p>Да, и мы его даём: учебник, разбор категорий и механизмов, протоколы и скрипты разговора с пациентом. Для врачей есть программа CELL.LAB Academy (Professional) с удостоверением о повышении квалификации и баллами НМО. Врач, который может объяснить «почему», получает приверженного пациента.</p></details>
+      <details><summary>Как пептиды хранятся и вводятся?</summary><p>Позиции Rejuva выпускаются в шприц-ручках со сменными картриджами и во флаконах с лиофилизатом — для подкожного введения. Иглы 31G поставляются отдельно. Условия хранения и сопроводительные документы передаём вместе с поставкой, транспорт — в термоконтейнере с логгером.</p></details>
       <details><summary>Можно ли начать с небольшой тестовой партии?</summary><p>Да. Стартуем с одной программы для 1–2 пациентов, после чего клиника решает о регулярных поставках. Условия и минимальный заказ обсуждаем на консультации.</p></details>
     </div>
   </section>
 
   <section class="wrap block limits">
     <div class="box">
-      <div><p class="eyebrow">Границы применения</p><h2>Инструмент для врача, не для витрины</h2><p>Решение принимается индивидуально, с учётом баланса пользы и риска. Если задачу можно решить менее инвазивно, начинают с этого.</p></div>
+      <div><p class="eyebrow">Границы применения</p><h2>Инструмент для врача, не для витрины</h2><p>Решение принимается индивидуально, с учётом баланса пользы и риска. Если задачу можно решить менее инвазивно или зарегистрированным препаратом, начинают с этого.</p></div>
       <ul>
         <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>Беременность и лактация: влияние на плод не изучено.</li>
-        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>Активные онкологические процессы: часть пептидов стимулирует деление клеток.</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>Онкологические заболевания, в том числе в анамнезе: факторы роста и часть пептидов стимулируют деление клеток.</li>
         <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>Декомпенсация печени или почек: нарушен метаболизм пептидов.</li>
-        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>У каждого препарата свои ограничения: GLP-1 — не при раке щитовидной железы в анамнезе, PT-141 — не при неконтролируемой гипертензии.</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>GLP-1 и ретатрутид — не при медуллярном раке щитовидной железы и МЭН-2; PT-141 — не при неконтролируемой гипертензии; меланокортины — только после осмотра кожи.</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/></svg>Спортсмены: BPC-157, TB-500, MOTS-c, IGF-1 входят в запрещённый список ВАДА.</li>
       </ul>
     </div>
   </section>
@@ -622,7 +723,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   <section class="contact-v" id="start-v" aria-hidden="true"><video class="lv bgv" muted loop playsinline preload="none" poster="v/deal.jpg" data-src="v/deal.mp4"></video><div class="bgv-shade"></div></section>
   <section class="wrap block contact" id="start">
     <div class="inner">
-      <div><p class="eyebrow">Старт</p><h2 style="margin-top:14px">Встреча с медицинским советником — <b>30 минут</b></h2><p class="sub">Оставьте контакт — медицинский советник за 30 минут разберёт профиль клиники, покажет документы и предложит формат старта. Учебник для врачей пришлём сразу. Без предоплаты.</p>
+      <div><p class="eyebrow">Старт</p><h2 style="margin-top:14px">Встреча с медицинским советником — <b>30 минут</b></h2><p class="sub">Медицинский советник за 30 минут разберёт профиль клиники: каких пациентов вы сейчас теряете в серый рынок, какие позиции линейки вам подходят и что по ним доказано. Покажет документы и предложит одну тестовую программу. Учебник для врачей пришлём сразу. Без предоплаты.</p>
         <div class="alt"><div class="crow"><div><div class="k">Менеджер проекта</div><div class="v">Елена · Instagram Direct</div></div></div>
         <div class="crow"><div class="v">@peptideselena</div><button type="button" class="copy" data-copy="@peptideselena">Скопировать</button></div>
         <div class="crow"><div class="v">селл-лаб.рф</div><button type="button" class="copy" data-copy="селл-лаб.рф">Скопировать</button></div></div>
@@ -645,7 +746,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   </section>
   <footer class="wrap">
     <div class="fcol"><b>CELL LAB</b><span>Пептиды корейского качества Rejuva. Поставки для клиник по всей России.</span><span>Материалы основаны на учебнике «Пептидная терапия: профессиональный учебник для врачей».</span></div>
-    <div class="fcol"><span>Реквизиты юрлица и выписку ЕГРЮЛ направим по запросу до встречи</span><span>Адрес и телефон офиса — по запросу у менеджера</span><span>Информация предназначена для медицинских и фармацевтических работников. Имеются противопоказания, необходима консультация специалиста.</span></div>
+    <div class="fcol"><span>ООО «РУТРЕЙД», ИНН 9724215102, КПП 772401001, ОГРН 1257700081726. 115446, Москва, Коломенский проезд, д. 21</span><span>+7 (985) 222-02-47 · cell.lab@yandex.com · селл-лаб.рф</span><span>Информация предназначена для медицинских и фармацевтических работников. Имеются противопоказания, необходима консультация специалиста.</span></div>
   </footer>
 </div>
 
@@ -705,10 +806,17 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   function readScroll(){var y=window.scrollY-track.offsetTop;target=Math.max(0,Math.min(1,y/trackMax()));dirty=true;}
   addEventListener('scroll',readScroll,{passive:true}); readScroll(); P=target;
   function ramp(p,a,b){return Math.max(0,Math.min(1,(p-a)/(b-a)))}
+  /* v4: pain -> solution grade. Grey, cold and dim at the problem stops; colour returns as the science starts; full warmth at the doctor */
+  var gEls=[canvas,document.getElementById('tv'),document.getElementById('loops')], tint=document.getElementById('paintint'), stageEl=document.getElementById('stage'), lastPain=-1, lastStage='';
+  function grade(p){var t=p*DUR, q=Math.round((1-ramp(t,7,15))*40)/40; if(q===lastPain)return; lastPain=q;
+    var f=q>0?('saturate('+(1-0.8*q).toFixed(3)+') brightness('+(1-0.2*q).toFixed(3)+') contrast('+(1+0.06*q).toFixed(3)+')'):'none';
+    gEls.forEach(function(e){if(e)e.style.filter=f}); if(tint)tint.style.opacity=q;}
+  function stageFor(step){var st=step<2?'':step<6?'mid':'fix'; if(st===lastStage)return; lastStage=st; stageEl.className='stage'+(st?' '+st:''); stageEl.textContent=st===''?'Проблема':st==='mid'?'Механизм':'Решение';}
   function setPanels(p){
     var step=0;
     var endGate=1-ramp(window.scrollY,track.offsetTop+track.offsetHeight-innerHeight*1.25,track.offsetTop+track.offsetHeight-innerHeight*0.95);
     ranges.forEach(function(r,i){var w=0.012;var o=Math.min(ramp(p,r.a-w,r.a+w),1-ramp(p,r.b-w,r.b+w))*endGate;o=Math.round(o*200)/200;if(o!==r.o){r.o=o;r.el.style.opacity=o;r.el.style.transform='translateY('+((1-o)*14).toFixed(1)+'px)';r.el.classList.toggle('show',o>0.5);}if(p>=r.a-w)step=i;});
+    grade(p); stageFor(step);
     if(step!==lastStep){lastStep=step;cnt.textContent=(step<9?'0':'')+(step+1);dots.forEach(function(d,i){if(i===step)d.setAttribute('aria-current','step');else d.removeAttribute('aria-current')});}
     scrim.style.opacity=1-ramp(p,0.05,0.08);
     hint.style.opacity=p<0.03?1:0; hint.style.pointerEvents=p<0.03?'auto':'none';
