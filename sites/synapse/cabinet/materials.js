@@ -91,8 +91,10 @@ function platformPublication(posts, platform) {
 }
 /* Этап по публикациям: вышло хоть на одной площадке → «Опубликовано»; ошибка → «Ошибка публикации»; дата стоит → «Запланировано к выходу». */
 function publicationStage(posts) {
-  const live = posts.filter(post => !post.deleted && !post.archive?.archivedAt && post.status !== "cancelled");
-  if (live.some(post => (post.externalReceipts || []).some(item => !item.stale) || (post.deliveries || []).some(item => item.status === "published") || (post.status === "published" && !(post.deliveries || []).length))) return "published";
+  // Архив — уборка списка в кабинете, а не снятие с площадки: факт выхода архивной публикации учитывается.
+  const kept = posts.filter(post => !post.deleted && post.status !== "cancelled");
+  const live = kept.filter(post => !post.archive?.archivedAt);
+  if (kept.some(post => (post.externalReceipts || []).some(item => !item.stale) || (post.deliveries || []).some(item => item.status === "published") || (post.status === "published" && !(post.deliveries || []).length))) return "published";
   if (live.some(post => ["failed", "needs_review"].includes(post.status))) return "publish_error";
   if (live.some(post => post.status === "scheduled")) return "scheduled";
   return "";
@@ -177,24 +179,41 @@ function create(el, ctx) {
       state.shooting = sameCompany(shooting) && shooting?.reels && typeof shooting.reels === "object" ? shooting.reels : {};
       state.settings = settings || null;
       state.info = sameCompany(info) ? info : null;
+      await loadReelPosts(epoch);
+      if (epoch !== state.epoch || ctx.signal.aborted) return;
       /* Пояс: кабинет (ctx.company) → /media-mentor нового сервера (company.timeZone) → сведения компании → настройки. */
       state.timeZone = ctx.company?.timeZone || state.mentor?.company?.timeZone || state.info?.profile?.timezone || state.settings?.settings?.timezone || "";
       build();status("");renderHead();renderGrid();
     } catch (error) {if (!ctx.signal.aborted) {renderHead();fail(error);}}
   }
+  /* Список /autoposting/posts отдаёт только активные публикации (без архива, до 200). Старые ролики, загруженные до связи
+     с планом, ссылаются на свою публикацию только через postId — её читаем по одной (GET /autoposting/posts/:id), чтобы этап
+     ролика шёл по факту публикации, а не «Монтаж на согласовании». Не больше 40 запросов; ошибка одной не мешает остальным. */
+  async function loadReelPosts(epoch) {
+    const known = new Set(state.posts.map(post => String(post.id)));
+    const missing = [...new Set(state.reels.filter(reel => !reel.ideaId && !reel.planLink?.ideaId && reel.postId != null && !known.has(String(reel.postId)))
+      .map(reel => String(reel.postId)))].filter(id => /^\d+$/.test(id)).slice(0, 40);
+    if (!missing.length) return;
+    const found = await Promise.all(missing.map(id => optional(() => ctx.api.get("crm/autoposting/posts/" + id))));
+    if (epoch !== state.epoch || ctx.signal.aborted) return;
+    const extra = found.filter(post => post && post.id != null && sameCompany(post) && !known.has(String(post.id)));
+    if (extra.length) state.posts = [...state.posts, ...extra];
+  }
+  /* Ролик без связи с планом и без публикации, чьё название сервер пометил «ОТМЕНЁН …» / «ЗАМЕНЁН на …». */
+  const retiredByTitle = reel => {const text = String(reel.title || "").trim().toLocaleLowerCase("ru");return text.startsWith("отменён") || text.startsWith("отменен") ? "cancelled" : text.startsWith("заменён") || text.startsWith("заменен") ? "replaced" : "";};
   /* Позиции ленты: видео-рилсы плана (номер = номер строки плана) и ролики без связи с планом. Связь ролика с рилсом плана —
      только серверная: ролик → публикация автопостинга (postId) → planLink.ideaId. По названию и дате не угадываем. */
   function build() {
     const days = state.mentor?.plan?.days || [], variants = state.mentor?.variants || [];
     const wholePlan = state.mentor?.approval?.status === "approved";
-    const postById = new Map(state.posts.map(post => [post.id, post]));
+    const postById = new Map(state.posts.map(post => [String(post.id), post]));
     const postsByIdea = new Map();
     state.posts.forEach(post => {const id = post.planLink?.ideaId;if (id) (postsByIdea.get(id) || postsByIdea.set(id, []).get(id)).push(post);});
     const reelsByIdea = new Map(), loose = [];
     const ideaIds = new Set(days.map(day => day.ideaId));
     for (const reel of state.reels) {
       // Новый сервер хранит связь ролика с идеей сам (reel.ideaId / planLink, specs/209); старый — только через публикацию.
-      const ideaId = reel.ideaId || reel.planLink?.ideaId || postById.get(reel.postId)?.planLink?.ideaId;
+      const ideaId = reel.ideaId || reel.planLink?.ideaId || postById.get(String(reel.postId))?.planLink?.ideaId;
       if (ideaId && ideaIds.has(ideaId)) (reelsByIdea.get(ideaId) || reelsByIdea.set(ideaId, []).get(ideaId)).push(reel);
       else loose.push(reel);
     }
@@ -231,11 +250,12 @@ function create(el, ctx) {
        он уходит в свёрнутый блок внизу «Отменённые и заменённые». Решение — только по полям сервера. */
     const retired = [];
     for (const reel of loose) {
-      const post = postById.get(reel.postId);const posts = post ? [post] : [];
+      const post = reel.postId != null ? postById.get(String(reel.postId)) : null;const posts = post ? [post] : [];
       const linkedIdea = reel.ideaId || reel.planLink?.ideaId || post?.planLink?.ideaId || "";
-      const why = post && (post.status === "cancelled" || post.deleted || post.archive?.archivedAt) ? "cancelled" : linkedIdea && days.length && !ideaIds.has(linkedIdea) ? "replaced" : "";
+      const why = post && (post.status === "cancelled" || post.deleted || post.archive?.archivedAt) ? "cancelled" : linkedIdea && days.length && !ideaIds.has(linkedIdea) ? "replaced"
+        : !linkedIdea && reel.postId == null ? retiredByTitle(reel) : "";
       const stage = why === "cancelled" ? (publicationStage(posts) === "published" ? "published" : "unpublished") : publicationStage(posts) || (reel.openEdits ? "edit_rework" : "edit_review");
-      const item = {key: reel.key, ideaId: null, number: null, title: reel.title, date: reel.releaseDate || "", stage, reel, posts, platforms: platformList(reel.platforms), retired: why};
+      const item = {key: reel.key, ideaId: null, number: null, title: reel.title, date: reel.releaseDate || "", stage, reel, posts, platforms: platformList(reel.platforms), retired: why && stage !== "published" ? why : ""};
       if (why && stage !== "published") retired.push(item); else items.push(item);
     }
     items.forEach(item => {item.group = groupOf(item.stage);item.uploadedAt = item.reel?.currentVersion?.createdAt || "";});

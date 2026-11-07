@@ -255,6 +255,41 @@ test('№209 окно публикации: маска IG/TT/YT/VK/TG, стат�
     assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.calls.some(call=>/unpublish/.test(call.path)),Boolean(f.node('autoposting-unpublish-zone')),'API снятия запрашивается (GET) только когда в кабинете есть его окно (PR 579)');
   }finally{f.close();}
 });
+/* Живые данные 07.11 (синтетика той же формы): отметка «вышло вне ЛК» (stale=false) — площадка опубликована, даже если доставка
+   по ней failed и карточка needs_review; площадка с отметкой видна, даже если её нет в platformIds; черновик с отметкой — в ленте. */
+test('Живые данные: отметка «вышло» — «вышло ↗» со ссылкой, этап «Опубликовано»; черновик с отметкой — в ленте; stale не считается',async()=>{
+  const receipt=(platform,url,publishedAt,stale=false)=>({platform,url,publishedAt,stale,contentRevision:3});
+  const entries=[
+    row(1,{status:'needs_review',title:'№1 Вышло частично',lastErrorCode:'AUTH_FAILED',platformIds:['telegram'],scheduledAt:'2026-09-20T02:00:00Z',approval:{approved:true,stale:false},
+      deliveries:[{channelId:'telegram',status:'failed',errorCode:'AUTH_FAILED'}],
+      externalReceipts:[receipt('tiktok','https://www.tiktok.com/@alpha/video/7001234567','2026-09-20T03:00:00Z'),receipt('telegram','https://t.me/alpha_channel/21','2026-09-20T02:10:00Z')]}),
+    row(2,{status:'draft',title:'№2 Черновик, вышел вручную',scheduledAt:null,platformIds:['telegram'],externalReceipts:[receipt('telegram','https://t.me/alpha_channel/22','2026-09-21T04:00:00Z')]}),
+    row(3,{status:'draft',title:'№3 Старая версия вышла',scheduledAt:null,platformIds:['telegram'],externalReceipts:[receipt('telegram','https://t.me/alpha_channel/23','2026-09-22T04:00:00Z',true)]}),
+    row(4,{status:'failed',title:'№4 Ошибка без отметки',lastErrorCode:'AUTH_FAILED',scheduledAt:'2026-09-26T02:00:00Z',approval:{approved:true,stale:false},deliveries:[{channelId:'telegram',status:'failed',errorCode:'AUTH_FAILED'}]})];
+  const f=await fixture({kit:true,entries});try{
+    const card=id=>f.d.querySelector(`#autoposting-feed [data-feed-post="${id}"]`);
+    assert.ok(card(1)&&card(2)&&card(4),'обе карточки с отметками и карточка с ошибкой — в ленте');
+    assert.equal(card(1).dataset.stage,'published');assert.equal(card(1).querySelector('.cfk-chip').textContent,'Опубликовано');
+    assert.equal(card(1).querySelector('.ap-feed-note'),null,'ошибки доставки по площадке с отметкой нет');
+    const cell=(id,platform)=>card(id).querySelectorAll('.ap-feed-cells .ap-cell')[['instagram','tiktok','youtube_shorts','vk','telegram'].indexOf(platform)];
+    assert.equal(cell(1,'tiktok').textContent,'вышло ↗','TikTok с отметкой — не «—»');
+    assert.equal(cell(1,'tiktok').querySelector('a').href,'https://www.tiktok.com/@alpha/video/7001234567');
+    assert.equal(cell(1,'telegram').querySelector('a').href,'https://t.me/alpha_channel/21','отметка сильнее failed-доставки');
+    assert.equal(card(1).querySelector('.ap-pf[data-platform="tiktok"]').dataset.kind,'published');
+    assert.equal(card(2).dataset.stage,'published','черновик с отметкой «вышло» — опубликован');
+    assert.equal(card(2).dataset.date,'2026-09-21','дата ленты — по отметке, в поясе компании');
+    assert.match(card(2).querySelector('.ap-feed-when').textContent,/21 сентября · 12:00/);
+    assert.equal(card(3),null,'stale-отметка (другая версия) черновик опубликованным не делает');
+    assert.equal(card(4).dataset.stage,'publish_error');assert.match(card(4).querySelector('.ap-feed-note').textContent,/не приняла ключ/);
+    const ids=feedIds(f);assert.ok(ids.indexOf('1')<ids.indexOf('4')&&ids.indexOf('2')<ids.indexOf('4'),'опубликованные — выше');
+    assert.equal(f.d.querySelector('#autoposting-feed .cfk-feed-sep').nextElementSibling,card(4),'стартовая точка — первый неопубликованный');
+    f.d.querySelector('[data-feed-open="1"]').click();await f.settle();
+    const pub=f.node('autoposting-pub'),st=platform=>pub.querySelector(`[data-pub-platform="${platform}"] .ap-pub-st`);
+    assert.equal(st('tiktok').textContent,'вышло ↗');assert.equal(st('tiktok').querySelector('a').href,'https://www.tiktok.com/@alpha/video/7001234567');
+    assert.match(pub.querySelector('.ap-pub-line').textContent,/Опубликовано/);
+    assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}
+});
 test('№209 «Удалить публикацию» (PR 579) — только когда в кабинете есть его окно и сервер отвечает на …/unpublish',async()=>{
   for(const api of [true,false]){
     const entries=[row(1,{status:'published',mediaUrls:['https://example.test/r1.mp4'],deliveries:[{channelId:'telegram',status:'published',url:'https://t.me/alpha_channel/15'}]})];

@@ -1103,7 +1103,7 @@ function create(container, context) {
     get('autoposting-selected-list').innerHTML=approvalSelection.size?'<p>Будут согласованы все выбранные материалы, даже если список для команды свёрнут:</p><ul>'+[...approvalSelection.values()].map(item=>`<li>${esc(item.title)} · версия ${esc(item.contentRevision)} <button type="button" class="plain-button" data-daily-unselect="${esc(item.id)}">Убрать из выбора</button></li>`).join('')+'</ul>':'';
     get('autoposting-batch-results').innerHTML=approvalResults.size?'<ul>'+[...approvalResults.values()].map(result=>`<li>${esc(result.title)}: ${esc(result.message)}</li>`).join('')+'</ul>':'';
   };
-  const localTime=item=>item.scheduledAt?time.toLocal(item.scheduledAt,zone()).slice(11,16):'';
+  const localTime=item=>item.scheduledAt?time.toLocal(item.scheduledAt,zone()).slice(11,16):item.receiptAt?time.toLocal(item.receiptAt,zone()).slice(11,16):'';
   const byTime=(a,b)=>(a.scheduledAt?0:1)-(b.scheduledAt?0:1)||String(a.scheduledAt||'').localeCompare(String(b.scheduledAt||''))||String(a.id).localeCompare(String(b.id),'en',{numeric:true});
   const approvedText=item=>{
     if(!(item.approval?.approved&&!item.approval?.stale))return '';
@@ -1151,11 +1151,24 @@ function create(container, context) {
     return 'Часовой пояс '+value;};
   // Готов к выходу: есть дата выхода и версия согласована, стоит в очереди, уже отправлялась или вышла.
   const isReady=item=>Boolean(item.effectiveDate)&&(READY_STATUSES.has(item.status)||receiptsOf(item).length>0||Boolean(item.approval?.approved&&!item.approval?.stale));
-  const sortedPlatforms=item=>platformsOf(item).slice().sort((a,b)=>{const ia=PLATFORM_ORDER.indexOf(a),ib=PLATFORM_ORDER.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  /* Отметки «вышло вне ЛК» текущей версии (stale=false): площадка опубликована, даже если доставка по ней не удалась. */
+  const liveReceipts=item=>receiptsOf(item).filter(receipt=>receipt&&!receipt.stale);
+  // Площадки ленты: выбранные в карточке плюс площадки с отметкой «вышло» (иначе такая площадка показывалась «—»).
+  const feedPlatforms=item=>[...new Set([...platformsOf(item),...liveReceipts(item).map(receipt=>receipt.platform).filter(Boolean)])];
+  /* Черновик без даты выхода, но с отметкой «вышло»: дата и время ленты — по самой ранней отметке. */
+  const withReceiptDate=item=>{
+    if(item.effectiveDate)return item;
+    const first=liveReceipts(item).map(receipt=>receipt.publishedAt).filter(at=>at&&!Number.isNaN(Date.parse(at))).sort()[0];
+    return first?{...item,effectiveDate:time.toLocal(first,zone()).slice(0,10),receiptAt:first}:item;
+  };
+  const sortedPlatforms=item=>feedPlatforms(item).slice().sort((a,b)=>{const ia=PLATFORM_ORDER.indexOf(a),ib=PLATFORM_ORDER.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
   /* Этап — ближайший из общей цепочки CfKit по уже существующим полям карточки; новых переходов кабинет не придумывает.
      PROVIDER_LINK_UNAVAILABLE: сервис сообщил о выходе, но ссылку на пост не отдал (ВК через Onlypult) — «вышло · сообщество». */
   const stageOf=item=>{
     if(item.status==='published')return 'published';
+    if(item.status==='cancelled')return 'unpublished';
+    // Хоть одна площадка вышла (доставка или отметка «вышло вне ЛК») — «Опубликовано»; ошибки других площадок видны в их строках.
+    if(feedPlatforms(item).some(platform=>platformState(item,platform).kind==='published'))return 'published';
     if(item.status==='failed')return 'publish_error';
     if(item.status==='needs_review')return item.lastErrorCode==='PROVIDER_PENDING'?'scheduled':item.lastErrorCode==='PROVIDER_LINK_UNAVAILABLE'?'published':'publish_error';
     if(item.status==='scheduled'||item.status==='publishing')return 'scheduled';
@@ -1188,7 +1201,7 @@ function create(container, context) {
   };
   const platformState=(item,platform)=>{
     const delivery=(item.deliveries||[]).find(entry=>(channels().find(channel=>channel.id===entry.channelId)?.platform||entry.channelId)===platform);
-    const receipt=receiptsOf(item).find(entry=>entry.platform===platform);
+    const receipt=liveReceipts(item).find(entry=>entry.platform===platform);
     const link=(receipt&&safeReceiptUrl(platform,receipt.url))||(delivery?.url&&(safeReceiptUrl(platform,delivery.url)||safeUrl(delivery.url)))||null;
     const state=(kind,text,href=null,hrefLabel='')=>({kind,text,href,hrefLabel});
     const code=delivery?.errorCode||'';
@@ -1212,12 +1225,14 @@ function create(container, context) {
   /* ПК: та же карточка строкой таблицы — по колонке на площадку (IG/TT/YT/VK/TG), как в макете. */
   const CELL={published:'вышло',wait:'ждёт',error:'ошибка',off:'не отпр.'};
   const cell=(item,platform)=>{
-    if(!platformsOf(item).includes(platform))return '<span class="ap-cell" data-kind="none">—</span>';
+    if(!feedPlatforms(item).includes(platform))return '<span class="ap-cell" data-kind="none">—</span>';
     const st=platformState(item,platform),label=st.kind==='published'&&!st.href?'ссылка позже':CELL[st.kind]||st.text;
     return `<span class="ap-cell" data-kind="${esc(st.kind)}" title="${esc(platformLabel(platform)+': '+st.text)}">${st.href?`<a href="${esc(st.href)}" target="_blank" rel="noopener noreferrer">${esc(st.hrefLabel.includes('сообщество')?'сообщество ↗':'вышло ↗')}</a>`:esc(label)}</span>`;
   };
+  // Время в ленте: время выхода по плану, для вышедшего вручную черновика — время отметки «вышло».
+  const feedTime=(a,b)=>{const ta=a.scheduledAt||a.receiptAt||'',tb=b.scheduledAt||b.receiptAt||'';return (ta?0:1)-(tb?0:1)||String(ta).localeCompare(String(tb))||byTime(a,b);};
   const feedCompare=(a,b)=>{
-    const byDate=String(a.effectiveDate).localeCompare(String(b.effectiveDate))||byTime(a,b);
+    const byDate=String(a.effectiveDate).localeCompare(String(b.effectiveDate))||feedTime(a,b);
     if(feedSort==='platform'){const rank=item=>{const index=PLATFORM_ORDER.indexOf(sortedPlatforms(item)[0]);return index<0?99:index;};return rank(a)-rank(b)||byDate;}
     if(feedSort==='status')return (STAGE_RANK[stageOf(a)]??9)-(STAGE_RANK[stageOf(b)]??9)||byDate;
     return byDate;
@@ -1237,7 +1252,7 @@ function create(container, context) {
   };
   const renderFeed=all=>{
     const feed=get('autoposting-feed'),pick=get('autoposting-platform-filter')?.value||'';
-    const ready=all.filter(isReady).filter(item=>!pick||platformsOf(item).includes(pick)).sort(feedCompare);
+    const ready=all.map(withReceiptDate).filter(isReady).filter(item=>!pick||feedPlatforms(item).includes(pick)).sort(feedCompare);
     const marks=[...new Set(ready.map(item=>item.effectiveDate))].sort();
     if(strip&&marks.join()!==stripMarked){stripMarked=marks.join();strip.setMarked(marks);}
     const cols=container.querySelector('.ap-feed-cols');if(cols)cols.hidden=!ready.length;
@@ -1324,8 +1339,9 @@ function create(container, context) {
   };
   container.insertAdjacentHTML('beforeend','<div id="autoposting-pub" class="ap-pub" role="dialog" aria-modal="true" aria-labelledby="autoposting-pub-title" hidden><div class="ap-pub-box"></div></div>');
   const renderPub=()=>{
-    const node=get('autoposting-pub'),item=dailyItems().find(value=>String(value.id)===pubId);
-    if(!item){closePub(true);return;}
+    const found=dailyItems().find(value=>String(value.id)===pubId);
+    if(!found){closePub(true);return;}
+    const node=get('autoposting-pub'),item=withReceiptDate(found);
     const {n,rest}=numberOf(item),stage=stageOf(item),video=videoOf(item),platforms=sortedPlatforms(item);
     if(!PUB_TABS.includes(pubPlatform))pubPlatform=platforms.find(id=>PUB_TABS.includes(id))||'instagram';
     const caption=item.captions?.[pubPlatform]||item.text||'',download=video||(item.mediaUrls||[]).map(safeUrl).find(Boolean);

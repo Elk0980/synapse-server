@@ -520,3 +520,57 @@ test('Макет 07.11: тема плана уже начинается с «№
   assert.ok(all.includes('№3 Тема 3'), all.join(' | '));
   assert.ok(!all.some((t) => /^№(\d+)\s+№\1\b/.test(t)), all.join(' | '));
 });
+
+/* Живые данные 07.11 (синтетика той же формы): старые ролики без ideaId ссылаются на опубликованную (архивную) публикацию только
+   через postId; её нет в списке /autoposting/posts — этап читается из GET /autoposting/posts/:id. */
+test('Живые данные: ролик без ideaId с postId вышедшей публикации — «Опубликовано» выше точки старта, пост читается по id', async () => {
+  const old = (id, title, postId, over = {}) => ({id, key: 'reel:' + id, source: 'materials', companyCode: 'avokado', title, releaseDate: '2026-10-20', platforms: ['instagram', 'tiktok'],
+    ideaId: null, postId, currentVersion: {version: 1, mediaUrl: asset('6')}, versionCount: 1, openEdits: 0, ...over});
+  const extra = [old(41, 'Старый вышедший', 141), old(42, 'Старый по отметке', 142), old(43, 'Старый черновик', 143),
+    old(44, 'ОТМЕНЁН — старый дубль', null), old(45, 'заменён на v4 — прежний монтаж', null), old(46, 'Без связи, обычный', null)];
+  const byId = {
+    141: {id: 141, companyCode: 'avokado', status: 'published', archive: {archivedAt: '2026-10-25T00:00:00Z'}, platformIds: ['instagram'],
+      deliveries: [{channelId: 'instagram', status: 'published', url: 'https://www.instagram.com/reel/OLD1/'}], externalReceipts: []},
+    142: {id: 142, companyCode: 'avokado', status: 'needs_review', archive: {archivedAt: null}, platformIds: ['tiktok'],
+      deliveries: [{channelId: 'tiktok', status: 'failed', errorCode: 'AUTH_FAILED'}], externalReceipts: [{platform: 'tiktok', url: 'https://www.tiktok.com/@demo/video/1', publishedAt: '2026-10-21T05:00:00Z', stale: false}]},
+    143: {id: 143, companyCode: 'avokado', status: 'draft', archive: {archivedAt: null}, platformIds: ['instagram'], deliveries: [], externalReceipts: []}};
+  const f = fixture({plan: true, respond: ({path, method}) => {
+    if (path === 'crm/autoposting/reels' && method === 'GET') return {companyCode: 'avokado', reels: [...planReels(), ...extra]};
+    const m = /^crm\/autoposting\/posts\/(\d+)$/.exec(path);
+    if (m) return byId[m[1]] || Promise.reject(Object.assign(new Error('нет'), {status: 404}));
+    return undefined;
+  }});
+  await f.mount();
+  const asked = f.calls.filter((c) => /^crm\/autoposting\/posts\/\d+$/.test(c.path)).map((c) => c.path).sort();
+  assert.deepEqual(asked, ['crm/autoposting/posts/141', 'crm/autoposting/posts/142', 'crm/autoposting/posts/143'], 'читаются только недостающие публикации роликов');
+  const card = (title) => [...f.el.querySelectorAll('[data-grid] .mt-card')].find((n) => n.querySelector('.mt-card__title').textContent === title);
+  assert.equal(card('Старый вышедший').dataset.stage, 'published', 'архивная вышедшая публикация — «Опубликовано»');
+  assert.equal(card('Старый вышедший').dataset.group, 'above');
+  assert.equal(card('Старый по отметке').dataset.stage, 'published', 'отметка «вышло» сильнее ошибки доставки той же площадки');
+  assert.match(card('Старый по отметке').textContent, /Опубликовано/);
+  assert.doesNotMatch(card('Старый вышедший').textContent, /Публикация отменена/);
+  assert.equal(card('Старый черновик').dataset.stage, 'edit_review', 'без выхода — как раньше');
+  assert.equal(card('Без связи, обычный').dataset.stage, 'edit_review');
+  const feed = [...f.el.querySelectorAll('[data-grid] .mt-card')];
+  const firstNow = feed.findIndex((n) => n.dataset.group !== 'above');
+  assert.ok(feed.slice(0, firstNow).some((n) => n.querySelector('.mt-card__title').textContent === 'Старый вышедший'), 'опубликованные — выше точки старта');
+  const titlesIn = (sel) => [...f.el.querySelectorAll(sel + ' .mt-card__title')].map((n) => n.textContent);
+  assert.ok(!titlesIn('[data-grid]').some((t) => /^(ОТМЕНЁН|заменён)/i.test(t)), 'отменённые и заменённые — не в ленте');
+  assert.deepEqual(titlesIn('[data-retired-list]').sort(), ['ОТМЕНЁН — старый дубль', 'заменён на v4 — прежний монтаж'].sort());
+  const chips = [...f.el.querySelectorAll('[data-retired-list] .cfk-chip')].map((n) => n.textContent).sort();
+  assert.deepEqual(chips, ['Заменён в плане', 'Публикация отменена']);
+});
+
+test('Живые данные: ролик с ideaId — этап идеи с сервера; публикация по его postId не читается', async () => {
+  const f = fixture({plan: true, respond: ({path, method}) => {
+    if (path === 'crm/autoposting/reels' && method === 'GET') return {companyCode: 'avokado', reels: [{id: 51, key: 'reel:51', source: 'materials', companyCode: 'avokado', title: 'С идеей',
+      releaseDate: '2026-11-06', platforms: ['instagram'], ideaId: 'idea-4', postId: 999, currentVersion: {version: 1, mediaUrl: asset('7')}, versionCount: 1, openEdits: 0}]};
+    if (path === 'crm/media-mentor') { const m = mentor(); m.plan.days[3].stage = 'published'; m.plan.days[3].stageSource = 'publication'; return m; }
+    return undefined;
+  }});
+  await f.mount();
+  const card = [...f.el.querySelectorAll('[data-grid] .mt-card')].find((n) => /Тема 4/.test(n.textContent));
+  assert.equal(card.dataset.stage, 'published');
+  assert.equal(card.dataset.group, 'above');
+  assert.ok(!f.calls.some((c) => c.path === 'crm/autoposting/posts/999'));
+});
