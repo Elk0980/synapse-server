@@ -11,11 +11,12 @@ merge(){ # $1 путь в репо, $2 живой файл, $3 куда поло
   curl -s --location -o m.C $R/$C/$1; curl -s --location -o m.D $R/$D/$1
   diff -u m.C $2 > m.local; cp m.D m.out
   if patch -s --no-backup-if-mismatch m.out m.local >/dev/null 2>&1; then cp m.out $3; echo "MERGED $1 local=$(grep -c '^[-+][^-+]' m.local) vs_head=$(diff m.D $3 | grep -c '^[<>]')";
-  else echo "MERGEFAIL $1"; grep -n '^[-+][^-+]' m.local | head -40; fi; rm -f m.out.rej
+  else echo "MERGEFAIL $1"; cp m.local fail.$(basename $1).local; cp m.out.rej fail.$(basename $1).rej 2>/dev/null; fi; rm -f m.out.rej
 }
 docker run --rm --entrypoint cat $NI /app/auth-store.js > live.auth; merge ops/content/auth-store.js live.auth b-content/auth-store.js
 rm -f b-content/*.rej b-content/*.orig st/*.rej st/*.orig
 merge sites/synapse/cabinet.html /opt/synapse/sites/synapse/cabinet.html st/cabinet.html
+for d in b-crm b-content; do rm -f $d/*.rej $d/*.orig; sed -i '/\.rej \/app\|\.orig \/app/d' $d/Dockerfile; done
 grep -c "content/companies" st/cabinet.html | sed 's/^/new_client_refs=/'
 docker build -q -t synapse-crm:pr613-claude b-crm >/dev/null || { echo BUILDFAIL_CRM; exit 1; }
 ID=$(docker image inspect synapse-crm:pr613-claude --format '{{.Id}}'); echo "$ID" > img-crm.new
