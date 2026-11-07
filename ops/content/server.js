@@ -239,6 +239,9 @@ const contentSettings=require('./content-settings').createContentSettings({db,au
 // Контент → Съёмка: дубли частями с продолжением; монтажёр работает по сессии кабинета. Лимиты — приватный файл тома (нет — по умолчанию).
 const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,providers:hughProviders,
   config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
+// Автомонтаж Хью (specs/214-auto-montage): очередь черновиков и служебный шлюз воркера ffmpeg. Выключен без MONTAGE_ENABLED=1.
+const montage=require('./montage-gateway').createMontageGateway({db,shooting,crmUrl:CRM_URL,crmKey:CRM_API_KEY,assetsDir:ASSETS_DIR,
+  publishingOrigin:PUBLISHING_ASSET_ORIGIN,maxVideoBytes:MAX_PUBLISHING_VIDEO,readJson,readRaw,sendJson:send});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send,contentSettings,shootingFacts:shooting.factsHeader});
 // Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
@@ -1015,6 +1018,7 @@ const server = http.createServer(async (request, response) => {
     if (await peopleService.handle(request,response,url)) return;
     if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
+    if (await montage.handle(request,response,url)) return;
     if (await shooting.handle(request,response,url)) return;
     if (await projectChat.handle(request,response,url)) return;
 

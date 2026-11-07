@@ -1,0 +1,6 @@
+*
+!ops/montage/package.json
+!ops/montage/render.js
+!ops/montage/draft.js
+!ops/montage/worker.js
+!sites/synapse/cabinet/shooting-script.js

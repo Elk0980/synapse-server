@@ -1,0 +1,56 @@
+# Автомонтаж Хью (specs/214-auto-montage). Подключается вторым файлом к основному compose:
+#   docker compose -f docker-compose.yml -f ops/montage/compose.montage.yml up -d --build content montage
+# Без этого файла сервиса montage нет, а content не получает переменных — автомонтаж выключен.
+# Относительные пути считаются от каталога первого файла (корень репозитория).
+services:
+  content:
+    environment:
+      # 1 = принимать задания автомонтажа. Нужны все три значения, иначе выключено.
+      MONTAGE_ENABLED: ${MONTAGE_ENABLED:-0}
+      # SHA-256 (hex) ключа воркера; сам ключ только у воркера.
+      MONTAGE_WORKER_KEY_SHA256: ${MONTAGE_WORKER_KEY_SHA256:-}
+      # Компании через запятую, чьи дубли и ролики воркер может обрабатывать.
+      MONTAGE_WORKER_COMPANIES: ${MONTAGE_WORKER_COMPANIES:-}
+    networks:
+      - default
+      - montage_internal
+
+  montage:
+    build:
+      context: .
+      dockerfile: ops/montage/Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      MONTAGE_WORKER_ENABLED: ${MONTAGE_WORKER_ENABLED:-0}
+      MONTAGE_WORKER_KEY: ${MONTAGE_WORKER_KEY:-}
+      CONTENT_URL: http://content:8080
+      MONTAGE_WORK_DIR: /work
+      MONTAGE_POLL_MS: ${MONTAGE_POLL_MS:-60000}
+      MONTAGE_THREADS: ${MONTAGE_THREADS:-2}
+      MONTAGE_JOB_TIMEOUT_MS: ${MONTAGE_JOB_TIMEOUT_MS:-1200000}
+      MONTAGE_MAX_INPUT_MB: ${MONTAGE_MAX_INPUT_MB:-4096}
+      MONTAGE_MAX_OUTPUT_MB: ${MONTAGE_MAX_OUTPUT_MB:-60}
+      MONTAGE_MIN_FREE_MB: ${MONTAGE_MIN_FREE_MB:-2048}
+      MONTAGE_FONT: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
+    # Только внутренняя сеть без выхода наружу: воркер видит лишь content.
+    networks:
+      - montage_internal
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    cpus: "${MONTAGE_CPUS:-1.5}"
+    mem_limit: ${MONTAGE_MEM:-1536m}
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    volumes:
+      - montage_work:/work
+
+networks:
+  montage_internal:
+    internal: true
+
+volumes:
+  montage_work:

@@ -1,0 +1,10 @@
+{
+  "name": "synapse-montage-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Воркер автомонтажа Хью: ffmpeg, без зависимостей npm",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node --test render.test.js worker.test.js"
+  }
+}

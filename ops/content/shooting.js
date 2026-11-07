@@ -346,7 +346,19 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     if (encoded.length > FACTS_HEADER_LIMIT) encoded = Buffer.from(JSON.stringify({v: 1, companyCode: code, truncated: true})).toString('base64url');
     return encoded;
   }
-  return {handle, storageInfo, sweep, facts, factsHeader};
+  /* Автомонтаж (specs/214-auto-montage): только чтение сохранённых дублей своей компании для служебного шлюза. */
+  function takes(code, idea) {
+    company(code);
+    return db.prepare("SELECT id, frame, mime, size, sha256, created_at FROM shooting_uploads WHERE company_code=? AND idea_id=? AND kind='take' AND status='stored' ORDER BY id")
+      .all(code, ideaId(idea)).map((item) => ({id: item.id, frame: item.frame, mime: item.mime, size: item.size, sha256: item.sha256, createdAt: item.created_at}));
+  }
+  function openTake(code, id) {
+    company(code);
+    const item = row(code, String(id));
+    if (item.kind !== 'take' || item.status !== 'stored') fail(404, 'Дубль не найден');
+    return {mime: item.mime, size: item.size, stream: () => storage.read(code, item.disk_key, {start: 0, end: item.size - 1})};
+  }
+  return {handle, storageInfo, sweep, facts, factsHeader, actor: cabinet, takes, openTake};
 }
 
 module.exports = {createShooting, readShootingConfig, signatureOk, MAX_FILE, CHUNK, MAX_CHUNK, DEFAULTS, MIN_RESERVE};
