@@ -116,3 +116,9 @@ body.mt-modal-open { overflow:hidden; }
 /* iPhone: поле даты держит собственную ширину и вылезает за край — снимаем системный вид. */
 .mt-upload input[type=date] { -webkit-appearance:none; appearance:none; display:block; max-width:100%; box-sizing:border-box; }
 .mt-upload input[type=date]::-webkit-date-and-time-value { text-align:left; }
+/* Макет 07.11 #mat: отменённые и заменённые ролики — свёрнутым блоком под лентой, не как «Монтаж на согласовании». */
+.mt-retired { margin:14px 0 8px; }
+.mt-retired > summary { cursor:pointer; min-height:44px; padding:10px 0; color:var(--muted); font-weight:600; }
+.mt-retired .mt-hint { margin:0 0 8px; }
+.mt-list--retired { max-height:none; overflow:visible; }
+.mt-list--retired .mt-card { opacity:.8; }

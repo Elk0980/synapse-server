@@ -233,11 +233,15 @@ function create(container, context) {
   container.innerHTML=`<p id="autoposting-status" role="status" aria-live="polite"></p>
     <section class="card autoposting-calendar-section ap-board-section ap-posting" aria-label="Публикации">
     <div id="autoposting-head" class="ap-head"><h2 class="ap-head-fallback">Публикации</h2></div>
-    <p id="autoposting-calendar-zone" class="autoposting-note"></p><p id="autoposting-calendar-state" role="status"></p><p id="autoposting-plan-gaps" role="status" hidden></p>
-    <div class="ap-feed-cols" aria-hidden="true"><span>Рилс и выход</span><span>Статус</span><span>Instagram</span><span>TikTok</span><span>YouTube</span><span>VK</span><span>Telegram</span></div>
+    <label class="ap-filter"><span class="ap-sr">Площадка</span><select id="autoposting-platform-filter" aria-label="Площадка"><option value="">Все площадки</option>${['instagram','tiktok','youtube_shorts','vk','telegram'].map(id=>`<option value="${esc(id)}">${esc(platformLabel(id))}</option>`).join("")}</select></label>
+    <p id="autoposting-calendar-state" role="status"></p>
+    <div class="ap-feed-cols" aria-hidden="true"><span>Рилс</span><span>Выход</span><span>Instagram</span><span>TikTok</span><span>YouTube</span><span>VK</span><span>Telegram</span></div>
     <ol id="autoposting-feed" class="ap-feed" aria-label="Готовые рилсы по датам выхода"></ol>
     <div id="autoposting-batch"><p>Флажок на карточке — только выбор. Решение применяется к каждому выбранному материалу отдельно после нажатия кнопки ниже. Публикация не запускается.</p><fieldset id="autoposting-batch-platforms"><legend>Площадки решения</legend><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="all" checked>Все площадки выбранных материалов</label><label class="autoposting-checkbox"><input type="radio" name="autoposting-batch-scope" value="subset">Только отмеченные ниже</label>${CAPTIONS.map(([id,label])=>`<label class="autoposting-checkbox"><input type="checkbox" data-batch-platform="${esc(id)}">${esc(label)}</label>`).join("")}<p class="autoposting-note">Решение применяется к пересечению отмеченных площадок с площадками каждой карточки. Материал без общих площадок пропускается — с указанием причины.</p></fieldset><div id="autoposting-selected-list"></div><button type="button" class="plain-button" id="autoposting-batch-approve" disabled>Согласовать выбранные (0)</button><label class="autoposting-batch-reason">Причина возврата на доработку (обязательна)<textarea id="autoposting-batch-reason" rows="2" maxlength="2000"></textarea></label><button type="button" class="danger" id="autoposting-batch-reject" disabled>Вернуть выбранные на доработку (0)</button></div><div id="autoposting-batch-results" role="status" aria-live="polite"></div><details id="autoposting-team" class="ap-team"><summary>Для команды · все материалы и согласование</summary><p class="autoposting-note">Черновики, согласование и материалы без даты. Карточка открывает редактор публикации.</p><div id="autoposting-posts"></div></details><details id="autoposting-archive" class="ap-archive"><summary>Удалённые материалы</summary><p class="autoposting-note">Черновики, удалённые из плана. Восстановленный материал вернётся черновиком — без согласования и даты отправки.</p><div id="autoposting-archive-list"></div></details></section>
-    <details class="autoposting-workspace-tools"><summary>Компания и настройки</summary>    <div class="autoposting-toolbar"><label for="autoposting-company">Компания</label><select id="autoposting-company">${companies.map(item=>`<option value="${esc(item.code)}">${esc(item.name)}</option>`).join("")}</select><button class="plain-button" id="autoposting-refresh" type="button">Обновить статусы</button><a href="#company-information">Данные компании</a></div>
+    <details class="autoposting-workspace-tools"><summary>Компания и настройки</summary>
+    <div class="ap-more"><p id="autoposting-calendar-zone" class="autoposting-note"></p><p id="autoposting-plan-gaps" role="status" hidden></p>
+    <p class="ap-more-links">${[['telegram-sources','#content-factory/sources','Исходники'],['content-factory-settings','#content-factory/settings','Настройки модуля']].filter(([view])=>typeof ctx.canView!=='function'||ctx.canView(view)).map(([,href,label])=>`<a class="plain-button" href="${href}">${label}</a>`).join('')}</p><div id="autoposting-guide-slot"></div></div>
+    <div class="autoposting-toolbar"><label for="autoposting-company">Компания</label><select id="autoposting-company">${companies.map(item=>`<option value="${esc(item.code)}">${esc(item.name)}</option>`).join("")}</select><button class="plain-button" id="autoposting-refresh" type="button">Обновить статусы</button><a href="#company-information">Данные компании</a></div>
     <details class="card autoposting-advanced"><summary>Подключения и подготовка материалов</summary><section class="card vk-connection-guide" id="vk-connection-guide" aria-labelledby="vk-connection-title"></section>
     <details class="card autoposting-connections"><summary>Подключение площадок</summary><p class="autoposting-note">Пустой ключ сохраняет прежний. Новый ключ применяется только кнопкой сохранения; после изменения канала проверьте доступ. Проверка не публикует посты.</p><div id="autoposting-channels" class="autoposting-channel-grid"></div><div id="autoposting-planning" class="autoposting-planning"></div></details>
     <section class="card autoposting-starter" id="autoposting-starter-plan" hidden></section></details>
@@ -265,6 +269,12 @@ function create(container, context) {
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Согласование относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и согласование ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без согласования; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></details>`;
   const get=id=>container.querySelector("#"+id), form=get("autoposting-form");
+  /* Макет 07.11 (#post): сверху только «Публикации» и лента. Подсказку кабинета «Как подключить и проверить»
+     (module-guide.js вставляет её первой в вид) переносим в свёрнутый блок «Компания и настройки» внизу. */
+  const parkGuide=()=>{const slot=get('autoposting-guide-slot');if(!slot)return;
+    const fresh=[...container.children].filter(node=>node.classList?.contains('module-guide'));if(!fresh.length)return;
+    slot.replaceChildren(fresh[fresh.length-1]);fresh.slice(0,-1).forEach(node=>node.remove());};
+  if(typeof MutationObserver==='function')new MutationObserver(parkGuide).observe(container,{childList:true});
   const edit=()=>permitted(ctx,"edit"), zone=()=>information?.profile?.timezone||settings?.timezone||"UTC";
   const channels=()=>Array.isArray(settings?.channels)?settings.channels:[];
   /* Готовность доставки — отдельно от согласования. Согласование говорит «владелец принял версию»,
@@ -1157,6 +1167,9 @@ function create(container, context) {
   const chipHtml=id=>kit()?kit().stageChip(id):`<span class="cfk-chip" data-stage="${esc(id)}">${esc(FALLBACK_STAGE[id]||id)}</span>`;
   const whenLabel=item=>{const date=String(item.effectiveDate||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 'Дата не задана';
     return `${WEEKDAY_FULL[new Date(date+'T12:00:00Z').getUTCDay()]}, ${Number(date.slice(8))} ${MONTHS_GEN[Number(date.slice(5,7))-1]}`;};
+  // Колонка «Выход» на ПК (макет): «05.11 18:30».
+  const shortWhen=item=>{const date=String(item.effectiveDate||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 'дата не задана';
+    return `${date.slice(8)}.${date.slice(5,7)}${localTime(item)?' '+localTime(item):''}`;};
   // «№N тема»: номер из названия плана («№2 «Первый визит»»); если его нет — номер материала в кабинете.
   const numberOf=item=>{const title=String(item.title||'').trim(),match=/^№\s?(\d{1,4})\s*[·.:—–-]?\s*/.exec(title);
     return match?{n:match[1],rest:title.slice(match[0].length)||'Без названия'}:{n:String(item.id),rest:title||'Без названия'};};
@@ -1212,21 +1225,25 @@ function create(container, context) {
   const feedCard=item=>{
     const {n,rest}=numberOf(item),stage=stageOf(item),video=videoOf(item),platforms=sortedPlatforms(item);
     // Превью-кадр — только у смонтированного ролика (видео есть в карточке); кадр с 0,5 с, без загрузки всего файла.
-    const thumb=video?`<span class="ap-feed-thumb"><video preload="metadata" muted playsinline src="${esc(frameOf(video))}" aria-hidden="true" tabindex="-1"></video></span>`:'';
+    // Макет: превью слева у каждой карточки; без смонтированного ролика — серая заглушка того же размера.
+    const thumb=video?`<span class="ap-feed-thumb"><video preload="metadata" muted playsinline src="${esc(frameOf(video))}" aria-hidden="true" tabindex="-1"></video></span>`:'<span class="ap-feed-thumb" data-empty="true" aria-hidden="true"></span>';
     const note=stage==='publish_error'&&item.lastErrorCode?`<p class="ap-feed-note">${esc(ERRORS[item.lastErrorCode]||'Публикация не подтверждена.')}</p>`
       :item.status==='publishing'?'<p class="ap-feed-note">Публикуется…</p>':'';
-    return `<li class="ap-feed-card${video?' has-thumb':''}" data-feed-post="${esc(item.id)}" data-date="${esc(item.effectiveDate)}" data-stage="${esc(stage)}"${selectedDate&&selectedDate===item.effectiveDate?' data-day="selected"':''}>
-      <button type="button" class="ap-feed-open" data-feed-open="${esc(item.id)}" aria-haspopup="dialog" aria-label="Открыть публикацию №${esc(n)} ${esc(rest)}">${thumb}<span class="ap-feed-main"><span class="ap-feed-title"><b>№${esc(n)}</b> ${esc(rest)}</span><span class="ap-feed-when">${esc(whenLabel(item))} · ${esc(localTime(item)||'время не задано')}</span></span></button>
+    const when=`${whenLabel(item)} · ${localTime(item)||'время не задано'}`;
+    return `<li class="ap-feed-card has-thumb" data-feed-post="${esc(item.id)}" data-date="${esc(item.effectiveDate)}" data-stage="${esc(stage)}"${selectedDate&&selectedDate===item.effectiveDate?' data-day="selected"':''}>
+      <button type="button" class="ap-feed-open" data-feed-open="${esc(item.id)}" aria-haspopup="dialog" aria-label="Открыть публикацию №${esc(n)} ${esc(rest)}">${thumb}<span class="ap-feed-main"><span class="ap-feed-title"><b>№${esc(n)}</b> ${esc(rest)}</span><span class="ap-feed-when">${esc(when)}</span></span></button>
+      <span class="ap-feed-out">${esc(shortWhen(item))}</span>
       <p class="ap-feed-foot">${chipHtml(stage)}<span class="ap-pfs">${platforms.map(platform=>badge(item,platform)).join('')||'<span class="ap-pf" data-kind="off">площадки не выбраны</span>'}</span></p><span class="ap-feed-cells">${PUB_TABS.map(platform=>cell(item,platform)).join('')}</span>${note}</li>`;
   };
   const renderFeed=all=>{
-    const feed=get('autoposting-feed'),ready=all.filter(isReady).sort(feedCompare);
+    const feed=get('autoposting-feed'),pick=get('autoposting-platform-filter')?.value||'';
+    const ready=all.filter(isReady).filter(item=>!pick||platformsOf(item).includes(pick)).sort(feedCompare);
     const marks=[...new Set(ready.map(item=>item.effectiveDate))].sort();
     if(strip&&marks.join()!==stripMarked){stripMarked=marks.join();strip.setMarked(marks);}
     const cols=container.querySelector('.ap-feed-cols');if(cols)cols.hidden=!ready.length;
     if(!ready.length){
       feed.classList.remove('has-above');
-      feed.innerHTML=calendarPending&&!all.length?'':'<li class="ap-feed-empty"><p><strong>Готовых к выходу рилсов пока нет.</strong> Здесь появятся смонтированные и согласованные ролики с датой выхода: что и куда уходит.</p><p>Сценарии и даты — в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся в <a href="#content/materials">«Монтаже»</a>.</p></li>';
+      feed.innerHTML=calendarPending&&!all.length?'':pick&&all.some(isReady)?`<li class="ap-feed-empty"><p>Для площадки «${esc(platformLabel(pick))}» готовых рилсов нет. Выберите «Все площадки».</p></li>`:'<li class="ap-feed-empty"><p><strong>Готовых к выходу рилсов пока нет.</strong> Здесь появятся смонтированные и согласованные ролики с датой выхода: что и куда уходит.</p><p>Сценарии и даты — в <a href="#content/plan">«Контент-плане»</a>, публикация создаётся в <a href="#content/materials">«Монтаже»</a>.</p></li>';
       return;
     }
     feed.innerHTML=ready.map(feedCard).join('');
@@ -1333,6 +1350,7 @@ function create(container, context) {
     container.ownerDocument.body.classList.toggle('autoposting-modal-open',Boolean(get('autoposting-editor')?.open));
     const back=pubOpener;pubOpener=null;if(!quiet&&back?.isConnected)back.focus?.();
   }
+  get('autoposting-platform-filter')?.addEventListener('change',()=>{feedPlaced=false;renderCalendar();});
   get('autoposting-feed').addEventListener('click',event=>{
     const card=event.target.closest('[data-feed-post]');if(!card||event.target.closest('a'))return;
     openPub(card.dataset.feedPost,card.querySelector('[data-feed-open]'));

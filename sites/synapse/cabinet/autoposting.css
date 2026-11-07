@@ -228,7 +228,7 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-note-row > :is(select,textarea) { grid-column:1 / -1; width:100%; }
 .ap-note-time { display:grid; gap:8px; }
 .ap-note-time fieldset { margin:0; padding:6px 8px; border:1px solid var(--line); border-radius:10px; }
-.view-panel .autoposting-view .ap-hint, .view-panel .ap-hint { min-height:24px; width:24px; height:24px; padding:0; border-radius:50%; font-size:.8rem; line-height:1; display:inline-grid; place-items:center; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-hint, .view-panel .ap-hint { min-height:24px; width:24px; height:24px; padding:0; border-radius:50%; font-size:.8rem; line-height:1; display:inline-grid; place-items:center; }
 .ap-hint-text { grid-column:1 / -1; font-size:.82rem; color:var(--muted); }
 .ap-notes-pending { margin:0; padding-left:20px; display:grid; gap:4px; }
 .ap-notes-pending:empty { display:none; }
@@ -264,11 +264,11 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-head { min-width:0; }
 .ap-head-fallback { margin:4px 0 6px; font-size:18px; }
 /* Глобальные кнопки кабинета крупнее иконок шапки и дней полосы: здесь возвращаем размеры CfKit. */
-.view-panel .autoposting-view .cfk-head button.cfk-ico, .view-panel .autoposting-view .cfk-head a.cfk-ico { width:32px; min-height:32px; height:32px; padding:0; border-radius:8px; background:transparent; font-size:15px; }
-.view-panel .autoposting-view .cfk-head button.cfk-sort-item { min-height:0; width:100%; padding:8px; border:0; background:transparent; font-size:13px; text-align:left; }
-.view-panel .autoposting-view .cfk-dates button.cfk-day { min-height:0; padding:0; border:0; background:transparent; border-radius:0; }
-.view-panel .autoposting-view .cfk-dates button.cfk-arrow { width:30px; min-height:30px; height:30px; padding:0; border-radius:50%; background:transparent; font-size:17px; }
-.view-panel .autoposting-view .cfk-dates button.cfk-dates-title { min-height:0; padding:4px 8px; border:0; background:transparent; font-size:14px; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .cfk-head button.cfk-ico, :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .cfk-head a.cfk-ico { width:32px; min-height:32px; height:32px; padding:0; border-radius:8px; background:transparent; font-size:15px; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .cfk-head button.cfk-sort-item { min-height:0; width:100%; padding:8px; border:0; background:transparent; font-size:13px; text-align:left; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .cfk-dates button.cfk-day { min-height:0; padding:0; border:0; background:transparent; border-radius:0; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .cfk-dates button.cfk-arrow { width:30px; min-height:30px; height:30px; padding:0; border-radius:50%; background:transparent; font-size:17px; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .cfk-dates button.cfk-dates-title { min-height:0; padding:4px 8px; border:0; background:transparent; font-size:14px; }
 .ap-posting #autoposting-calendar-zone { margin:0; font-size:12px; }
 /* border-box: добор отступа снизу от CfKit.feedStart остаётся внутри max-height и даёт место встать на старт. */
 .ap-feed { box-sizing:border-box; list-style:none; margin:0; padding:0 2px 0 0; display:grid; gap:8px; align-content:start; min-width:0; }
@@ -277,8 +277,8 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-feed-card:hover { border-color:rgba(168,207,255,.45); }
 .ap-feed-card[data-stage="published"] { opacity:.86; }
 .ap-feed-card[data-day="selected"] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
-.view-panel .autoposting-view .ap-feed-card button.ap-feed-open { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-items:center; width:100%; min-height:0; padding:0; border:0; border-radius:8px; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
-.view-panel .autoposting-view .ap-feed-card.has-thumb button.ap-feed-open { grid-template-columns:52px minmax(0,1fr); }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card button.ap-feed-open { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-items:center; width:100%; min-height:0; padding:0; border:0; border-radius:8px; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card.has-thumb button.ap-feed-open { grid-template-columns:52px minmax(0,1fr); }
 .ap-feed-open:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 .ap-feed-thumb { display:block; width:52px; aspect-ratio:9/16; border-radius:8px; overflow:hidden; background:var(--surface-soft); }
 .ap-feed-thumb video { display:block; width:100%; height:100%; object-fit:cover; pointer-events:none; }
@@ -308,12 +308,12 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-pub-head { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; margin:0 -16px; padding:8px 16px; background:var(--bg); border-bottom:1px solid var(--line); }
 .ap-pub-head h3 { flex:1 1 auto; min-width:0; margin:0; font-size:17px; line-height:1.3; overflow-wrap:anywhere; outline:none; }
 .ap-pub-head h3 b { color:var(--accent); }
-.view-panel .autoposting-view button.ap-pub-x { flex:none; width:40px; min-height:40px; height:40px; padding:0; border-radius:50%; font-size:16px; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) button.ap-pub-x { flex:none; width:40px; min-height:40px; height:40px; padding:0; border-radius:50%; font-size:16px; }
 .ap-pub-grid { display:grid; gap:14px; min-width:0; }
 .ap-pub-preview { display:grid; gap:8px; justify-items:center; min-width:0; }
 .ap-pub-tabs { display:flex; gap:4px; padding:3px; border:1px solid var(--line); border-radius:10px; }
-.view-panel .autoposting-view .ap-pub-tabs button { min-height:34px; padding:4px 12px; border:0; border-radius:7px; background:transparent; font-size:13px; font-weight:700; }
-.view-panel .autoposting-view .ap-pub-tabs button[aria-selected="true"] { background:rgba(168,207,255,.2); color:var(--accent); }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-pub-tabs button { min-height:34px; padding:4px 12px; border:0; border-radius:7px; background:transparent; font-size:13px; font-weight:700; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-pub-tabs button[aria-selected="true"] { background:rgba(168,207,255,.2); color:var(--accent); }
 .ap-pub-screen { position:relative; width:min(100%,250px); aspect-ratio:9/16; border-radius:18px; overflow:hidden; background:#000; border:1px solid var(--line); }
 .ap-pub-screen video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .ap-pub-novideo { position:absolute; inset:0; display:grid; place-items:center; margin:0; color:var(--muted); background:var(--surface-soft); }
@@ -336,10 +336,10 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-pub-st a { color:var(--accent); font-weight:600; text-decoration:none; }
 .ap-pub-text { margin:0; padding:10px 12px; max-height:260px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
 .ap-pub-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
-.view-panel .autoposting-view .ap-pub-actions :is(a,button) { width:auto; flex:1 1 140px; text-align:center; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-pub-actions :is(a,button) { width:auto; flex:1 1 140px; text-align:center; }
 .ap-pub-box, .ap-pub-head, .ap-pub-grid, .ap-pub-text { box-sizing:border-box; }
 .ap-pub-box { max-width:100%; overflow-x:hidden; }
-.view-panel .autoposting-view .ap-pub-actions a.plain-button { display:inline-grid; place-items:center; min-height:44px; padding:9px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); color:var(--text); text-decoration:none; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-pub-actions a.plain-button { display:inline-grid; place-items:center; min-height:44px; padding:9px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); color:var(--text); text-decoration:none; }
 @media (min-width:900px) {
   .autoposting-view .ap-pub { place-items:center; padding:24px; background:rgba(4,7,12,.66); }
   .ap-pub-box { max-width:980px; max-height:calc(100dvh - 48px); overflow:auto; padding:0 20px 20px; border:1px solid var(--line); border-radius:16px; background:var(--bg); box-shadow:0 18px 50px rgba(0,0,0,.55); }
@@ -352,7 +352,7 @@ body.autoposting-modal-open { overflow:hidden; }
 @media (min-width:1100px) {
   .ap-feed-cols { display:grid; grid-template-columns:minmax(0,1fr) 200px repeat(5,104px); column-gap:12px; padding:0 16px 4px; font-size:12px; color:var(--muted); }
   .ap-feed-card { grid-template-columns:minmax(0,1fr) 200px repeat(5,104px); align-items:center; column-gap:12px; row-gap:4px; padding:8px 16px; }
-  .view-panel .autoposting-view .ap-feed-card.has-thumb button.ap-feed-open { grid-template-columns:38px minmax(0,1fr); }
+  :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card.has-thumb button.ap-feed-open { grid-template-columns:38px minmax(0,1fr); }
   .ap-feed-thumb { width:38px; border-radius:6px; }
   .ap-feed-foot { display:block; }
   .ap-feed-foot .ap-pfs { display:none; }
@@ -370,3 +370,60 @@ body.autoposting-modal-open { overflow:hidden; }
 .ap-review-history { display: grid; gap: 4px; }
 .ap-review-last { margin: 0; font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .ap-review-notes > summary { cursor: pointer; color: var(--muted); }
+
+/* ---------- Макет 07.11 #post: «Постинг» как в макете (телефон — карточки, ПК — таблица) ----------
+   Шапка «Постинг», подвкладки и «Как подключить и проверить» — не сверху: подвкладки и подсказка
+   лежат в свёрнутом блоке «Компания и настройки» внизу (autoposting.js). cabinet.html не меняется. */
+body[data-cabinet-view="autoposting"] #content-factory-header > .content-header,
+body[data-cabinet-view="autoposting"] #content-factory-header > .factory-tabs { display:none !important; }
+.autoposting-view > .module-guide { display:none; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-posting.card { margin:0 0 8px; padding:0; border:0; background:none; box-shadow:none; display:grid; gap:10px; min-width:0; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-posting .ap-filter { margin:0; }
+.ap-posting #autoposting-calendar-state:empty { display:none; }
+.ap-posting #autoposting-calendar-state { margin:0; font-size:13px; color:var(--muted); }
+.ap-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.ap-filter { display:block; min-width:0; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-filter select { width:100%; min-height:40px; padding:6px 10px; border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--muted); font-size:15px; }
+.ap-more { display:grid; gap:8px; margin:8px 0 12px; }
+.ap-more p { margin:0; }
+.ap-more-links { display:flex; flex-wrap:wrap; gap:8px; }
+.ap-more-links:empty { display:none; }
+#autoposting-guide-slot:empty { display:none; }
+/* Карточка свёрнутого вида: превью слева, №+тема и дата; ниже этап и площадки. */
+.ap-feed { gap:10px; }
+.ap-feed-card { gap:6px; padding:10px; border-radius:13px; }
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card.has-thumb button.ap-feed-open,
+:is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card button.ap-feed-open { grid-template-columns:56px minmax(0,1fr); gap:10px; align-items:center; justify-items:start; text-align:left; }
+.ap-feed-thumb { width:56px; border-radius:10px; }
+.ap-feed-thumb[data-empty] { background:linear-gradient(160deg,var(--surface-soft),rgba(255,255,255,.04)); border:1px solid var(--line); box-sizing:border-box; }
+.ap-feed-main { gap:3px; justify-items:start; text-align:left; }
+.ap-feed-title { font-size:15px; font-weight:700; -webkit-line-clamp:3; }
+.ap-feed-title b { color:inherit; }
+.ap-feed-when { font-size:14px; }
+.ap-feed-out { display:none; }
+.ap-feed-foot { justify-content:flex-start; gap:6px 8px; }
+.ap-pfs { justify-content:flex-start; gap:0; }
+.ap-pf { gap:0; padding:0; border:0; border-radius:0; background:none !important; color:var(--muted); font-size:13px; font-weight:500; letter-spacing:0; }
+.ap-pf::before { content:none; }
+.ap-pf + .ap-pf::before { content:"·"; width:auto; height:auto; margin:0 5px; border-radius:0; background:none; color:var(--muted); }
+.ap-pf[data-kind="published"] { color:#8fd3a6; }
+.ap-pf[data-kind="error"] { color:#f5b3b3; }
+@media (min-width:1100px) {
+  .ap-filter { justify-self:end; width:240px; }
+  .ap-feed-cols { grid-template-columns:minmax(0,1fr) 110px repeat(5,104px); }
+  .ap-feed-card { grid-template-columns:minmax(0,1fr) 110px repeat(5,104px); grid-template-rows:auto auto; padding:10px 16px; }
+  :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card.has-thumb button.ap-feed-open,
+  :is(.view-panel.autoposting-view, .view-panel .autoposting-view) .ap-feed-card button.ap-feed-open { grid-column:1; grid-row:1; grid-template-columns:minmax(0,1fr); }
+  .ap-feed-thumb, .ap-feed-when { display:none; }
+  .ap-feed-title { -webkit-line-clamp:2; font-weight:600; }
+  .ap-feed-foot { grid-column:1; grid-row:2; display:flex; }
+  .ap-feed-out { display:block; grid-column:2; grid-row:1 / 3; font-size:13px; color:var(--muted); }
+  .ap-feed-cells > .ap-cell { grid-row:1 / 3; justify-self:start; }
+  .ap-cell { display:inline-block; padding:1px 9px; border:1px solid transparent; border-radius:999px; font-size:12.5px; line-height:1.5; white-space:nowrap; }
+  .ap-cell[data-kind="published"] { border-color:rgba(76,195,138,.7); color:#8fd3a6; }
+  .ap-cell[data-kind="wait"] { border-color:rgba(232,177,76,.45); color:#e3c58a; }
+  .ap-cell[data-kind="error"] { border-color:rgba(240,140,140,.6); color:#f5b3b3; }
+  .ap-cell[data-kind="off"] { border-color:var(--line); }
+  .ap-cell a { color:inherit; }
+  .ap-feed-note { grid-column:1 / -1; grid-row:3; }
+}

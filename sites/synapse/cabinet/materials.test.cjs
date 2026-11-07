@@ -488,3 +488,27 @@ test('пакет H, старый сервер: без plan.stageFacts загру
   assert.equal('offPlan' in create.body, false);
   assert.match(f.el.querySelector('[data-status]').textContent, /загружен как v1/);
 });
+
+test('Макет 07.11: отменённый и заменённый ролики не «Монтаж на согласовании» в ленте — свёрнутым блоком внизу', async () => {
+  const extra = [
+    {id: 31, key: 'reel:31', source: 'materials', companyCode: 'avokado', title: 'Старая версия №2', releaseDate: '2026-11-03', platforms: ['instagram'],
+      postId: 131, currentVersion: {version: 1, mediaUrl: asset('4')}, versionCount: 1, openEdits: 0},
+    {id: 32, key: 'reel:32', source: 'materials', companyCode: 'avokado', title: 'Рилс убран из плана', releaseDate: '2026-11-04', platforms: ['vk'],
+      postId: null, ideaId: 'idea-old', currentVersion: {version: 3, mediaUrl: asset('5')}, versionCount: 3, openEdits: 0}];
+  const f = fixture({plan: true, respond: ({path, method}) => {
+    if (path === 'crm/autoposting/reels' && method === 'GET') return {companyCode: 'avokado', reels: [...planReels(), ...extra]};
+    if (path === 'crm/autoposting/posts') { const data = posts(); data.posts.push({id: 131, status: 'cancelled', title: 'Старая', platformIds: ['instagram'], deliveries: [], externalReceipts: []}); return data; }
+    return undefined;
+  }});
+  await f.mount();
+  const feed = [...f.el.querySelectorAll('[data-grid] .mt-card .mt-card__title')].map((n) => n.textContent);
+  assert.ok(!feed.includes('Старая версия №2') && !feed.includes('Рилс убран из плана'), 'в общей ленте их нет');
+  assert.ok(feed.includes('Вне плана'), 'ролик «вне плана» без связи остаётся в ленте');
+  const box = f.el.querySelector('[data-retired]');
+  assert.equal(box.hidden, false);
+  assert.equal(box.open, false, 'блок свёрнут');
+  assert.match(box.querySelector('summary').textContent, /Отменённые и заменённые · 2/);
+  const chips = [...box.querySelectorAll('.mt-card .cfk-chip')].map((n) => n.textContent);
+  assert.deepEqual(chips, ['Публикация отменена', 'Заменён в плане']);
+  assert.doesNotMatch(box.textContent, /Монтаж на согласовании/);
+});
