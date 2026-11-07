@@ -667,3 +667,44 @@ test('specs/225: «Указать таблицу» видит и не-владе
   await viewer.mount(); openQ(viewer);
   assert.equal(hint(viewer.root), false);
 });
+
+test('specs/225: «📁 Исходники» и «🎬 Монтаж» в раскрытой карточке — ссылки в новой вкладке, «Изменить» шлёт PUT links', async () => {
+  const ideaLinks = { 's-1': { sourcesUrl: 'https://drive.google.com/drive/folders/src1', montageUrl: '', updatedAt: '2026-11-07T03:00:00Z', updatedByName: 'SAMPLE' },
+    's-2': { sourcesUrl: 'javascript:alert(1)', montageUrl: '' } };
+  const a = api({ role: 'editor', permissions: ['autoposting.view', 'autoposting.edit'], mentorExtra: { ideaLinks } });
+  const put = a.ctx.api.put, writes = [];
+  a.ctx.api.put = async (p, b) => { if (/\/links$/.test(p)) { writes.push([p, plain(b)]);
+    return { ...(await a.ctx.api.get('crm/media-mentor')), ideaLinks: { 's-1': { sourcesUrl: b.sourcesUrl, montageUrl: b.montageUrl } } }; } return put(p, b); };
+  await a.mount();
+  const row = () => a.root.querySelector('[data-idea="s-1"]');
+  assert.equal(row().querySelector('[data-cp-links]'), null, 'в свёрнутой строке ссылок нет');
+  row().querySelector('[data-toggle]').click();
+  const src = row().querySelector('.cp-links a.cp-link');
+  assert.equal(src.getAttribute('href'), 'https://drive.google.com/drive/folders/src1');
+  assert.equal(src.target, '_blank'); assert.match(src.rel, /noopener/); assert.match(src.textContent, /📁 Исходники/);
+  assert.match(row().querySelector('.cp-links').textContent, /🎬 Монтаж · не указано/);
+  row().querySelector('[data-cp-links-edit]').click();
+  const form = row().querySelector('[data-cp-links-form]');
+  assert.equal(form.querySelector('[name="sourcesUrl"]').value, 'https://drive.google.com/drive/folders/src1');
+  form.querySelector('[name="montageUrl"]').value = 'javascript:alert(1)';
+  form.dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick();
+  assert.equal(writes.length, 0, 'не https — запрос не уходит');
+  assert.match(row().querySelector('[data-cp-links-error]').textContent, /https:\/\//);
+  row().querySelector('[name="montageUrl"]').value = 'https://drive.google.com/drive/folders/m1';
+  row().querySelector('[data-cp-links-form]').dispatchEvent(new a.window.Event('submit', { cancelable: true })); await tick(); await tick();
+  assert.deepEqual(writes, [['crm/media-mentor/plan/ideas/s-1/links', { sourcesUrl: 'https://drive.google.com/drive/folders/src1', montageUrl: 'https://drive.google.com/drive/folders/m1' }]]);
+  assert.equal(row().querySelector('[data-cp-links-form]'), null, 'после сохранения форма закрыта');
+  assert.equal(row().querySelectorAll('.cp-links a.cp-link').length, 2);
+  // Опасная ссылка от сервера не становится ссылкой.
+  a.root.querySelector('[data-idea="s-2"] [data-toggle]').click();
+  assert.equal(a.root.querySelector('[data-idea="s-2"] .cp-links a'), null);
+});
+
+test('specs/225: просмотр без права правки — ссылки видны, «Изменить» нет; старый сервер (нет ideaLinks) — блока нет', async () => {
+  const viewer = api({ role: 'editor', permissions: ['autoposting.view'], mentorExtra: { ideaLinks: { 's-1': { sourcesUrl: 'https://disk.yandex.ru/d/x', montageUrl: '' } } } });
+  await viewer.mount(); viewer.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  assert.ok(viewer.root.querySelector('[data-idea="s-1"] .cp-links a.cp-link'));
+  assert.equal(viewer.root.querySelector('[data-cp-links-edit]'), null);
+  const old = api(); await old.mount(); old.root.querySelector('[data-idea="s-1"] [data-toggle]').click();
+  assert.equal(old.root.querySelector('[data-cp-links]'), null);
+});

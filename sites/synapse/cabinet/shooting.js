@@ -253,13 +253,21 @@
       this.renderUploads();
       if (this.opened.has(ideaId)) this.refreshUploads(ideaId);
     }
+    /* specs/225-cf-theme-sources: ссылка «📁 Исходники» темы из /media-mentor (ideaLinks). Только https; нет — строки нет. */
+    folderLink(ideaId) {
+      const value = this.snapshot?.ideaLinks?.[ideaId]?.sourcesUrl;
+      let href = '';
+      try { const u = new URL(String(value || '')); href = u.protocol === 'https:' && u.hostname && !u.username && !u.password ? u.href : ''; } catch { href = ''; }
+      return href ? h('a', {class: 'shoot-link', href, target: '_blank', rel: 'noopener noreferrer', 'data-sources-link': '', text: '📁 Открыть папку'}) : '';
+    }
     /* Полный вид: сведения рилса, сцены «Сцена №N» (у каждой — своя загрузка), «До съёмки» после сцен. */
     full(reel, parsed, plan) {
       const {idea} = reel;
       const fields = [['Дата', shortDay(this.dayOf(reel))], ['Формат', reel.kind || 'Рилс'], ['Статус', stageNode(S.script.stageOf(reel))], ['Выход', date(plan.publishDate)],
         ['Съёмка', plan.shootDate ? date(plan.shootDate) : 'день не задан'],
         ['Дедлайн', plan.deadline ? date(plan.deadline) : 'не задан'], ['Снимает', idea.filmingBy || ''],
-        ['Хук 1–2 с', idea.hook || ''], ['Реквизит', parsed.props.join(', ') || idea.props || '']].filter(([, value]) => value);
+        ['Хук 1–2 с', idea.hook || ''], ['Реквизит', parsed.props.join(', ') || idea.props || ''],
+        ['Исходники', this.folderLink(idea.ideaId)]].filter(([, value]) => value);
       return h('div', {class: 'shoot-full'},
         h('dl', {class: 'shoot-full__grid'}, fields.flatMap(([key, value]) => [h('dt', {text: key}), typeof value === 'string' ? h('dd', {text: value}) : h('dd', {}, value)])),
         h('b', {class: 'shoot-full__head', text: 'Сценарий по секундам'}),

@@ -393,6 +393,14 @@ function create(el, ctx) {
     for (const post of posts) {if (String(post.text || "").trim()) return post.text;}
     return "";
   }
+  /* specs/225-cf-theme-sources: «📁 Исходники» и «🎬 Монтаж» связанной темы плана (/media-mentor → ideaLinks). Только https. */
+  function folderLinks(ideaId) {
+    const own = ideaId && state.mentor?.ideaLinks?.[ideaId];
+    if (!own) return "";
+    const href = value => {try {const u = new URL(String(value || ""));return u.protocol === "https:" && u.hostname && !u.username && !u.password ? u.href : "";} catch {return "";}};
+    const links = [[own.sourcesUrl, "📁 Исходники"], [own.montageUrl, "🎬 Монтаж"]].map(([v, label]) => [href(v), label]).filter(([v]) => v);
+    return links.length ? `<p class="mt-folders" data-folders>${links.map(([v, label]) => `<a class="plain-button" href="${esc(v)}" target="_blank" rel="noopener noreferrer">${label}</a>`).join("")}</p>` : "";
+  }
   function renderDetail() {
     const reel = state.open, item = state.item, version = currentVersion(), media = safeUrl(version?.mediaUrl), node = $("[data-detail]");
     node.hidden = false;modal("detail", true);
@@ -420,6 +428,7 @@ function create(el, ctx) {
           <h3 data-caption-head>Текст публикации · ${esc(platformOf(state.platform).short)}</h3>
           <p class="mt-caption${caption ? "" : " muted"}" data-caption>${caption ? esc(caption) : "Текста публикации пока нет."}</p>
           ${versions.length > 1 ? `<label class="mt-version">Версия<select data-version>${versions.map(v => `<option value="${v.version}"${v.version === state.version ? " selected" : ""}>v${v.version}${v.editId ? " · правка №" + esc(v.editId) : ""}</option>`).join("")}</select></label>` : ""}
+          ${folderLinks(item?.ideaId)}
           <div class="mt-actions">
             ${media ? `<a class="plain-button" href="${esc(media)}" download="${esc(reel.title)} v${esc(version?.version ?? 1)}.mp4" data-download>Скачать</a>` : ""}
             ${canEdit ? (sb.reelEditor ? `<button type="button" class="plain-button" data-edit>Редактировать</button>` : `<button type="button" class="plain-button" disabled aria-disabled="true" title="Редактор монтажа скоро">Редактировать · скоро</button>`) : ""}

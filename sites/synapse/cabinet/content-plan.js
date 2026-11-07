@@ -374,6 +374,38 @@
     try { await api.post(`/plan/ideas/${encodeURIComponent(ideaId)}/restore`, {}); state.rowBusy = null; await mount(container, ctx); }
     catch (err) { state.rowBusy = null; draw(); error(err.status === 403 ? 'Нет права возвращать строки плана этой компании.' : err.message || 'Не удалось вернуть строку'); }
   }
+  /* specs/225-cf-theme-sources: «📁 Исходники» и «🎬 Монтаж» — внешние папки темы (обычно Google Диск). Хранятся рядом с планом:
+     правка ссылки не создаёт новую версию плана и не сбрасывает согласование. Старый сервер (нет ideaLinks) — блока нет. */
+  const folderHref = (value) => { try { const u = new URL(String(value || '')); return u.protocol === 'https:' && !u.username && !u.password && u.hostname ? u.href : ''; } catch { return ''; } };
+  function linksBlock(idea, edit) {
+    const all = state.mentor.ideaLinks;
+    if (!all || typeof all !== 'object') return '';
+    const own = all[idea.ideaId] || {}, editing = edit && state.linksOpen === idea.ideaId, busy = state.rowBusy === idea.ideaId ? ' disabled' : '';
+    const link = (value, icon, label) => { const href = folderHref(value);
+      return href ? `<a class="cp-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(href)}">${icon} ${label}</a>`
+        : `<span class="cp-link cp-link--none">${icon} ${label}<small> · не указано</small></span>`; };
+    const form = !editing ? '' : `<form class="cp-fix cp-links-form" data-cp-links-form role="group" aria-label="Ссылки на папки темы">
+      <label class="cp-note">📁 Исходники съёмки<input type="url" name="sourcesUrl" inputmode="url" maxlength="1000" placeholder="https://drive.google.com/…" value="${esc(own.sourcesUrl || '')}"></label>
+      <label class="cp-note">🎬 Готовый монтаж<input type="url" name="montageUrl" inputmode="url" maxlength="1000" placeholder="https://drive.google.com/…" value="${esc(own.montageUrl || '')}"></label>
+      <p class="cp-note">Только ссылки https://. Пустое поле убирает ссылку. Согласование темы не сбрасывается.</p>
+      <p class="cp-error" data-cp-links-error role="alert" hidden></p>
+      <div class="cp-fix-btns"><button type="submit" class="plain-button"${busy}>Сохранить</button><button type="button" class="cp-act" data-cp-links-cancel>Отмена</button></div></form>`;
+    return `<div class="cp-links" data-cp-links>${link(own.sourcesUrl, '📁', 'Исходники')}${link(own.montageUrl, '🎬', 'Монтаж')}
+      ${edit ? `<button type="button" class="cp-act" data-cp-links-edit aria-expanded="${editing}" aria-label="${esc('Изменить ссылки «' + idea.topic + '»')}">Изменить</button>` : ''}</div>${form}`;
+  }
+  async function saveLinks(form) {
+    const ideaId = form.closest('[data-idea]').dataset.idea, body = {};
+    for (const name of ['sourcesUrl', 'montageUrl']) {
+      const value = form.querySelector(`[name="${name}"]`).value.trim();
+      if (value && !/^https:\/\//i.test(value)) { const err = form.querySelector('[data-cp-links-error]'); err.hidden = false; err.textContent = 'Нужна ссылка, начинающаяся с https://'; form.querySelector(`[name="${name}"]`).focus(); return; }
+      body[name] = value;
+    }
+    state.rowBusy = ideaId; draw();
+    try { state.mentor = await state.api.put(`/plan/ideas/${encodeURIComponent(ideaId)}/links`, body); state.linksOpen = null; state.rowBusy = null; draw();
+      state.container.querySelector(`[data-idea="${ideaId}"] [data-cp-links-edit]`)?.focus(); }
+    catch (err) { state.rowBusy = null; draw(); const node = state.container.querySelector('[data-cp-links-error]');
+      if (node) { node.hidden = false; node.textContent = err.status === 403 ? 'Нет права менять ссылки этой компании.' : err.message || 'Не удалось сохранить ссылки'; } }
+  }
   function full(idea, edit, st, status, archiving = false) {
     const {mentor} = state, vocab = mentor.vocabulary || {};
     const line = (key, label, value) => value ? `<p data-key="${key}"><b>${label}:</b> ${esc(value)}</p>` : '';
@@ -397,7 +429,7 @@
       idea.mentorNote ? `<p><b>Задание Хью:</b> ${esc(idea.mentorNote)}</p>` : ''].join('');
     const fhead = `<p class="cp-fhead" aria-hidden="true"><b>№${(state.numbers?.get(idea.ideaId) ?? 0) + 1} ${esc(idea.topic)} — полный вид</b><span class="cp-chev">▴</span></p>`;
     return `<div class="cp-full">${fhead}<dl class="cp-fgrid">${fields.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
-      ${pinned}${secondsTable(idea.script, secs)}${before ? `<div class="cp-before">${before}</div>` : ''}
+      ${linksBlock(idea, edit)}${pinned}${secondsTable(idea.script, secs)}${before ? `<div class="cp-before">${before}</div>` : ''}
       ${edit ? `<details class="cp-edit"><summary>Изменить сценарий</summary><form data-edit="${esc(idea.ideaId)}">
         ${[...REEL, 'caption'].map((key) => `<label>${LABEL[key]}<textarea name="${key}" rows="${key === 'script' ? 6 : 2}">${esc(key === 'caption' ? caption(idea) : idea[key] || '')}</textarea></label>`).join('')}
         <button type="submit" class="plain-button">Сохранить строку</button><p class="cp-note">После правки строка снова уходит на согласование.</p></form></details>` : ''}
@@ -602,6 +634,12 @@
       const id = state.removeOpen; state.removeOpen = null; draw(); root.querySelector(`[data-idea="${id}"] .cp-acts [data-cp-remove]`)?.focus(); }));
     root.querySelectorAll('[data-cp-remove-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault();
       void archiveIdea(form.closest('[data-idea]').dataset.idea, form.querySelector('[name="reason"]').value.trim()); }));
+    root.querySelectorAll('[data-cp-links-edit]').forEach((button) => button.addEventListener('click', () => {
+      const id = button.closest('[data-idea]').dataset.idea; state.linksOpen = state.linksOpen === id ? null : id; draw();
+      root.querySelector('[data-cp-links-form] input')?.focus(); }));
+    root.querySelectorAll('[data-cp-links-cancel]').forEach((button) => button.addEventListener('click', () => {
+      const id = state.linksOpen; state.linksOpen = null; draw(); root.querySelector(`[data-idea="${id}"] [data-cp-links-edit]`)?.focus(); }));
+    root.querySelectorAll('[data-cp-links-form]').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); void saveLinks(form); }));
     root.querySelectorAll('[data-cp-restore]').forEach((button) => button.addEventListener('click', () => void restoreIdea(button.dataset.cpRestore)));
     root.querySelector('[data-cp="questionnaire"]')?.addEventListener('click', (event) => openQuestionnaire('new', event.currentTarget));
     root.querySelector('[data-cp="settings-plan"]')?.addEventListener('click', (event) => openQuestionnaire('edit', event.currentTarget));
@@ -615,6 +653,8 @@
       state.sort = button.dataset.cpSort; state.sortOpen = false; state.feedReset = true; try { localStorage.setItem(sortKey(ctx),state.sort); } catch { /* сортировка работает в текущем сеансе */ } draw(); root.querySelector('[data-cp-sort-toggle]')?.focus();
     });
     root.onkeydown = event => { if (event.key === 'Escape' && state?.qOpen) { event.preventDefault(); closeQuestionnaire(); return; }
+      if (event.key === 'Escape' && state?.linksOpen) { const id = state.linksOpen; state.linksOpen = null; draw();
+        root.querySelector(`[data-idea="${id}"] [data-cp-links-edit]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.removeOpen) { const id = state.removeOpen; state.removeOpen = null; draw();
         root.querySelector(`[data-idea="${id}"] .cp-acts [data-cp-remove]`)?.focus(); return; }
       if (event.key === 'Escape' && state?.menuOpen) { const id = state.menuOpen; state.menuOpen = null; state.fixOpen = null; draw();
