@@ -3,14 +3,8 @@
 const { isPasswordHash, hashPassword, verifyPassword } = require('./passwords');
 const crypto = require('node:crypto');
 
-const COMPANIES = Object.freeze({
-  'synapse-business': { name: 'Synapse Бизнес', contentSiteId: null },
-  taisabai: { name: 'ТайСабай', contentSiteId: null },
-  'novyi-etap': { name: 'НовыйЭтап', contentSiteId: null },
-  alvi: { name: 'Алви', contentSiteId: 'alvi' },
-  avokado: { name: 'Авокадо', contentSiteId: 'avokado' },
-  'palitra-love': { name: 'Palitra', contentSiteId: 'palitra' },
-});
+// specs/226: компании — каталог в базе content (company-catalog.js); COMPANIES — общий реестр каталога.
+const { COMPANIES, CONTENT_FACTORY_GRANT, createCompanyCatalog } = require('./company-catalog');
 const PERMISSIONS = Object.freeze([
   'analytics.view', 'crm.view', 'crm.edit', 'sites.view', 'sites.create', 'sites.delete',
   'site_editor.view', 'site_editor.edit', 'price.view', 'price.edit', 'chat.view', 'chat.reply',
@@ -19,6 +13,7 @@ const PERMISSIONS = Object.freeze([
   'actor-onboarding.self', 'actor-onboarding.manage',
   'tasks.self.view', 'tasks.self.edit',
   'content-plan.approve',
+  'companies.create',
 ]);
 const DEPENDENCIES = Object.freeze({
   'crm.edit': ['crm.view'],
@@ -130,6 +125,7 @@ function createAuthStore(db, authUsers = '') {
     });
   }
 
+  const catalog = createCompanyCatalog(db);
   const getUser = (id) => db.prepare('SELECT * FROM auth_users WHERE id = ?').get(id);
   const decorate = (row) => {
     if (!row) return null;
@@ -348,8 +344,33 @@ function createAuthStore(db, authUsers = '') {
         return current;
       });
     },
+    catalog,
+    /* specs/226: новая рабочая компания. Право companies.create (у владельца — всегда).
+       Создатель-редактор получает компанию и только права ведения Контент-завода
+       (CONTENT_FACTORY_GRANT и их обязательные зависимости). Каталог, доступ и журнал — одна транзакция. */
+    createCompany(actorId, input) {
+      const actor = decorate(getUser(actorId));
+      if (!actor) fail(401, 'Требуется вход');
+      if (actor.role !== 'owner' && !actor.permissions.includes('companies.create')) fail(403, 'Нет права создавать компании');
+      const company = catalog.normalizeInput(input);
+      const result = transaction(db, () => {
+        catalog.insert(actorId, company);
+        let addedPermissions = [];
+        if (actor.role !== 'owner') {
+          db.prepare('INSERT OR IGNORE INTO auth_user_companies VALUES (?, ?)').run(actorId, company.code);
+          addedPermissions = normalizePermissions([...CONTENT_FACTORY_GRANT]).filter((permission) => !actor.permissions.includes(permission));
+          for (const permission of addedPermissions) db.prepare('INSERT OR IGNORE INTO auth_user_permissions VALUES (?, ?)').run(actorId, permission);
+          db.prepare('UPDATE auth_users SET updated_at=? WHERE id=?').run(now(), actorId);
+        }
+        audit(actorId, actorId, 'COMPANY_CREATED', { company: company.code, name: company.name, city: company.city,
+          timezone: company.timezone, modules: company.modules, addedCompany: actor.role !== 'owner', addedPermissions });
+        return { addedPermissions };
+      });
+      catalog.sync();
+      return { company: catalog.get(company.code), addedPermissions: result.addedPermissions };
+    },
     audit,
   };
 }
 
-module.exports = { COMPANIES, DEPENDENCIES, PERMISSIONS, PRICE_CLIENT_PRESET, TATYANA_PERMISSIONS, createAuthStore, transaction };
+module.exports = { COMPANIES, CONTENT_FACTORY_GRANT, DEPENDENCIES, PERMISSIONS, PRICE_CLIENT_PRESET, TATYANA_PERMISSIONS, createAuthStore, transaction };

@@ -175,6 +175,24 @@ button { color: inherit; }
 }
 .project-option:hover, .project-option[aria-checked="true"] { background: rgba(159, 212, 255, 0.12); }
 .project-option .project-mark { width: 36px; height: 36px; }
+/* specs/226: «+ Новый клиент» в меню проекта и форма создания компании. */
+.project-create { display: flex; width: 100%; min-height: 44px; margin-top: 4px; padding: 8px 10px; border: 1px dashed var(--line);
+  border-radius: 10px; color: var(--accent); background: transparent; font: inherit; text-align: left; cursor: pointer; align-items: center; gap: 8px; }
+.project-create:hover, .project-create:focus-visible { background: rgba(159, 212, 255, 0.12); }
+#company-create-dialog { width: min(480px, calc(100vw - 32px)); box-sizing: border-box; }
+#company-create-dialog form { display: grid; gap: 12px; }
+#company-create-dialog h2 { margin: 0; }
+#company-create-dialog label { display: grid; gap: 4px; min-width: 0; }
+#company-create-dialog input { min-height: 44px; padding: 9px; box-sizing: border-box; width: 100%; font: inherit; }
+#company-create-dialog .hint { margin: 0; font-size: 0.86em; opacity: 0.75; overflow-wrap: anywhere; }
+#company-create-dialog .company-create-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+#company-create-dialog .company-create-actions button { min-height: 44px; flex: 0 1 auto; padding: 0 16px; border-radius: 10px; font: inherit; cursor: pointer;
+  border: 1px solid var(--line); color: var(--text); background: transparent; }
+#company-create-dialog .company-create-actions button[type="submit"] { border-color: var(--accent); color: #0c1520; background: var(--accent); font-weight: 600; }
+#company-create-dialog .company-create-actions button:disabled { opacity: 0.6; cursor: progress; }
+#company-create-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+#company-create-dialog [role="alert"]:empty { display: none; }
+@media (max-width: 430px) { #company-create-dialog { padding: 18px; } #company-create-dialog .company-create-actions button { flex: 1 1 120px; } }
 .nav { display: grid; gap: 4px; }
 .nav-link, .nav-category {
   display: flex;
@@ -1066,6 +1084,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <select name="companyCode" required></select><div class="site-actions">
     <button type="button" data-close-dialog>Отмена</button>
   <button type="submit">Создать</button></div><p role="alert"></p></form></dialog>
+<dialog id="company-create-dialog" aria-labelledby="company-create-title"><form id="company-create-form" novalidate>
+  <h2 id="company-create-title">Новый клиент</h2>
+  <p class="hint">Компания появится в выборе проекта с Контент-заводом. Вы получите ведение Контент-завода; согласование остаётся у клиента.</p>
+  <label>Название *<input name="name" required maxlength="80" autocomplete="off" placeholder="Например, Студия Мята"></label>
+  <label>Код *<input name="code" required maxlength="40" autocomplete="off" pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" placeholder="studiya-myata" spellcheck="false"></label>
+  <p class="hint">Латиница в нижнем регистре, цифры и дефис. Код нельзя изменить после создания.</p>
+  <label>Город<input name="city" maxlength="80" autocomplete="off"></label>
+  <label>Часовой пояс<input name="timezone" maxlength="64" list="company-timezones" value="Asia/Irkutsk" spellcheck="false"></label>
+  <datalist id="company-timezones"><option value="Asia/Irkutsk"><option value="Europe/Moscow"><option value="Asia/Novosibirsk"><option value="Asia/Krasnoyarsk"><option value="Asia/Yekaterinburg"><option value="Asia/Vladivostok"><option value="Asia/Bangkok"></datalist>
+  <p role="alert" id="company-create-error"></p>
+  <div class="company-create-actions"><button type="button" data-company-create-cancel>Отмена</button><button type="submit">Создать и открыть</button></div>
+</form></dialog>
 <dialog id="task-create-dialog">
   <form id="task-create-form" class="crm-form">
     <h2 class="wide">Добавить задачу</h2>
@@ -1343,6 +1373,54 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
   };
 
+  // specs/226: новых клиентов подключает владелец или обладатель права companies.create.
+  const canCreateCompany = () => identity?.role === "owner" || !!identity?.permissions?.includes("companies.create");
+  const COMPANY_CODE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+  const slugCompanyCode = (value) => {
+    const map = {а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"ts",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya"};
+    return String(value).toLowerCase().split("").map((ch) => map[ch] ?? ch).join("")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  };
+  const openCompanyCreate = () => {
+    closeProjectMenu();
+    const dialog = byId("company-create-dialog"), form = byId("company-create-form");
+    form.reset();
+    form.elements.code.dataset.touched = "";
+    byId("company-create-error").textContent = "";
+    if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", "");
+    form.elements.name.focus();
+  };
+  const closeCompanyCreate = () => {
+    const dialog = byId("company-create-dialog");
+    if (typeof dialog.close === "function") dialog.close(); else dialog.removeAttribute("open");
+  };
+  const submitCompanyCreate = async (event) => {
+    event.preventDefault();
+    const form = byId("company-create-form"), error = byId("company-create-error"), submit = form.querySelector('[type="submit"]');
+    const body = { code: form.elements.code.value.trim(), name: form.elements.name.value.trim(),
+      city: form.elements.city.value.trim(), timezone: form.elements.timezone.value.trim() || "Asia/Irkutsk" };
+    if (!body.name) { error.textContent = "Укажите название"; form.elements.name.focus(); return; }
+    if (!COMPANY_CODE.test(body.code)) { error.textContent = "Код: латиница в нижнем регистре, цифры и дефис, без дефиса по краям"; form.elements.code.focus(); return; }
+    error.textContent = "";
+    submit.disabled = true;
+    try {
+      const response = await fetch("/content/companies", { method: "POST", credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-csrf-token": identity.csrfToken || "" }, body: JSON.stringify(body) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Не удалось создать компанию");
+      // Новая компания становится выбранной; после перезагрузки меню и права берутся из сервера заново.
+      selectedProjectId = result.company.id;
+      saveSelectedProject();
+      closeCompanyCreate();
+      location.hash = "#content/plan";
+      location.reload();
+    } catch (failure) {
+      error.textContent = failure.message;
+    } finally {
+      submit.disabled = false;
+    }
+  };
+
   const renderProjectPicker = () => {
     const menu = byId("project-menu");
     const project = selectedProject();
@@ -1363,10 +1441,19 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       button.append(mark, name);
       menu.append(button);
     });
+    if (canCreateCompany()) {
+      const create = document.createElement("button");
+      create.type = "button";
+      create.className = "project-create";
+      create.dataset.projectCreate = "";
+      create.setAttribute("role", "menuitem");
+      create.textContent = "+ Новый клиент";
+      menu.append(create);
+    }
     byId("project-name").textContent = project?.name || "Проекты не настроены";
     setProjectText(byId("project-mark"), project);
     byId("mobile-project").textContent = project?.name || "Проекты не настроены";
-    byId("project-trigger").disabled = allowedProjects.length === 0;
+    byId("project-trigger").disabled = allowedProjects.length === 0 && !canCreateCompany();
     byId("no-projects").hidden = allowedProjects.length !== 0;
     renderProjectContexts();
     updateEditorLinks();
@@ -1380,7 +1467,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (restoreFocus) trigger.focus();
   };
   const openProjectMenu = () => {
-    if (!allowedProjects.length) return;
+    if (!allowedProjects.length && !canCreateCompany()) return;
     byId("project-menu").hidden = false;
     byId("project-trigger").setAttribute("aria-expanded", "true");
     const selected = byId("project-menu").querySelector('[aria-checked="true"]');
@@ -1973,7 +2060,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   byId("project-menu").addEventListener("click", (event) => {
     const option = event.target.closest("[data-project-id]");
     if (option) chooseProject(option.dataset.projectId);
+    else if (event.target.closest("[data-project-create]") && canCreateCompany()) openCompanyCreate();
   });
+  byId("company-create-form").addEventListener("submit", submitCompanyCreate);
+  byId("company-create-form").querySelector("[data-company-create-cancel]").addEventListener("click", closeCompanyCreate);
+  byId("company-create-form").elements.name.addEventListener("input", (event) => {
+    const code = byId("company-create-form").elements.code;
+    if (!code.dataset.touched) code.value = slugCompanyCode(event.target.value);
+  });
+  byId("company-create-form").elements.code.addEventListener("input", (event) => { event.target.dataset.touched = "1"; });
   byId("project-menu").addEventListener("keydown", (event) => {
     const options = [...byId("project-menu").querySelectorAll("[role='menuitemradio']")];
     const index = options.indexOf(document.activeElement);
