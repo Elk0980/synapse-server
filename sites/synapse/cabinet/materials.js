@@ -393,6 +393,36 @@ function create(el, ctx) {
     for (const post of posts) {if (String(post.text || "").trim()) return post.text;}
     return "";
   }
+  /* specs/227-plan-caption-to-post: текст из плана для площадки маски — тем же выбором, что сервер при «Создать публикацию»:
+     своя версия площадки, иначе основной текст (основная площадка или первая непустая версия, укладывающаяся в свой лимит).
+     Текст длиннее лимита площадки сервер не подставит — здесь он и не обещается. Тема в архиве плана текста не даёт.
+     Лимиты — mentor.vocabulary.captionLimits; у старого сервера — те же значения CAPTION_PLATFORMS. */
+  const CAPTION_LIMITS = {instagram: 2200, tiktok: 2200, youtube_shorts: 5000, vk: 15000, telegram: 1024, max: 4000, two_gis: 2000};
+  function planCaption(ideaId, platform) {
+    if (!ideaId) return {status: "none"};
+    if ((state.mentor?.archivedIdeas || []).some((item) => item?.ideaId === ideaId)) return {status: "archived"};
+    const idea = (state.mentor?.plan?.days || []).find((day) => day.ideaId === ideaId);
+    if (!idea) return {status: "none"};
+    const limits = {...CAPTION_LIMITS, ...(state.mentor?.vocabulary?.captionLimits || {})}, limit = (id) => Number(limits[id]) || 0;
+    const variants = idea.variants || {}, own = (id) => variants[id] && !variants[id].excluded ? String(variants[id].text || "").trim() : "";
+    const fits = (id) => own(id) && (!limit(id) || own(id).length <= limit(id)), label = platformOf(platform).label;
+    if (own(platform)) return fits(platform) ? {status: "ok", text: own(platform)}
+      : {status: "too_long", message: `Текст для ${label} в контент-плане длиннее лимита площадки ${limit(platform)} — сократите его в плане, иначе он не подставится.`};
+    const main = [idea.platform, ...Object.keys(variants)].filter(Boolean).find(fits);
+    if (!main) return {status: "empty"};
+    if (limit(platform) && own(main).length > limit(platform))
+      return {status: "too_long", message: `Основной текст плана длиннее лимита площадки ${label} (${limit(platform)}) — добавьте текст для ${label} в контент-плане, иначе для неё текста не будет.`};
+    return {status: "ok", text: own(main)};
+  }
+  function captionHtml(posts, ideaId) {
+    const caption = captionFor(posts, state.platform);
+    if (caption) return `<p class="mt-caption" data-caption>${esc(caption)}</p>`;
+    const plan = planCaption(ideaId, state.platform);
+    if (plan.status === "ok") return `<p class="mt-caption" data-caption data-from-plan>${esc(plan.text)}</p><p class="muted mt-caption-src" data-caption-source>Из контент-плана — подставится в черновик при «Создать публикацию».</p>`;
+    const text = plan.status === "too_long" ? plan.message : plan.status === "empty" ? "Текста публикации пока нет. Добавьте текст публикации в контент-плане."
+      : plan.status === "archived" ? "Текста публикации пока нет. Тема убрана в архив контент-плана — текст из плана не подставится." : "Текста публикации пока нет.";
+    return `<p class="mt-caption muted" data-caption${plan.status === "too_long" ? ' data-plan-too-long' : ""}>${esc(text)}</p>`;
+  }
   /* specs/225-cf-theme-sources: «📁 Исходники» и «🎬 Монтаж» связанной темы плана (/media-mentor → ideaLinks). Только https. */
   function folderLinks(ideaId) {
     const own = ideaId && state.mentor?.ideaLinks?.[ideaId];
@@ -411,7 +441,6 @@ function create(el, ctx) {
     const targets = item?.platforms?.length ? item.platforms : platformList(reel.platforms);
     const switcher = platformList(["instagram", "tiktok", "youtube_shorts", "vk", "telegram", ...targets]);
     const title = numTitle(item?.number, item?.title || reel.title);
-    const caption = captionFor(posts, state.platform);
     const published = stage === "published";
     node.innerHTML = `<header class="mt-modal__head"><h2 id="mt-detail-title" tabindex="-1" data-title>${esc(title)}</h2><button type="button" class="mt-x" data-back aria-label="Закрыть">✕</button></header>
       <p class="mt-detail__meta"><span class="muted">${esc(item?.date ? dateShort(item.date) : dateRu(reel.releaseDate))} · версия v${esc(version?.version ?? 1)}${version?.note ? " · " + esc(version.note) : ""}</span> ${chip(stage)}</p>
@@ -426,7 +455,7 @@ function create(el, ctx) {
           <h3>Публикация по площадкам</h3>
           <ul class="mt-pubs" data-pubs>${targets.map(id => publicationRow(id, posts, item?.publications)).join("") || `<li class="muted">Площадки не выбраны</li>`}</ul>
           <h3 data-caption-head>Текст публикации · ${esc(platformOf(state.platform).short)}</h3>
-          <p class="mt-caption${caption ? "" : " muted"}" data-caption>${caption ? esc(caption) : "Текста публикации пока нет."}</p>
+          <div data-caption-box>${captionHtml(posts, item?.ideaId || reel.ideaId)}</div>
           ${versions.length > 1 ? `<label class="mt-version">Версия<select data-version>${versions.map(v => `<option value="${v.version}"${v.version === state.version ? " selected" : ""}>v${v.version}${v.editId ? " · правка №" + esc(v.editId) : ""}</option>`).join("")}</select></label>` : ""}
           ${folderLinks(item?.ideaId)}
           <div class="mt-actions">
@@ -455,9 +484,20 @@ function create(el, ctx) {
     try {
       const result = await api.publication(state.open.id, {version: state.version, platformIds: targets});if (ctx.signal.aborted) return;
       state.open = result.reel;renderDetail();
-      detailStatus(`Черновик публикации №${result.post.id} создан. Ничего не отправлено: подпись, согласование и время — в «Постинге».`);
+      /* specs/227: сервер сообщает, подставлен ли текст публикации из контент-плана (planText). Старый сервер — прежняя фраза. */
+      const plan = result.planText, fromPlan = plan?.source === "plan";
+      const source = !plan ? "" : fromPlan ? ` Текст публикации подставлен из контент-плана (версия плана ${plan.planRevision}).`
+        : plan.reason === "NO_IDEA_LINK" ? " Ролик не привязан к теме плана — текст публикации добавьте в «Постинге»."
+        : " В контент-плане нет текста публикации — добавьте текст публикации в контент-плане.";
+      detailStatus(`Черновик публикации №${result.post.id} создан. Ничего не отправлено: ${fromPlan ? "" : "подпись, "}согласование и время — в «Постинге».${source}`);
+      const status = el.querySelector("[data-detail-status]");
+      status.dataset.planText = plan ? plan.source : "";
       const link = document.createElement("button");link.type = "button";link.className = "plain-button";link.textContent = "Открыть в «Постинге»";
-      link.addEventListener("click", () => openPost(result.post.id));el.querySelector("[data-detail-status]").append(" ", link);
+      link.addEventListener("click", () => openPost(result.post.id));status.append(" ", link);
+      const warnings = Array.isArray(plan?.warnings) ? plan.warnings.filter((w) => w && w.message) : [];
+      if (warnings.length) {const list = document.createElement("ul");list.className = "mt-plan-warn";list.dataset.planWarnings = "";
+        for (const w of warnings) {const li = document.createElement("li");li.textContent = String(w.message);list.append(li);}
+        status.after(list);}
     } catch (error) {detailStatus(error?.code === "PROFILE_CHANGED" ? "Данные компании изменились — обновите страницу и повторите." : "Не удалось создать публикацию: " + (error?.message || "ошибка"));}
     finally {state.busy = false;}
   }
@@ -747,8 +787,7 @@ function create(el, ctx) {
       el.querySelector(".mt-mask").hidden = !el.querySelector("[data-mask-toggle]").checked;
       el.querySelector(".mt-note").textContent = `Тёмные зоны — где лягут шапка, подпись и кнопки ${label.label}. Зоны ориентировочные.`;
       el.querySelector("[data-caption-head]").textContent = `Текст публикации · ${label.short}`;
-      const caption = captionFor(state.item?.posts || [], state.platform), node = el.querySelector("[data-caption]");
-      node.textContent = caption || "Текста публикации пока нет.";node.classList.toggle("muted", !caption);
+      el.querySelector("[data-caption-box]").innerHTML = captionHtml(state.item?.posts || [], state.item?.ideaId || state.open?.ideaId);
     }
     else if (event.target.matches("[data-mask-toggle]")) el.querySelector(".mt-mask").hidden = !event.target.checked;
     else if (event.target.matches("[data-version]")) {state.version = Number(event.target.value);renderDetail();}
