@@ -128,7 +128,10 @@
     const days = snapshot?.plan?.days || [];
     const approvedIdeas = new Set((snapshot?.variants || []).filter((v) => v.status === 'approved').map((v) => v.ideaId));
     const wholePlan = snapshot?.approval?.status === 'approved';
-    const order = days.map((idea, index) => ({idea, index})).filter(({idea}) => isVideo(idea) && (wholePlan || approvedIdeas.has(idea.ideaId)));
+    /* Этап с сервера (specs/209): идея дальше «сценария» (запланировано, снято, монтаж…) — уже в работе съёмки,
+       даже если в плане не стоит галочка согласования (так было у ранних рилсов). */
+    const PAST_SCRIPT = new Set(['planned', 'shot', 'editing', 'edit_review', 'edit_rework', 'ready', 'scheduled']);
+    const order = days.map((idea, index) => ({idea, index})).filter(({idea}) => isVideo(idea) && (wholePlan || approvedIdeas.has(idea.ideaId) || PAST_SCRIPT.has(idea.stage)));
     order.sort((a, b) => String(a.idea.date).localeCompare(String(b.idea.date)) || a.index - b.index);
     return order.map(({idea, index}) => {
       const stored = uploads[idea.ideaId] || {};

@@ -322,3 +322,11 @@ test('пакет H: этап с сервера — опубликованное 
   assert.ok(card(oldRoot, 'h-1'), 'старый сервер: этапа нет — рилс остаётся по прежней логике');
   assert.equal(oldRoot.querySelector('.cfk-tz').textContent, 'Время устройства');
 });
+
+test('этап с сервера: идея дальше сценария попадает на «Съёмку» без галочки согласования, на сценарии — нет', () => {
+  const snap = {plan: {days: [
+    {ideaId: 'x-montage', date: '2026-11-03', format: 'reel', topic: 'SAMPLE монтаж', stage: 'edit_review'},
+    {ideaId: 'x-script', date: '2026-11-05', format: 'reel', topic: 'SAMPLE сценарий', stage: 'script_review'},
+    {ideaId: 'x-pub', date: '2026-11-01', format: 'reel', topic: 'SAMPLE вышел', stage: 'published'}]}, variants: []};
+  assert.deepEqual(script.reels(snap).map((r) => r.idea.ideaId), ['x-montage']);
+});
