@@ -4,7 +4,7 @@
   "skills": [
     {
       "id": "synapse-content-system",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dir": "synapse-content-system",
       "entry": "SKILL.md",
       "threshold": 2,
@@ -15,6 +15,10 @@
         {
           "file": "references/planning.md",
           "triggers": ["контент-план*", "бриф*", "план", "плана", "плане", "месяц", "месяца", "недел*", "график*", "календар*"]
+        },
+        {
+          "file": "references/reels-style.md",
+          "triggers": ["контент-план*", "сценари*", "съемк*", "съёмк*", "монтаж*", "рилс", "рилсы", "reels", "ролик*", "видео"]
         }
       ]
     }

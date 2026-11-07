@@ -74,7 +74,7 @@ test('контентное задание уносит инструкции на
   const system = systemOf(f);
   assert.equal(f.sent[0].messages[0].role, 'system');
   assert.match(system, /Ты Хью, бизнес-ассистент/, 'базовые правила остались на месте');
-  assert.match(system, /навык synapse-content-system, версия 1\.0\.0/);
+  assert.match(system, /навык synapse-content-system, версия 1\.1\.0/);
   assert.match(system, /роль/i);
   // Порядок: базовые правила, затем контекст проекта, затем навык. Навык правил не отменяет.
   assert.ok(system.indexOf('Ты Хью') < system.indexOf('навык synapse-content-system'));
@@ -140,7 +140,7 @@ test('владелец видит идентификатор и версию н�
   const state = response.payload?.ai?.fallback?.skills;
   assert.ok(state, 'состояние навыков доступно владельцу');
   assert.equal(state.enabled, true);
-  assert.deepEqual(state.skills, [{id: 'synapse-content-system', version: '1.0.0'}]);
+  assert.deepEqual(state.skills, [{id: 'synapse-content-system', version: '1.1.0'}]);
   assert.equal(/Рабочая инструкция|роль публикации/i.test(JSON.stringify(state)), false,
     'содержание навыка в состоянии не показывается');
 });
