@@ -22,14 +22,14 @@
 
    Настройки окружения:
      HUGH_SKILLS=off              — выключить подключение навыков целиком
-     HUGH_SKILLS_MAX_BYTES=6000   — предел размера блока инструкций в запросе */
+     HUGH_SKILLS_MAX_BYTES=14000  — предел размера блока инструкций в запросе */
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const DEFAULT_ROOT = path.join(__dirname, 'skills');
 const CATALOG_FILE = 'catalog.json';
-const DEFAULT_MAX_BYTES = 6000;
+const DEFAULT_MAX_BYTES = 14000;   // навык + справочники плана и рилсов целиком (ревью PR 614)
 const MAX_FILE_BYTES = 32768;
 const MAX_REL_LENGTH = 200;
 const TRUNCATED = '\n[…сокращено по пределу размера]';

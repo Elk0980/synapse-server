@@ -132,7 +132,7 @@ test('предел размера обрезает блок и честно эт
   assert.match(result.text, /сокращено по пределу размера/);
   // Неверное значение не снимает предел, а возвращает к значению по умолчанию.
   const broken = skills({ HUGH_SKILLS_MAX_BYTES: 'много' });
-  assert.equal(broken.status().maxBytes, 6000);
+  assert.equal(broken.status().maxBytes, 14000);
   assert.ok(broken.status().issues.some((issue) => /HUGH_SKILLS_MAX_BYTES/.test(issue)));
 });
 
@@ -186,4 +186,18 @@ test('каталог навыков попадает в образ сервис�
       assert.ok(fs.existsSync(path.join(DEFAULT_ROOT, item.dir, ref.file)), `справочник существует: ${ref.file}`);
     }
   }
+});
+
+test('стандарт рилсов и правило текста публикации доходят до модели целиком', () => {
+  const store = skills({}, DEFAULT_ROOT, { info() {}, error() {} });
+  for (const task of ['Составь контент-план рилсов на месяц со сценариями и съёмкой',
+    'Напиши сценарий рилса для съёмки и монтажа видео']) {
+    const result = store.instructions(task, { companyCode: 'alvi' });
+    assert.ok(result, task);
+    assert.equal(result.text.includes('сокращено по пределу размера'), false, `блок не обрезан: ${task}`);
+    assert.match(result.text, /безопасной зоне/, 'правило масок площадок');
+    assert.match(result.text, /зацепка/, 'правило зацепки');
+  }
+  const plan = store.instructions('Составь контент-план рилсов на месяц со сценариями и съёмкой', { companyCode: 'alvi' });
+  assert.match(plan.text, /готовый текст публикации/, 'текст публикации пишется в плане');
 });
