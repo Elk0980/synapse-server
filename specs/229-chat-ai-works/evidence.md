@@ -1,0 +1,29 @@
+# Свидетельства 229 (проверено локально 07.11.2026; в рабочей системе не проверялось)
+
+Состояние: реализовано и проверено локально. Не подключено: на сервере нужен вход владельца в
+подписку (`docs/chat-ai-setup.md`). Живого ответа модели в «Чатах» этой веткой не получено.
+
+| Проверка | Результат |
+|---|---|
+| `node --test ops/content/team-chat-ai.test.js` (настоящий HTTP `/reply`, `validateReplyPayload` рантайма) | 6/6 |
+| `node --test ops/content/team-chat-answers.test.js ops/content/team-chat-rooms.test.js ops/content/people-http.test.js ops/content/team-chat*.test.js ops/content/hugh-personas*.test.js ops/crm/people-http.test.js` | все проходят |
+| `node --test ops/content/*.test.js` | 842 тестов: 832 pass, 1 fail, остальные пропущены самими тестами; `media-mentor-proxy.test.js` — падает так же на `origin/main` без изменений (проверено `git stash`) |
+| `node --test ops/crm/people*.test.js ops/crm/media-mentor*.test.js ops/crm/company-information*.test.js` | 148/149: `media-mentor-http.test.js` «импорт проверяет компанию…» падает так же на `origin/main` |
+| `python3 tools/spec-kit/gate.py check` | status ok |
+
+Покрыто тестами:
+- свои телефон (в разных записях), email, сайт, страницы сайта, ссылки VK/Telegram компании проходят;
+  чужой номер/email/ссылка, похожий handle, чужой хост с путём своего, `?token=`, `sk-…`, `Bearer`,
+  «пароль:» рядом со своим телефоном — отказ; без контактов поведение прежнее;
+- вопрос со своим телефоном уходит модели, в фактах есть `contacts`; чужой номер модели не уходит;
+- ответ модели со своим телефоном в другой записи (`8900…`) проходит проверку чисел; чужой — нет;
+- «Лео, …»: system начинается с «Ты Лео, бизнес-ассистент Синапс Бизнес», содержит тему
+  Медиа-наставника и правила JSON; проверка — «черновик Лео»; факты содержат бриф, материалы,
+  план; подпись «Лео · ИИ»; Хью брифа и материалов не получает; «Лео, а Хью…» — отвечает Лео;
+- ИИ недоступен: «Лео передал вопрос команде — ответим здесь, в этом чате.», без «ошибка/недоступ»;
+  в личном чате текст не обещает передачу команде;
+- CRM `teamChatContext`: `contacts` из карточки компании; `brief` есть при доступе к контент-плану
+  и отсутствует у роли только с задачами.
+
+## После слияния #615 (merge origin/main)
+Конфликт разрешён по plan.md. `team-chat.js` — версия #615 (`addressedTo`, ИИ зовётся только по обращению). `node --test ops/content/team-chat*.test.js ops/content/people-http*.test.js ops/crm/people-http*.test.js sites/synapse/cabinet/chats*.test.cjs sites/synapse/cabinet/team-chat*.test.cjs` — 57/57; gate — ok. Ожидание в `team-chat-agent.test.js` для Хью обновлено на новый запасной текст.

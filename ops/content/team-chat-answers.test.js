@@ -39,7 +39,7 @@ test('недоступность и поздний ответ не показы�
   f.setStatus(200);f.setHook(p=>{if(p.jobId.startsWith('team-review:'))f.advance();});await f.send();assert.equal(f.audit().status,'review_required');
   assert.equal(f.chat.list(2,'alvi').messages.filter(m=>m.user_id===0).length,1);
   assert.equal(f.chat.list(1,'alvi').reviewQueue.length,2);assert.equal(f.chat.list(2,'alvi').reviewQueue,undefined);
-  assert.ok(f.chat.list(2,'alvi').messages.filter(m=>m.user_id===0).every(m=>m.text==='Ответ пока недоступен. Вопрос сохранён для проверки.'));
+  assert.ok(f.chat.list(2,'alvi').messages.filter(m=>m.user_id===0).every(m=>m.text==='Хью передал вопрос команде — ответим здесь, в этом чате.'));
   f.setHook(()=>{});await f.send();assert.equal(f.audit().status,'approved');
   f.setStatus(503);await f.send();assert.equal(f.chat.list(2,'alvi').messages.filter(m=>m.user_id===0).length,3);
 });
@@ -48,7 +48,7 @@ test('10 обезличенных примеров: 4 безопасных пр�
   const examples=[['В работе: подготовить ролик.',true],['Сегодня тема: уход за волосами.',true],['Покажите этапы ухода.',true],['В данных нет цены. Уточните услугу.',true],
     ['В Авокадо идут другие работы.',false],['Ключ: sk-syntheticsecret123456789',false],['Почта: private@example.com',false],['Позвоните +79991234567',false],['Стоимость 99999 рублей.',false],['Обещаю завтра всё опубликовать.',false]];
   for(const [text,safe] of examples){f.setDraft(text,safe);await f.send();const audit=f.audit(),reply=f.chat.list(2,'alvi').messages.find(m=>m.id===audit.reply_id);
-    assert.equal(audit.status,safe?'approved':'review_required',text);if(reply){assert.equal(reply.text,safe?text:'Ответ пока недоступен. Вопрос сохранён для проверки.');assert.ok(reply.text.split('\n').length<=5);}}
+    assert.equal(audit.status,safe?'approved':'review_required',text);if(reply){assert.equal(reply.text,safe?text:'Хью передал вопрос команде — ответим здесь, в этом чате.');assert.ok(reply.text.split('\n').length<=5);}}
 });
 test('ответы доступны спрашивающему и владельцу; общая история и страницы сохраняются',async t=>{
   const f=await fixture(t);

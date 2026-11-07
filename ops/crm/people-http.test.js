@@ -19,7 +19,7 @@ test('реальные content→CRM запросы editor: узкие зада�
     const r=await fetch(base+route,{method,headers:{'content-type':'application/json',...(auth?{'x-api-key':key}:{}),...(actor?{'x-synapse-crm-identity':Buffer.from(JSON.stringify(actor)).toString('base64url')}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
     return {status:r.status,body:await r.json()};
   }
-  for(const code of ['alpha','beta'])assert.equal((await request('/companies','POST',{code,name:code})).status,201);
+  for(const code of ['alpha','beta'])assert.equal((await request('/companies','POST',{code,name:code,...(code==='alpha'?{phone:'+7 900 000-11-22',email:'hello@alpha.example',websiteUrl:'https://alpha.example/'}:{})})).status,201);
   let sequence=0;
   async function create(title,executor,parent_id=null,code='alpha') {
     const response=await request('/coordination/mcp/task_create','POST',{project:code,title,description:'ЦКП: Сохранённый результат',executor,reviewer:'Проверяющий',client_ref:`people-test:${++sequence}`,...(parent_id?{parent_id}:{})},{...owner,companyCodes:[code]});
@@ -30,6 +30,8 @@ test('реальные content→CRM запросы editor: узкие зада�
   const scopedContext=await call('teamChatContext',{},user,'alpha');
   assert.equal(scopedContext.companyCode,'alpha');assert.deepEqual(scopedContext.tasks.map(t=>t.id),[branch.id,own.id,inherited.id]);
   assert.ok(scopedContext.tasks.every(t=>!('description' in t)&&!('assignee_name' in t)));
+  // specs/229: контакты профиля своей компании (для фильтра чата) — только деловые поля.
+  assert.deepEqual(scopedContext.contacts,{phone:'+7 900 000-11-22',email:'hello@alpha.example',websiteUrl:'https://alpha.example/',links:[]});
   await assert.rejects(call('teamChatContext',{},user,'beta'),{status:403});
   await t.test('owner decision events: scope, editor denial, create, blocker changes and dedupe',async()=>{
     const decision=await create('Решение','Влад');
@@ -98,7 +100,7 @@ test('реальные content→CRM запросы editor: узкие зада�
     const snapshot=await call('mediaMentor',{},user,'alpha');assert.equal(snapshot.plan.days.length,7);
     const context=await call('teamChatContext',{},user,'alpha');assert.equal(context.plan.length,7);assert.deepEqual(context.plan[0].scripts,['Полный текст 1']);
     const tasksOnly={...user,permissions:['tasks.self.view']};
-    const restricted=await call('teamChatContext',{},tasksOnly,'alpha');assert.deepEqual(restricted.plan,[]);assert.ok(restricted.tasks.length>0);
+    const restricted=await call('teamChatContext',{},tasksOnly,'alpha');assert.deepEqual(restricted.plan,[]);assert.equal(restricted.brief,undefined);assert.equal(typeof context.brief,'object');assert.ok(restricted.tasks.length>0);
     assert.ok(!JSON.stringify(restricted).includes('Полный текст'));assert.ok(!JSON.stringify(restricted).includes('Тема 1'));
     const raw=await request('/internal/people/teamChatContext?companyCode=alpha','GET',undefined,{...editor,permissions:['tasks.self.view']});
     assert.equal(raw.status,200);assert.deepEqual(raw.body.plan,[]);
