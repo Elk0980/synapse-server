@@ -339,3 +339,20 @@ test('этап с сервера: идея дальше сценария поп�
     {ideaId: 'x-pub', date: '2026-11-01', format: 'reel', topic: 'SAMPLE вышел', stage: 'published'}]}, variants: []};
   assert.deepEqual(script.reels(snap).map((r) => r.idea.ideaId), ['x-montage']);
 });
+
+test('specs/225: полный вид рилса показывает «Исходники» темы из ideaLinks (https, новая вкладка); не https — строки нет', async () => {
+  snapshot.ideaLinks = {'r-late': {sourcesUrl: 'https://drive.google.com/drive/folders/src', montageUrl: ''}};
+  try {
+    const p = page({path: 'r-late'}), root = p.d.getElementById('m');
+    await p.registered['content-shooting'].mount(root, p.ctx); await settle();
+    const link = card(root, 'r-late').querySelector('[data-sources-link]');
+    assert.equal(link.getAttribute('href'), 'https://drive.google.com/drive/folders/src');
+    assert.equal(link.target, '_blank'); assert.match(link.rel, /noopener/);
+    assert.match(card(root, 'r-late').querySelector('.shoot-full__grid').textContent, /Исходники/);
+    snapshot.ideaLinks = {'r-late': {sourcesUrl: 'javascript:alert(1)'}};
+    const q = page({path: 'r-late'}), qRoot = q.d.getElementById('m');
+    await q.registered['content-shooting'].mount(qRoot, q.ctx); await settle();
+    assert.equal(card(qRoot, 'r-late').querySelector('[data-sources-link]'), null);
+    assert.doesNotMatch(card(qRoot, 'r-late').querySelector('.shoot-full__grid').textContent, /Исходники/);
+  } finally { delete snapshot.ideaLinks; }
+});

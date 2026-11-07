@@ -633,3 +633,18 @@ test('specs/224: в окне ролика — «Убрать версию» (н�
   viewer.el.querySelector('[data-open="reel:4"]').click();await settle();
   assert.equal(viewer.el.querySelector('[data-remove-open]'), null);assert.equal(viewer.el.querySelector('[data-remove-version]'), null);
 });
+
+test('specs/225: окно ролика связанной темы показывает «📁 Исходники» и «🎬 Монтаж» из ideaLinks; без ссылок — блока нет', async () => {
+  const f = fixture({plan: true, respond: ({path}) => path === 'crm/media-mentor'
+    ? {...mentor(), ideaLinks: {'idea-1': {sourcesUrl: 'https://drive.google.com/drive/folders/s', montageUrl: 'https://drive.google.com/drive/folders/m'}, 'idea-2': {sourcesUrl: 'javascript:x'}}}
+    : undefined});
+  await f.mount();
+  f.el.querySelector('[data-open="reel:21"]').click(); await settle();
+  const links = [...f.el.querySelectorAll('[data-detail-modal] [data-folders] a')];
+  assert.deepEqual(links.map((a) => [a.textContent, a.getAttribute('href'), a.target, a.rel]), [
+    ['📁 Исходники', 'https://drive.google.com/drive/folders/s', '_blank', 'noopener noreferrer'],
+    ['🎬 Монтаж', 'https://drive.google.com/drive/folders/m', '_blank', 'noopener noreferrer']]);
+  f.el.querySelector('[data-back]').click(); await settle();
+  f.el.querySelector('[data-open="reel:22"]').click(); await settle();
+  assert.equal(f.el.querySelector('[data-detail-modal] [data-folders]'), null, 'не https — ссылок нет');
+});

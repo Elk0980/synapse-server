@@ -179,3 +179,4 @@ body.prompter-open, body.shoot-win-open { overflow: hidden; }
 .view-panel .shoot-row button.shoot-upload--main { min-height: 0; height: 34px; padding: 0 12px; background: #7d9bff; border-color: #7d9bff; color: #0b0f16; font-size: 14px; font-weight: 700; }
 .view-panel .shoot-row button.shoot-upload--main:disabled { opacity: .55; }
 .view-panel .shoot-row .shoot-row__chev { color: #6f95ff; font-size: 20px; font-weight: 800; line-height: 1; }
+.shoot-link { color: var(--accent, #f08a5d); text-decoration: underline; }

@@ -247,6 +247,24 @@ function person(actor,required=false) {
   return {userId:value.userId??null,userName};
 }
 
+/* specs/225-cf-theme-sources: ссылки «Исходники» и «Готовый монтаж» темы плана — внешние папки (обычно Google Диск).
+   Только https://, без логина/пароля в адресе и без пробелов/управляющих символов, до 1000 знаков. Пусто — ссылки нет. */
+const IDEA_LINK_FIELDS=Object.freeze(['sourcesUrl','montageUrl']);
+const MAX_IDEA_LINK=1000,MAX_IDEA_LINKS_BATCH=200;
+function folderUrl(value,label) {
+  if(value===null||value==='')return '';
+  if(typeof value!=='string')fail(400,`${label}: нужна ссылка https://`,'INVALID_LINK');
+  const raw=value.trim();
+  if(!raw)return '';
+  if(raw.length>MAX_IDEA_LINK)fail(400,`${label}: ссылка длиннее ${MAX_IDEA_LINK} символов`,'INVALID_LINK');
+  if(/[\s\u0000-\u001f\u007f]/.test(raw)||!/^https:\/\//i.test(raw))fail(400,`${label}: нужна ссылка https://`,'INVALID_LINK');
+  let parsed;try{parsed=new URL(raw);}catch{fail(400,`${label}: нужна ссылка https://`,'INVALID_LINK');}
+  if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password)fail(400,`${label}: нужна ссылка https:// без логина и пароля`,'INVALID_LINK');
+  if(parsed.href.length>MAX_IDEA_LINK)fail(400,`${label}: ссылка длиннее ${MAX_IDEA_LINK} символов`,'INVALID_LINK');
+  return parsed.href;
+}
+const LINK_LABEL={sourcesUrl:'Исходники',montageUrl:'Готовый монтаж'};
+
 function createMediaMentor(db,{now=Date.now}={}) {
   db.exec(`CREATE TABLE IF NOT EXISTS media_mentor_brief_versions (
     company_id INTEGER NOT NULL REFERENCES companies(id),revision INTEGER NOT NULL,brief TEXT NOT NULL,
@@ -339,6 +357,16 @@ function createMediaMentor(db,{now=Date.now}={}) {
   const archiveMarks=owner=>new Map(db.prepare(`SELECT idea_id ideaId,idea,archived_at archivedAt,archived_by archivedBy,
     archived_by_name archivedByName,reason FROM media_mentor_idea_archive WHERE company_id=? ORDER BY archived_at DESC,idea_id`).all(owner.id)
     .map(row=>[row.ideaId,{...row}]));
+  /* Ссылки темы (specs/225): рядом с планом, как архив идей. Правка ссылки не создаёт версию плана и не трогает согласование. */
+  db.exec(`CREATE TABLE IF NOT EXISTS media_mentor_idea_links (
+    company_id INTEGER NOT NULL REFERENCES companies(id),idea_id TEXT NOT NULL,
+    sources_url TEXT NOT NULL DEFAULT '',montage_url TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,updated_by INTEGER,updated_by_name TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(company_id,idea_id));
+    CREATE TABLE IF NOT EXISTS media_mentor_idea_link_events (
+    id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),idea_id TEXT NOT NULL,
+    sources_url TEXT NOT NULL DEFAULT '',montage_url TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,actor_id INTEGER,actor_name TEXT NOT NULL DEFAULT '',source TEXT NOT NULL DEFAULT 'single');`);
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
 
@@ -438,6 +466,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
          догадываются по решению о плане целиком. */
       variants:plan?planVariantStates(owner,plan,brief.revision):[],
       archivedIdeas:archivedIdeas(owner),
+      ideaLinks:ideaLinks(owner),
       vocabulary:{platforms:labels(CAPTION_PLATFORMS),formats:labels(FORMATS),roles:labels(ROLES),
         shootingComfort:labels(COMFORT),assetKinds:labels(ASSET_KINDS),minDays:MIN_DAYS,maxDays:MAX_DAYS,
         variantScopes:VARIANT_SCOPES,captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS)
@@ -492,6 +521,59 @@ function createMediaMentor(db,{now=Date.now}={}) {
         VALUES(?,?,'restored',?,'',?,?,?)`).run(owner.id,ideaId,mark.idea,iso(),who.userId,who.userName);
       return snapshot(owner);
     });
+  }
+
+  function ideaLinks(owner) {
+    return Object.fromEntries(db.prepare(`SELECT idea_id ideaId,sources_url sourcesUrl,montage_url montageUrl,updated_at updatedAt,
+      updated_by_name updatedByName FROM media_mentor_idea_links WHERE company_id=? ORDER BY idea_id`).all(owner.id)
+      .map(row=>[row.ideaId,{sourcesUrl:row.sourcesUrl,montageUrl:row.montageUrl,updatedAt:row.updatedAt,updatedByName:row.updatedByName}]));
+  }
+  /* Одна строка списка: ideaId и хотя бы одно из полей. Не переданное поле сохраняет прежнее значение, '' или null — очищает. */
+  function linkPatch(row) {
+    if(!row||typeof row!=='object'||Array.isArray(row))fail(400,'Укажите тему и ссылки');
+    object(row,['ideaId',...IDEA_LINK_FIELDS]);
+    if(typeof row.ideaId!=='string'||!IDEA_ID.test(row.ideaId))fail(404,'Идея плана не найдена','NOT_FOUND');
+    const patch={ideaId:row.ideaId};
+    for(const key of IDEA_LINK_FIELDS)if(row[key]!==undefined)patch[key]=folderUrl(row[key],LINK_LABEL[key]);
+    if(Object.keys(patch).length===1)fail(400,'Укажите ссылку «Исходники» или «Готовый монтаж»');
+    return patch;
+  }
+  function writeLinks(owner,patches,who,source) {
+    const known=new Set([...(planOf(owner,{raw:true})?.days||[]).map(day=>day?.ideaId),...archiveMarks(owner).keys()]);
+    const missing=patches.find(patch=>!known.has(patch.ideaId));
+    if(missing)fail(404,`Идея плана не найдена: ${missing.ideaId}`,'NOT_FOUND');
+    const read=db.prepare('SELECT sources_url sourcesUrl,montage_url montageUrl FROM media_mentor_idea_links WHERE company_id=? AND idea_id=?');
+    const time=iso();let changed=0;
+    for(const patch of patches){
+      const was=read.get(owner.id,patch.ideaId)||{sourcesUrl:'',montageUrl:''};
+      const next={sourcesUrl:patch.sourcesUrl??was.sourcesUrl,montageUrl:patch.montageUrl??was.montageUrl};
+      if(next.sourcesUrl===was.sourcesUrl&&next.montageUrl===was.montageUrl)continue;
+      if(!next.sourcesUrl&&!next.montageUrl)db.prepare('DELETE FROM media_mentor_idea_links WHERE company_id=? AND idea_id=?').run(owner.id,patch.ideaId);
+      else db.prepare(`INSERT INTO media_mentor_idea_links(company_id,idea_id,sources_url,montage_url,updated_at,updated_by,updated_by_name)
+        VALUES(?,?,?,?,?,?,?) ON CONFLICT(company_id,idea_id) DO UPDATE SET sources_url=excluded.sources_url,montage_url=excluded.montage_url,
+        updated_at=excluded.updated_at,updated_by=excluded.updated_by,updated_by_name=excluded.updated_by_name`)
+        .run(owner.id,patch.ideaId,next.sourcesUrl,next.montageUrl,time,who.userId,who.userName);
+      db.prepare(`INSERT INTO media_mentor_idea_link_events(company_id,idea_id,sources_url,montage_url,created_at,actor_id,actor_name,source)
+        VALUES(?,?,?,?,?,?,?,?)`).run(owner.id,patch.ideaId,next.sourcesUrl,next.montageUrl,time,who.userId,who.userName,source);
+      changed++;
+    }
+    return changed;
+  }
+  function setIdeaLinks(code,ideaId,body={},actor={}) {
+    if(!body||typeof body!=='object'||Array.isArray(body))fail(400,'Укажите ссылки');
+    const patch=linkPatch({...body,ideaId}),who=person(actor);
+    return transaction(()=>{const owner=company(db,code);writeLinks(owner,[patch],who,'single');return snapshot(owner);});
+  }
+  /* Массовый ввод (агент, импорт): весь список проверяется до записи и пишется одной транзакцией — всё или ничего. */
+  function setIdeaLinksBatch(code,body={},actor={}) {
+    if(!body||typeof body!=='object'||Array.isArray(body))fail(400,'Передайте список items');
+    object(body,['items']);
+    if(!Array.isArray(body.items)||!body.items.length||body.items.length>MAX_IDEA_LINKS_BATCH)
+      fail(400,`Список items: от 1 до ${MAX_IDEA_LINKS_BATCH} тем`);
+    const patches=body.items.map(linkPatch);
+    if(new Set(patches.map(p=>p.ideaId)).size!==patches.length)fail(400,'Тема повторяется в списке','DUPLICATE_IDEA');
+    const who=person(actor);
+    return transaction(()=>{const owner=company(db,code),updated=writeLinks(owner,patches,who,'batch');return {...snapshot(owner),linksUpdated:updated};});
   }
 
   function saveBrief(code,body,actor={}) {
@@ -713,7 +795,7 @@ function createMediaMentor(db,{now=Date.now}={}) {
   /* Вводные контент-завода (CF1) живут рядом с брифом на той же базе, но отдельно от него:
      их правка не создаёт версию брифа и не снимает согласования плана. */
   const inputs=createContentFactoryInputs(db,{now});
-  return {get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,archiveIdea,restoreIdea,
+  return {get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,archiveIdea,restoreIdea,setIdeaLinks,setIdeaLinksBatch,
     planVariantStates,variantDecisions,inputs};
 }
 

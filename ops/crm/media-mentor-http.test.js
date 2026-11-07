@@ -494,3 +494,48 @@ test('specs/224: убрать/вернуть идею плана — право 
   const restored = await f.call('POST', `/media-mentor/plan/ideas/${ideaId}/restore`, SMM, {});
   assert.equal(restored.result.plan.days.length, 7);
 });
+
+test('specs/225: ссылки «Исходники» и «Монтаж» темы — без новой версии плана, только https, право правки своей компании', async (t) => {
+  const f = fixture(t);
+  const brief = await seedBrief(f);
+  const plan = await f.call('PUT', '/media-mentor/plan', OWNER, {planRevision: 0, briefRevision: brief.brief.revision, days: days()});
+  const [a, b] = plan.result.plan.days.map((d) => d.ideaId);
+  const VIEWER = {userId: 9, userName: 'Наблюдатель', role: 'editor', companies: ['alvi'], permissions: ['autoposting.view']};
+  const SMM = {...EDITOR, permissions: ['autoposting.view', 'autoposting.edit']};
+  const src = 'https://drive.google.com/drive/folders/abc123';
+  await assert.rejects(f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, VIEWER, {sourcesUrl: src}), (e) => e.status === 403);
+  await assert.rejects(f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {sourcesUrl: src}, 'avokado'), (e) => e.status === 403);
+  await assert.rejects(f.call('POST', `/media-mentor/plan/ideas/${a}/links`, SMM, {sourcesUrl: src}), (e) => e.status === 405);
+  for (const bad of ['javascript:alert(1)', 'http://drive.google.com/x', 'https://user:pw@drive.google.com/x', 'https://drive.google.com/a b',
+    'https://' + 'a'.repeat(1000) + '.com', 'drive.google.com/x', 42])
+    await assert.rejects(f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {sourcesUrl: bad}), (e) => e.status === 400, String(bad));
+  await assert.rejects(f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {}), (e) => e.status === 400);
+  await assert.rejects(f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {sourcesUrl: src, extra: 1}), (e) => e.status === 400);
+  await assert.rejects(f.call('PUT', '/media-mentor/plan/ideas/missing-idea/links', SMM, {sourcesUrl: src}), (e) => e.status === 404);
+  const before = await f.call('GET', '/media-mentor', VIEWER);
+  const saved = await f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {sourcesUrl: src});
+  assert.equal(saved.result.plan.revision, plan.result.plan.revision, 'версия плана прежняя');
+  assert.deepEqual(saved.result.variants, before.result.variants, 'согласование не сброшено');
+  assert.equal(saved.result.ideaLinks[a].sourcesUrl, src);
+  assert.equal(saved.result.ideaLinks[a].montageUrl, '');
+  assert.equal(saved.result.ideaLinks[a].updatedByName, 'Редактор клиента', 'автор — из доверенной личности');
+  const viewed = await f.call('GET', '/media-mentor', VIEWER);
+  assert.equal(viewed.result.ideaLinks[a].sourcesUrl, src, 'просмотр — всем с доступом к плану');
+  const montage = await f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {montageUrl: 'https://drive.google.com/drive/folders/m1'});
+  assert.equal(montage.result.ideaLinks[a].sourcesUrl, src, 'непереданное поле сохраняется');
+  const cleared = await f.call('PUT', `/media-mentor/plan/ideas/${a}/links`, SMM, {sourcesUrl: '', montageUrl: null});
+  assert.equal(cleared.result.ideaLinks[a], undefined, 'пустые ссылки удаляют запись');
+  // Массовый ввод: всё или ничего.
+  await assert.rejects(f.call('POST', '/media-mentor/plan/idea-links', SMM, {items: [{ideaId: a, sourcesUrl: src}, {ideaId: b, montageUrl: 'javascript:x'}]}), (e) => e.status === 400);
+  assert.equal((await f.call('GET', '/media-mentor', VIEWER)).result.ideaLinks[a], undefined, 'ошибка в одной строке — ничего не записано');
+  await assert.rejects(f.call('POST', '/media-mentor/plan/idea-links', SMM, {items: [{ideaId: a, sourcesUrl: src}, {ideaId: a, montageUrl: src}]}), (e) => e.status === 400);
+  await assert.rejects(f.call('POST', '/media-mentor/plan/idea-links', SMM, {items: []}), (e) => e.status === 400);
+  await assert.rejects(f.call('POST', '/media-mentor/plan/idea-links', VIEWER, {items: [{ideaId: a, sourcesUrl: src}]}), (e) => e.status === 403);
+  await assert.rejects(f.call('POST', '/media-mentor/plan/idea-links', SMM, {items: [{ideaId: a, sourcesUrl: src}]}, 'avokado'), (e) => e.status === 403);
+  const batch = await f.call('POST', '/media-mentor/plan/idea-links', SMM, {items: [{ideaId: a, sourcesUrl: src, montageUrl: 'https://drive.google.com/m'}, {ideaId: b, sourcesUrl: 'https://disk.yandex.ru/d/x'}]});
+  assert.equal(batch.result.linksUpdated, 2);
+  assert.equal(batch.result.plan.revision, plan.result.plan.revision);
+  assert.equal(batch.result.ideaLinks[b].sourcesUrl, 'https://disk.yandex.ru/d/x');
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM media_mentor_idea_link_events').get().n, 5, 'журнал изменений');
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM media_mentor_plan_versions').get().n, 1, 'новой версии плана нет');
+});

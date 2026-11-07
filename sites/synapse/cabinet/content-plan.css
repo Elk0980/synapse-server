@@ -280,3 +280,14 @@ a.cp-pub:hover, a.cp-pub:focus-visible { background:rgba(76,195,138,.12); }
 /* Телефон: «Сменить статус ▾», «Убрать» и значки площадок переносятся строкой ниже, а не наезжают друг на друга. */
 @media (max-width: 1099px) { .cp-row .cp-acts { flex-wrap:wrap; row-gap:6px; } .cp-row > .cp-remove-form { margin-top:8px; } }
 .view-panel .cp .cp-full-acts button.cp-act.cp-act { min-height:0 !important; height:34px; padding:0 12px; border-radius:8px; font-size:14px; background:transparent; }
+/* specs/225-cf-theme-sources: ссылки «📁 Исходники» и «🎬 Монтаж» в раскрытой карточке темы. */
+.cp-links { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 10px; min-width:0; }
+.cp-link { display:inline-flex; align-items:center; gap:4px; min-height:34px; padding:0 12px; border-radius:8px; border:1px solid var(--line,#333); color:var(--text,#eee); text-decoration:none; font-size:14px; max-width:100%; box-sizing:border-box; white-space:nowrap; }
+a.cp-link:hover, a.cp-link:focus-visible { border-color:var(--accent,#f08a5d); }
+.cp-link--none { opacity:.65; border-style:dashed; }
+.cp-link--none small { font-size:12px; }
+.view-panel .cp .cp-links button.cp-act.cp-act { min-height:0 !important; height:34px; padding:0 12px; border-radius:8px; font-size:14px; background:transparent; }
+.cp-links-form { margin:0 0 10px; border-color:var(--line,#333); }
+.cp-links-form p { margin:0; }
+.cp-links-form label { display:grid; gap:4px; min-width:0; }
+.cp-links-form input { box-sizing:border-box; width:100%; min-width:0; min-height:40px; font:inherit; font-size:16px; padding:6px 10px; border-radius:10px; border:1px solid var(--line,#333); background:var(--surface,#12100f); color:var(--text,#eee); }

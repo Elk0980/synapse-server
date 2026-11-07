@@ -59,6 +59,9 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
     const generationImport = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)\/drafts$/.exec(url.pathname);
     // specs/224-content-archive: убрать идею плана в архив и вернуть. Право — правка контента компании.
     const ideaArchive = /^\/media-mentor\/plan\/ideas\/([A-Za-z0-9][A-Za-z0-9_-]{0,99})\/(archive|restore)$/.exec(url.pathname);
+    // specs/225-cf-theme-sources: ссылки «Исходники» и «Готовый монтаж» темы — одна тема и список для агента/импорта.
+    const ideaLinks = /^\/media-mentor\/plan\/ideas\/([A-Za-z0-9][A-Za-z0-9_-]{0,99})\/links$/.exec(url.pathname);
+    const ideaLinksBatch = url.pathname === '/media-mentor/plan/idea-links';
     let result, status = 200;
     // №98 Б: анкета контент-плана и отметки согласующих. Отметку ставит только сам согласующий.
     const workspaceRoute = ['/media-mentor/questionnaire', '/media-mentor/plan/signoffs'].includes(url.pathname);
@@ -78,6 +81,13 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
       if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
       const who = {userId: fresh.identity.userId, userName: fresh.identity.userName};
       result = served(ideaArchive[2] === 'archive' ? mentor.archiveIdea(code, ideaArchive[1], body, who) : mentor.restoreIdea(code, ideaArchive[1], body, who));
+    }
+    else if (ideaLinks || ideaLinksBatch) {
+      if (request.method !== (ideaLinks ? 'PUT' : 'POST')) fail(405, 'Метод не поддерживается');
+      const body = await readJson(request, ideaLinksBatch ? 600000 : undefined), fresh = companyModuleContext(request, code, 'autoposting.edit');
+      if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
+      const who = {userId: fresh.identity.userId, userName: fresh.identity.userName};
+      result = served(ideaLinks ? mentor.setIdeaLinks(code, ideaLinks[1], body, who) : mentor.setIdeaLinksBatch(code, body, who));
     }
     else if(url.pathname==='/media-mentor/plan/import-preview'&&request.method==='POST') {
       const body=await readJson(request,1500000);
