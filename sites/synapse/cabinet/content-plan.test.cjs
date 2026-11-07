@@ -90,7 +90,7 @@ test('макет 07.11: карточка — дата, статус, тема с
   assert.equal(a.root.querySelector('[data-idea="s-1"] .cp-chev').textContent, '▴');
   const fields = Object.fromEntries([...full.querySelectorAll('.cp-fgrid > div')].map((d) => [d.querySelector('dt').textContent, d.querySelector('dd').textContent]));
   // Порядок раскрытой карточки макета 07.11: Дата, Формат, Съёмка, Задача, Статус, Правки (Исходники и «Вышло» — когда есть данные).
-  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Съёмка', 'Задача', 'Статус', 'Правки'], 'исходников и публикаций в данных нет — не показываются; правок нет — «—»');
+  assert.deepEqual(Object.keys(fields), ['Дата', 'Формат', 'Что снять', 'Съёмка', 'Задача', 'Статус', 'Правки'], 'исходников и публикаций в данных нет — не показываются; правок нет — «—»');
   assert.equal(fields['Формат'], 'Рилс'); assert.equal(fields['Съёмка'], 'SAMPLE оператор'); assert.equal(fields['Задача'], 'Охватный'); assert.equal(fields['Правки'], '—');
   assert.match(fields['Дата'], /^(Пн|Вт|Ср|Чт|Пт|Сб|Вс) \d{2}\.\d{2}$/, 'дата как в макете: «Сб 01.11»');
   // «До съёмки» — после сцен.
