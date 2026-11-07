@@ -5,6 +5,8 @@ const {normalizeNotes,createReviewNotes}=require('./autoposting-review-notes');
 const {createRecovery}=require('./autoposting-recovery');
 const {publicUrl}=require('./autoposting-transport');
 const {createMediaMentorPlanLink}=require('./media-mentor-plan-link');
+const {createPublishVerifier}=require('./autoposting-verify');
+const {contentDigest}=require('./onlypult-provider');
 const {randomUUID}=require('node:crypto');
 const LEASE_MS=120000;
 const META_FIELDS=['format','role','audience','hook','idea','hughNote','metrics','methodSource'];
@@ -268,9 +270,13 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     PRIMARY KEY(source_post_id,platform_id));
     CREATE INDEX IF NOT EXISTS autoposting_split_child_idx ON autoposting_split_links(child_post_id);`);
   const deliveryColumns=new Set(db.prepare('PRAGMA table_info(autoposting_deliveries)').all().map(row=>row.name));
-  for(const column of ['provider_post_id','provider_status','provider_checked_at']){
+  // Проверка выхода (specs/215-publish-verify): когда запрос ушёл сервису, отпечаток отправленного текста,
+  // источник подтверждения, время выхода по данным сервиса и последняя попытка найти ссылку.
+  for(const column of ['provider_post_id','provider_status','provider_checked_at','provider_submitted_at','provider_content_sha','confirmed_via','provider_published_at','link_checked_at']){
     if(!deliveryColumns.has(column))db.exec(`ALTER TABLE autoposting_deliveries ADD COLUMN ${column} TEXT`);
   }
+  const verifyDays=Number.parseInt(process.env.AUTOPOSTING_VERIFY_DAYS||'7',10);
+  const verifier=createPublishVerifier(db,{transport,now,logger,days:verifyDays});
   const recovery=createRecovery(db,{now});
   // Источник и его файлы принадлежат content; здесь только связи и квитанции атомарного attach.
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_source_links (
@@ -490,7 +496,8 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       profileRevision:row.profile_revision,createdAt:row.created_at,updatedAt:row.updated_at,lastErrorCode:row.last_error_code,
       deleted:row.deleted_at?{at:row.deleted_at,byName:row.deleted_by_name||null,comment:row.deleted_comment||''}:null,
       deliveries:db.prepare(`SELECT channel_id channelId,status,external_id externalId,url,error_code errorCode,finished_at finishedAt,
-        provider_post_id providerPostId,provider_status providerStatus,provider_checked_at providerCheckedAt
+        provider_post_id providerPostId,provider_status providerStatus,provider_checked_at providerCheckedAt,
+        confirmed_via confirmedVia,provider_published_at providerPublishedAt
         FROM autoposting_deliveries WHERE post_id=? ORDER BY channel_id`).all(row.id)};
   }
   function invalidate(code) {
@@ -1489,37 +1496,19 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     object(body,['revision']);revision(body.revision);
     const {row}=rowFor(id,code);
     if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
-    const deliveries=db.prepare("SELECT * FROM autoposting_deliveries WHERE post_id=? AND provider_post_id IS NOT NULL AND status='needs_review'").all(row.id);
-    if(!transport.reconcile||!deliveries.length)fail(409,'Нет принятого задания, которое можно проверить без повторной отправки','PROVIDER_POST_REQUIRED');
-    for(const delivery of deliveries)await reconcileDelivery(row.id,code,delivery);
+    // Ручная «Проверить статус»: те же только читающие шаги, что и фоновая сверка, без ожидания интервала.
+    const deliveries=db.prepare(`SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND ((provider_post_id IS NOT NULL AND status='needs_review')
+      OR (provider_post_id IS NULL AND status IN ('needs_review','failed') AND started_at IS NOT NULL)
+      OR (status='published' AND url IS NULL AND provider_post_id IS NOT NULL AND channel_id IN ('instagram','tiktok'))) LIMIT 1`).get(row.id);
+    if(!transport.reconcile||!deliveries)fail(409,'Нет принятого задания, которое можно проверить без повторной отправки','PROVIDER_POST_REQUIRED');
+    await verifier.tick(row.id);
     return get(id,code);
-  }
-  async function reconcileDelivery(postId,code,delivery) {
-    let result;
-    try {
-      result=await transport.reconcile({companyCode:code,channelId:delivery.channel_id,
-        channelRevision:delivery.channel_revision,providerPostId:delivery.provider_post_id});
-      if(!result||result.providerPostId!==delivery.provider_post_id||!['draft','scheduled','published','failed'].includes(result.providerStatus))throw Error('Invalid provider receipt');
-    } catch {
-      // A failed GET never permits a second POST and cannot erase the known job ID.
-      db.prepare("UPDATE autoposting_deliveries SET provider_checked_at=?,error_code='PROVIDER_CHECK_FAILED' WHERE post_id=? AND channel_id=? AND provider_post_id=? AND status='needs_review'")
-        .run(iso(),postId,delivery.channel_id,delivery.provider_post_id);return;
-    }
-    db.prepare("UPDATE autoposting_deliveries SET provider_status=?,provider_checked_at=?,error_code=? WHERE post_id=? AND channel_id=? AND provider_post_id=? AND status='needs_review'")
-      .run(result.providerStatus,iso(),result.errorCode||'PROVIDER_PENDING',postId,delivery.channel_id,delivery.provider_post_id);
-    db.prepare("UPDATE autoposting_posts SET last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='needs_review'")
-      .run(result.errorCode||'PROVIDER_PENDING',iso(),postId);
   }
   let stopped=false,running=null;
   async function processDue() {
-    // Poll only known pending jobs. Unknown/timeout attempts cannot be reconciled by guessing text.
-    if(transport.reconcile&&!stopped){
-      const pending=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id
-        JOIN companies c ON c.id=p.company_id WHERE c.is_deleted=0 AND p.archived_at IS NULL AND p.deleted_at IS NULL AND d.status='needs_review'
-        AND d.provider_post_id IS NOT NULL AND d.provider_status IN ('draft','scheduled')
-        AND (d.provider_checked_at IS NULL OR d.provider_checked_at<=?) LIMIT 5`).all(new Date(now()-60000).toISOString());
-      for(const delivery of pending){if(stopped)return;await reconcileDelivery(delivery.post_id,delivery.code,delivery);}
-    }
+    /* Проверка выхода только чтением (specs/215-publish-verify): известные задания сервиса, задания без
+       идентификатора (строгий поиск по профилю и отпечатку текста) и ссылки опубликованных за N дней. */
+    if(transport.reconcile&&!stopped){await verifier.tick();if(stopped)return;}
     // An expired attempt may already exist externally. Never resend it automatically.
     db.prepare("UPDATE autoposting_deliveries SET status='needs_review',error_code='PUBLICATION_UNCERTAIN' WHERE status='publishing' AND started_at<=?").run(now()-LEASE_MS);
     db.prepare("UPDATE autoposting_posts SET status='needs_review',last_error_code='PUBLICATION_UNCERTAIN',revision=revision+1,updated_at=? WHERE status='publishing' AND publishing_at<=?").run(iso(),now()-LEASE_MS);
@@ -1595,10 +1584,11 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       }
       if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
       if(!db.prepare("UPDATE autoposting_deliveries SET status='publishing',started_at=? WHERE post_id=? AND channel_id=? AND status='pending'").run(now(),due.id,delivery.channel_id).changes)continue;
+      let sent='';
       try{
         const result=await transport.publish({companyCode:due.code.toLowerCase(),channelId:delivery.channel_id,channelRevision:delivery.channel_revision,
           // Подпись площадки, если задана, заменяет общий текст именно для этого канала.
-          post:(()=>{const view=dto(due,company(db,due.code));return {...view,title:view.title||'',text:view.captions?.[channel.platform||channel.id]||view.text,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
+          post:(()=>{const view=dto(due,company(db,due.code));sent=view.captions?.[channel.platform||channel.id]||view.text;return {...view,title:view.title||'',text:sent,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
           beforePublish:()=>{
             // Подтверждение могло появиться, пока транспорт ждал предварительные запросы: адаптер вызывает
             // этот барьер перед самой передачей, и до неё отправка ещё отменима.
@@ -1616,8 +1606,10 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
           }});
         if(result?.provider==='onlypult'){
           if(typeof result.providerPostId!=='string'||!result.providerPostId||!['draft','scheduled','published','failed'].includes(result.providerStatus))throw Error('Invalid provider receipt');
-          db.prepare(`UPDATE autoposting_deliveries SET status='needs_review',provider_post_id=?,provider_status=?,provider_checked_at=?,error_code=?
-            WHERE post_id=? AND channel_id=? AND status='publishing'`).run(result.providerPostId,result.providerStatus,iso(),result.errorCode||'PROVIDER_PENDING',due.id,delivery.channel_id);
+          /* Ответ на отправку выход не подтверждает: доставка ждёт повторного чтения задания (сверка). */
+          db.prepare(`UPDATE autoposting_deliveries SET status='needs_review',provider_post_id=?,provider_status=?,provider_checked_at=?,error_code=?,
+            provider_submitted_at=?,provider_content_sha=? WHERE post_id=? AND channel_id=? AND status='publishing'`)
+            .run(result.providerPostId,result.providerStatus,iso(),result.errorCode||'PROVIDER_PENDING',iso(),sent.trim()?contentDigest(sent):null,due.id,delivery.channel_id);
           continue;
         }
         if(result?.status&&result.status!=='published')throw Error('Publication still pending');
@@ -1631,10 +1623,15 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
             .run(iso(),due.id,delivery.channel_id);
           review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
         }
-        const ambiguous=error?.ambiguous!==false,status=ambiguous?'needs_review':'failed';
-        const code=ambiguous?'PUBLICATION_UNCERTAIN':'PUBLISH_FAILED';
-        db.prepare("UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=? WHERE post_id=? AND channel_id=? AND status='publishing'")
-          .run(status,code,iso(),due.id,delivery.channel_id);
+        /* Запрос уже ушёл сервису (submitted): даже документированный отказ не доказывает, что задание не создано
+           (07.11: рилс Instagram вышел при «не подтвердила»). Такая доставка не становится окончательной ошибкой —
+           она остаётся на проверке, и сверка ищет задание только чтением. Повторной отправки нет. */
+        const submitted=error?.submitted===true;
+        const ambiguous=error?.ambiguous!==false,status=ambiguous||submitted?'needs_review':'failed';
+        const code=ambiguous?'PUBLICATION_UNCERTAIN':submitted?'PROVIDER_UNCONFIRMED':'PUBLISH_FAILED';
+        db.prepare(`UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=?,provider_submitted_at=?,provider_content_sha=?
+          WHERE post_id=? AND channel_id=? AND status='publishing'`)
+          .run(status,code,iso(),submitted?iso():null,submitted&&sent.trim()?contentDigest(sent):null,due.id,delivery.channel_id);
         db.prepare("UPDATE autoposting_posts SET status=?,last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='publishing' AND lease=?")
           .run(status,code,iso(),due.id,lease);
         logger.warn(`[crm] autoposting code=${code}`);return;
@@ -1648,7 +1645,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       .run(iso(),due.id,lease,due.id);
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
-  function stop(){stopped=true;return running||Promise.resolve();}
+  function stop(){stopped=true;verifier.stop();return running||Promise.resolve();}
   function archived(code){const owner=company(db,code),rows=db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC,id DESC LIMIT 200').all(owner.id),batch=reviewBatch(rows,owner);return {companyCode:owner.code.toLowerCase(),posts:rows.map(row=>dto(row,owner,batch))};}
   function archive(id,code,body,actor){rowFor(id,code);recovery.archive(id,code,body,actor);return get(id,code);}
   function restore(id,code,body,actor={}){

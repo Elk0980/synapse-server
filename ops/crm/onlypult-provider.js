@@ -124,7 +124,9 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (!data || !id(data.id) || (expectedId && data.id !== expectedId) ||
         !profile || profile !== row.target ||
         !['draft','scheduled','published','failed'].includes(data.status)) throw failure('RESPONSE_UNCERTAIN',true);
-    return {provider:'onlypult',providerPostId:data.id,providerStatus:data.status,status:'needs_review',
+    // Время выхода — только корректная дата провайдера; иначе null, не выдумывается.
+    const at = typeof data.published_at === 'string' && !Number.isNaN(Date.parse(data.published_at)) ? new Date(Date.parse(data.published_at)).toISOString() : null;
+    return {provider:'onlypult',providerPostId:data.id,providerStatus:data.status,status:'needs_review',publishedAt:data.status === 'published' ? at : null,
       errorCode:data.status === 'published' ? 'PROVIDER_LINK_UNAVAILABLE' : data.status === 'failed' ? 'PROVIDER_FAILED' : 'PROVIDER_PENDING'};
   }
   async function publish(row,post,guard) {
@@ -210,13 +212,78 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       extra.title = title;
       extra.platform_options = {youtube:{is_shorts:true,privacy:'public'}};
     }
-    return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],...(withoutText ? {} : {content:post.text}),
-      publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {}),...extra}),row);
+    /* С этой точки запрос ушёл провайдеру. Любая ошибка ниже (таймаут, неразобранный ответ и даже
+       документированный отказ) помечается submitted: задание могло быть создано, и сверка ищет его
+       по профилю и отпечатку текста (specs/215-publish-verify, FR-1). Повторной отправки нет. */
+    try {
+      return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],...(withoutText ? {} : {content:post.text}),
+        publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {}),...extra}),row);
+    } catch (error) {
+      if (error && typeof error === 'object') error.submitted = true;
+      throw error;
+    }
   }
   async function reconcile(row,providerPostId) {
     if (!id(providerPostId) || !id(row.target)) throw failure('PROVIDER_POST_REQUIRED');
     return receipt(await request(row,'GET',`/posts/${encodeURIComponent(providerPostId)}`),row,providerPostId);
   }
-  return {listProfiles,inspectProfiles,check,publish,reconcile};
+  /* Поиск созданного задания без идентификатора (ответ на POST потерян или был ошибкой).
+     Только чтение GET /posts своего профиля. Совпадение строгое: тот же профиль, отпечаток SHA-256
+     нормализованного текста, создано в окне попытки, и такое задание ровно одно. Иначе — null. */
+  async function findSubmitted(row,{contentSha,submittedAt}) {
+    if (!id(row.target) || typeof contentSha !== 'string' || !/^[a-f0-9]{64}$/.test(contentSha)) throw failure('PROVIDER_POST_REQUIRED');
+    const since = Date.parse(submittedAt);
+    if (Number.isNaN(since)) throw failure('PROVIDER_POST_REQUIRED');
+    const list = await request(row,'GET',`/posts?profile_id=${encodeURIComponent(row.target)}&limit=50`);
+    if (!Array.isArray(list)) throw failure('RESPONSE_UNCERTAIN');
+    const matches = list.filter(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item) || !id(item.id) || typeof item.content !== 'string') return false;
+      if (profileOf(item) !== row.target || !['draft','scheduled','published','failed'].includes(item.status)) return false;
+      const created = Date.parse(item.created_at);
+      if (Number.isNaN(created) || created < since - 10 * 60000 || created > since + 60 * 60000) return false;
+      return contentDigest(item.content) === contentSha;
+    });
+    if (matches.length !== 1) return null;
+    return receipt(matches[0],row,matches[0].id);
+  }
+  /* Ссылка на конкретный пост. Публикационный Post у Onlypult ссылки не содержит (openapi.yaml, проверено
+     07.11.2026); permalink есть только в аналитике (AnalyticsTopItem.url) и только для Instagram и TikTok
+     среди наших площадок. Мост — linked_publish_profile.id === наш профиль публикации. Совпадение строгое:
+     время выхода ±30 минут и начало подписи; кандидат ровно один, ссылка https на домен площадки.
+     Любая неясность, отсутствие аналитики в тарифе или ошибка → null: ссылка не выдумывается. */
+  const PERMALINK = {instagram:{analytics:'instagram',host:/(^|\.)instagram\.com$/},tiktok:{analytics:'tiktok',host:/(^|\.)tiktok\.com$/}};
+  async function permalink(row,{publishedAt,text}) {
+    const spec = PERMALINK[row.id];
+    const at = Date.parse(publishedAt);
+    if (!spec || !id(row.target) || Number.isNaN(at) || typeof text !== 'string' || !normalize(text)) return null;
+    let profiles,top;
+    try {
+      profiles = await request(row,'GET',`/analytics/profiles?platform=${spec.analytics}`);
+      if (!Array.isArray(profiles)) return null;
+      const linked = profiles.filter(profile => profile && typeof profile.id === 'string' && /^an_[A-Za-z0-9_-]{1,100}$/.test(profile.id) &&
+        profile.platform === spec.analytics && String(profile.linked_publish_profile?.id ?? '') === row.target);
+      if (linked.length !== 1) return null;
+      const day = ms => new Date(ms).toISOString().slice(0,10);
+      top = await request(row,'GET',`/analytics/${encodeURIComponent(linked[0].id)}/top-posts?date_from=${day(at - 86400000)}&date_to=${day(at + 86400000)}&limit=50`);
+    } catch {return null;}
+    const items = Array.isArray(top?.items) ? top.items : [];
+    const own = normalize(text);
+    const candidates = items.filter(item => {
+      if (!item || typeof item !== 'object' || !Number.isSafeInteger(item.published_at) || Math.abs(item.published_at - at) > 30 * 60000) return false;
+      let url;
+      try {url = new URL(item.url);} catch {return false;}
+      if (url.protocol !== 'https:' || url.username || url.password || url.port || !spec.host.test(url.hostname.toLowerCase())) return false;
+      const caption = normalize(typeof item.caption === 'string' ? item.caption : typeof item.title === 'string' ? item.title : '').replace(/(\.\.\.|…)$/,'').trim();
+      if (!caption) return false;
+      // Подпись площадки обрезается до 500 символов: короткий текст — точное совпадение, длинный — общее начало не короче 40 символов.
+      return caption === own || (caption.length >= 40 && own.startsWith(caption)) || (own.length >= 40 && caption.startsWith(own));
+    });
+    if (candidates.length !== 1) return null;
+    return new URL(candidates[0].url).href;
+  }
+  return {listProfiles,inspectProfiles,check,publish,reconcile,findSubmitted,permalink};
 }
-module.exports = {createOnlypultProvider};
+// Нормализация текста для отпечатка: переводы строк, пробелы по краям и подряд. Сам текст не хранится.
+const normalize = value => String(value || '').replace(/\r\n?/g,'\n').replace(/[ \t]+/g,' ').replace(/ *\n */g,'\n').trim();
+const contentDigest = value => require('node:crypto').createHash('sha256').update(normalize(value)).digest('hex');
+module.exports = {createOnlypultProvider,contentDigest,normalizeText:normalize};

@@ -58,7 +58,7 @@ function createContentStages(db) {
     if (!row || row.deleted_at || row.archived_at) return null;
     const receipts = has('autoposting_publication_receipts') ? db.prepare(`SELECT platform, url, published_at publishedAt, content_revision contentRevision
       FROM autoposting_publication_receipts WHERE post_id=? AND company_id=? ORDER BY published_at DESC, id DESC`).all(row.id, companyId) : [];
-    const deliveries = has('autoposting_deliveries') ? db.prepare(`SELECT channel_id channelId, status, url, finished_at finishedAt
+    const deliveries = has('autoposting_deliveries') ? db.prepare(`SELECT channel_id channelId, status, url, ${columns('autoposting_deliveries').has('error_code') ? 'error_code' : 'NULL'} errorCode, finished_at finishedAt
       FROM autoposting_deliveries WHERE post_id=? ORDER BY channel_id`).all(row.id) : [];
     const platforms = parse(row.platform_ids || '[]', []);
     const media = parse(row.media_urls || '[]', []);
@@ -79,7 +79,9 @@ function createContentStages(db) {
       for (const receipt of receipts) if (receipt.contentRevision === (row.content_revision ?? 1))
         put(receipt.platform, {platform: receipt.platform, status: 'published', url: receipt.url || null, publishedAt: receipt.publishedAt || null});
       for (const delivery of deliveries) {
-        const status = delivery.status === 'published' ? 'published' : ['failed', 'needs_review'].includes(delivery.status) ? 'error'
+        // Сервис принял задание и сверка ждёт результата (PROVIDER_PENDING) — это ещё выход, а не ошибка (specs/215).
+        const pending = delivery.status === 'needs_review' && delivery.errorCode === 'PROVIDER_PENDING';
+        const status = delivery.status === 'published' ? 'published' : pending ? 'publishing' : ['failed', 'needs_review'].includes(delivery.status) ? 'error'
           : delivery.status === 'cancelled' ? 'cancelled' : delivery.status === 'publishing' ? 'publishing' : row.status === 'scheduled' ? 'scheduled' : 'draft';
         put(delivery.channelId, {platform: delivery.channelId, status, url: delivery.url || null,
           publishedAt: status === 'published' ? delivery.finishedAt || null : null});
@@ -97,8 +99,10 @@ function createContentStages(db) {
     const live = facts.filter((item) => item.row.status !== 'cancelled');
     const published = publications.filter((p) => p.status === 'published');
     if (published.length) return 'published';
-    if (live.some((item) => ['failed', 'needs_review'].includes(item.row.status)) || publications.some((p) => p.status === 'error')) return 'publish_error';
-    if (live.some((item) => ['scheduled', 'publishing'].includes(item.row.status))) return 'scheduled';
+    const waiting = (item) => item.row.status === 'needs_review' && item.deliveries.length &&
+      item.deliveries.every((d) => d.status === 'published' || (d.status === 'needs_review' && d.errorCode === 'PROVIDER_PENDING'));
+    if (live.some((item) => ['failed', 'needs_review'].includes(item.row.status) && !waiting(item)) || publications.some((p) => p.status === 'error')) return 'publish_error';
+    if (live.some((item) => ['scheduled', 'publishing'].includes(item.row.status) || waiting(item))) return 'scheduled';
     // Монтаж согласован: карточка с роликом одобрена для текущей версии содержимого и ждёт выхода.
     if (live.some((item) => item.video && item.approved)) return 'ready';
     return '';
