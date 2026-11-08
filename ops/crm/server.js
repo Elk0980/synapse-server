@@ -646,6 +646,9 @@ const watchdogTimer=setInterval(()=>{
 watchdogTimer.unref();
 const taskDispatch = createTaskDispatch(db,{onAccept:taskCoordination.acceptDispatch});
 const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
+// №194: зависшие в очереди запуски передаются запасному без ожидания чужого запроса.
+const agentQueueTimer=setInterval(()=>{try{agentLaunch.sweep();}catch{console.error('[crm] agent queue sweep unavailable');}},60000);
+agentQueueTimer.unref();
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
 // specs/217: метки рилсов в подписях (по умолчанию выключены) и отчёт «рилс → заявки → продажи → выручка».
