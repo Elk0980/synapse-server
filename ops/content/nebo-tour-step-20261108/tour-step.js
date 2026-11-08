@@ -121,6 +121,32 @@
     scrollToY(target, dir);
   }
 
+  // ── Загрузка и автостарт (Влад 08.11 16:35) ──────────────────────────────────────
+  // Пока сайт грузится — поверх идёт бесконечный цикл облаков (#nebo-loader из index.html).
+  // Как только видео экскурсии готово — облака плавно растворяются и видео само идёт
+  // до первого блока, без касаний. Дальше — свайпами, как обычно.
+  var userActed = false;
+  ['wheel', 'touchstart', 'keydown'].forEach(function (t) {
+    window.addEventListener(t, function () { userActed = true; }, { capture: true, passive: true });
+  });
+  function hideLoader() {
+    var l = document.getElementById('nebo-loader'); if (!l || l.__gone) return; l.__gone = true;
+    l.style.opacity = '0';
+    setTimeout(function () { l.remove(); }, 900);
+  }
+  function autostart() {
+    hideLoader();
+    if (reduce || userActed || window.scrollY > 10 || anim) return;
+    setTimeout(function () { if (!userActed && window.scrollY <= 10 && !anim) step(1); }, 700);
+  }
+  (function waitReady(t0) {
+    var v = video(), f = film();
+    var ready = v && f && v.readyState >= 3 && isFinite(v.duration) && v.duration > 0 && document.readyState !== 'loading';
+    if (ready) return autostart();
+    if (performance.now() - t0 > 25000) return hideLoader();   // сеть совсем плохая — убираем облака без автостарта
+    setTimeout(function () { waitReady(t0); }, 150);
+  })(performance.now());
+
   // Колесо и тачпад: один жест = один шаг. Инерция тачпада гасится паузой между событиями.
   window.addEventListener('wheel', function (e) {
     var y = anim ? anim.to : window.scrollY;
