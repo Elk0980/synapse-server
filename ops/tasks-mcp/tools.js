@@ -62,12 +62,12 @@ const TOOLS = [
     function:z.string().max(500).optional(), chat:z.string().max(500).optional(), state:states,
     last_event:z.string().trim().min(1).max(2000)
   }],
-  ['agent_launch', 'Поставить локальную работу с кодом в dispatch для codex-code. Оркестратор обязан явно задать code_only:true и неизменяемую область allowed_paths. Только Owner и разрешённый проект; production/merge/deploy не разрешаются. Повтор client_ref не создаёт дубль.', {
-    task_id:id,code_only:z.literal(true),allowed_paths:z.array(z.string().min(1).max(500)).min(1).max(100).refine(value => value.every(entry => {
+  ['agent_launch', 'Поставить работу локальному обработчику. codex-code: явный code_only:true и неизменяемая область allowed_paths, PR без merge/deploy. codex-review-merge: только pr_number — независимое ревью PR Claude, «КОД ПРИНЯТ» и обычный merge при зелёном CI, без меток и deploy. Только Owner и разрешённый проект. Запуск, не забранный за 10 минут, передаётся запасному исполнителю. Повтор client_ref не создаёт дубль.', {
+    task_id:id,code_only:z.literal(true).optional(),pr_number:z.number().int().min(1).max(1000000).optional(),allowed_paths:z.array(z.string().min(1).max(500)).min(1).max(100).refine(value => value.every(entry => {
       if (entry !== entry.trim() || entry.startsWith('/') || /[\x00-\x1f\x7f\\:*?\[\]{}]/.test(entry)) return false;
       return (entry.endsWith('/') ? entry.slice(0,-1) : entry).split('/').every(part => part && part !== '.' && part !== '..');
-    }),'Нужны точные пути или префиксы каталогов без wildcard и выхода из репозитория'),
-    executor_profile:z.literal('codex-code').optional(),client_ref:short.optional()
+    }),'Нужны точные пути или префиксы каталогов без wildcard и выхода из репозитория').optional(),
+    executor_profile:z.enum(['codex-code','codex-review-merge']).optional(),client_ref:short.optional()
   }],
   ['agent_status', 'Прочитать состояние запуска, session_id и очищенный хвост технического журнала. Истёкшая аренда не доказывает остановку процесса.', {
     run_id:z.uuid()
@@ -81,12 +81,14 @@ const TOOLS = [
   ['agent_worker_claim', 'Локальному обработчику Owner: атомарно забрать локальный код из dispatch; максимум три живых или неизвестных процесса. Не перезапускает истёкшую аренду.', {
     worker_id:z.uuid()
   }],
-  ['agent_worker_update', 'Локальному обработчику Owner: heartbeat, контекст и подтверждение завершения процесса. Сырые команды, секреты и клиентские данные в журнал не передавать.', {
-    run_id:z.uuid(),worker_id:z.uuid(),lease_token:z.uuid(),
-    event:z.enum(['heartbeat','started','complete','failed','stopped']),session_id:z.uuid().optional(),
+  ['agent_worker_update', 'Локальному обработчику Owner: heartbeat, контекст и подтверждение завершения процесса; event=presence без run_id — сигнал «обработчик в сети» раз в минуту. Сырые команды, секреты и клиентские данные в журнал не передавать.', {
+    run_id:z.uuid().optional(),worker_id:z.uuid(),lease_token:z.uuid().optional(),
+    event:z.enum(['heartbeat','started','complete','failed','stopped','presence']),session_id:z.uuid().optional(),
+    platform:z.string().max(40).optional(),active_runs:z.number().int().min(0).max(100).optional(),
     log_tail:z.string().max(8000).optional(),summary:z.string().max(4000).optional(),
     exit_code:z.number().int().min(-2147483648).max(2147483647).optional()
   }],
+  ['agent_workers_status', 'Показать, в сети ли локальный обработчик Codex (последний сигнал), запуски в очереди и передачи запасному за сутки.', {}],
   ['session_start', 'Начать рабочую сессию: получить обязательные правила, карту документов под запрос и свои задачи.', {
     agent:short, kind:kinds, request:z.string().trim().min(1).max(4000)
   }],
@@ -111,6 +113,22 @@ const TOOLS = [
     task_id:id.optional(), supersedes_id:id.optional()
   }]
 ].map(([name, description, shape]) => ({name, description, inputSchema:z.strictObject(shape)}));
+
+// №194: у запуска ровно один вид разрешения — область кода либо номер PR для ревью.
+const launchTool = TOOLS.find(tool => tool.name === 'agent_launch');
+launchTool.inputSchema = launchTool.inputSchema.superRefine((value, context) => {
+  const review = value.executor_profile === 'codex-review-merge';
+  const valid = review ? value.pr_number !== undefined && value.code_only === undefined && value.allowed_paths === undefined
+    : value.code_only === true && value.allowed_paths !== undefined && value.pr_number === undefined;
+  if (!valid) context.addIssue({code:'custom', message:review ? 'Ревью требует только pr_number' : 'Нужны code_only:true и allowed_paths'});
+});
+const updateTool = TOOLS.find(tool => tool.name === 'agent_worker_update');
+updateTool.inputSchema = updateTool.inputSchema.superRefine((value, context) => {
+  const presence = value.event === 'presence';
+  const valid = presence ? value.run_id === undefined && value.lease_token === undefined
+    : value.run_id !== undefined && value.lease_token !== undefined && value.platform === undefined && value.active_runs === undefined;
+  if (!valid) context.addIssue({code:'custom', message:presence ? 'Сигнал присутствия без run_id и lease_token' : 'Нужны run_id и lease_token'});
+});
 
 const SESSION_RULES = [
   'До выполнения запроса прочитайте конституцию, DIRECTION и документы выданной карты. Канон правит постановщик.',
