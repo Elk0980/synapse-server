@@ -42,7 +42,7 @@ a{color:inherit}
 .story{position:relative}
 .film{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden}
 .film .fr{position:absolute;inset:0;opacity:0;will-change:opacity,transform}
-.film .fr img{width:100%;height:100%;object-fit:cover}
+.film .fr img,.film .fr video{width:100%;height:100%;object-fit:cover}
 .film .breath{position:absolute;inset:0;animation:breath 9s ease-in-out infinite alternate}
 @keyframes breath{from{transform:scale(1)}to{transform:scale(1.035)}}
 .film::after{content:"";position:absolute;inset:0;background:
@@ -94,8 +94,8 @@ section.block{position:relative;padding:clamp(70px,10vw,130px) clamp(16px,5vw,64
 .cat{padding-bottom:clamp(60px,8vw,100px)}
 .showroom{position:relative;margin-top:36px;border-radius:24px;overflow:hidden;border:1px solid var(--line);background:#000;aspect-ratio:1024/575;perspective:1400px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .scene{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.7,0,.25,1),opacity .9s,filter .9s}
-.scene img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .28s linear}
-.scene img.on{opacity:1}
+.scene img,.scene video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .28s linear}
+.scene img.on,.scene video.on{opacity:1}
 .scene.out-l{transform:translateX(-62%) rotateY(38deg) scale(.82);opacity:0;filter:blur(2px)}
 .scene.out-r{transform:translateX(62%) rotateY(-38deg) scale(.82);opacity:0;filter:blur(2px)}
 .scene.in-r{transform:translateX(62%) rotateY(-38deg) scale(.82);opacity:0;transition:none}
@@ -382,9 +382,14 @@ const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
 const N = 8, film = document.getElementById('film'), frames = [];
 for (let i = 1; i <= N; i++) {
   const d = document.createElement('div'); d.className = 'fr';
-  const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = '';
-  if (i > 2) im.loading = 'lazy';
-  d.append(im); film.append(d); frames.push(d);
+  if (i <= 2) {
+    const v = document.createElement('video'); v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute('playsinline', '');
+    v.preload = i === 1 ? 'auto' : 'metadata'; v.poster = 'm/v/story' + i + '.jpg'; v.src = 'm/v/story' + i + '.mp4';
+    d.append(v);
+  } else {
+    const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; im.loading = 'lazy'; d.append(im);
+  }
+  film.append(d); frames.push(d);
 }
 const chapters = [...document.querySelectorAll('.ch')];
 const rail = document.getElementById('rail');
@@ -410,6 +415,8 @@ function renderStory() {
     if (k === i) { o = 1; s = 1 + 0.06 * f + (RM ? 0 : 0.08 * e); x = -1.2 * f; }
     else if (k === i + 1) { o = e; s = 1.12 - 0.12 * e; x = 2 * (1 - e); }
     fr.style.opacity = o;
+    const vid = fr.querySelector('video');
+    if (vid) { const want = o > 0.02 && r.bottom > 0 && !RM; if (want && vid.paused) vid.play().catch(() => {}); else if (!want && !vid.paused) vid.pause(); }
     if (!RM) fr.style.transform = `scale(${s.toFixed(4)}) translateX(${x.toFixed(2)}%)`;
   });
   const cur = Math.round(p);
@@ -429,7 +436,7 @@ renderStory();
 
 /* ---------- CATALOG SHOWROOM ---------- */
 const CARS = [
-  {id:'suv', k:'Внедорожник · горы', t:'Рамный внедорожник', d:'Полный привод, понижающая передача, клиренс для бездорожья. Выпрыгивает из-за холма — и встаёт на подиум.', p:4590000, start:2},
+  {id:'suv', k:'Внедорожник · горы', t:'Рамный внедорожник', d:'Полный привод, понижающая передача, клиренс для бездорожья. Выпрыгивает из-за холма — и встаёт на подиум.', p:4590000, start:2, video:'m/v/suv.mp4'},
   {id:'crossover', k:'Кроссовер · равнина', t:'Семейный кроссовер', d:'Большой салон, полный привод, богатая комплектация. Самый популярный класс у наших клиентов.', p:3290000, start:1},
   {id:'compact', k:'Компакт · лес', t:'Городской кроссовер', d:'Экономичный, манёвренный, с высокой посадкой. Выезжает из соснового леса.', p:2190000, start:1},
   {id:'ev', k:'Электро · город', t:'Электролифтбек', d:'Запас хода для города и трассы, быстрая зарядка, тишина в салоне. Выезжает с ночного проспекта.', p:3750000, start:1},
@@ -448,10 +455,12 @@ const scenes = CARS.map(c => {
     const im = new Image(); im.alt = n >= 5 ? c.t + ' на подиуме' : ''; im.decoding = 'async';
     im.dataset.src = 'm/cat/' + c.id + '/' + n + '.jpg'; s.append(im); imgs.push(im);
   }
+  let vid = null;
+  if (c.video) { vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.setAttribute('playsinline', ''); vid.preload = 'auto'; vid.poster = c.video.replace('.mp4', '.jpg'); vid.dataset.src = c.video; s.append(vid); }
   room.prepend(s);
-  return {el: s, imgs};
+  return {el: s, imgs, vid};
 });
-function load(i) { scenes[i].imgs.forEach(im => { if (im && !im.src) im.src = im.dataset.src; }); }
+function load(i) { scenes[i].imgs.forEach(im => { if (im && !im.src) im.src = im.dataset.src; }); const v = scenes[i].vid; if (v && !v.src) v.src = v.dataset.src; }
 CARS.forEach((c, i) => { const b = document.createElement('button'); b.textContent = c.t; b.onclick = () => go(i); tabs.append(b); });
 for (let k = 0; k < 5; k++) { const d = document.createElement('i'); rot.append(d); }
 rot.insertAdjacentHTML('afterbegin', '<span>360°</span>');
@@ -467,6 +476,14 @@ function clear() { timers.forEach(clearTimeout); timers = []; clearInterval(auto
 function arrive(i) {
   const c = CARS[i]; const seq = [];
   for (let n = c.start; n <= 5; n++) seq.push(n);
+  const v = scenes[i].vid;
+  if (v) {
+    if (RM) { v.classList.remove('on'); show(i, 5); view = 0; return; }
+    show(i, 0); v.classList.add('on'); v.currentTime = 0;
+    v.onended = () => { if (cur !== i) return; show(i, 5); timers.push(setTimeout(() => v.classList.remove('on'), 320)); view = 0; timers.push(setTimeout(startAuto, 1600)); };
+    v.play().catch(() => { v.onended(); });
+    return;
+  }
   if (RM) { show(i, 5); view = 0; startAuto(); return; }
   seq.forEach((n, k) => timers.push(setTimeout(() => show(i, n), k * 520)));
   timers.push(setTimeout(() => { view = 0; startAuto(); }, seq.length * 520 + 1400));
@@ -485,7 +502,9 @@ function go(i, dir) {
   const c = CARS[i];
   info.k.textContent = c.k; info.t.textContent = c.t; info.d.textContent = c.d; info.p.textContent = 'от ' + fmt(c.p);
   [...tabs.children].forEach((b, k) => b.classList.toggle('on', k === i));
-  show(i, c.start);
+  if (scenes[i].vid) { show(i, 0); scenes[i].vid.classList.add('on'); scenes[i].vid.pause(); try { scenes[i].vid.currentTime = 0; } catch (e) {} }
+  else show(i, c.start);
+  if (prev && cur >= 0 && scenes[cur].vid) scenes[cur].vid.pause();
   next.hidden = false; next.className = 'scene ' + (dir > 0 ? 'in-r' : 'in-l');
   void next.offsetWidth;
   busy = true;
