@@ -69,6 +69,28 @@
    const from=y,target=pos[to];
    if(reduce){jump(target);lockUntil=now()+LOCK_MS;return true;}
    const ms=compact()?750:Math.min(Math.max(Math.abs(target-from)/Math.max(hero.offsetHeight,1)*videoSeconds()*1000/SPEED,MIN_MS),MAX_MS);
+   // Forward on desktop: really PLAY the hero video (all 60 frames per second) and let the
+   // page scroll follow it. Seeking frame by frame on every scroll step shows only a few frames.
+   const v=doc.getElementById('hero-video');
+   const playable=dir>0&&!compact()&&v&&Number.isFinite(v.duration)&&v.duration>0&&v.readyState>=2&&v.style.opacity!=='0';
+   if(playable){
+    const top=heroTop(),h=hero.offsetHeight,span=Math.max(v.duration-0.04,0.01);
+    const tEnd=Math.min(((target-top)/h)*span,span);
+    anim={to};win.__alviAutoplay=true;
+    v.playbackRate=SPEED;
+    const done=()=>{v.pause();v.playbackRate=1;try{v.currentTime=tEnd;}catch(_e){}jump(target);win.__alviAutoplay=false;anim=null;lockUntil=now()+LOCK_MS;};
+    const p=v.play();if(p&&p.catch)p.catch(()=>{});
+    const started=now();
+    const tick=()=>{
+     if(!anim)return;
+     const t=v.currentTime;
+     if(t>=tEnd-0.02||v.ended||now()-started>ms+3000)return done();
+     jump(Math.round(top+h*(t/span)));
+     win.requestAnimationFrame(tick);
+    };
+    win.requestAnimationFrame(tick);
+    return true;
+   }
    const t0=now();
    anim={to};
    const tick=()=>{

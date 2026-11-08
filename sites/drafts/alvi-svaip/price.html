@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>if (window.parent !== window && new URLSearchParams(location.search).get('embedded') === '1') document.documentElement.classList.add('alvi-price-embedded');</script>
+  <title>Прайс ALVI SPA — Иркутск, Депутатская, 71а</title>
+  <meta name="description" content="Полный прайс SPA-салона ALVI в Иркутске: SPA-программы для одного и для двоих, программы для лица, ручные массажи, солярий, сертификаты. Депутатская, 71а.">
+  <link rel="canonical" href="https://spaalvi-38.ru/price.html">
+  <meta property="og:url" content="https://spaalvi-38.ru/price.html">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png" media="(prefers-color-scheme: light)">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-dark-32.png" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#22301f">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="actions.css?v=20260910-type-spacing">
+
+  <style>
+    :root {
+      --bg: #16221a; --ink: #fffdf8; --ink-dim: rgba(255, 253, 248, 0.8); --ink-faint: rgba(255, 253, 248, 0.56);
+      --gold: #e3d4a7; --gold-soft: #b39a68; --green-deep: #e3d4a7;
+      --line: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; color: var(--ink); background: var(--bg);
+      font-family: "Lora", Georgia, serif; font-size: 1rem; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+
+    .page-water { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .page-water__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .page-water__veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 18, 13, 0.6) 0%, rgba(10, 18, 13, 0.68) 100%); }
+
+    .price-header {
+      position: relative; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1.25rem, 4vw, 3rem);
+      background: rgba(9, 17, 12, 0.55);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .price-header img { display: block; height: 3.2rem; width: auto; }
+    .price-header__back {
+      display: inline-flex; align-items: center; min-height: 2.6rem; padding: 0.55rem 1rem;
+      font-size: 0.78rem; letter-spacing: 0.09em; text-transform: uppercase; text-decoration: none;
+      border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+    }
+    .price-header__back:hover { border-color: rgba(255, 255, 255, 0.6); background: rgba(255, 253, 248, 0.9); color: #12211a; }
+
+    .price-intro {
+      position: relative; z-index: 2;
+      padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 3rem) 0;
+    }
+    .price-intro h1 {
+      margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400;
+      font-size: clamp(2rem, 4.5vw, 3.4rem); line-height: 1.12; text-wrap: balance;
+    }
+    .price-intro p { margin: 0.9rem 0 0; max-width: 44rem; color: var(--ink-dim); }
+
+    .price-layout {
+      position: relative; z-index: 2;
+      display: grid; grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+      gap: clamp(1.5rem, 3vw, 3rem); align-items: start;
+      padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 4vw, 3rem) clamp(4rem, 8vw, 6rem);
+    }
+
+    .pnav {
+      position: sticky; top: 1.25rem;
+      max-height: calc(100vh - 2.5rem); overflow: auto; overscroll-behavior: contain;
+      padding: 1.1rem 1rem; border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.6);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    .pnav ul { margin: 0; padding: 0; list-style: none; }
+    .pnav > ul > li + li { margin-top: 0.85rem; }
+    .pnav__top {
+      display: block; font-family: "Lora", Georgia, serif; font-size: 1.05rem; line-height: 1.3;
+      text-decoration: none; color: var(--ink);
+    }
+    .pnav__top:hover, .pnav__top.is-active { color: var(--gold); }
+    .pnav__sub { display: none; margin: 0.45rem 0 0; padding-left: 0.85rem; border-left: 1px solid var(--line); }
+    .pnav li.is-open > .pnav__sub { display: block; }
+    .pnav li.has-sub > .pnav__top { position: relative; padding-right: 1.4rem; }
+    .pnav li.has-sub > .pnav__top::after {
+      content: ""; position: absolute; right: 0.35rem; top: 0.45em;
+      width: 0.45em; height: 0.45em; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg); transition: transform 200ms ease; opacity: 0.7;
+    }
+    .pnav li.has-sub.is-open > .pnav__top::after { transform: rotate(225deg); top: 0.6em; }
+    .pnav__sub li + li { margin-top: 0.3rem; }
+    .pnav__sub a {
+      display: block; padding: 0.12rem 0; color: var(--ink-dim);
+      font-size: 0.86rem; line-height: 1.4; text-decoration: none;
+    }
+    .pnav__sub a:hover, .pnav__sub a.is-active { color: var(--gold); }
+
+    .pnav-toggle { display: none; }
+
+    .price-layout > * { min-width: 0; }
+    .price-content { min-width: 0; }
+    .ps { min-width: 0; scroll-margin-top: 1.5rem; }
+    .pc { min-width: 0; }
+    .ps + .ps { margin-top: clamp(2.5rem, 5vw, 4rem); }
+
+    /* Анимированные смайлики заголовков: конверт у сертификатов, подарок у акций */
+    .ps__emoji { display: inline-block; transform-origin: 50% 80%; will-change: transform; }
+    .ps__emoji--cert { animation: emojiWave 3.2s ease-in-out infinite; }
+    .ps__emoji--promo { animation: emojiGift 2.6s ease-in-out infinite; }
+    @keyframes emojiWave { 0%, 100% { transform: rotate(-8deg) translateY(0); } 25% { transform: rotate(8deg) translateY(-2px); } 50% { transform: rotate(-6deg) translateY(0); } 75% { transform: rotate(6deg) translateY(-1px); } }
+    @keyframes emojiGift { 0%, 55%, 100% { transform: translateY(0) scale(1); } 15% { transform: translateY(-6px) scale(1.08) rotate(-6deg); } 30% { transform: translateY(0) scale(1) rotate(4deg); } 42% { transform: translateY(-3px) scale(1.04) rotate(-2deg); } }
+    @media (prefers-reduced-motion: reduce) { .ps__emoji { animation: none; } }
+    .ps__title {
+      margin: 0 0 1.4rem; font-family: "Lora", Georgia, serif; font-weight: 400;
+      font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.2;
+    }
+    .cert-photo { margin: 0 0 1.4rem; }
+    .cert-photo img { display: block; width: min(100%, 24rem); height: auto; border-radius: 1rem; border: 1px solid var(--line); }
+    @media (min-width: 62rem) {
+      .cert-photo { float: right; margin: 0 0 1rem 1.5rem; }
+      .cert-photo img { width: 17rem; }
+      #s8::after { content: ""; display: block; clear: both; }
+    }
+    .pc { position: relative; }
+    .pc__heading { display: flex; align-items: baseline; gap: 12px; }
+    .pc__badge { flex-shrink: 0; color: var(--gold); font-size: 0.78rem; letter-spacing: 0.04em; }
+    .pt__star { color: var(--gold); margin-right: 0.35rem; }
+    .ps__note { margin: 0 0 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
+
+    .pc {
+      scroll-margin-top: 1.5rem;
+      padding: clamp(1.25rem, 2.4vw, 1.9rem);
+      border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.55);
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .pc + .pc { margin-top: 1rem; }
+    .pc__title {
+      min-width: 0;
+      margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400;
+      font-size: clamp(1.25rem, 2.2vw, 1.65rem); line-height: 1.25;
+    }
+    .pc__list { margin: 0.9rem 0 0; padding-left: 1.1rem; color: var(--ink-dim); }
+    .pc__list li { margin: 0.18rem 0; }
+    .pc__meta {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem 1.5rem;
+      margin: 1.1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--line);
+    }
+    .pc__dur { color: var(--ink-faint); font-size: 0.9rem; }
+    .pc__price { font-family: "Lora", Georgia, serif; font-size: 1.5rem; color: var(--gold); }
+    .pt-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    .pt { width: 100%; border-collapse: collapse; min-width: 30rem; }
+    .pt th, .pt td { padding: 0.85rem clamp(0.85rem, 1.6vw, 1.4rem); text-align: left; }
+    .pt th { color: var(--ink-faint); font-size: 0.74rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+    .pt tbody tr + tr td { border-top: 1px solid var(--line); }
+    .pt__price { white-space: nowrap; font-weight: 600; color: var(--gold); }
+
+    .cert { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+    .cert__card {
+      padding: clamp(1.25rem, 2.4vw, 1.9rem); border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .cert__card p { margin: 0.7rem 0 0; color: var(--ink-dim); }
+
+    .site-footer {
+      position: relative; z-index: 2;
+      padding: clamp(2.5rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3rem);
+      color: rgba(255, 253, 248, 0.78); background: #1b2a1e;
+      font-size: 0.86rem; line-height: 1.7;
+    }
+    .site-footer__inner { width: min(100%, 75rem); margin-inline: auto; }
+    .site-footer p { margin: 0; }
+    .site-footer__brand { font-family: "Lora", Georgia, serif; font-size: 1.3rem; color: #fffdf8; margin-bottom: 0.6rem; }
+    .site-footer__links { margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; }
+    .site-footer__links a { color: rgba(255, 253, 248, 0.9); }
+
+    .floating-cta {
+      position: fixed; right: clamp(0.85rem, 2.2vw, 2.4rem); bottom: clamp(0.85rem, 2.2vw, 2rem);
+      z-index: 60; display: grid; gap: 0.4rem; justify-items: center; pointer-events: none;
+    }
+    .floating-cta__row { display: flex; gap: 0.55rem; pointer-events: auto; }
+    .floating-cta { transition: opacity 300ms ease, transform 300ms ease; }
+    .floating-cta.is-hidden { opacity: 0; visibility: hidden; transform: translateY(0.75rem); }
+    .floating-cta.is-hidden .floating-cta__row { pointer-events: none; }
+    .floating-cta__button {
+      position: relative; display: inline-flex; align-items: center; justify-content: center;
+      overflow: hidden; min-width: 11.5rem; min-height: 2.9rem; padding: 0.75rem 1.1rem;
+      color: rgba(255, 253, 248, 0.96); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.035em;
+      text-align: center; text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.32); border-radius: 999px;
+      background: linear-gradient(135deg, rgba(46, 70, 51, 0.72) 0%, rgba(18, 30, 22, 0.66) 45%, rgba(46, 70, 51, 0.72) 100%);
+      backdrop-filter: blur(12px) saturate(140%); -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 12px 32px rgba(4, 12, 8, 0.4);
+    }
+    .floating-cta__button::after {
+      content: ""; position: absolute; inset: -20% -40%;
+      background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.45) 50%, transparent 62%);
+      transform: translateX(-130%); animation: glassSheen 6s ease-in-out infinite; pointer-events: none;
+    }
+    @keyframes glassSheen { 0%, 70% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+    .floating-cta__note {
+      margin: 0; padding: 0.15rem 0.6rem; color: rgba(255, 253, 248, 0.9); font-size: 0.66rem;
+      letter-spacing: 0.05em; border-radius: 999px; background: rgba(12, 22, 16, 0.55);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none;
+    }
+
+    @media (max-width: 62rem) {
+      .price-layout { grid-template-columns: 1fr; }
+      .pnav { position: static; max-height: none; }
+      .pnav > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.7rem; }
+      .pnav > ul > li + li { margin-top: 0; }
+    }
+
+    @media (max-width: 34rem) {
+      .floating-cta { left: clamp(0.85rem, 2.2vw, 2.4rem); justify-items: stretch; }
+      .floating-cta__row { justify-content: center; }
+      .floating-cta__button { min-width: 0; flex: 1 1 0; padding: 0.7rem 0.6rem; font-size: 0.74rem; }
+      .pc__button { width: 100%; }
+    }
+
+    @media (max-width: 35rem) {
+      .pc__heading { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+      .pc__badge { order: -1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .page-water__video { display: none; }
+      .floating-cta__button::after { animation: none; opacity: 0; }
+    }
+  </style>
+  <link rel="stylesheet" href="mobile.css?v=20260910-type-spacing">
+  <link rel="stylesheet" href="price-mobile-nav.css?v=20260910-type-spacing">
+  <link rel="stylesheet" href="background-water.css?v=20260910-water-recovery">
+  <link rel="stylesheet" href="responsive-foundation.css?v=20260915">
+  <style>
+    html.alvi-price-embedded .price-header { display: none; }
+    .price-page :is(.ps, .pc, .pt tr) { scroll-margin-top: var(--alvi-price-anchor-offset, 24px); }
+    @media (max-width: 56.24rem) {
+      :root:not(.alvi-price-embedded) { --alvi-price-anchor-offset: calc(var(--price-header-height, 4.5rem) + 1rem); }
+    }
+  </style>
+  <script src="mobile-performance.js?v=20260910-water-recovery" defer></script>
+  <script src="background-water.js?v=20260910-water-recovery" defer></script>
+<meta property="og:type" content="website"><meta property="og:title" content="Прайс ALVI SPA — Иркутск, Депутатская, 71а"><meta property="og:description" content="Полный прайс SPA-салона ALVI в Иркутске: SPA-программы для одного и для двоих, программы для лица, ручные массажи, солярий, сертификаты. Депутатская, 71а."><meta property="og:image" content="https://spaalvi-38.ru/img/alvi-poster.png"></head>
+<body class="price-page" data-full-price data-company-code="alvi">
+  <div class="page-water water-surface" aria-hidden="true">
+    <div class="water-surface__poster"></div>
+    <video class="page-water__video water-surface__video" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture poster="img/water-poster.jpg">
+      <source src="img/water-loop.mp4" type="video/mp4">
+      <source src="img/water-loop.webm" type="video/webm">
+    </video>
+    <div class="page-water__veil"></div>
+  </div>
+
+  <header class="price-header">
+    <a href="index.html" aria-label="ALVI SPA — на главную"><img src="img/alvi-logo-full.png" alt="ALVI SPA" width="823" height="823"></a>
+    <a class="price-header__back" href="index.html">На главную</a>
+  </header>
+
+  <div class="price-intro">
+    <h1>Прайс ALVI</h1>
+    <p>Полный список программ и услуг салона на Депутатской, 71а. Цены за программу целиком, время — общая длительность визита. Есть противопоказания, проконсультируйтесь со специалистом.</p>
+  </div>
+
+  <div class="price-layout">
+    <nav class="pnav" aria-label="Разделы прайса">
+      <ul>
+        <li><a class="pnav__top" href="#s8">💌 Сертификаты</a></li>
+        <li><a class="pnav__top" href="#promo">🎁 Акции</a></li>
+        <li class="has-sub"><a class="pnav__top" href="#s1">SPA-программы для одного</a>
+          <ul class="pnav__sub">
+            <li><a href="#s1-1">Программа «Душевное расслабление»</a></li>
+            <li><a href="#s1-2">Программа «Здоровая спина»</a></li>
+            <li><a href="#s1-3">Программа «Идеальное тело»</a></li>
+            <li><a href="#s1-4">Программа «Медовое наслаждение»</a></li>
+            <li><a href="#s1-5">Программа «Майами с камнями»</a></li>
+            <li><a href="#s1-6">Программа «Цитрусовый рай»</a></li>
+            <li><a href="#s1-7">Программа «Ароматное погружение»</a></li>
+            <li><a href="#s1-8">Программа «Для беременных»</a></li>
+            <li><a href="#s1-9">Программа «Релакс»</a></li>
+            <li><a href="#s1-10">Программа «Роскошное преображение»</a></li>
+            <li><a href="#s1-11">Программа для мужчин «Антистресс»</a></li>
+          </ul></li>
+        <li class="has-sub"><a class="pnav__top" href="#s2">SPA-программы для двоих</a>
+          <ul class="pnav__sub">
+            <li><a href="#s2-1">«Успокаивающая, расслабляющая»</a></li>
+            <li><a href="#s2-2">«Обновление»</a></li>
+            <li><a href="#s2-3">«Спа-день»</a></li>
+            <li><a href="#s2-4">«Райский отдых»</a></li>
+            <li><a href="#s2-5">«Релакс-мини»</a></li>
+            <li><a href="#s2-6">«Релакс»</a></li>
+          </ul></li>
+        <li class="has-sub"><a class="pnav__top" href="#s3">SPA-программы для лица</a>
+          <ul class="pnav__sub">
+            <li><a href="#s3-1">Программа «Свежий взгляд»</a></li>
+            <li><a href="#s3-2">Программа «Сияние»</a></li>
+            <li><a href="#s3-3">Программа «Питание»</a></li>
+          </ul></li>
+        <li><a class="pnav__top" href="#s4">Ручные массажи тела</a></li>
+        <li><a class="pnav__top" href="#s5">Ручные массажи лица, шеи и зоны декольте</a></li>
+        <li><a class="pnav__top" href="#s6">Отдельные услуги</a></li>
+        <li><a class="pnav__top" href="#s7">Солярий</a></li>
+      </ul>
+    </nav>
+
+    <div class="price-content">
+      <section class="ps" id="s8">
+        <h2 class="ps__title"><span class="ps__emoji ps__emoji--cert" aria-hidden="true">💌</span> Сертификаты</h2>
+        <div class="cert-photo">
+          <img src="img/certificates.jpg" alt="Подарочные сертификаты ALVI SPA" width="403" height="691" loading="lazy">
+        </div>
+        <div class="cert">
+          <article class="cert__card">
+            <h3 class="pc__title">Электронный</h3>
+            <p>Приходит в мессенджер сразу после оплаты. Дарить можно в тот же день, из любого города.</p>
+          </article>
+          <article class="cert__card">
+            <h3 class="pc__title">Бумажный</h3>
+            <p>В конверте с лентой. По Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.</p>
+          </article>
+        </div>
+        <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="index.html#contacts">Оформить сертификат</a>
+        </div>
+      </section>
+
+      <section class="ps" id="promo" data-cat="promo">
+        <h2 class="ps__title"><span class="ps__emoji ps__emoji--promo" aria-hidden="true">🎁</span> Акции</h2>
+        <p class="ps__note">Действующие акции и специальные предложения меняются по сезону — уточните у администратора, что актуально сейчас.</p>
+        <div class="pc__actions pc__actions--section">
+          <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s1">
+        <h2 class="ps__title">SPA-программы для одного</h2>
+        <article class="pc" id="s1-1">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Душевное расслабление»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Марципан»</li>
+            <li>Обертывание «Шоколад»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">5 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-2">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Здоровая спина»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Фитобочка с лечебными травами</li>
+            <li>Обертывание «Лечебно-грязевое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Классический массаж спины и ШВЗ</li>
+            <li>Массаж тела с применением лечебных банок</li>
+            <li>Нанесение крема с прогревающим эффектом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">5 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-3">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Идеальное тело»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Антицеллюлитное»</li>
+            <li>Обертывание «Водорослевое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Антицеллюлитный массаж тела</li>
+            <li>Лимфодренажный массаж тела с использованием вакуумных банок</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 800 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-4">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Медовое наслаждение»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Медовый массаж спины</li>
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Мед с облепихой»</li>
+            <li>Обертывание «Медовое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Нанесение крема с лечебными травами</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 800 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-5">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Майами с камнями»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Кокос»</li>
+            <li>Обертывание «Кофейное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Нейроседативный стоун массаж тела с камнями</li>
+            <li>Расслабляющий массаж головы</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте с теплым маслом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 500 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-6">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Цитрусовый рай»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Цитрусовое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы с апельсиновым аромамаслом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">4 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-7">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Ароматное погружение»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Дикие ягоды»</li>
+            <li>Обертывание «Шоколад»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела с аромамаслами</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте с теплым маслом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 300 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-8">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Для беременных»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Расслабляющий массаж головы</li>
+            <li>Расслабляющий массаж стоп и рук</li>
+            <li>Массаж лица, шеи и зоны декольте</li>
+            <li>Альгинатная маска</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">4 800 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-9">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Релакс»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 30 мин</span><span class="pc__price">3 500 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-10">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Роскошное преображение»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Марципан»</li>
+            <li>Обертывание «Винное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж всего тела и головы</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте</li>
+            <li>Альгинатная маска</li>
+            <li>Нанесение уходового крема</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">8 900 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-11">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа для мужчин «Антистресс»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Хвойное»</li>
+            <li>Обертывание «Кофейное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж всего тела и головы</li>
+            <li>Расслабляющий массаж лица</li>
+            <li>Успокаивающая маска для лица</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">8 900 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="ps" id="s2">
+        <h2 class="ps__title">SPA-программы для двоих</h2>
+        <article class="pc" id="s2-1">
+          <div class="pc__heading">
+            <h3 class="pc__title">«Успокаивающая, расслабляющая»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Марципан»</li>
+            <li>Обертывание «Шоколад»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">10 900 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-2">
+          <div class="pc__heading">
+            <h3 class="pc__title">«Обновление»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Хвойное»</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">8 900 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-3">
+          <div class="pc__heading">
+            <h3 class="pc__title">«Спа-день»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Дикие ягоды»</li>
+            <li>Обертывание «Кофейное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Расслабляющий массаж лица</li>
+            <li>Питательная маска для лица</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">13 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-4">
+          <div class="pc__heading">
+            <h3 class="pc__title">«Райский отдых»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Ягодный джем»</li>
+            <li>Обертывание «Винное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж всего тела и головы</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте</li>
+            <li>Альгинатная маска</li>
+            <li>Нанесение уходового крема</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">17 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-5">
+          <div class="pc__heading">
+            <h3 class="pc__title">«Релакс-мини»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час</span><span class="pc__price">4 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-6">
+          <div class="pc__heading">
+            <h3 class="pc__title">«Релакс»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 30 мин</span><span class="pc__price">6 900 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="ps" id="s3">
+        <h2 class="ps__title">SPA-программы для лица</h2>
+        <article class="pc" id="s3-1">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Свежий взгляд»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Демакияж (молочко для очищения + патчи)</li>
+            <li>Пенка-мусс для лица, шеи и зоны декольте</li>
+            <li>Классический массаж лица, шеи и зоны декольте с теплым маслом</li>
+            <li>Альгинатная маска</li>
+            <li>Нанесение крема по типу кожи</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 20 мин</span><span class="pc__price">3 500 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s3-2">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Сияние»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Очищение и тонизирование лица</li>
+            <li>Лимфодренажный массаж лица, шеи и зоны декольте</li>
+            <li>Водорослевая маска</li>
+            <li>Нанесение крема по типу кожи</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 10 мин</span><span class="pc__price">2 900 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s3-3">
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Питание»</h3>
+          </div>
+          <ul class="pc__list">
+            <li>Демакияж (молочко для очищения + патчи)</li>
+            <li>Пенка-мусс для лица, шеи и зоны декольте</li>
+            <li>Медовый массаж лица, шеи и зоны декольте</li>
+            <li>Йогуртовая маска</li>
+            <li>Нанесение крема по типу кожи</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 10 мин</span><span class="pc__price">3 600 ₽</span></p>
+          <div class="pc__actions">
+            <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="ps" id="s4">
+        <h2 class="ps__title">Ручные массажи тела</h2>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Длительность</th><th>Цена</th></tr></thead>
+            <tbody>
+            <tr id="s4-1"><td>Массаж на двоих</td><td data-label="Длительность">60 мин / 90 мин</td><td class="pt__price" data-label="Цена">5 600 / 7 500 ₽</td></tr>
+            <tr id="s4-2"><td>Классический массаж спины и ног</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">2 800 ₽</td></tr>
+            <tr id="s4-3"><td>Расслабляющий массаж тела</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">2 800 ₽</td></tr>
+            <tr id="s4-4"><td>Oil массаж с маслом (на выбор)</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">3 000 ₽</td></tr>
+            <tr id="s4-5"><td>Общий массаж всего тела</td><td data-label="Длительность">90 мин</td><td class="pt__price" data-label="Цена">3 800 ₽</td></tr>
+            <tr id="s4-6"><td>Массаж головы + шея</td><td data-label="Длительность">20 мин</td><td class="pt__price" data-label="Цена">650 ₽</td></tr>
+            <tr id="s4-7"><td>Массаж ног и стоп (до колен)</td><td data-label="Длительность">30 мин</td><td class="pt__price" data-label="Цена">1 300 ₽</td></tr>
+            <tr id="s4-8"><td>Массаж рук</td><td data-label="Длительность">15 мин</td><td class="pt__price" data-label="Цена">650 ₽</td></tr>
+            <tr id="s4-9"><td>Массаж в 4 руки</td><td data-label="Длительность">60 мин / 90 мин</td><td class="pt__price" data-label="Цена">5 500 / 7 500 ₽</td></tr>
+            <tr id="s4-10"><td>Миофасциальный массаж всего тела с акцентом на проблемные зоны</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">3 400 ₽</td></tr>
+            <tr id="s4-11"><td>Медовый массаж</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">3 700 ₽</td></tr>
+            <tr id="s4-12"><td>Массаж спины и ШВЗ</td><td data-label="Длительность">40 мин / 60 мин</td><td class="pt__price" data-label="Цена">1 900 / 2 600 ₽</td></tr>
+            <tr id="s4-13"><td>Лимфодренажный массаж на всё тело + протокол лимфатических узлов</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">2 800 ₽</td></tr>
+            <tr id="s4-14"><td>Испанский массаж</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">2 700 ₽</td></tr>
+            <tr id="s4-15"><td>Массаж для беременных</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">3 200 ₽</td></tr>
+            <tr id="s4-16"><td>Спортивный массаж по зонам</td><td data-label="Длительность">30 мин / 60 мин</td><td class="pt__price" data-label="Цена">2 500 / 4 800 ₽</td></tr>
+            <tr id="s4-17"><td>«Бразильская попа»</td><td data-label="Длительность">30 мин</td><td class="pt__price" data-label="Цена">2 300 ₽</td></tr>
+            <tr id="s4-18"><td>Нейроседативный массаж всего тела и головы</td><td data-label="Длительность">90 мин</td><td class="pt__price" data-label="Цена">4 300 ₽</td></tr>
+            <tr id="s4-19"><td>Нейроседативный массаж камнями</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">3 200 ₽</td></tr>
+            <tr id="s4-20"><td>Антицеллюлитный массаж по зонам: бёдра и ягодицы · спина и руки · живот и бока</td><td data-label="Длительность">60 мин</td><td class="pt__price" data-label="Цена">3 900 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s5">
+        <h2 class="ps__title">Ручные массажи лица, шеи и зоны декольте</h2>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Длительность</th><th>Цена</th></tr></thead>
+            <tbody>
+            <tr id="s5-1"><td>Классический</td><td data-label="Длительность">40 мин</td><td class="pt__price" data-label="Цена">2 000 ₽</td></tr>
+            <tr id="s5-2"><td>Медовый</td><td data-label="Длительность">40 мин</td><td class="pt__price" data-label="Цена">2 000 ₽</td></tr>
+            <tr id="s5-3"><td>Нейроседативный массаж с камнями</td><td data-label="Длительность">40 мин</td><td class="pt__price" data-label="Цена">2 000 ₽</td></tr>
+            <tr id="s5-4"><td>Лимфодренажный</td><td data-label="Длительность">40 мин</td><td class="pt__price" data-label="Цена">2 000 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s6">
+        <h2 class="ps__title">Отдельные услуги</h2>
+        <p class="ps__note">Цена указана за одного гостя и за двоих.</p>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Длительность</th><th>Для одного / для двоих</th></tr></thead>
+            <tbody>
+            <tr id="s6-1"><td>Фитобочка</td><td data-label="Длительность">20 мин</td><td class="pt__price" data-label="Для одного / для двоих">1 100 / 1 500 ₽</td></tr>
+            <tr id="s6-2"><td>Обертывание</td><td data-label="Длительность">30 мин</td><td class="pt__price" data-label="Для одного / для двоих">1 100 / 2 000 ₽</td></tr>
+            <tr id="s6-3"><td>Скрабирование</td><td data-label="Длительность">20 мин</td><td class="pt__price" data-label="Для одного / для двоих">1 100 / 2 000 ₽</td></tr>
+            <tr id="s6-4"><td>Баночки с массажем / без массажа</td><td data-label="Длительность">20 мин</td><td class="pt__price" data-label="Для одного / для двоих">400 / 600 ₽</td></tr>
+            <tr id="s6-5"><td>SPA для ног / для рук</td><td data-label="Длительность">20 мин</td><td class="pt__price" data-label="Для одного / для двоих">500 / 900 ₽</td></tr>
+            <tr id="s6-6"><td>Массаж травяными мешочками — лицо</td><td data-label="Длительность">10 мин</td><td class="pt__price" data-label="Для одного / для двоих">500 / 900 ₽</td></tr>
+            <tr id="s6-7"><td>Массаж травяными мешочками — тело</td><td data-label="Длительность">15 мин</td><td class="pt__price" data-label="Для одного / для двоих">600 / 1 100 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s7">
+        <h2 class="ps__title">Солярий</h2>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Стоимость минуты</th><th>Цена</th></tr></thead>
+            <tbody>
+            <tr id="s7-1"><td>Сеанс «Солярий»</td><td data-label="Стоимость минуты"></td><td class="pt__price" data-label="Цена">35 ₽ / мин</td></tr>
+            <tr id="s7-2"><td>Абонемент на 30 минут</td><td data-label="Стоимость минуты">33 ₽ за минуту</td><td class="pt__price" data-label="Цена">990 ₽</td></tr>
+            <tr id="s7-3"><td>Абонемент на 50 минут</td><td data-label="Стоимость минуты">31 ₽ за минуту</td><td class="pt__price" data-label="Цена">1 550 ₽</td></tr>
+            <tr id="s7-4"><td>Абонемент на 100 минут</td><td data-label="Стоимость минуты">29 ₽ за минуту</td><td class="pt__price" data-label="Цена">2 900 ₽</td></tr>
+            <tr id="s7-5"><td>Абонемент на 150 минут</td><td data-label="Стоимость минуты">27 ₽ за минуту</td><td class="pt__price" data-label="Цена">4 050 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a data-company-link="booking" class="pc__button pc__button--main" href="index.html#contacts">Записаться</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <p class="site-footer__brand">ALVI SPA</p>
+      <p>Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
+      <p>Иркутск, Депутатская улица, 71а · ежедневно 09:00–22:00, по предварительной записи · <a href="tel:+79246180555">+7 924 618-05-55</a></p>
+      <p class="site-footer__links"><a href="oferta.html">Публичная оферта</a><a href="politika.html">Политика обработки персональных данных</a><a href="soglasie.html">Согласие на обработку персональных данных</a></p>
+      <p>Есть противопоказания, проконсультируйтесь со специалистом.</p>
+    </div>
+  </footer>
+
+  <div class="floating-cta">
+    <div class="floating-cta__row">
+      <a data-company-link="booking" class="floating-cta__button" href="index.html#contacts">Записаться</a>
+      <a class="floating-cta__button" href="index.html#contacts">Связаться с нами</a>
+    </div>
+    <p class="floating-cta__note">отвечаем в течение 2 минут</p>
+  </div>
+
+  <script src="price-render.js?v=20260918-contact-buttons"></script>
+  <script src="price-navigation.js?v=20260915-price-flow"></script>
+  <script>
+    // Прайс рендерится из data/price.json (редактируется в кабинете Synapse).
+    // Статичная разметка выше — запасной вариант: если данных нет, страница остаётся как есть.
+    async function hydratePrice() {
+      if (!window.AlviPrice) return;
+      const data = await AlviPrice.load(['/api/price', 'data/price.json']);
+      if (!data) return;
+      const nav = document.querySelector('.pnav > ul');
+      const content = document.querySelector('.price-content');
+      if (!nav || !content) return;
+      nav.innerHTML = AlviPrice.renderNav(data);
+      content.innerHTML = AlviPrice.renderSections(data);
+      initNav();
+      document.dispatchEvent(new Event('alvi:price-ready'));
+    }
+    function initNav() {
+      const links = [...document.querySelectorAll('.pnav a')];
+      const targets = links
+        .map(a => ({ a, el: document.querySelector(a.getAttribute('href')) }))
+        .filter(x => x.el);
+      if (!targets.length) return;
+      const items = [...document.querySelectorAll('.pnav > ul > li')];
+      // Подпункты по умолчанию скрыты; раскрываются только кликом по разделу (повторный клик сворачивает)
+      items.forEach(li => {
+        const top = li.querySelector('.pnav__top');
+        if (!top) return;
+        top.addEventListener('click', () => {
+          const wasOpen = li.classList.contains('is-open');
+          items.forEach(x => x.classList.remove('is-open'));
+          if (!wasOpen) li.classList.add('is-open');
+        });
+      });
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          const hit = targets.find(t => t.el === e.target);
+          if (!hit) return;
+          hit.a.classList.toggle('is-active', e.isIntersecting);
+        });
+      }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+      targets.forEach(t => io.observe(t.el));
+    }
+    initNav();
+    (() => {
+      const cta = document.querySelector('.floating-cta');
+      const footer = document.querySelector('.site-footer');
+      if (!cta || !footer) return;
+      const update = () => {
+        // Keep a focused action visible until keyboard focus leaves the group.
+        const hidden = footer.getBoundingClientRect().top < window.innerHeight - 40 && !cta.contains(document.activeElement);
+        cta.classList.toggle('is-hidden', hidden);
+        cta.inert = hidden;
+        cta.setAttribute('aria-hidden', String(hidden));
+      };
+      update();
+      addEventListener('scroll', update, { passive: true });
+      addEventListener('resize', update);
+      cta.addEventListener('focusin', update);
+      cta.addEventListener('focusout', () => setTimeout(update, 0));
+    })();
+    hydratePrice();
+  </script>
+  <script src="price-mobile-nav.js?v=20260915-price-flow"></script>
+  <script src="contact-route.js?v=20260915-price-flow"></script>
+<script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
+</body>
+</html>
