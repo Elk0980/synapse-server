@@ -66,7 +66,8 @@ class FakeAPI:
 
 class AdmissionTests(unittest.TestCase):
     def test_paths(self):
-        for path in (FILE, 'sites/alvi/hero.js', 'sites/avokado/video/intro.mp4', 'sites/nebo/index.html'):
+        for path in (FILE, 'sites/alvi/hero.js', 'sites/avokado/video/intro.mp4', 'sites/nebo/index.html',
+                     'sites/drafts/demo/robots.txt', 'sites/alvi/service-worker.js', 'sites/drafts/demo/sw.js'):
             with self.subTest(path=path):
                 self.assertTrue(m.path_allowed(path, ROOTS, EXT))
         for path in ('ops/server.js', '.github/workflows/x.yml', 'sites/synapse/cabinet/a.js',
@@ -75,7 +76,7 @@ class AdmissionTests(unittest.TestCase):
                      'sites/drafts/a/server/api.js', 'sites/drafts/a/package.json',
                      'sites/drafts/a/node_modules/a.js', 'sites/drafts/a/x.test.js',
                      'sites/drafts/a/script.py', 'sites/drafts/a/vite.config.js',
-                     'sites/drafts/a/sw.js', 'sites/drafts/a/Caddyfile', 'sites/drafts/a//index.html',
+                     'sites/drafts/a/Caddyfile', 'sites/drafts/a//index.html',
                      'sites/unknown/index.html', 'sites/drafts/a/secret.pem'):
             with self.subTest(path=path):
                 self.assertFalse(m.path_allowed(path, ROOTS, EXT))

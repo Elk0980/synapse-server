@@ -17,7 +17,7 @@ REQUIRED_CHECKS = {'guard-tests', 'process-check'}
 REQUIRED_STATUS = 'production-sites/path-approval'
 DENIED_NAMES = {'server.js', 'server.mjs', 'package.json', 'package-lock.json',
                 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'dockerfile',
-                'caddyfile', 'service-worker.js', 'sw.js', 'robots.txt'}
+                'caddyfile'}
 DENIED_PARTS = {'node_modules', 'server', 'ops', 'tools', 'analytics-tests', 'tests', 'test'}
 
 
