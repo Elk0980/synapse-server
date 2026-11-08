@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Небо × Synapse — больше пациентов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&display=swap">
+<style>
+:root{--bg:#EDF5FC;--bg2:#F7FAFD;--ink:#142F48;--soft:#4A6280;--acc:#2F6FC4;--line:#D6E4F2;--card:#FBFDFF;--pale:#9CC6F2;--pale2:#C9DCEE}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:Manrope,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
+#deck{height:100vh;overflow-y:auto;scroll-snap-type:y mandatory;scroll-behavior:smooth}
+section{position:relative;height:100vh;min-height:640px;scroll-snap-align:start;overflow:hidden;padding:7vh 6.6vw;display:flex;flex-direction:column;gap:3.2vh}
+section.alt{background:var(--bg2)}
+section.dark{background:var(--ink);color:#F7FAFD}
+.eyebrow{font-size:clamp(13px,1.45vw,28px);font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--acc)}
+.dark .eyebrow{color:var(--pale)}
+h1{font-size:clamp(40px,5.4vw,104px);font-weight:700;line-height:1.05;letter-spacing:-.01em}
+h2{font-size:clamp(30px,3.75vw,72px);font-weight:700;line-height:1.1;letter-spacing:-.01em}
+.lead{font-size:clamp(16px,1.85vw,36px);line-height:1.4;color:var(--soft);max-width:48ch}
+.dark .lead{color:var(--pale2)}
+.small{font-size:clamp(12px,1.25vw,24px);color:var(--soft)}
+/* reveal */
+.r{opacity:0;transform:translateY(28px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--d,0)*120ms)}
+.on .r{opacity:1;transform:none}
+.step{opacity:0;transform:translateY(28px) scale(.98);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+.step.shown{opacity:1;transform:none}
+/* sky */
+.sky{position:absolute;inset:0;background:url(m/sky-tile.jpg) repeat-x 0 0/auto 100%;animation:drift 120s linear infinite;z-index:0}
+@keyframes drift{to{background-position-x:-355.55vh}}
+.sky+.veil{position:absolute;inset:0;z-index:0;background:linear-gradient(90deg,rgba(237,245,252,.95) 0%,rgba(237,245,252,.82) 48%,rgba(237,245,252,0) 82%)}
+.dark .sky{opacity:.22}
+section>*:not(.sky):not(.veil){position:relative;z-index:1}
+/* cards */
+.grid{display:grid;gap:clamp(10px,1.4vw,28px)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:clamp(14px,1.45vw,28px);padding:clamp(16px,2vw,40px);box-shadow:0 16px 48px rgba(20,47,72,.08);transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s,border-color .35s}
+.card:hover{transform:translateY(-6px);box-shadow:0 26px 70px rgba(20,47,72,.16);border-color:#B9D3EC}
+.card.ink{background:var(--ink);border-color:var(--ink);color:#F7FAFD;box-shadow:0 24px 60px rgba(20,47,72,.25)}
+.card .n{font-size:clamp(20px,2.2vw,44px);font-weight:800;color:var(--acc)}
+.card.ink .n{color:var(--pale)}
+.card h3{font-size:clamp(16px,1.9vw,38px);font-weight:700;margin:.35em 0 .3em}
+.card p{font-size:clamp(13px,1.5vw,30px);line-height:1.38;color:var(--soft)}
+.card.ink p{color:var(--pale2)}
+.glass{background:rgba(247,250,253,.08);border:1px solid rgba(156,198,242,.4);color:#F7FAFD;box-shadow:none}
+.glass p{color:#F7FAFD}.glass .n{color:var(--pale)}
+.ico{width:clamp(28px,3vw,56px);height:clamp(28px,3vw,56px);color:var(--acc)}
+.card.ink .ico{color:var(--pale)}
+.pill{display:inline-block;font-size:clamp(13px,1.45vw,28px);font-weight:600;padding:.55em 1em;border-radius:99px;background:var(--card);border:1px solid var(--line);white-space:nowrap}
+.pill.on2{background:var(--acc);color:#F7FAFD;border-color:var(--acc)}
+.row{display:flex;align-items:center;gap:clamp(8px,1vw,20px);flex-wrap:wrap}
+.arrow{width:clamp(24px,3vw,64px);height:4px;background:var(--pale);border-radius:2px;position:relative}
+.arrow:after{content:"";position:absolute;right:-2px;top:-6px;border:8px solid transparent;border-left-color:var(--pale)}
+.note{font-size:clamp(14px,1.6vw,32px);font-weight:600;background:#E3EEF9;border-radius:20px;padding:.9em 1.15em}
+/* table */
+table{border-collapse:collapse;width:100%;font-size:clamp(13px,1.45vw,28px)}
+th,td{padding:.55em .7em;border-bottom:1px solid var(--line);text-align:left}
+th{background:#E3EEF9;font-weight:700}td.r2,th.r2{text-align:right}
+tr.total td{background:var(--ink);color:#F7FAFD;font-weight:700}tr.total td.us{color:var(--pale)}
+/* case frame */
+.case{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.2fr);gap:4vw;align-items:center;flex:1}
+.frame{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 32px 90px rgba(20,47,72,.18);overflow:hidden;transform-style:preserve-3d;transition:transform .25s ease-out}
+.frame .bar{height:clamp(28px,3vw,58px);display:flex;align-items:center;gap:8px;padding:0 18px;border-bottom:1px solid var(--line)}
+.frame .bar i{width:12px;height:12px;border-radius:50%;background:var(--line)}
+.frame .bar span{flex:1;text-align:center;font-size:clamp(11px,1.15vw,22px);color:var(--soft)}
+.frame video{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#dfe9f3}
+.case a{color:var(--acc);text-decoration:none;border-bottom:1px solid currentColor}
+/* plan */
+.plan{display:grid;grid-template-columns:minmax(90px,.9fr) repeat(4,1fr) 1.3fr;gap:clamp(6px,.8vw,16px);align-items:center;font-size:clamp(12px,1.35vw,26px)}
+.plan .h{font-weight:700;text-align:center}.plan .lab{font-weight:700}
+.plan .b{padding:.75em .6em;border-radius:16px;text-align:center;transition:transform .3s}
+.plan .b:hover{transform:scale(1.04)}
+.b1{background:var(--acc);color:#F7FAFD}.b2{background:#D9E8F7}.b3{background:var(--card);border:1px solid var(--line)}
+.s2{grid-column:span 2}
+/* hub */
+.hub{position:relative;flex:1;min-height:40vh}
+.hub .core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--ink);color:#F7FAFD;border-radius:24px;padding:1.2em 1.6em;text-align:center;box-shadow:0 0 0 0 rgba(47,111,196,.35);animation:pulse 2.6s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 28px rgba(47,111,196,0)}100%{box-shadow:0 0 0 0 rgba(47,111,196,0)}}
+.hub .core b{display:block;font-size:clamp(16px,1.7vw,32px)}.hub .core small{color:var(--pale2);font-size:clamp(12px,1.2vw,24px)}
+.hub .node{position:absolute;transform:translate(-50%,-50%);font-size:clamp(14px,1.55vw,30px);font-weight:600}
+.hub svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.hub line{stroke:var(--pale);stroke-width:3;vector-effect:non-scaling-stroke;stroke-dasharray:1.2 1.6;animation:flow 1.4s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-5.6}}
+/* nav */
+#bar{position:fixed;left:0;top:0;height:3px;background:var(--acc);z-index:10;transition:width .4s}
+#dots{position:fixed;right:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:10}
+#dots button{width:8px;height:8px;border-radius:50%;border:0;background:rgba(20,47,72,.25);cursor:pointer;transition:transform .2s,background .2s}
+#dots button.cur{background:var(--acc);transform:scale(1.6)}
+#hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);font-size:13px;color:var(--soft);background:rgba(251,253,255,.8);padding:6px 12px;border-radius:99px;z-index:10;transition:opacity .6s}
+@media (max-width:900px){
+ body{overflow:auto}#deck{height:auto;overflow:visible;scroll-snap-type:none}
+ section{height:auto;min-height:100svh;padding:56px 18px}
+ .grid{grid-template-columns:1fr!important}.case{grid-template-columns:1fr}
+ .plan{grid-template-columns:repeat(2,1fr)}.plan .h,.plan .sp{display:none}.plan .lab{grid-column:span 2;margin-top:8px}.s2{grid-column:span 1}
+ .hub{min-height:420px}#dots,#hint{display:none}
+ .step{opacity:1;transform:none}
+}
+@media (prefers-reduced-motion:reduce){.sky,.hub line,.hub .core{animation:none}.r,.step{transition:none}}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<nav id="dots"></nav>
+<div id="hint">→ / пробел / колесо — дальше · ← — назад</div>
+<main id="deck">
+
+<section>
+ <div class="sky"></div><div class="veil"></div>
+ <p class="eyebrow r" style="--d:0">Стоматология «Небо» × Synapse</p>
+ <div style="flex:1"></div>
+ <h1 class="r" style="--d:1;max-width:19ch">Больше пациентов в два филиала</h1>
+ <p class="lead r" style="--d:2">Сайт, контент, звонки и площадки — одной командой, с отчётом каждый месяц</p>
+ <div style="flex:1"></div>
+ <p class="small r" style="--d:3">Владислав · Synapse Business · 2026</p>
+</section>
+
+<section class="alt">
+ <div class="grid" style="grid-template-columns:1.2fr 1fr;align-items:center;flex:1">
+  <div style="display:flex;flex-direction:column;gap:3vh">
+   <p class="eyebrow r">01 · Задача</p>
+   <h2 class="r" style="--d:1;font-size:clamp(34px,4.6vw,88px)">Больше пациентов в два филиала</h2>
+   <p class="lead r" style="--d:2">Открылся второй филиал — пациентов нужно больше, чем приходит сейчас.</p>
+   <p class="note r" style="--d:3">Правильно понимаю, задача не изменилась?</p>
+  </div>
+  <img class="r" style="--d:2;width:100%;height:76vh;object-fit:cover;border-radius:28px;box-shadow:0 24px 80px rgba(20,47,72,.18)" src="m/building.jpg" alt="ЖК «Небо», где находится клиника">
+ </div>
+</section>
+
+<section data-steps>
+ <p class="eyebrow r">02 · Если бы полгода назад…</p>
+ <h2 class="r" style="--d:1">…пациентов было бы больше?</h2>
+ <div class="grid" style="grid-template-columns:1fr 1fr">
+  <div class="card step"><div class="n">1</div><h3>Сайт и Яндекс Директ</h3><p>Запустили бы год назад — было бы больше пациентов?</p></div>
+  <div class="card step"><div class="n">2</div><h3>Соцсети</h3><p>Начали бы вести тогда — это привело бы пациентов?</p></div>
+  <div class="card step"><div class="n">3</div><h3>Звонки администраторов</h3><p>Записи есть. Если по каждому вопросу и возражению — скрипт до первой записи?</p></div>
+  <div class="card step"><div class="n">4</div><h3>Одна информация везде</h3><p>Цены, акции, реклама в 2ГИС — одинаково и сразу на всех площадках?</p></div>
+ </div>
+</section>
+
+<section class="alt" data-steps>
+ <p class="eyebrow r">Посчитаем вместе</p>
+ <h2 class="r" style="--d:1">Сколько стоит ещё месяц ожидания?</h2>
+ <div class="grid" style="grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch">
+  <div class="card step" style="display:flex;flex-direction:column"><p>Не хватает пациентов в месяц</p><div style="flex:1"></div><p style="font-size:clamp(40px,5vw,96px);font-weight:800;color:var(--ink)">?</p></div>
+  <p class="step" style="align-self:center;font-size:clamp(36px,4vw,80px);color:var(--acc);font-weight:300">×</p>
+  <div class="card step" style="display:flex;flex-direction:column"><p>Приносит один пациент за лечение</p><div style="flex:1"></div><p style="font-size:clamp(40px,5vw,96px);font-weight:800;color:var(--ink)">? ₽</p></div>
+  <p class="step" style="align-self:center;font-size:clamp(36px,4vw,80px);color:var(--acc);font-weight:300">=</p>
+  <div class="card ink step" style="display:flex;flex-direction:column"><p>Недополучено за месяц</p><div style="flex:1"></div><p style="font-size:clamp(40px,5vw,96px);font-weight:800;color:#F7FAFD">? ₽</p></div>
+ </div>
+ <p class="lead step">Цифры называете вы — мы только считаем. К этой сумме вернёмся, когда дойдём до стоимости.</p>
+</section>
+
+<section data-steps>
+ <p class="eyebrow r">03 · Разберём</p>
+ <h2 class="r" style="--d:1">Что из этого уже пробовали?</h2>
+ <div class="grid" style="grid-template-columns:1fr">
+  <div class="card step row" style="gap:3vw"><h3 style="width:9em;margin:0">Сайт</h3><p>Что пробовали? Узнавали цены?</p></div>
+  <div class="card step row" style="gap:3vw"><h3 style="width:9em;margin:0">Соцсети</h3><p>Хотели начать — что не позволило?</p></div>
+  <div class="card step row" style="gap:3vw"><h3 style="width:9em;margin:0">Звонки</h3><p>Записи есть — кто их слушает и что меняется?</p></div>
+  <div class="card step row" style="gap:3vw"><h3 style="width:9em;margin:0">Площадки</h3><p>Акция вышла — везде ли она появилась одновременно?</p></div>
+ </div>
+</section>
+
+<section class="alt">
+ <p class="eyebrow r">04 · Сайт</p>
+ <h2 class="r" style="--d:1;max-width:18ch">Сайт, который хочется досмотреть</h2>
+ <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:2vh">
+  <div class="card r" style="--d:2"><h3>Экскурсия видео</h3><p>Один свайп — и пациент «входит» в клинику.</p></div>
+  <div class="card r" style="--d:3"><h3>Цены и отзывы сразу</h3><p>2ГИС и Яндекс — с прямыми ссылками.</p></div>
+  <div class="card r" style="--d:4"><h3>Запись в один шаг</h3><p>И реклама в Яндекс Директе на этот сайт.</p></div>
+ </div>
+ <p class="lead r" style="--d:5">Дальше — наши сайты. Видео записаны с работающих страниц.</p>
+</section>
+
+<section class="case-s"><div class="case">
+ <div style="display:flex;flex-direction:column;gap:2.4vh"><p class="eyebrow r">Наши сайты · 1 из 4</p><h2 class="r" style="--d:1">SPA ALVI · Иркутск</h2><p class="small r" style="--d:2;color:var(--acc);font-weight:600">Массаж и SPA</p><p class="lead r" style="--d:3">Первый экран «дышит»: живое видео встречает гостя и задаёт настроение салона.</p><a class="small r" style="--d:4" href="https://spaalvi-38.ru/" target="_blank">spaalvi-38.ru</a></div>
+ <div class="frame r" style="--d:2"><div class="bar"><i></i><i></i><i></i><span>spaalvi-38.ru</span></div><video muted loop playsinline preload="metadata" poster="m/case-alvi.jpg" src="m/case-alvi.mp4"></video></div>
+</div></section>
+
+<section class="alt case-s"><div class="case">
+ <div style="display:flex;flex-direction:column;gap:2.4vh"><p class="eyebrow r">Наши сайты · 2 из 4</p><h2 class="r" style="--d:1">АВОКАДО · Иркутск</h2><p class="small r" style="--d:2;color:var(--acc);font-weight:600">Студия коррекции фигуры</p><p class="lead r" style="--d:3">Вместо баннера — сцена-история: зал, героиня, бренд. Хочется смотреть дальше.</p><a class="small r" style="--d:4" href="https://avokado.synapsebusiness.ru/" target="_blank">avokado.synapsebusiness.ru</a></div>
+ <div class="frame r" style="--d:2"><div class="bar"><i></i><i></i><i></i><span>avokado.synapsebusiness.ru</span></div><video muted loop playsinline preload="metadata" poster="m/case-avokado.jpg" src="m/case-avokado.mp4"></video></div>
+</div></section>
+
+<section class="case-s"><div class="case">
+ <div style="display:flex;flex-direction:column;gap:2.4vh"><p class="eyebrow r">Наши сайты · 3 из 4</p><h2 class="r" style="--d:1">PALITRA · Подольск</h2><p class="small r" style="--d:2;color:var(--acc);font-weight:600">Оформление праздников шарами</p><p class="lead r" style="--d:3">Слайдер праздников и каталог по поводам: выбор за пару касаний.</p><a class="small r" style="--d:4" href="https://palitra-love.synapsebusiness.ru/" target="_blank">palitra-love.synapsebusiness.ru</a></div>
+ <div class="frame r" style="--d:2"><div class="bar"><i></i><i></i><i></i><span>palitra-love.synapsebusiness.ru</span></div><video muted loop playsinline preload="metadata" poster="m/case-palitra.jpg" src="m/case-palitra.mp4"></video></div>
+</div></section>
+
+<section class="alt case-s"><div class="case">
+ <div style="display:flex;flex-direction:column;gap:2.4vh"><p class="eyebrow r">Наши сайты · 4 из 4</p><h2 class="r" style="--d:1">CELL LAB</h2><p class="small r" style="--d:2;color:var(--acc);font-weight:600">Пептидная терапия для клиник</p><p class="lead r" style="--d:3">Экскурсия для врачей: от лица пациента — до структуры кожи и молекулы.</p><a class="small r" style="--d:4" href="https://drafts.synapsebusiness.ru/peptides/" target="_blank">drafts.synapsebusiness.ru/peptides</a></div>
+ <div class="frame r" style="--d:2"><div class="bar"><i></i><i></i><i></i><span>drafts.synapsebusiness.ru/peptides</span></div><video muted loop playsinline preload="metadata" poster="m/case-peptides.jpg" src="m/case-peptides.mp4"></video></div>
+</div></section>
+
+<section class="case-s"><div class="sky" style="opacity:.35"></div><div class="case">
+ <div style="display:flex;flex-direction:column;gap:2.4vh"><p class="eyebrow r">Ваш сайт</p><h2 class="r" style="--d:1">Стоматология «Небо»</h2><p class="lead r" style="--d:3">Вся экскурсия: от неба над ЖК — до кабинета, врача и записи.</p><a class="small r" style="--d:4" href="https://nebo-draft-1.synapsebusiness.ru/" target="_blank">nebo-draft-1.synapsebusiness.ru</a></div>
+ <div class="frame r" style="--d:2"><div class="bar"><i></i><i></i><i></i><span>nebo-draft-1.synapsebusiness.ru</span></div><video muted loop playsinline preload="metadata" poster="m/case-nebo.jpg" src="m/case-nebo.mp4"></video></div>
+</div></section>
+
+<section class="alt">
+ <p class="eyebrow r">05 · Контент-завод</p>
+ <h2 class="r" style="--d:1">Соцсети ведёт команда, а не администратор</h2>
+ <div class="grid" style="grid-template-columns:repeat(5,1fr)">
+  <div class="card r" style="--d:2"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h11a3 3 0 0 1 3 3v12H7a3 3 0 0 1-3-3z"/><path d="M8 9h6M8 13h6"/></svg><h3>План</h3><p>Темы на месяц под услуги и акции</p></div>
+  <div class="card r" style="--d:3"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg><h3>Съёмка</h3><p>SMM-специалист приезжает в клинику и снимает сам</p></div>
+  <div class="card r" style="--d:4"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4v16M18 4v16M6 9h12M6 15h12"/></svg><h3>Монтаж</h3><p>Рилсы с хуком и субтитрами</p></div>
+  <div class="card r" style="--d:5"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l18-8-8 18-2-8z"/></svg><h3>Публикация</h3><p>Вы согласуете в кабинете в один клик</p></div>
+  <div class="card ink r" style="--d:6"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><h3>Отчёт</h3><p>Что вышло и сколько обращений</p></div>
+ </div>
+ <p class="note r" style="--d:7">Один ответственный ведёт план и показывает результат. Администраторы занимаются пациентами.</p>
+</section>
+
+<section>
+ <p class="eyebrow r">06 · Звонки</p>
+ <h2 class="r" style="--d:1">Каждый звонок — к первой записи</h2>
+ <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+  <div class="card r" style="--d:2"><div class="n">1</div><h3>Берём записи</h3><p>Те, что уже пишутся</p></div>
+  <div class="card r" style="--d:3"><div class="n">2</div><h3>Расшифровываем</h3><p>Вопросы и возражения пациентов</p></div>
+  <div class="card r" style="--d:4"><div class="n">3</div><h3>Пишем скрипты</h3><p>Ответ на каждое возражение</p></div>
+  <div class="card ink r" style="--d:5"><div class="n">4</div><h3>Слушаем и учим</h3><p>Обратная связь: что улучшить</p></div>
+ </div>
+ <div class="row r" style="--d:6"><span class="small" style="font-weight:600;color:var(--ink)">Прослушка:</span><span class="pill">раз в неделю</span><span class="arrow"></span><span class="pill">раз в 2 недели</span><span class="arrow"></span><span class="pill on2">раз в месяц</span></div>
+</section>
+
+<section class="alt">
+ <div class="grid" style="grid-template-columns:1fr 1.25fr;flex:1;align-items:center">
+  <div style="display:flex;flex-direction:column;gap:3vh"><p class="eyebrow r">07 · Площадки</p><h2 class="r" style="--d:1">Одна правда на всех площадках</h2><p class="lead r" style="--d:2">Вы меняете цену, акцию или часы работы один раз — мы обновляем везде одновременно и проверяем, что вышло.</p></div>
+  <div class="hub r" style="--d:2">
+   <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="50" y1="50" x2="22" y2="12"/><line x1="50" y1="50" x2="78" y2="12"/><line x1="50" y1="50" x2="12" y2="88"/><line x1="50" y1="50" x2="50" y2="92"/><line x1="50" y1="50" x2="88" y2="88"/></svg>
+   <div class="core"><b>Данные клиники</b><small>цены · акции · часы</small></div>
+   <span class="node pill" style="left:22%;top:12%">2ГИС</span><span class="node pill" style="left:78%;top:12%">Яндекс Карты</span>
+   <span class="node pill" style="left:12%;top:88%">Сайт</span><span class="node pill" style="left:50%;top:92%">Соцсети</span><span class="node pill" style="left:88%;top:88%">Реклама</span>
+  </div>
+ </div>
+</section>
+
+<section>
+ <div class="grid" style="grid-template-columns:1fr 1fr;flex:1;align-items:center">
+  <div style="display:flex;flex-direction:column;gap:3vh"><p class="eyebrow r">Почему получится</p><h2 class="r" style="--d:1">Доверие у вас уже есть. Не хватает потока</h2><p class="lead r" style="--d:2">Пациенты, которые нашли «Небо», ставят 5,0. Наша работа — чтобы находили чаще и записывались с первого звонка.</p></div>
+  <div style="display:flex;flex-direction:column;gap:2vh">
+   <div class="card row r" style="--d:2;justify-content:space-between"><h3 style="margin:0">2ГИС</h3><h3 style="margin:0;color:var(--acc)">5,0 · 300 отзывов</h3></div>
+   <div class="card row r" style="--d:3;justify-content:space-between"><h3 style="margin:0">Яндекс Карты</h3><h3 style="margin:0;color:var(--acc)">5,0 · 43 отзыва</h3></div>
+   <div class="card row r" style="--d:4;justify-content:space-between"><h3 style="margin:0">Google Карты</h3><h3 style="margin:0;color:var(--acc)">5,0 · 15 отзывов</h3></div>
+   <p class="small r" style="--d:5">Данные с площадок на 17.10.2026, филиал Маркова, Стрижи, 3</p>
+  </div>
+ </div>
+</section>
+
+<section class="alt">
+ <p class="eyebrow r">План работ</p>
+ <h2 class="r" style="--d:1">Два месяца — шаг за шагом</h2>
+ <div class="plan r" style="--d:2">
+  <span class="sp"></span><span class="h">Неделя 1</span><span class="h">Неделя 2</span><span class="h">Неделя 3</span><span class="h">Неделя 4</span><span class="h">Месяц 2</span>
+  <span class="lab">Сайт</span><span class="b b1 s2">Разработка</span><span class="b b2 s2">Ваши правки, запуск</span><span class="b b3">Директ на сайт</span>
+  <span class="lab">Соцсети</span><span class="b b1">План</span><span class="b b1 s2">Съёмка SMM-специалистом</span><span class="b b2">Первые публикации</span><span class="b b3">Регулярно</span>
+  <span class="lab">Звонки</span><span class="b b1 s2">Расшифровка и скрипты</span><span class="b b2 s2">Работа по скриптам</span><span class="b b3">Сверка, раз в неделю</span>
+  <span class="lab">Площадки</span><span class="s2 sp"></span><span class="b b1 s2">Сверка данных</span><span class="b b3">Одинаково везде</span>
+ </div>
+ <p class="small r" style="--d:3">Дальше: прослушка раз в 2 недели, потом раз в месяц · акции сразу на всех площадках · отчёт по обращениям каждый месяц</p>
+</section>
+
+<section>
+ <p class="eyebrow r">Связь</p>
+ <h2 class="r" style="--d:1">Мы рядом каждый день — не пропадаем</h2>
+ <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+  <div class="card ink r" style="--d:2"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-5 4z"/></svg><h3>Каждый день</h3><p>На связи в чате: вопрос, акция, срочная правка — отвечаем в тот же день</p></div>
+  <div class="card r" style="--d:3"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 20c0-2 1-4 3.5-4S22 18 22 20"/></svg><h3>Раз в неделю</h3><p>Онлайн-встреча: что сделали, план на следующую неделю, ваши вопросы</p></div>
+  <div class="card r" style="--d:4"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><h3>Раз в месяц</h3><p>Отчёт: сколько обращений и сколько стоило одно обращение</p></div>
+ </div>
+ <p class="note r" style="--d:5;background:var(--card);border:1px solid var(--line)">Вы всегда знаете, что происходит, — и видите это сами</p>
+</section>
+
+<section class="alt">
+ <p class="eyebrow r">Почему ниже рынка</p>
+ <h2 class="r" style="--d:1">Вы — наш кейс. Поэтому дешевле</h2>
+ <p class="lead r" style="--d:2;max-width:70ch">В договоре прописываем: результаты работы можем показывать в своих соцсетях и рекламе. За это — цена ниже рынка.</p>
+ <table class="r" style="--d:3">
+  <tr><th>Если собирать самим</th><th class="r2">Рынок</th><th class="r2">У нас</th></tr>
+  <tr><td>Сайт для клиники</td><td class="r2">180 000 – 650 000 ₽</td><td class="r2">входит</td></tr>
+  <tr><td>Соцсети, агентство</td><td class="r2">60 000 – 200 000 ₽/мес</td><td class="r2">входит</td></tr>
+  <tr><td>Ведение Яндекс Директа</td><td class="r2">от 30 000 – 50 000 ₽/мес</td><td class="r2">входит</td></tr>
+  <tr><td>Маркетолог в штат</td><td class="r2">60 000 – 180 000 ₽/мес</td><td class="r2">входит</td></tr>
+  <tr><td>Программист</td><td class="r2">50 000 – 80 000 ₽/мес</td><td class="r2">входит</td></tr>
+  <tr class="total"><td>Каждый месяц</td><td class="r2">от 200 000 ₽</td><td class="r2 us">60 000 ₽</td></tr>
+ </table>
+ <p class="small r" style="--d:4">Источники: Sostav (июнь 2026, дек. 2025), vc.ru (2026), hh.ru I кв. 2026 — регионы, данные ppc.world. «От 200 000 ₽» — сумма нижних границ, без сайта и рекламного бюджета.</p>
+</section>
+
+<section>
+ <p class="eyebrow r">Варианты</p>
+ <h2 class="r" style="--d:1">Два способа начать</h2>
+ <div class="grid" style="grid-template-columns:1fr 1fr;flex:1">
+  <div class="card r" style="--d:2;display:flex;flex-direction:column;gap:1.6vh"><p class="eyebrow" style="color:var(--soft)">Вариант 1</p><h3 style="font-size:clamp(24px,2.5vw,48px)">Сайт</h3><p>Сайт-экскурсия под ключ за 2 недели (с правками — до 3–4). Дальше ведёте сами.</p><div style="flex:1"></div><p style="font-size:clamp(34px,3.75vw,72px);font-weight:800;color:var(--ink)">120 000 ₽</p><p>Можно двумя платежами по 60 000 ₽</p></div>
+  <div class="card ink r" style="--d:3;display:flex;flex-direction:column;gap:1.6vh"><p class="eyebrow" style="color:var(--pale)">Вариант 2 · выгоднее</p><h3 style="font-size:clamp(24px,2.5vw,48px)">Комплексное ведение</h3><p>Сайт, Директ, контент, звонки и площадки — одна команда и отчёт каждый месяц. Выездные съёмки SMM-специалиста включены.</p><div style="flex:1"></div><p style="font-size:clamp(34px,3.75vw,72px);font-weight:800;color:#F7FAFD">100 000 ₽</p><p>первый месяц, сайт входит · далее 60 000 ₽ в месяц</p></div>
+ </div>
+ <p class="small r" style="--d:4">В стоимость входит работа команды, включая выездные съёмки SMM-специалиста. Рекламный бюджет (пополнение Яндекс Директа, 2ГИС и других площадок) оплачивается отдельно.</p>
+</section>
+
+<section class="dark">
+ <div class="sky"></div>
+ <p class="eyebrow r">Старт</p>
+ <h1 class="r" style="--d:1;font-size:clamp(36px,5vw,96px)">С какого варианта начнём?</h1>
+ <div style="flex:1"></div>
+ <p class="lead r" style="--d:2;color:var(--pale);font-weight:600">Чтобы стартовать на этой неделе, нужно:</p>
+ <div class="grid" style="grid-template-columns:repeat(5,1fr)">
+  <div class="card glass r" style="--d:3"><div class="n">1</div><p>Подписать договор</p></div>
+  <div class="card glass r" style="--d:4"><div class="n">2</div><p>Внести оплату</p></div>
+  <div class="card glass r" style="--d:5"><div class="n">3</div><p>Доступ к записям звонков</p></div>
+  <div class="card glass r" style="--d:6"><div class="n">4</div><p>Доступ к кабинетам площадок</p></div>
+  <div class="card glass r" style="--d:7"><div class="n">5</div><p>Доступ к вашим соцсетям</p></div>
+ </div>
+</section>
+
+</main>
+<script>
+(function(){
+ var deck=document.getElementById('deck'),S=[].slice.call(document.querySelectorAll('#deck>section')),cur=0,lock=0;
+ var mobile=matchMedia('(max-width:900px)').matches;
+ var dots=document.getElementById('dots');
+ S.forEach(function(s,i){var b=document.createElement('button');b.setAttribute('aria-label','Слайд '+(i+1));b.onclick=function(){go(i)};dots.appendChild(b)});
+ function mark(i){cur=i;S.forEach(function(s,j){var on=j===i||(mobile&&s.classList.contains('on'));s.classList.toggle('on',on);var v=s.querySelector('video');if(v){if(j===i){var p=v.play();if(p&&p.catch)p.catch(function(){})}else v.pause()}});
+  [].forEach.call(dots.children,function(b,j){b.classList.toggle('cur',j===i)});
+  document.getElementById('bar').style.width=((i+1)/S.length*100)+'%';}
+ var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&e.intersectionRatio>.55){mark(S.indexOf(e.target))}})},{root:mobile?null:deck,threshold:[.55,.9]});
+ S.forEach(function(s){io.observe(s)});
+ function go(i){i=Math.max(0,Math.min(S.length-1,i));S[i].scrollIntoView({behavior:'smooth'});}
+ function next(){var s=S[cur];if(s.hasAttribute('data-steps')){var h=s.querySelector('.step:not(.shown)');if(h){h.classList.add('shown');return}}go(cur+1)}
+ function prev(){var s=S[cur];if(s.hasAttribute('data-steps')){var sh=s.querySelectorAll('.step.shown');if(sh.length){sh[sh.length-1].classList.remove('shown');return}}go(cur-1)}
+ if(!mobile){
+  deck.addEventListener('wheel',function(e){e.preventDefault();var t=Date.now();if(t<lock||Math.abs(e.deltaY)<6)return;lock=t+750;(e.deltaY>0?next:prev)()},{passive:false});
+  addEventListener('keydown',function(e){if(['ArrowDown','ArrowRight','PageDown',' ','Enter'].indexOf(e.key)>=0){e.preventDefault();next()}else if(['ArrowUp','ArrowLeft','PageUp'].indexOf(e.key)>=0){e.preventDefault();prev()}else if(e.key==='Home')go(0);else if(e.key==='End')go(S.length-1)});
+  deck.addEventListener('click',function(e){if(e.target.closest('a,button,video,.frame'))return;next()});
+  document.querySelectorAll('.frame').forEach(function(f){f.addEventListener('mousemove',function(e){var r=f.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;f.style.transform='perspective(1400px) rotateY('+(x*6)+'deg) rotateX('+(-y*5)+'deg) scale(1.01)'});f.addEventListener('mouseleave',function(){f.style.transform=''})});
+  setTimeout(function(){document.getElementById('hint').style.opacity=0},6000);
+ } else { document.querySelectorAll('.step').forEach(function(x){x.classList.add('shown')}); }
+ mark(0);
+})();
+</script>
+</body>
+</html>
