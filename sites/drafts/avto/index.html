@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Восточный ключ — авто под заказ</title>
-<meta name="description" content="Демо-сайт: подбор и доставка автомобилей из Китая и Кореи под ключ — проверка до покупки, договор с фиксированной ценой, растаможка и подготовка. Пример для Synapse Business.">
+<meta name="description" content="Демо-сайт: подбор и доставка автомобилей из Китая под ключ — проверка до покупки, договор с фиксированной ценой, растаможка и подготовка. Пример для Synapse Business.">
 <meta name="robots" content="noindex, nofollow">
-<meta property="og:title" content="Восточный ключ — авто под заказ из Китая и Кореи">
+<meta property="og:title" content="Восточный ключ — авто под заказ из Китая">
 <meta property="og:description" content="Восемь шагов от поиска машины до ключей в ваших руках. Демо-сайт Synapse Business.">
 <meta property="og:image" content="poster.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -189,10 +189,44 @@ footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;bo
   .scene{transition:opacity .3s}
   html{scroll-behavior:auto}
 }
+
+/* ---------- INTRO: bus, phone, notification (shown while the site loads) ---------- */
+html.intro-on,html.intro-on body{overflow:hidden}
+.intro{position:fixed;inset:0;z-index:100;background:#07080a;overflow:hidden;display:block}
+.intro .cam{position:absolute;inset:-4%;animation:bump 2.6s infinite ease-in-out}
+.intro .cam img,.intro .cam video{width:100%;height:100%;object-fit:cover;display:block}
+@keyframes bump{0%{transform:translate(0,0) rotate(0)}9%{transform:translate(-.35%,.55%) rotate(-.25deg)}14%{transform:translate(.2%,-.4%) rotate(.18deg)}22%{transform:translate(0,.15%) rotate(0)}48%{transform:translate(.25%,.1%) rotate(.12deg)}55%{transform:translate(-.2%,.7%) rotate(-.3deg)}61%{transform:translate(.15%,-.35%) rotate(.15deg)}70%{transform:translate(0,0) rotate(0)}100%{transform:translate(0,0) rotate(0)}}
+.intro .vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 55%,transparent 45%,rgba(0,0,0,.55))}
+.intro .load{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);width:min(280px,60vw);height:3px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}
+.intro .load i{display:block;height:100%;width:0;background:var(--acc,#ff3b30);transition:width .4s}
+.push{position:absolute;left:50%;top:22px;width:min(420px,calc(100vw - 32px));transform:translate(-50%,-140%);opacity:0;transition:transform .6s cubic-bezier(.2,.9,.25,1.15),opacity .3s;
+  background:rgba(30,32,38,.82);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:14px 16px 16px;color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.5);font-family:var(--body)}
+.push.on{transform:translate(-50%,0);opacity:1}
+.push .ph{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.65);margin-bottom:6px}
+.push .ph b{width:22px;height:22px;border-radius:6px;background:var(--acc,#ff3b30);display:grid;place-items:center;color:#fff;font:700 11px var(--head)}
+.push .ph span{margin-left:auto}
+.push h4{margin:0 0 4px;font:600 16px var(--body)}
+.push p{margin:0 0 12px;font-size:14.5px;line-height:1.4;color:rgba(255,255,255,.85)}
+.push .go{display:block;width:100%;border:0;border-radius:14px;padding:13px;font:600 15px var(--body);background:var(--acc,#ff3b30);color:#fff;cursor:pointer}
+.intro.leave .cam{animation:none;transition:transform 1.1s cubic-bezier(.6,0,.3,1),opacity 1.1s;transform:scale(2.6) translateY(6%);opacity:0}
+.intro.leave .push,.intro.leave .load{opacity:0;transition:opacity .3s}
+.intro.gone{display:none}
+@media (prefers-reduced-motion:reduce){.intro .cam{animation:none}}
 </style>
 </head>
 <body>
 
+<div class="intro" id="intro" role="dialog" aria-label="Заставка">
+  <div class="cam"><img src="m/story/0.jpg" alt=""></div>
+  <div class="vig"></div>
+  <div class="push" id="push" aria-live="polite">
+    <div class="ph"><b>ВК</b>Восточный ключ<span>сейчас</span></div>
+    <h4>Нашли вариант под ваш запрос</h4>
+    <p>Новый кроссовер в нужной комплектации — дешевле, чем в салоне. Цена «под ключ» уже посчитана.</p>
+    <button class="go" id="enter" type="button">Зайти на сайт</button>
+  </div>
+  <div class="load"><i id="loadbar"></i></div>
+</div>
 <header class="bar">
   <a class="logo" href="#top"><i></i>ВОСТОЧНЫЙ КЛЮЧ<small style="font:500 10px var(--body);letter-spacing:.1em;color:var(--fg3);border:1px solid var(--line);border-radius:5px;padding:1px 5px">ДЕМО</small></a>
   <nav><a href="#catalog">Каталог</a><a href="#steps">Как работаем</a><a href="#calc">Расчёт</a><a href="#faq">Вопросы</a></nav>
@@ -207,77 +241,76 @@ footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;bo
   </div>
 
   <div class="chapters" id="chapters">
-    <!-- 1 -->
+    <!-- 1 Шанхай -->
     <div class="ch" data-i="0">
       <div class="hero card">
-        <div class="stage"><b>01</b>Внимание</div>
-        <h1>Ваш авто<br><span>уже в пути</span></h1>
-        <p>Подбираем, проверяем и привозим автомобили из Китая и Кореи под ключ. Вы видите каждый шаг — от выбора до ключей в руках.</p>
+        <div class="stage"><b>01</b>Шанхай</div>
+        <h1>Ваш авто<br><span>уже ждёт в Китае</span></h1>
+        <p>Новые машины напрямую с площадок Китая — в комплектациях, которых нет в российских салонах, и без наценки дилерской цепочки. Вы видите каждый шаг — от выбора до ключей в руках.</p>
         <div class="row"><a class="btn" href="#order">Подобрать мой авто</a><a class="btn ghost" href="#catalog">Смотреть каталог</a></div>
       </div>
       <div class="scrollhint"><i></i>листайте</div>
     </div>
-    <!-- 2 -->
+    <!-- 2 Подбор -->
     <div class="ch right" data-i="1">
       <div class="card">
-        <div class="stage"><b>02</b>Интерес</div>
-        <h2>Новая машина без переплаты салону</h2>
-        <p>Покупаем напрямую у дилеров и на площадках Китая и Кореи. Вы платите за автомобиль, доставку и оформление — без наценки посредников по цепочке.</p>
-        <ul><li>Комплектации, которых нет в российских салонах</li><li>Свежие автомобили с небольшим пробегом</li></ul>
+        <div class="stage"><b>02</b>Подбор</div>
+        <h2>Подберём под бюджет и задачи</h2>
+        <p>Не нужно листать сотни объявлений. Скажите, сколько готовы потратить и для чего машина, — пришлём 3–5 вариантов с ценой «под ключ».</p>
+        <ul><li>Цена уже с доставкой и растаможкой</li><li>Сравнение комплектаций простым языком</li></ul>
       </div>
     </div>
-    <!-- 3 -->
+    <!-- 3 Проверка -->
     <div class="ch" data-i="2">
       <div class="card">
-        <div class="stage"><b>03</b>Снимаем страх</div>
-        <h2>Проверяем до покупки, а не после</h2>
-        <p>Наш инспектор на месте смотрит машину вживую: толщиномер по всем элементам, компьютерная диагностика, история обслуживания и ДТП.</p>
+        <div class="stage"><b>03</b>Проверка</div>
+        <h2>Проверяем до оплаты, а не после</h2>
+        <p>Инспектор на площадке смотрит машину вживую: толщиномер по всем элементам, компьютерная диагностика, история обслуживания.</p>
         <ul><li>Фото- и видеоотчёт — до оплаты</li><li>Не понравилось — ищем следующую</li></ul>
-        <div class="pain">Главный страх покупателей — <em>скрученный пробег и скрытые повреждения</em>. Его снимает проверка на месте.</div>
+        <div class="pain">Главный страх покупателей — <em>битая машина или скрученный пробег</em>. Его снимает проверка на месте.</div>
       </div>
     </div>
-    <!-- 4 -->
+    <!-- 4 Договор -->
     <div class="ch right" data-i="3">
       <div class="card">
-        <div class="stage"><b>04</b>Доверие</div>
-        <h2>Договор с ценой, которая не вырастет</h2>
-        <p>Фиксируем в договоре стоимость автомобиля, доставку, услуги и сроки. Все платежи — по счетам, с закрывающими документами.</p>
-        <div class="pain">«Цена выросла по дороге» — частая история рынка. У нас итоговая сумма прописана заранее (пример условий).</div>
+        <div class="stage"><b>04</b>Договор</div>
+        <h2>Цена фиксируется в договоре</h2>
+        <p>Стоимость машины, доставка, пошлины и наши услуги — построчно в договоре. Оплата этапами, по счетам, с закрывающими документами.</p>
+        <div class="pain">«Цена выросла по дороге» — частая история рынка. Здесь итог прописан заранее (пример условий демо-сайта).</div>
       </div>
     </div>
-    <!-- 5 -->
+    <!-- 5 Порт Далянь -->
     <div class="ch" data-i="4">
       <div class="card">
-        <div class="stage"><b>05</b>Контроль</div>
-        <h2>Вы видите, где машина</h2>
-        <p>Погрузка, порт, море или ж/д — на каждом этапе фото и статус в мессенджере. Не нужно звонить и спрашивать.</p>
-        <ul><li>Страховка груза на весь путь</li><li>Сроки доставки — в договоре</li></ul>
+        <div class="stage"><b>05</b>Отправка</div>
+        <h2>Погрузка — с фотоотчётом</h2>
+        <p>Машину доставляют в порт Далянь и загружают на судно-автовоз. Вы получаете фото с погрузки и номер рейса.</p>
+        <ul><li>Страховка груза на весь путь</li><li>Срок доставки — в договоре</li></ul>
       </div>
     </div>
-    <!-- 6 -->
+    <!-- 6 Море -->
     <div class="ch right" data-i="5">
       <div class="card">
-        <div class="stage"><b>06</b>Прозрачность</div>
-        <h2>Растаможка — без сюрпризов</h2>
-        <p>Пошлину, утильсбор и оформление считаем до покупки и показываем в смете построчно. Оформляем ЭПТС, СБКТС — всё, чтобы машину поставили на учёт.</p>
-        <div class="pain">Утильсбор и пошлина зависят от мощности, объёма и возраста авто — поэтому <em>считаем заранее под конкретную машину</em>.</div>
+        <div class="stage"><b>06</b>В пути</div>
+        <h2>Вы видите, где машина</h2>
+        <p>Статус и положение судна — в мессенджере в любой момент. Не нужно звонить и спрашивать «ну когда уже».</p>
       </div>
     </div>
-    <!-- 7 -->
+    <!-- 7 Владивосток -->
     <div class="ch" data-i="6">
       <div class="card">
-        <div class="stage"><b>07</b>Ценность</div>
-        <h2>Готова к российской зиме</h2>
-        <p>Перед выдачей — сервис: антикоррозийная обработка, ТО, русификация меню и навигации, установка нужных опций.</p>
-        <ul><li>Вы забираете машину, а не проект</li><li>Сервис-партнёры в городе для обслуживания</li></ul>
+        <div class="stage"><b>07</b>Владивосток</div>
+        <h2>Таможня и ЭПТС — на нас</h2>
+        <p>Пошлину, утильсбор и оформление считаем до покупки под конкретную машину. Растамаживаем, оформляем ЭПТС и СБКТС — всё для постановки на учёт.</p>
+        <div class="pain">Утильсбор и пошлина зависят от мощности, объёма и возраста авто — поэтому <em>считаем заранее, а не по факту</em>.</div>
       </div>
     </div>
-    <!-- 8 -->
+    <!-- 8 Ключи -->
     <div class="ch right" data-i="7">
       <div class="card">
-        <div class="stage"><b>08</b>Решение</div>
-        <h2>Ключи — в ваших руках</h2>
-        <p>Выдаём на площадке или привозим к дому. Остаёмся на связи: подскажем по обслуживанию и запчастям.</p>
+        <div class="stage"><b>08</b>Ключи</div>
+        <h2>Ключи — в вашем городе</h2>
+        <p>Привозим автовозом до вашего города или выдаём во Владивостоке. Помогаем с постановкой на учёт и остаёмся на связи по обслуживанию.</p>
         <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px"><a class="btn" href="#catalog">Выбрать модель</a><a class="btn ghost" href="#calc">Рассчитать стоимость</a></div>
       </div>
     </div>
@@ -373,7 +406,7 @@ footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;bo
 </footer>
 <div class="demo-tag">Демо-сайт · не настоящая компания</div>
 
-<script>window.__AV_LOOPS=[1,2,3,4,5,6];window.__AV_TRANS=[1,2,3,5];</script>
+<script>window.__AV_LOOPS=[];window.__AV_TRANS=[];</script>
 <script>
 (()=>{
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -468,6 +501,7 @@ renderStory();
   const jump = y => { document.documentElement.style.scrollBehavior = 'auto'; scrollTo(0, y); };
   function finish(k) { jump(yAt(k)); if (auto && auto.v) auto.v.pause(); auto = null; lockUntil = performance.now() + 350; renderStory(); document.documentElement.style.scrollBehavior = ''; }
   function step(dir) {
+    if (document.documentElement.classList.contains('intro-on')) return true; // the loader is still on screen
     if (auto || performance.now() < lockUntil) return true;
     const k = curBlock(), to = k + dir;
     if (to < 0 || to > N - 1) return false;                 // let the page scroll out of the story
@@ -655,6 +689,27 @@ $('price').oninput = calc; $('hp').oninput = calc; calc();
 
 /* ---------- FORM (demo) ---------- */
 $('form').onsubmit = e => { e.preventDefault(); $('ok').hidden = false; };
+})();
+
+/* ---------- INTRO ---------- */
+(function () {
+  const intro = document.getElementById('intro'); if (!intro) return;
+  const root = document.documentElement; root.classList.add('intro-on');
+  const bar = document.getElementById('loadbar'), push = document.getElementById('push');
+  const t0 = performance.now(), MIN = 3200;
+  let loaded = document.readyState === 'complete';
+  addEventListener('load', () => { loaded = true; });
+  const tick = () => {
+    const k = Math.min((performance.now() - t0) / MIN, loaded ? 1 : 0.85);
+    bar.style.width = (k * 100) + '%';
+    if (k >= 1) { push.classList.add('on'); return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  document.getElementById('enter').onclick = () => {
+    scrollTo(0, 0); intro.classList.add('leave');
+    setTimeout(() => { intro.classList.add('gone'); root.classList.remove('intro-on'); dispatchEvent(new Event('scroll')); }, 1100);
+  };
 })();
 </script>
 </body>
