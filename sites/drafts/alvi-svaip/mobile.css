@@ -1,0 +1,151 @@
+/* Mobile-only corrective layer. Desktop styling is intentionally untouched. */
+@media (max-width: 56.24rem) {
+  html, body { max-width: 100%; overflow-x: clip; }
+  body { min-width: 0 !important; font-size: max(15px, 1rem); }
+  main, header, footer, section, article, nav, div, form, fieldset { min-width: 0; }
+  img, video, svg, iframe { max-width: 100%; }
+  p, li, dd, dt, a, h1, h2, h3, address { overflow-wrap: anywhere; word-break: normal; }
+  pre, code, table { max-width: 100%; }
+  pre, .pt-wrap { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+
+  /* Standalone/legal pages. */
+  body > header, body > main, body > footer { width: min(calc(100% - 2rem), 46rem); margin-inline: auto; }
+  .price-page > header, .price-page > main, .price-page > footer { width: 100%; max-width: 100%; margin-inline: 0; }
+  body > main.after-hero { width: 100%; padding-bottom: 0; }
+  .after-hero > section, .after-hero > footer, .after-hero > .synapse-strip { width: 100%; }
+  body > header a, .back, .actions a, button, textarea, input, select { min-height: 44px; }
+  body > header a, .back, .actions a { display: inline-flex; align-items: center; }
+  h1, h2, h3 { hyphens: none; text-wrap: balance; }
+  footer { font-size: max(13px, .85rem); }
+  .details { padding: 1rem; }
+
+  /* Main page: compact first screen and safe persistent actions. */
+  .hero.is-compact-mode .hero__chrome { height: auto; margin: 0; gap: 12px; padding: max(12px, env(safe-area-inset-top)) 16px 8px; }
+  .hero.is-compact-mode .brand-mark { width: 64px; min-height: 64px; }
+  .hero.is-compact-mode .certificate-link { padding: 10px 12px; font-size: 12px; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] {
+    min-height: 100svh;
+    align-items: flex-start;
+    padding: calc(6rem + env(safe-area-inset-top)) 1rem calc(9.5rem + env(safe-area-inset-bottom));
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
+    max-width: 8ch; margin-bottom: .7rem; font-size: clamp(2.35rem, 11.5vw, 3.2rem); line-height: .98;
+  }
+  /* Fit the heroine's face on narrow screens and blend the opening into the text area. */
+  .hero.is-compact-mode .hero__poster,
+  .hero.is-compact-mode:not(.is-reduced-motion) .hero__idle-video,
+  .hero.is-compact-mode .hero__frame[data-frame="k1"] {
+    height: 78%;
+    object-position: 86% center;
+    -webkit-mask-image: linear-gradient(#000 0%, #000 72%, transparent 100%);
+    mask-image: linear-gradient(#000 0%, #000 72%, transparent 100%);
+  }
+  .hero.is-compact-mode .hero__frame[data-frame="k2"] { object-position: 62% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k3"] { object-position: 100% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k5"] { object-position: 96% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k7"] { object-position: 82% center; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-scene__content {
+    display: flex; flex-direction: column;
+    min-height: calc(100svh - 15.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-ratings { margin-top: auto; padding-top: 1rem; }
+  /* Bright final frame: soft, low-opacity shadows avoid a dark rim around the letters. */
+  .hero.is-compact-mode .hero-scene--final :is(.scene-title, .scene-copy, .final-price-line, .final-signature, .final-signature strong, .button--dark) {
+    text-shadow: 0 1px 3px rgba(3, 10, 6, .45), 0 3px 10px rgba(3, 10, 6, .3);
+  }
+  .hero.is-compact-mode .hero-scene--final :is(.scene-copy, .final-price-line, .final-signature) { opacity: 1; }
+  .hero.is-compact-mode .hero-scene--final .button--dark { box-shadow: 0 2px 10px rgba(3, 10, 6, .16); }
+  .hero-ratings { display: grid; width: min(100%, 22rem); gap: 8px; }
+  .rating-pill { width: 100%; min-height: 44px; padding: .55rem .8rem; font-size: 13px; line-height: 1.25; }
+  .hero__chrome a, .certificate-link, .scenario-link, .button, .content-button,
+  .text-link, .site-footer__links a, .faq-list summary { min-height: 44px; }
+  .floating-cta {
+    right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px;
+    max-width: calc(100vw - 24px); gap: 8px;
+  }
+  .floating-cta__row { width: 100%; gap: 8px; }
+  .floating-cta__button { min-width: 0; min-height: 44px; flex: 1 1 0; padding: .65rem .45rem; font-size: 13px; }
+  .floating-cta__note { font-size: 13px; line-height: 1.25; }
+  .after-hero { padding-bottom: 0; }
+  .after-hero .program-card--photo { padding-top: 8rem; }
+  .quiz-result__card { padding-top: 8rem; }
+  .after-hero :is(a, button, input, summary) { scroll-margin-bottom: calc(9rem + env(safe-area-inset-bottom)); }
+
+  /* Photo remains the dominant part of every service/result card. */
+  .after-hero .program-card--photo, body .quiz-result__card { min-height: 27rem !important; }
+  .after-hero .program-card--photo .program-card__body, .quiz-result__body {
+    flex: 0 0 auto !important; max-height: none; overflow: visible;
+    background: linear-gradient(180deg, rgba(6,13,9,.62), rgba(6,13,9,.92)) !important;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .program-card--photo::after, body .quiz-result__card::after {
+    background: linear-gradient(180deg, rgba(8,16,12,.02) 0%, rgba(8,16,12,.04) 48%, rgba(8,16,12,.72) 100%) !important;
+  }
+
+  /* Quiz: large labels, a real checkbox target, and an in-flow result CTA. */
+  .quiz-form { gap: 1rem; margin-top: 1.5rem; }
+  .quiz-question { padding: 1rem; }
+  .quiz-options { gap: 10px; }
+  .quiz-option { min-height: 52px; font-size: 15px; }
+  .quiz-option input { width: 20px; height: 20px; }
+  .form-consent { position: relative; min-height: 44px; align-items: center; font-size: 13px; }
+  .form-consent input { width: 24px; height: 24px; }
+  .quiz-actions, .quiz-actions .content-button { width: 100%; }
+  .quiz-result { scroll-margin-top: 1rem; }
+  .program-card .pc__actions, .need-card .pc__actions, .quiz-result .pc__actions { width: 100%; }
+
+  /* Header stays outside the scroll area; either offer can be reached. */
+  .promo { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+  .promo .promo__panel {
+    width: 100%; max-height: calc(100svh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 16px;
+  }
+  .promo .promo__head { min-height: 0; gap: 12px; padding: 12px; }
+  .promo .promo__tagline { font: 500 13px/1.4 "Lora", Georgia, serif; }
+  .promo .promo__close { min-width: 44px; min-height: 44px; height: auto; padding: 8px 10px; font: 13px/1.4 "Lora", Georgia, serif; flex: 0 0 auto; }
+  .promo .promo__body { grid-template-columns: minmax(0, 1fr); }
+  .promo .promo__half { display: grid; grid-template-columns: clamp(76px, 24vw, 112px) minmax(0, 1fr); align-items: start; gap: 12px; padding: 14px 12px; }
+  .promo .promo__half + .promo__half { border-top: 1px solid rgba(227,212,167,.2); }
+  .promo .promo__portrait { width: 100%; height: 132px; aspect-ratio: auto; object-fit: cover; object-position: 50% 25%; border-radius: 10px; }
+  .promo .promo__half--alvi .promo__portrait { object-position: 84% center; }
+  .promo .promo__portrait[hidden] { display: none; }
+  .promo .promo__half:has(.promo__portrait[hidden]) { grid-template-columns: 1fr; }
+  .promo .promo__content { min-width: 0; padding: 0; overflow: visible; gap: 8px; }
+  .promo .promo__brand { font-size: 11px; letter-spacing: .08em; }
+  .promo .promo__title { font-size: 20px; line-height: 1.15; }
+  .promo .promo__copy { font-size: 14px; line-height: 1.4; }
+  .promo .promo__note { font-size: 12px; line-height: 1.4; }
+  .promo .promo__button { width: 100%; min-width: 0; padding: 10px 8px; font-size: 13px; }
+  .promo .promo__price { font-size: 26px; }
+
+  /* Price navigation is a horizontally scrollable row; tables stay internal. */
+  .price-header { gap: 1rem; padding-inline: 1rem; }
+  .price-header > a { min-width: 44px; min-height: 44px; }
+  .price-intro, .price-layout { width: 100%; margin-inline: 0; padding-inline: 1rem; }
+  .pnav { margin-inline: -1rem; padding: .75rem 1rem; overflow-x: auto; overscroll-behavior-inline: contain; }
+  .pnav > ul { display: flex !important; width: max-content; max-width: none; gap: 8px !important; }
+  .pnav > ul > li { width: auto; flex: 0 0 auto; margin-top: 0 !important; }
+  .pnav > ul > li.is-open { max-width: min(76vw, 18rem); }
+  .pnav__top { white-space: nowrap; }
+  .pnav__top, .pnav__sub a { display: flex; min-height: 44px; align-items: center; padding: .6rem .75rem; }
+  .pnav__sub li + li { margin-top: 8px; }
+  .pc { padding: 1rem; }
+  .pc__meta { align-items: flex-start; gap: .5rem 1rem; }
+  .pc__price { white-space: nowrap; }
+  .pt { min-width: 36rem; }
+  .pt th, .pt td { padding: .8rem .7rem; line-height: 1.45; }
+  .price-page > .floating-cta { position: relative; inset: auto; margin: 1rem auto calc(1rem + env(safe-area-inset-bottom)); width: min(calc(100% - 2rem), 32rem); }
+
+  /* Task board. */
+  #app { width: min(calc(100% - 2rem), 880px); }
+  .task { overflow: hidden; }
+  .task .instruction, .task .why { overflow-wrap: anywhere; }
+  .task button, .task .link, .task textarea { min-height: 44px; font-size: 15px; }
+  .task .actions { gap: 8px; }
+}
+
+@media (max-width: 56.24rem) and (prefers-reduced-motion: reduce) {
+  html:focus-within { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  video { display: none !important; }
+}
