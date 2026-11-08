@@ -1,0 +1,56 @@
+name: Site content auto-merge
+on:
+  pull_request:
+    paths: ['tools/site-content-automerge/**', '.github/workflows/site-content-automerge.yml', 'specs/231-site-content-automerge/**']
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  workflow_run:
+    workflows: ['Protect production sites', 'Production sites guard tests', 'spec-kit']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Номер PR; пусто — проверить открытые'
+        required: false
+  schedule:
+    - cron: '*/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: site-content-automerge-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'writer' }}
+  cancel-in-progress: false
+jobs:
+  policy-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tools/site-content-automerge -p 'test_*.py' -v
+  merge-content:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      statuses: read
+    steps:
+      # Trusted main only. Never check out, import, build or execute PR files.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Слить только проверенный контент
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_MERGE_REPOSITORY: ${{ github.repository }}
+          # This reviewed workflow is the only source of the automatic merge scope.
+          SITE_MERGE_ROOTS: '["sites/drafts/","sites/alvi/","sites/avokado/","sites/avokado2/","sites/avokado3/","sites/palitra-love/","sites/taisabai/","sites/nebo/"]'
+          SITE_MERGE_EXTENSIONS: '[".html",".css",".js",".mjs",".json",".svg",".png",".jpg",".jpeg",".webp",".avif",".gif",".ico",".mp4",".webm",".mp3",".ogg",".wav",".woff",".woff2",".ttf",".txt",".xml",".webmanifest"]'
+        run: python3 tools/site-content-automerge/merge.py --apply
