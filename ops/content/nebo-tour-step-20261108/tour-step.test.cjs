@@ -104,3 +104,12 @@ test('если видео не готово — плавная прокрутк�
   assert.equal(p.win.scrollY, 2247);
   assert.equal(p.video.paused, true);
 });
+
+test('несколько свайпов подряд: видео играет до конца без прыжков (раньше рвалось через 30 с)', () => {
+  const p = page();
+  p.wheel(100); p.tick(500); p.wheel(100); p.tick(500); p.wheel(100);   // три блока вперёд
+  let prev = p.win.scrollY, maxJump = 0;
+  for (let i = 0; i < 4000 && !p.video.paused; i++) { p.tick(16); maxJump = Math.max(maxJump, p.win.scrollY - prev); prev = p.win.scrollY; }
+  assert.equal(p.win.scrollY, 6272, 'дошли до 4-го блока');
+  assert.ok(maxJump < 60, 'нет прыжков, максимум за кадр ' + maxJump + ' px');
+});
