@@ -382,9 +382,9 @@ const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
 const N = 8, film = document.getElementById('film'), frames = [];
 for (let i = 1; i <= N; i++) {
   const d = document.createElement('div'); d.className = 'fr';
-  if (i <= 2) {
+  if ([1, 2, 3, 5].includes(i)) {
     const v = document.createElement('video'); v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute('playsinline', '');
-    v.preload = i === 1 ? 'auto' : 'metadata'; v.poster = 'm/v/story' + i + '.jpg'; v.src = 'm/v/story' + i + '.mp4';
+    v.preload = i === 1 ? 'auto' : 'metadata'; if (i > 2) v.preload = 'none'; v.poster = 'm/v/story' + i + '.jpg'; v.src = 'm/v/story' + i + '.mp4';
     d.append(v);
   } else {
     const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; im.loading = 'lazy'; d.append(im);
