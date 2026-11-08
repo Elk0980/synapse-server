@@ -73,6 +73,8 @@ async function startChildMcp({upstreamCall, job, agentName}) {
     }
     if (name === 'doc_read' && !documents.has(args.path)) fail();
     if (name === 'session_end' && !sessions.has(args.session_id)) fail();
+    // №194: приёмку кода фиксирует только доверенный обработчик после проверки CI.
+    if (name === 'task_comment' && /КОД\s+ПРИНЯТ/iu.test(args.text)) fail('«КОД ПРИНЯТ» оставляет только доверенный обработчик после зелёного CI.');
   }
   async function call(name,args) {
     validate(name,args);

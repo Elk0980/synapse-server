@@ -387,3 +387,73 @@ test('подготовка создаёт настоящий отдельный 
   await assert.rejects(fs.access(path.join(target,'AGENT-ECONOMY.md')),{code:'ENOENT'});
   await exec('git',['-C',f.config.repo,'worktree','remove',target],{windowsHide:true});
 });
+
+// №194: профиль codex-review-merge и сигнал присутствия.
+const reviewJob = (fields = {}) => job({executor_profile:'codex-review-merge', code_only:false, allowed_paths:[], pr_number:621, ...fields});
+const finishReview = (child, outcome) => {
+  child.stdout.write(JSON.stringify({type:'thread.started',thread_id:randomUUID()})+'\n');
+  child.stdout.write(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({outcome,summary:'SAMPLE вердикт'})}})+'\n');
+  child.stdout.write(JSON.stringify({type:'turn.completed'})+'\n'); child.end(0);
+};
+const reviewTools = (mergeResult = {merged:true,accepted:true,merge_commit:'c'.repeat(40)}) => {
+  const seen = {prepare:[], merge:[]};
+  return {seen, impl:{
+    prepareReview:async args => { seen.prepare.push(args); return {remote:'example/sample', reviewedSha:'a'.repeat(40), url:'https://github.com/example/sample/pull/621'}; },
+    mergeReviewed:async args => { seen.merge.push(args); if (mergeResult.merged) await args.comment('КОД ПРИНЯТ — SAMPLE'); return mergeResult; }}};
+};
+
+test('ревью-задание: только номер PR, пустая область, без продолжения', () => {
+  const j = reviewJob(), valid = validateJob(j);
+  assert.equal(valid.review,true); assert.match(valid.branch,/^review\/pr-621-/); assert.deepEqual(valid.allowed_paths,[]);
+  assert.throws(() => validateJob({...j,code_only:true}),/INVALID_REVIEW_JOB/);
+  assert.throws(() => validateJob({...j,allowed_paths:['ops/']}),/INVALID_REVIEW_JOB/);
+  assert.throws(() => validateJob({...j,pr_number:0}),/INVALID_REVIEW_JOB/);
+  assert.throws(() => validateJob({...j,session_id:randomUUID(),message_id:'1'}),/REVIEW_RESUME_UNSUPPORTED/);
+  assert.throws(() => validateJob({...job(),pr_number:5}),/INVALID_JOB/);
+  const {buildReviewPrompt} = require('./agent-launch-local-worker');
+  const prompt = buildReviewPrompt(valid);
+  assert.ok(prompt.includes('PR #621')); assert.ok(prompt.includes('Не пиши «КОД ПРИНЯТ» сам')); assert.ok(prompt.includes('approve|changes|blocked'));
+});
+
+test('approve → доверенная стадия сливает без publisher; changes → только замечание', async t => {
+  let published = 0;
+  const tools = reviewTools();
+  const f = await fixture(t,{dependencies:{reviewImpl:tools.impl,publishImpl:async()=>{published++;return{};}}});
+  const j = reviewJob(); await f.worker.startJob(j);
+  assert.equal(tools.seen.prepare[0].prNumber,621);
+  finishReview(f.children[0],'approve'); await tick(()=>f.worker.active.size===0);
+  assert.equal(published,0); assert.equal(tools.seen.merge[0].reviewedSha,'a'.repeat(40));
+  const complete = f.calls.find(x=>x.args.event==='complete');
+  assert.match(complete.args.summary,/слит обычным merge/);
+  assert.ok(f.calls.some(x=>x.name==='task_comment'&&x.args.text==='КОД ПРИНЯТ — SAMPLE'));
+  assert.equal(f.worker.records[j.run_id].merge_commit,'c'.repeat(40));
+
+  const second = reviewTools(), g = await fixture(t,{dependencies:{reviewImpl:second.impl}});
+  await g.worker.startJob(reviewJob()); finishReview(g.children[0],'changes'); await tick(()=>g.worker.active.size===0);
+  assert.equal(second.seen.merge.length,0);
+  assert.match(g.calls.find(x=>x.args.event==='complete').args.summary,/нужны правки/);
+  assert.ok(!g.calls.some(x=>x.name==='task_comment'&&/КОД ПРИНЯТ/.test(x.args.text)));
+});
+
+test('ревью: «ready» не принимается, blocked не сливает, отказ слияния виден в итоге', async t => {
+  const tools = reviewTools(), f = await fixture(t,{dependencies:{reviewImpl:tools.impl}});
+  await f.worker.startJob(reviewJob()); finishReview(f.children[0],'ready'); await tick(()=>f.worker.active.size===0);
+  assert.equal(tools.seen.merge.length,0); assert.ok(f.calls.some(x=>x.args.event==='failed'));
+  const blocked = reviewTools(), g = await fixture(t,{dependencies:{reviewImpl:blocked.impl}});
+  await g.worker.startJob(reviewJob()); finishReview(g.children[0],'blocked'); await tick(()=>g.worker.active.size===0);
+  assert.equal(blocked.seen.merge.length,0);
+  const rejected = reviewTools({merged:false,reason:'CI_FAILED'}), h = await fixture(t,{dependencies:{reviewImpl:rejected.impl}});
+  await h.worker.startJob(reviewJob()); finishReview(h.children[0],'approve'); await tick(()=>h.worker.active.size===0);
+  assert.match(h.calls.find(x=>x.args.event==='complete').args.summary,/CI_FAILED/);
+});
+
+test('сигнал присутствия уходит сразу при старте и затем по таймеру, без run_id', async t => {
+  const f = await fixture(t);
+  f.worker.config.presenceMs = 20; f.worker.config.pollMs = 60000;
+  f.worker.start();
+  await tick(()=>f.calls.filter(x=>x.args?.event==='presence').length>=2);
+  const signal = f.calls.find(x=>x.args?.event==='presence');
+  assert.equal(signal.name,'agent_worker_update'); assert.equal(signal.args.worker_id,f.worker.workerId);
+  assert.equal(signal.args.run_id,undefined); assert.equal(signal.args.lease_token,undefined);
+  assert.equal(signal.args.active_runs,0);
+});
