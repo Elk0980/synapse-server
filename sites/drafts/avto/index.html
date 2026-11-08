@@ -411,11 +411,12 @@ chapters.forEach((c, i) => {
 const railBtns = [...rail.children];
 const story = document.querySelector('.story');
 
+let auto = null; // autopilot: one swipe = one block, the transition plays by itself
 function renderStory() {
   const r = story.getBoundingClientRect(), vh = innerHeight;
   const total = r.height - vh;
   const p = Math.min(Math.max(-r.top / total, 0), 1) * (N - 1); // 0..7
-  const i = Math.min(Math.floor(p), N - 1), f = p - i;
+  const i = Math.min(Math.floor(p + 1e-3), N - 1), f = Math.max(p - i, 0); // epsilon: landing exactly on a block must count as that block
   const HOLD = 0.4;                       // share of a block spent on the loop before the transition starts
   const t = Math.min(Math.max((f - HOLD) / (1 - HOLD), 0), 1);
   const tr = trans[i], trv = tr && tr.querySelector('video');
@@ -432,7 +433,8 @@ function renderStory() {
   if (useTr && trv) {
     if (trv.preload !== 'auto') trv.preload = 'auto';
     const d = trv.duration;
-    if (d) { const want = Math.min(t * d, d - 0.04); if (Math.abs(trv.currentTime - want) > 0.03) trv.currentTime = want; }
+    // while autopilot plays this video natively, scroll follows the video — don't seek it back
+    if (d && !(auto && auto.v === trv && auto.dir > 0)) { const want = Math.min(t * d, d - 0.04); if (Math.abs(trv.currentTime - want) > 0.03) trv.currentTime = want; }
   }
   [i + 1, i + 2].forEach(k => { const fr = trans[k - 1]; const v = fr && fr.querySelector('video'); if (v && v.preload !== 'auto') v.preload = 'auto'; });
   const cur = Math.round(p);
@@ -450,6 +452,78 @@ const setH = () => document.querySelectorAll('.ch>.card').forEach(c => c.parentE
 addEventListener('resize', () => { setH(); renderStory(); });
 setH(); document.fonts && document.fonts.ready.then(setH);
 renderStory();
+
+/* ---------- STORY AUTOPILOT ----------
+   One wheel notch / swipe / arrow key moves exactly one block: the transition video
+   plays on its own (scroll follows it), then the next block's loop runs with its card
+   until the visitor swipes again. Swiping up plays the same transition backwards. */
+(function () {
+  const HOLD = 0.4, FADE = 1100;
+  const top0 = () => story.getBoundingClientRect().top + scrollY;
+  const total = () => story.offsetHeight - innerHeight;
+  const yAt = p => top0() + total() * p / (N - 1);
+  const curBlock = () => Math.min(Math.max(Math.round((scrollY - top0()) / total() * (N - 1)), 0), N - 1);
+  const inStory = () => { const s = scrollY, a = top0(), b = a + total(); return s >= a - innerHeight * 0.25 && s <= b + 2; };
+  let lockUntil = 0;
+  const jump = y => { document.documentElement.style.scrollBehavior = 'auto'; scrollTo(0, y); };
+  function finish(k) { jump(yAt(k)); if (auto && auto.v) auto.v.pause(); auto = null; lockUntil = performance.now() + 350; renderStory(); document.documentElement.style.scrollBehavior = ''; }
+  function step(dir) {
+    if (auto || performance.now() < lockUntil) return true;
+    const k = curBlock(), to = k + dir;
+    if (to < 0 || to > N - 1) return false;                 // let the page scroll out of the story
+    const i = Math.min(k, to), tr = trans[i], v = tr && tr.querySelector('video');
+    if (RM) { finish(to); return true; }
+    auto = {dir, v, i, k, to};
+    if (v && dir > 0) {                                      // forward: native playback, scroll follows the video
+      jump(yAt(i + HOLD)); v.currentTime = 0; v.preload = 'auto';
+      v.play().catch(() => {});
+      const t0 = performance.now();
+      const tick = () => {
+        if (!auto || auto.v !== v) return;
+        const d = v.duration || 0;
+        if (d && (v.ended || v.currentTime >= d - 0.06)) return finish(to);
+        if (!d && performance.now() - t0 > 6000) return finish(to);   // video never loaded
+        const t = d ? v.currentTime / d : 0;
+        jump(yAt(i + HOLD + (1 - HOLD) * t));
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    } else {                                                 // backwards (seek-driven) or a plain crossfade
+      const d = v && v.duration ? v.duration * 1000 : FADE, t0 = performance.now();
+      const tick = now => {
+        if (!auto) return;
+        const q = Math.min((now - t0) / d, 1), t = dir > 0 ? q : 1 - q;
+        jump(yAt(i + HOLD + (1 - HOLD) * t));
+        if (q >= 1) return finish(to);
+        requestAnimationFrame(tick);
+      };
+      jump(yAt(i + (dir > 0 ? HOLD : 1)));
+      requestAnimationFrame(tick);
+    }
+    return true;
+  }
+  addEventListener('wheel', e => {
+    if (!inStory() || Math.abs(e.deltaY) < 4) return;
+    const dir = e.deltaY > 0 ? 1 : -1;
+    if (auto || performance.now() < lockUntil) { e.preventDefault(); lockUntil = performance.now() + 350; return; } // swallow trackpad inertia
+    if (step(dir)) e.preventDefault();
+  }, {passive: false});
+  let ty = null;
+  addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, {passive: true});
+  addEventListener('touchmove', e => { if (inStory() && ty !== null) e.preventDefault(); }, {passive: false});
+  addEventListener('touchend', e => {
+    if (ty === null || !inStory()) { ty = null; return; }
+    const dy = ty - e.changedTouches[0].clientY; ty = null;
+    if (Math.abs(dy) < 30) return;
+    if (!step(dy > 0 ? 1 : -1)) jump(scrollY + dy * 2); // at the ends — let the visitor leave the story
+  }, {passive: true});
+  addEventListener('keydown', e => {
+    if (!inStory() || e.target.closest('input,textarea,select')) return;
+    const dir = ['ArrowDown', 'PageDown', ' '].includes(e.key) ? 1 : ['ArrowUp', 'PageUp'].includes(e.key) ? -1 : 0;
+    if (dir && step(dir)) e.preventDefault();
+  });
+  railBtns.forEach((b, k) => b.onclick = () => { if (auto) return; const c = curBlock(); if (Math.abs(k - c) === 1) step(k - c); else finish(k); });
+})();
 
 /* ---------- CATALOG SHOWROOM ---------- */
 const CARS = [
