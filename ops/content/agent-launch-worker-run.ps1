@@ -33,17 +33,32 @@ $node = if ($config.NODE_EXE) { [string]$config.NODE_EXE } else { (Get-Command n
 $worker = Join-Path $env:TASKS_AGENT_REPO 'ops\content\agent-launch-local-worker.js'
 if (-not (Test-Path -LiteralPath $worker -PathType Leaf)) { Write-Log 'WORKER_NOT_FOUND'; exit 2 }
 
+# Node пишет UTF-8: без этого русский текст в журнале превращается в кракозябры.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 $delay = 30
 while ($true) {
   Write-Log 'WORKER_START'
   $started = Get-Date
-  # stdout обработчика содержит только коды состояния, без секретов и текстов задач.
-  & $node $worker 2>&1 | ForEach-Object { Write-Log ([string]$_) }
+  $duplicate = $false
+  # В Windows PowerShell 5.1 каждая строка stderr становится ErrorRecord; при Stop это
+  # оборвало бы запускатель. На время работы обработчика ошибки только пишутся в журнал.
+  $ErrorActionPreference = 'Continue'
+  # stdout/stderr обработчика содержат только коды состояния, без секретов и текстов задач.
+  & $node $worker 2>&1 | ForEach-Object {
+    $text = [string]$_
+    if ($text -match 'WORKER_ALREADY_RUNNING') { $duplicate = $true }
+    Write-Log $text
+  }
   $code = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
   Write-Log "WORKER_EXIT $code"
-  # Второй экземпляр не нужен: обработчик уже работает в другом процессе.
-  if ((Get-Content -LiteralPath $log -Tail 3 -Encoding UTF8) -match 'WORKER_ALREADY_RUNNING') { Write-Log 'STOP_DUPLICATE'; exit 0 }
-  if (((Get-Date) - $started).TotalMinutes -gt 10) { $delay = 30 } else { $delay = [Math]::Min($delay * 2, 300) }
+  if ($duplicate) {
+    # Обработчик уже работает в другом процессе. Не выходим насовсем: если тот упадёт,
+    # этот запускатель через 5 минут поднимет обработчик снова.
+    $delay = 300
+  } elseif (((Get-Date) - $started).TotalMinutes -gt 10) { $delay = 30 } else { $delay = [Math]::Min($delay * 2, 300) }
   Write-Log "RESTART_IN ${delay}s"
   Start-Sleep -Seconds $delay
 }

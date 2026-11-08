@@ -2,12 +2,14 @@
 // №194: профиль codex-review-merge — доверенная стадия слияния на синтетических ответах git/gh.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {prepareReview, mergeReviewed, checksState} = require('./agent-launch-review-merge');
+const {prepareReview, mergeReviewed, cleanupReview, checksState} = require('./agent-launch-review-merge');
 
 const SHA = 'a'.repeat(40), OTHER = 'b'.repeat(40), MERGE = 'c'.repeat(40);
 const REMOTE = 'Elk0980/synapse-server';
 const pr = (fields = {}) => ({number:621, state:'OPEN', isDraft:false, headRefOid:SHA, headRefName:'claude/sample-branch',
-  baseRefName:'main', url:`https://github.com/${REMOTE}/pull/621`, mergeCommit:null, ...fields});
+  baseRefName:'main', url:`https://github.com/${REMOTE}/pull/621`, mergeCommit:null,
+  isCrossRepository:false, headRepositoryOwner:{login:'Elk0980'}, author:{login:'Elk0980'}, ...fields});
+const fast = {sleep:async () => {}, settleMs:0};
 
 function fakeExec({views = [pr()], checks = [[{name:'ci',bucket:'pass'}]], fetched = SHA, mergeFails = false} = {}) {
   const calls = [];
@@ -17,7 +19,7 @@ function fakeExec({views = [pr()], checks = [[{name:'ci',bucket:'pass'}]], fetch
     if (command === 'git') {
       const rest = args.slice(args.indexOf('-C') + 2);
       if (rest[0] === 'remote') return {stdout:`https://github.com/${REMOTE}.git\n`};
-      if (rest[0] === 'rev-parse') return {stdout:`${fetched}\n`};
+      if (rest[0] === 'rev-parse') return {stdout:`${rest[1].includes('-base') ? 'd'.repeat(40) : fetched}\n`};
       return {stdout:''};
     }
     if (args[0] === 'pr' && args[1] === 'view') return {stdout:JSON.stringify(views[Math.min(view++, views.length - 1)])};
@@ -35,22 +37,26 @@ function fakeExec({views = [pr()], checks = [[{name:'ci',bucket:'pass'}]], fetch
 test('подготовка ревью: только открытый PR Claude в main, копия ровно на head', async () => {
   const ok = fakeExec();
   const result = await prepareReview({repo:'/repo', prNumber:621, target:'/trees/review', execImpl:ok.exec, env:{}});
-  assert.deepEqual(result, {remote:REMOTE, reviewedSha:SHA, url:pr().url, branch:'claude/sample-branch'});
+  assert.deepEqual(result, {remote:REMOTE, reviewedSha:SHA, baseSha:'d'.repeat(40), url:pr().url, branch:'claude/sample-branch'});
   assert.ok(ok.calls.some(line => line.includes(`worktree add --detach /trees/review ${SHA}`)));
+  assert.ok(ok.calls.some(line => line.includes('+refs/heads/main:refs/synapse-review/pr-621-base')));
   for (const [fields, code] of [[{state:'MERGED'}, 'REVIEW_PR_NOT_OPEN'], [{baseRefName:'dev'}, 'REVIEW_PR_BASE_REJECTED'],
-    [{headRefName:'codex/agent-task-1'}, 'REVIEW_PR_NOT_CLAUDE'], [{url:'https://github.com/other/repo/pull/621'}, 'REVIEW_PR_INVALID']]) {
+    [{headRefName:'codex/agent-task-1'}, 'REVIEW_PR_NOT_CLAUDE'], [{url:'https://github.com/other/repo/pull/621'}, 'REVIEW_PR_INVALID'],
+    // Публичный репозиторий: ветка claude/* из форка или от чужого автора — не PR Claude.
+    [{isCrossRepository:true}, 'REVIEW_PR_FOREIGN'], [{headRepositoryOwner:{login:'attacker'}}, 'REVIEW_PR_FOREIGN'],
+    [{author:{login:'attacker'}}, 'REVIEW_PR_FOREIGN'], [{isCrossRepository:undefined}, 'REVIEW_PR_FOREIGN'], [{isDraft:true}, 'REVIEW_PR_DRAFT']]) {
     await assert.rejects(prepareReview({repo:'/repo', prNumber:621, target:'/t', execImpl:fakeExec({views:[pr(fields)]}).exec, env:{}}), {code});
   }
   await assert.rejects(prepareReview({repo:'/repo', prNumber:621, target:'/t', execImpl:fakeExec({fetched:OTHER}).exec, env:{}}), {code:'REVIEW_HEAD_MOVED'});
 });
 
 test('зелёный CI → «КОД ПРИНЯТ» → обычный merge с привязкой к head; меток нет', async () => {
-  const fake = fakeExec({views:[pr({isDraft:true}), pr({isDraft:true}), pr({state:'MERGED', mergeCommit:{oid:MERGE}})]});
+  const fake = fakeExec({views:[pr(), pr(), pr({state:'MERGED', mergeCommit:{oid:MERGE}})]});
   const comments = [];
-  const result = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async text => comments.push(text), execImpl:fake.exec, env:{}});
+  const result = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async text => comments.push(text), execImpl:fake.exec, env:{}, ...fast});
   assert.deepEqual(result, {merged:true, accepted:true, merge_commit:MERGE, url:pr().url});
   assert.equal(comments.length, 1); assert.match(comments[0], /^КОД ПРИНЯТ — PR #621, head aaaaaaaaaaaa/);
-  assert.ok(fake.calls.includes(`gh pr ready 621 --repo ${REMOTE}`));
+  assert.ok(!fake.calls.some(line => line.includes('pr ready')));
   assert.ok(fake.calls.includes(`gh pr merge 621 --repo ${REMOTE} --merge --match-head-commit ${SHA}`));
   assert.ok(!fake.calls.some(line => /label|--admin|--squash|--rebase|deploy/.test(line)));
   // Комментарий раньше слияния.
@@ -65,15 +71,15 @@ test('без зелёного CI или при сдвинутом head слия�
     const fake = fakeExec(options), comments = [];
     let clock = 0;
     const result = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async text => comments.push(text),
-      execImpl:fake.exec, env:{}, now:() => clock, sleep:async ms => { clock += ms; }, ciWaitMs:5 * 60000});
+      execImpl:fake.exec, env:{}, now:() => clock, sleep:async ms => { clock += ms; }, ciWaitMs:5 * 60000, settleMs:0});
     assert.deepEqual(result, expected); assert.equal(comments.length, 0);
     assert.ok(!fake.calls.some(line => line.includes('pr merge')));
   }
   const moved = fakeExec({views:[pr({headRefOid:OTHER})]});
-  await assert.rejects(mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async () => {}, execImpl:moved.exec, env:{}}), {code:'REVIEW_HEAD_MOVED'});
+  await assert.rejects(mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async () => {}, execImpl:moved.exec, env:{}, ...fast}), {code:'REVIEW_HEAD_MOVED'});
   const late = fakeExec({views:[pr(), pr({headRefOid:OTHER})]});
   const comments = [];
-  await assert.rejects(mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async text => comments.push(text), execImpl:late.exec, env:{}}), {code:'REVIEW_HEAD_MOVED'});
+  await assert.rejects(mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async text => comments.push(text), execImpl:late.exec, env:{}, ...fast}), {code:'REVIEW_HEAD_MOVED'});
   assert.equal(comments.length, 0);
 });
 
@@ -82,11 +88,26 @@ test('ожидание CI: pending → pass сливает; отказ защи�
     views:[pr(), pr(), pr({state:'MERGED', mergeCommit:{oid:MERGE}})]});
   let clock = 0;
   const merged = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async () => {}, execImpl:fake.exec, env:{},
-    now:() => clock, sleep:async ms => { clock += ms; }});
+    now:() => clock, sleep:async ms => { clock += ms; }, settleMs:0});
   assert.equal(merged.merged, true);
   const rejected = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async () => {},
-    execImpl:fakeExec({mergeFails:true}).exec, env:{}});
+    execImpl:fakeExec({mergeFails:true}).exec, env:{}, ...fast});
   assert.deepEqual(rejected, {merged:false, reason:'MERGE_REJECTED', accepted:true});
+  // Ошибка gh после фактического слияния: состояние перечитывается, статус не ложный.
+  const lost = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async () => {},
+    execImpl:fakeExec({mergeFails:true, views:[pr(), pr(), pr({state:'MERGED', mergeCommit:{oid:MERGE}})]}).exec, env:{}, ...fast});
+  assert.equal(lost.merged, true); assert.equal(lost.merge_commit, MERGE);
+});
+
+test('слияние не начинается у общего лимита запуска; копия ревью удаляется', async () => {
+  const fake = fakeExec(), comments = [];
+  const result = await mergeReviewed({repo:'/repo', remote:REMOTE, prNumber:621, reviewedSha:SHA, comment:async text => comments.push(text),
+    execImpl:fake.exec, env:{}, now:() => 1000, deadlineAt:1000 + 60000, ...fast});
+  assert.deepEqual(result, {merged:false, reason:'RUN_TIME_LIMIT'}); assert.equal(comments.length, 0);
+  const cleanup = fakeExec();
+  await cleanupReview({repo:'/repo', prNumber:621, target:'/trees/review', execImpl:cleanup.exec, env:{}});
+  assert.ok(cleanup.calls.some(line => line.endsWith('worktree remove --force /trees/review')));
+  assert.ok(cleanup.calls.some(line => line.endsWith('update-ref -d refs/synapse-review/pr-621')));
 });
 
 test('состояние проверок: только pass/skipping с хотя бы одним pass считается зелёным', async () => {
@@ -95,4 +116,5 @@ test('состояние проверок: только pass/skipping с хот�
   assert.equal(await checksState(gh([{bucket:'skipping'}]), REMOTE, 1), 'failed');
   assert.equal(await checksState(gh([{bucket:'pass'},{bucket:'cancel'}]), REMOTE, 1), 'failed');
   assert.equal(await checksState(async () => { throw new Error('x'); }, REMOTE, 1), 'unknown');
+  assert.equal(await checksState(async () => { throw Object.assign(new Error('x'), {stderr:'no checks reported on the branch'}); }, REMOTE, 1), 'missing');
 });

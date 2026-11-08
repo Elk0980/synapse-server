@@ -125,7 +125,7 @@ launchTool.inputSchema = launchTool.inputSchema.superRefine((value, context) => 
 const updateTool = TOOLS.find(tool => tool.name === 'agent_worker_update');
 updateTool.inputSchema = updateTool.inputSchema.superRefine((value, context) => {
   const presence = value.event === 'presence';
-  const valid = presence ? value.run_id === undefined && value.lease_token === undefined
+  const valid = presence ? ['run_id','lease_token','session_id','log_tail','summary','exit_code'].every(key => value[key] === undefined)
     : value.run_id !== undefined && value.lease_token !== undefined && value.platform === undefined && value.active_runs === undefined;
   if (!valid) context.addIssue({code:'custom', message:presence ? 'Сигнал присутствия без run_id и lease_token' : 'Нужны run_id и lease_token'});
 });

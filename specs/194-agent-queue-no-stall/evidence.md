@@ -4,8 +4,8 @@
 
 | Проверка | Результат |
 |---|---|
-| `cd ops/tasks-mcp && npm test` (включая новый `agent-queue-no-stall.test.js`, 7 тестов) | 193 теста: 186 pass, 0 fail, 7 пропущены (только Windows) |
-| `node --test ops/content/agent-launch-*.test.js` (новые: `agent-launch-review-merge.test.js` 5, ревью/присутствие в worker 4, запрет «КОД ПРИНЯТ» в child MCP 1) | 75: 68 pass, 0 fail, 7 пропущены (только Windows) |
+| `cd ops/tasks-mcp && npm test` (включая новый `agent-queue-no-stall.test.js`, 7 тестов) | 187 pass, 0 fail, 7 пропущены (только Windows) |
+| `node --test ops/content/agent-launch-*.test.js` (новые: `agent-launch-review-merge.test.js` 6, ревью/присутствие в worker 4, запрет «КОД ПРИНЯТ» в child MCP 1) | 69 pass, 0 fail, 7 пропущены (только Windows) |
 | `node --test ops/crm/task-coordination.test.js ops/crm/task-watchdog.test.js sites/synapse/cabinet/task*.test.cjs` (jsdom через NODE_PATH, индикатор — новый тест в `task-board.test.cjs`) | 96 pass, 0 fail |
 | `python3 tools/spec-kit/gate.py check` | ok |
 
@@ -15,3 +15,7 @@
 - PowerShell-скрипты автозапуска не запускались: в окружении автора нет PowerShell. Проверка — установка на ПК Влада (Codex), признак — «Обработчик Codex: в сети» на доске.
 - Настоящие `gh pr checks/merge` против GitHub — только на синтетических ответах.
 - Боевой выпуск, экраны 390/1440 и сценарий «10 минут → запасной» на живой доске — после слияния и managed-release.
+
+## Ревью 1 (отдельный Claude-проверяющий, 08.11) и исправления
+Найдено: PR из форка с веткой `claude/*` проходил как PR Claude (блокер); завершённое ревью занимало задачу; «КОД ПРИНЯТ» можно было подделать похожими буквами и от того же автора; запускатель PowerShell 5.1 обрывался на stderr; после ошибки gh не перечитывалось состояние; «deploy не выполнялся» вводило в заблуждение при автовыпуске; diff мог строиться от устаревшего main; мелочи (занятый обработчик, лишние поля сигнала, «нет проверок», черновик, NaN, копии ревью, выход запускателя при дубле).
+Исправлено всё перечисленное, тесты добавлены. Оставлено осознанно: `reviewSafe` проверяет только заголовок и описание (обработчик deploy не умеет); `sweep()` берёт компании из запусков владельца, а не из текущей сессии (на сервере нет сессии; права только сужаются до компаний самих запусков).

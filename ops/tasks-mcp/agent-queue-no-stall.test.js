@@ -73,6 +73,8 @@ test('presence rejects run fields and run updates reject presence fields',t => {
   const worker_id = randomUUID();
   assert.throws(() => call('agent_worker_update',{worker_id,event:'presence',run_id:randomUUID()}),{status:400});
   assert.throws(() => call('agent_worker_update',{worker_id,event:'presence',active_runs:-1}),{status:400});
+  for (const extra of [{summary:'x'},{log_tail:'x'},{session_id:randomUUID()},{exit_code:0}])
+    assert.throws(() => call('agent_worker_update',{worker_id,event:'presence',...extra}),{status:400});
   assert.throws(() => call('agent_worker_update',{worker_id:'x',event:'presence'}),{status:400});
   assert.throws(() => call('agent_worker_update',{worker_id,event:'heartbeat',run_id:randomUUID(),lease_token:randomUUID(),platform:'win32'}),{status:400});
 });
@@ -100,7 +102,7 @@ test('a run nobody claimed for 10 minutes is handed to the backup executor with 
   assert.equal(call('agent_launch',{task_id:target.id,code_only:true,allowed_paths:['ops/']}).created,true);
 });
 
-test('handoff reason distinguishes an online but busy worker; claimed runs are never handed off',t => {
+test('an online worker busy with three processes keeps the fourth run queued; claimed runs are never handed off',t => {
   const {db,call,create,clock,claim} = fixture(t);
   const worker_id = randomUUID();
   const tasks = [1,2,3,4].map(n => create(`Код ${n}`));
@@ -114,7 +116,13 @@ test('handoff reason distinguishes an online but busy worker; claimed runs are n
   call('agent_workers_status');
   for (const job of jobs) assert.equal(call('agent_status',{run_id:job.run_id}).run.state,'running');
   const waiting = tasks.find(task => !jobs.some(job => job.task_id === task.id));
-  assert.match(comments(db,waiting.id).at(-1),/в сети, но не забрал запуск/);
+  const queued = call('agent_workers_status').queued;
+  assert.equal(queued.length,1);assert.equal(queued[0].task_id,waiting.id);assert.ok(queued[0].waiting_minutes >= 10);
+  assert.equal(call('agent_workers_status').handoffs_24h.length,0);
+  // Обработчик пропал — тот же запуск уходит запасному с честной причиной.
+  clock.at += 4 * MINUTE;
+  call('agent_workers_status');
+  assert.match(comments(db,waiting.id).at(-1),/обработчик Codex не в сети \(последний сигнал 4 мин назад\)/);
 });
 
 test('sweep hands off stale runs without any agent request and the morning digest gets one line',t => {
@@ -147,8 +155,13 @@ test('review-merge profile: needs only a PR number, skips the merge word gate, n
   const job = claim();
   assert.equal(job.executor_profile,'codex-review-merge');assert.equal(job.pr_number,621);
   assert.equal(job.code_only,false);assert.deepEqual(job.allowed_paths,[]);
-  update(job,'started',{session_id:randomUUID()});update(job,'complete',{summary:'Ревью завершено'});
+  update(job,'started',{session_id:randomUUID()});update(job,'complete',{summary:'Ревью: нужны правки'});
   assert.throws(() => call('agent_message',{run_id:run.run_id,text:'Ещё раз'}),{status:409});
+  // Завершённое ревью не занимает задачу: новое ревью (после правок) ставится сразу.
+  assert.equal(call('agent_status',{run_id:run.run_id}).run.state,'stopped');
+  assert.match(comments(db,target.id).at(-1),/Ревью PR #621 завершено: Ревью: нужны правки/);
+  const again = call('agent_launch',{task_id:target.id,executor_profile:'codex-review-merge',pr_number:621});
+  assert.equal(again.created,true);assert.notEqual(again.run.run_id,run.run_id);
 });
 
 test('review-merge profile refuses deploy instructions in the task',t => {

@@ -425,7 +425,9 @@ test('approve → доверенная стадия сливает без publis
   assert.equal(published,0); assert.equal(tools.seen.merge[0].reviewedSha,'a'.repeat(40));
   const complete = f.calls.find(x=>x.args.event==='complete');
   assert.match(complete.args.summary,/слит обычным merge/);
-  assert.ok(f.calls.some(x=>x.name==='task_comment'&&x.args.text==='КОД ПРИНЯТ — SAMPLE'));
+  assert.ok(f.calls.some(x=>x.name==='task_comment'&&x.args.text==='КОД ПРИНЯТ — SAMPLE'&&x.args.author==='Обработчик Codex (доверенный)'));
+  assert.ok(Number.isFinite(tools.seen.merge[0].deadlineAt));
+  assert.match(complete.args.summary,/managed-release не запускался/);
   assert.equal(f.worker.records[j.run_id].merge_commit,'c'.repeat(40));
 
   const second = reviewTools(), g = await fixture(t,{dependencies:{reviewImpl:second.impl}});

@@ -176,7 +176,7 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
           patch(row.run_id,data);
           audit(raw(row.run_id),actor,!authorized(row) ? 'Запуск без явного разрешения локального кода и области файлов остановлен.' : 'Изменённая задача остановлена ограничением локального кода.');
         }
-      } else if (handoffs && row.state === 'queued' && !row.stop_requested && now() - Date.parse(row.updated_at) >= HANDOFF_MS) {
+      } else if (handoffs && row.state === 'queued' && !row.stop_requested && now() - Date.parse(row.updated_at) >= HANDOFF_MS && !busyOnline(row.owner_id)) {
         handoff(row,actor);
       }
       // Stop requests and changed tasks do not prove process termination. A
@@ -191,6 +191,12 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
       }
     }
   }
+  // Обработчик в сети и занят тремя процессами — запуск не завис, а ждёт слота.
+  const busyOnline = ownerId => {
+    const last = ownerPresence(ownerId)[0];
+    return Boolean(last) && now() - last.last_seen <= PRESENCE_MS &&
+      db.prepare("SELECT count(*) n FROM task_dispatch_agent_runs WHERE state IN ('running','unknown')").get().n >= 3;
+  };
   const ownerPresence = ownerId => db.prepare('SELECT * FROM task_dispatch_agent_workers WHERE owner_id=? ORDER BY last_seen DESC').all(ownerId);
   const minutesAgo = at => Math.max(0, Math.floor((now() - at) / 60000));
   function presenceLine(ownerId) {
@@ -369,7 +375,7 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     // Worker acknowledgements remain possible after task closure/deletion/move,
     // but only within the ORIGINAL scope and with the original process lease.
     if (args.event === 'presence') {
-      if (args.run_id !== undefined || args.lease_token !== undefined) fail(400,'Сигнал присутствия не относится к запуску');
+      if (['run_id','lease_token','session_id','log_tail','summary','exit_code'].some(key => args[key] !== undefined)) fail(400,'Сигнал присутствия не относится к запуску');
       return presence(args,actor);
     }
     if (args.platform !== undefined || args.active_runs !== undefined) fail(400,'Поля присутствия только для event=presence');
@@ -382,7 +388,8 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     if (!events.includes(args.event)) fail(400,'Неизвестное событие запуска');
     if (args.session_id !== undefined) uuid(args.session_id);
     if (r.session_id && args.session_id && r.session_id !== args.session_id) fail(409,'Нельзя заменить контекст запуска');
-    const terminal = {complete:'waiting',failed:'failed',stopped:'stopped'}[args.event];
+    // Ревью не продолжается: завершённое ревью освобождает задачу для нового ревью на новый head.
+    const terminal = {complete:reviewRun(r) ? 'stopped' : 'waiting',failed:'failed',stopped:'stopped'}[args.event];
     if (!LIVE.has(r.state)) {
       if (r.state === terminal || args.event === 'heartbeat') return {run:view(r)};
       fail(409,'Turn запуска уже завершён');
@@ -409,7 +416,7 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     const next = raw(r.run_id);
     if (validTask && (terminal || (args.event === 'started' && (!r.session_id || r.state === 'unknown')))) {
       if (args.event === 'started' && !next.stop_requested && ownsDispatch(next)) coordination.tool('task_update',{task_id:r.task_id,status:'in_progress'},actor);
-      audit(next,actor,terminal ? `Turn завершён: ${next.state}; ${next.summary || 'результат ожидает проверки'}` : 'codex exec запущен; контекст зарегистрирован.');
+      audit(next,actor,terminal ? (reviewRun(next) && args.event === 'complete' ? `Ревью PR #${next.pr_number} завершено: ${next.summary || 'итог в комментариях'}` : `Turn завершён: ${next.state}; ${next.summary || 'результат ожидает проверки'}`) : 'codex exec запущен; контекст зарегистрирован.');
     } else if (validTask) report(next,actor,r.stop_requested ? 'Ожидается подтверждение остановки процесса.' : 'Heartbeat локального процесса получен.');
     return {run:view(next)};
   }
@@ -437,7 +444,8 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     for (const row of owners) {
       const actor = {role:'owner',userId:row.owner_id,companyCodes:new Set(String(row.codes || '').split(',').filter(Boolean))};
       const before = db.prepare('SELECT count(*) n FROM task_dispatch_agent_handoffs').get().n;
-      try { tx(() => reconcile(actor)); } catch { continue; }
+      try { tx(() => reconcile(actor)); }
+      catch (error) { console.error(`[agent-launch] sweep owner ${row.owner_id}: ${Number(error?.status) || 'error'}`); continue; }
       changed += db.prepare('SELECT count(*) n FROM task_dispatch_agent_handoffs').get().n - before;
     }
     return {handoffs:changed};

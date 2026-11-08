@@ -212,7 +212,7 @@ const init = (context) => {
   // №194: виден ли локальный обработчик Codex и что ждёт в очереди.
   const workerIndicator = status => {
     if (!status) return '';
-    const ago = status.minutes_ago === null ? '' : ` (последний сигнал ${Number(status.minutes_ago)} мин назад)`;
+    const ago = Number.isFinite(status.minutes_ago) ? ` (последний сигнал ${Number(status.minutes_ago)} мин назад)` : '';
     const text = status.online ? `Обработчик Codex: в сети${ago}` : status.last_seen_at ? `Обработчик Codex: не в сети${ago}` : 'Обработчик Codex: не в сети (ни разу не выходил на связь)';
     const queued = (status.queued || []).length, handed = (status.handoffs_24h || []).length;
     const extra = [queued ? `в очереди: ${queued}, дольше всех ждёт ${Number(Math.max(...status.queued.map(item => item.waiting_minutes)))} мин` : '',
