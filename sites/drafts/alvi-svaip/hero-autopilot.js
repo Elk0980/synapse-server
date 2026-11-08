@@ -57,8 +57,45 @@
    return [event&&event.target,doc.activeElement].some(el=>el&&el.closest&&el.closest(editable));
   }
   function jump(y){win.scrollTo({top:y,left:0,behavior:'instant'});}
+  // "Breathing" at a stop: the hero video drifts a little forward at low speed and slowly
+  // back, again and again, until the next gesture. The opening scene keeps its own idle loop.
+  const BREATH_SPAN=0.8,BREATH_RATE=0.3;
+  let breath=null;
+  function stopBreath(){
+   if(!breath)return;
+   const v=breath.v;breath=null;
+   try{v.pause();v.playbackRate=1;}catch(_e){}
+   win.__alviAutoplay=false;
+  }
+  function startBreath(stopIndex){
+   stopBreath();
+   if(stopIndex<1||compact()||reduce)return;
+   const v=doc.getElementById('hero-video');
+   if(!v||!Number.isFinite(v.duration)||v.duration<=0||v.readyState<2||v.style.opacity==='0')return;
+   const span=Math.max(v.duration-0.04,0.01);
+   const t0=Math.min(Math.max(v.currentTime,0),span),t1=Math.min(t0+BREATH_SPAN,span);
+   if(t1-t0<0.2)return;
+   const b={v,t0,t1,dir:1,y:win.scrollY,last:now()};
+   breath=b;win.__alviAutoplay=true;
+   v.playbackRate=BREATH_RATE;const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
+   const tick=()=>{
+    if(breath!==b)return;
+    if(Math.abs(win.scrollY-b.y)>2){stopBreath();win.dispatchEvent(new Event('scroll'));return;} // visitor scrolled by hand
+    const t=now(),dt=(t-b.last)/1000;b.last=t;
+    if(b.dir>0){
+     if(v.currentTime>=b.t1-0.01){v.pause();b.dir=-1;}
+    }else{
+     const next=Math.max(v.currentTime-dt*BREATH_RATE,b.t0);
+     try{v.currentTime=next;}catch(_e){}
+     if(next<=b.t0+0.001){b.dir=1;const p2=v.play();if(p2&&p2.catch)p2.catch(()=>{});}
+    }
+    win.requestAnimationFrame(tick);
+   };
+   win.requestAnimationFrame(tick);
+  }
   function go(dir){
    if(anim)return true;
+   stopBreath();
    if(now()<lockUntil)return true;
    const pos=positions(),y=win.scrollY,n=pos.length-1;
    // next stop strictly beyond the current position in the swipe direction
@@ -78,7 +115,7 @@
     const tEnd=Math.min(((target-top)/h)*span,span);
     anim={to};win.__alviAutoplay=true;
     v.playbackRate=SPEED;
-    const done=()=>{v.pause();v.playbackRate=1;try{v.currentTime=tEnd;}catch(_e){}jump(target);win.__alviAutoplay=false;anim=null;lockUntil=now()+LOCK_MS;};
+    const done=()=>{v.pause();v.playbackRate=1;try{v.currentTime=tEnd;}catch(_e){}jump(target);win.__alviAutoplay=false;anim=null;lockUntil=now()+LOCK_MS;win.setTimeout(()=>{if(!anim)startBreath(to);},120);};
     const p=v.play();if(p&&p.catch)p.catch(()=>{});
     const started=now();
     const tick=()=>{
@@ -97,7 +134,7 @@
     if(!anim)return;
     const q=Math.min((now()-t0)/ms,1);
     jump(Math.round(from+(target-from)*ease(q)));
-    if(q>=1){anim=null;lockUntil=now()+LOCK_MS;return;}
+    if(q>=1){anim=null;lockUntil=now()+LOCK_MS;win.setTimeout(()=>{if(!anim)startBreath(to);},200);return;}
     win.requestAnimationFrame(tick);
    };
    win.requestAnimationFrame(tick);
