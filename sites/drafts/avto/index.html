@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Восточный ключ — авто под заказ</title>
+<meta name="description" content="Демо-сайт: подбор и доставка автомобилей из Китая под ключ — проверка до покупки, договор с фиксированной ценой, растаможка и подготовка. Пример для Synapse Business.">
+<meta name="robots" content="noindex, nofollow">
+<meta property="og:title" content="Восточный ключ — авто под заказ из Китая">
+<meta property="og:description" content="Восемь шагов от поиска машины до ключей в ваших руках. Демо-сайт Synapse Business.">
+<meta property="og:image" content="poster.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#08090B; --bg2:#101216; --fg:#F3F4F6; --fg2:#B9BEC7; --fg3:#7D838E;
+  --line:rgba(255,255,255,.12); --glass:rgba(10,12,16,.58);
+  --red:#FF3B3B; --amber:#FFB25B;
+  --disp:"Oswald",system-ui,sans-serif; --body:"Golos Text",system-ui,sans-serif;
+}
+:root:not([data-theme="light"]){color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{display:block;max-width:100%}
+a{color:inherit}
+[hidden]{display:none!important}
+
+/* top bar */
+.bar{position:fixed;inset:0 0 auto 0;z-index:30;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,40px);background:linear-gradient(#08090Bcc,#08090B00)}
+.logo{font-family:var(--disp);font-weight:700;letter-spacing:.08em;font-size:18px;text-decoration:none;display:flex;align-items:center;gap:10px}
+.logo i{width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 14px var(--red)}
+.bar nav{display:flex;gap:22px;font-size:14px;color:var(--fg2)}
+.bar nav a{text-decoration:none}
+.bar nav a:hover{color:var(--fg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 15px var(--body);background:var(--red);color:#fff;border:0;border-radius:999px;padding:12px 22px;cursor:pointer;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px #ff3b3b55}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+.demo-tag{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;font-size:12px;color:var(--fg3);background:#000a;border:1px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;white-space:nowrap}
+
+/* ===== STORY: fixed film driven by scroll ===== */
+.story{position:relative}
+.film{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden}
+.film .fr{position:absolute;inset:0;opacity:0;will-change:opacity,transform}
+.film .fr img,.film .fr video{width:100%;height:100%;object-fit:cover}
+.film .breath{position:absolute;inset:0;animation:breath 9s ease-in-out infinite alternate}
+@keyframes breath{from{transform:scale(1)}to{transform:scale(1.035)}}
+.film::after{content:"";position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 50% 40%,transparent 40%,#000a 100%),
+  linear-gradient(transparent 55%,#08090Bd9 100%);pointer-events:none}
+.grain{position:absolute;inset:-50%;opacity:.07;pointer-events:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");animation:grain 1s steps(4) infinite}
+@keyframes grain{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-2%,-1%)}}
+
+.chapters{position:relative;margin-top:-100vh;margin-top:-100svh}
+.ch{height:150vh;display:flex;align-items:flex-start;padding:0 clamp(16px,5vw,64px)}
+.ch>.card{position:sticky;top:calc(100vh - var(--h,340px) - 9vh);top:calc(100svh - var(--h,340px) - 9vh)}
+.ch:first-child{align-items:center;padding-bottom:0}
+.ch:first-child>.card{position:relative;top:auto}
+.card{max-width:560px;background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:22px;padding:26px 28px;opacity:0;transform:translateY(30px);transition:opacity .6s,transform .6s}
+.ch.on .card{opacity:1;transform:none}
+.ch.right{justify-content:flex-end}
+.stage{display:inline-flex;align-items:center;gap:10px;font:500 12px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin-bottom:12px}
+.stage b{font:700 13px var(--disp);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:1px 7px;letter-spacing:.06em}
+.card h2{font:700 clamp(30px,4.4vw,52px)/1.02 var(--disp);text-transform:uppercase;letter-spacing:.01em;margin-bottom:12px}
+.card p{color:var(--fg2)}
+.card ul{list-style:none;margin-top:14px;display:grid;gap:8px}
+.card li{display:flex;gap:10px;color:var(--fg2);font-size:15.5px}
+.card li::before{content:"";flex:0 0 6px;height:6px;margin-top:9px;border-radius:50%;background:var(--red)}
+.pain{margin-top:14px;font-size:14px;color:var(--fg3);border-left:2px solid var(--red);padding-left:12px}
+.pain em{font-style:normal;color:var(--fg)}
+
+.hero{text-align:left;max-width:900px}
+.hero h1{font:700 clamp(46px,9vw,124px)/.92 var(--disp);text-transform:uppercase;letter-spacing:-.005em}
+.hero h1 span{color:var(--red);text-shadow:0 0 40px #ff3b3b66}
+.hero p{font-size:clamp(17px,1.6vw,21px);color:var(--fg2);max-width:560px;margin:18px 0 26px}
+.hero .row{display:flex;flex-wrap:wrap;gap:12px}
+.scrollhint{position:absolute;left:50%;bottom:56px;transform:translateX(-50%);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg3);display:flex;flex-direction:column;align-items:center;gap:8px}
+.scrollhint i{width:1px;height:38px;background:linear-gradient(var(--fg3),transparent);animation:drip 1.8s ease-in-out infinite}
+@keyframes drip{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* progress rail */
+.rail{position:fixed;right:clamp(10px,2vw,26px);top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:10px;transition:opacity .4s}
+.rail button{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:#0008;color:var(--fg3);font:600 11px var(--disp);cursor:pointer;transition:all .3s}
+.rail button.on{background:var(--red);color:#fff;border-color:var(--red)}
+.rail.off{opacity:0;pointer-events:none}
+
+/* ===== sections ===== */
+section.block{position:relative;padding:clamp(70px,10vw,130px) clamp(16px,5vw,64px);background:var(--bg)}
+.eyebrow{font:500 12px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-bottom:12px}
+.h2{font:700 clamp(34px,5.4vw,72px)/1 var(--disp);text-transform:uppercase;max-width:900px}
+.lead{color:var(--fg2);max-width:640px;margin-top:16px;font-size:18px}
+
+/* ===== CATALOG ===== */
+.cat{padding-bottom:clamp(60px,8vw,100px)}
+.showroom{position:relative;margin-top:36px;border-radius:24px;overflow:hidden;border:1px solid var(--line);background:#000;aspect-ratio:1024/575;perspective:1400px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.scene{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.7,0,.25,1),opacity .9s,filter .9s}
+.scene img,.scene video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .28s linear}
+.scene img.on,.scene video.on{opacity:1}
+.scene.out-l{transform:translateX(-62%) rotateY(38deg) scale(.82);opacity:0;filter:blur(2px)}
+.scene.out-r{transform:translateX(62%) rotateY(-38deg) scale(.82);opacity:0;filter:blur(2px)}
+.scene.in-r{transform:translateX(62%) rotateY(-38deg) scale(.82);opacity:0;transition:none}
+.scene.in-l{transform:translateX(-62%) rotateY(38deg) scale(.82);opacity:0;transition:none}
+.showroom::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 60%,#000c);pointer-events:none}
+.sr-info{position:absolute;left:clamp(14px,3vw,32px);bottom:clamp(14px,3vw,28px);z-index:3;max-width:60%}
+.sr-info .k{font:500 12px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+.sr-info h3{font:700 clamp(26px,4vw,54px)/1 var(--disp);text-transform:uppercase;margin:6px 0}
+.sr-info p{color:var(--fg2);font-size:clamp(13px,1.3vw,16px)}
+.sr-price{position:absolute;right:clamp(14px,3vw,32px);bottom:clamp(14px,3vw,28px);z-index:3;text-align:right}
+.sr-price b{display:block;font:700 clamp(22px,3vw,40px)/1 var(--disp)}
+.sr-price small{color:var(--fg3);font-size:12px}
+.sr-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:4;width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:#000a;color:#fff;font-size:22px;cursor:pointer;backdrop-filter:blur(8px)}
+.sr-nav:hover{background:var(--red);border-color:var(--red)}
+.sr-prev{left:14px}.sr-next{right:14px}
+.sr-rot{position:absolute;top:14px;right:14px;z-index:4;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg2);background:#000a;border:1px solid var(--line);border-radius:999px;padding:6px 12px;backdrop-filter:blur(8px)}
+.sr-rot i{width:7px;height:7px;border-radius:50%;background:var(--fg3)}
+.sr-rot i.on{background:var(--red)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.tabs button{font:500 14px var(--body);color:var(--fg2);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer}
+.tabs button.on{color:#fff;background:var(--red);border-color:var(--red)}
+.cat-note{color:var(--fg3);font-size:13px;margin-top:12px}
+
+/* ===== steps strip ===== */
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-top:40px}
+.steps div{background:var(--bg2);padding:22px 18px}
+.steps b{display:block;font:700 44px/1 var(--disp);color:var(--red)}
+.steps h4{font:600 16px var(--body);margin:10px 0 6px}
+.steps p{font-size:14px;color:var(--fg3)}
+
+/* ===== calc ===== */
+.calc{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;margin-top:40px}
+.panel{background:var(--bg2);border:1px solid var(--line);border-radius:22px;padding:26px}
+.field{margin-bottom:22px}
+.field label{display:flex;justify-content:space-between;font-size:14px;color:var(--fg2);margin-bottom:10px}
+.field label output{font:600 15px var(--body);color:var(--fg)}
+input[type=range]{width:100%;accent-color:var(--red)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:90px;font:500 14px var(--body);color:var(--fg2);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;cursor:pointer}
+.seg button.on{border-color:var(--red);color:#fff}
+.lines{display:grid;gap:12px;font-size:15px}
+.lines div{display:flex;justify-content:space-between;color:var(--fg2);border-bottom:1px dashed var(--line);padding-bottom:10px}
+.lines div span:last-child{color:var(--fg);font-variant-numeric:tabular-nums}
+.total{margin-top:20px}
+.total small{color:var(--fg3);font-size:13px}
+.total b{display:block;font:700 clamp(40px,5vw,64px)/1 var(--disp);font-variant-numeric:tabular-nums;margin:6px 0 4px}
+.save{color:var(--amber);font-size:14px}
+.disc{color:var(--fg3);font-size:12.5px;margin-top:16px}
+
+/* ===== faq ===== */
+.faq{max-width:860px;margin-top:34px}
+.faq details{border-bottom:1px solid var(--line);padding:18px 0}
+.faq summary{cursor:pointer;font:600 18px var(--body);list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::after{content:"+";color:var(--red);font-size:24px;line-height:1}
+.faq details[open] summary::after{content:"–"}
+.faq p{color:var(--fg2);margin-top:10px}
+
+/* ===== final ===== */
+.final{position:relative;overflow:hidden;min-height:90vh;display:flex;align-items:center}
+.final>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.55}
+.final::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#08090Bf2 0%,#08090Bb0 50%,#08090B40 100%);z-index:1}
+.final .inner{position:relative;z-index:2;max-width:520px}
+form{display:grid;gap:12px;margin-top:24px}
+input[type=text],input[type=tel],select{font:16px var(--body);color:var(--fg);background:#0d0f13cc;border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:100%}
+input:focus,select:focus{outline:2px solid var(--red);outline-offset:1px}
+.ok{background:#12301e;border:1px solid #2f7a4a;color:#c9f2d7;border-radius:14px;padding:14px 16px;font-size:15px}
+footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 30px;justify-content:space-between}
+
+@media (max-width:900px){
+  .bar nav{display:none}
+  .logo{font-size:15px;white-space:nowrap}.logo small{display:none}
+  .bar .btn{padding:10px 16px;font-size:14px}
+  .steps{grid-template-columns:1fr 1fr}
+  .steps div:last-child{grid-column:1/-1}
+  .calc{grid-template-columns:1fr}
+  .ch{height:130vh}
+  .demo-tag{display:none}
+  .ch.right{justify-content:flex-start}
+  .card{padding:20px}
+  .rail{display:none}
+  .showroom{aspect-ratio:4/5}
+  .showroom::before{content:"";position:absolute;inset:0 0 auto 0;height:55%;background:linear-gradient(#000c,transparent);z-index:2;pointer-events:none}
+  .sr-info{max-width:100%;right:14px;top:54px;bottom:auto}
+  .sr-rot{left:14px;right:auto}
+  .sr-price{left:clamp(14px,3vw,32px);right:auto;text-align:left}
+  .sr-nav{width:44px;height:44px;top:auto;bottom:14px;transform:none}
+  .sr-prev{left:auto;right:66px}
+}
+@media (prefers-reduced-motion:reduce){
+  .film .breath,.grain,.scrollhint i{animation:none}
+  .scene{transition:opacity .3s}
+  html{scroll-behavior:auto}
+}
+
+/* ---------- INTRO: bus, phone, notification (shown while the site loads) ---------- */
+html.intro-on,html.intro-on body{overflow:hidden}
+.intro{position:fixed;inset:0;z-index:100;background:#07080a;overflow:hidden;display:block}
+.intro .cam{position:absolute;inset:-4%;animation:bump 2.6s infinite ease-in-out}
+.intro .cam img,.intro .cam video{width:100%;height:100%;object-fit:cover;display:block}
+@keyframes bump{0%{transform:translate(0,0) rotate(0)}9%{transform:translate(-.35%,.55%) rotate(-.25deg)}14%{transform:translate(.2%,-.4%) rotate(.18deg)}22%{transform:translate(0,.15%) rotate(0)}48%{transform:translate(.25%,.1%) rotate(.12deg)}55%{transform:translate(-.2%,.7%) rotate(-.3deg)}61%{transform:translate(.15%,-.35%) rotate(.15deg)}70%{transform:translate(0,0) rotate(0)}100%{transform:translate(0,0) rotate(0)}}
+.intro .vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 55%,transparent 45%,rgba(0,0,0,.55))}
+.intro .load{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);width:min(280px,60vw);height:3px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}
+.intro .load i{display:block;height:100%;width:0;background:var(--acc,#ff3b30);transition:width .4s}
+.push{position:absolute;left:50%;top:22px;width:min(420px,calc(100vw - 32px));transform:translate(-50%,-140%);opacity:0;transition:transform .6s cubic-bezier(.2,.9,.25,1.15),opacity .3s;
+  background:rgba(30,32,38,.82);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:14px 16px 16px;color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.5);font-family:var(--body)}
+.push.on{transform:translate(-50%,0);opacity:1}
+.push .ph{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.65);margin-bottom:6px}
+.push .ph b{width:22px;height:22px;border-radius:6px;background:var(--acc,#ff3b30);display:grid;place-items:center;color:#fff;font:700 11px var(--head)}
+.push .ph span{margin-left:auto}
+.push h4{margin:0 0 4px;font:600 16px var(--body)}
+.push p{margin:0 0 12px;font-size:14.5px;line-height:1.4;color:rgba(255,255,255,.85)}
+.push .go{display:block;width:100%;border:0;border-radius:14px;padding:13px;font:600 15px var(--body);background:var(--acc,#ff3b30);color:#fff;cursor:pointer}
+.intro.leave .cam{animation:none;transition:transform 1.1s cubic-bezier(.6,0,.3,1),opacity 1.1s;transform:scale(2.6) translateY(6%);opacity:0}
+.intro.leave .push,.intro.leave .load{opacity:0;transition:opacity .3s}
+.intro.gone{display:none}
+@media (prefers-reduced-motion:reduce){.intro .cam{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="intro" id="intro" role="dialog" aria-label="Заставка">
+  <div class="cam"><img src="m/story/0.jpg" alt=""></div>
+  <div class="vig"></div>
+  <div class="push" id="push" aria-live="polite">
+    <div class="ph"><b>ВК</b>Восточный ключ<span>сейчас</span></div>
+    <h4>Нашли вариант под ваш запрос</h4>
+    <p>Новый кроссовер в нужной комплектации — дешевле, чем в салоне. Цена «под ключ» уже посчитана.</p>
+    <button class="go" id="enter" type="button">Зайти на сайт</button>
+  </div>
+  <div class="load"><i id="loadbar"></i></div>
+</div>
+<header class="bar">
+  <a class="logo" href="#top"><i></i>ВОСТОЧНЫЙ КЛЮЧ<small style="font:500 10px var(--body);letter-spacing:.1em;color:var(--fg3);border:1px solid var(--line);border-radius:5px;padding:1px 5px">ДЕМО</small></a>
+  <nav><a href="#catalog">Каталог</a><a href="#steps">Как работаем</a><a href="#calc">Расчёт</a><a href="#faq">Вопросы</a></nav>
+  <a class="btn" href="#order">Подобрать авто</a>
+</header>
+
+<!-- ============ STORY ============ -->
+<div class="story" id="top">
+  <div class="film" aria-hidden="true">
+    <div class="breath" id="film"></div>
+    <div class="grain"></div>
+  </div>
+
+  <div class="chapters" id="chapters">
+    <!-- 1 Шанхай -->
+    <div class="ch" data-i="0">
+      <div class="hero card">
+        <div class="stage"><b>01</b>Шанхай</div>
+        <h1>Ваш авто<br><span>уже ждёт в Китае</span></h1>
+        <p>Новые машины напрямую с площадок Китая — в комплектациях, которых нет в российских салонах, и без наценки дилерской цепочки. Вы видите каждый шаг — от выбора до ключей в руках.</p>
+        <div class="row"><a class="btn" href="#order">Подобрать мой авто</a><a class="btn ghost" href="#catalog">Смотреть каталог</a></div>
+      </div>
+      <div class="scrollhint"><i></i>листайте</div>
+    </div>
+    <!-- 2 Подбор -->
+    <div class="ch right" data-i="1">
+      <div class="card">
+        <div class="stage"><b>02</b>Подбор</div>
+        <h2>Подберём под бюджет и задачи</h2>
+        <p>Не нужно листать сотни объявлений. Скажите, сколько готовы потратить и для чего машина, — пришлём 3–5 вариантов с ценой «под ключ».</p>
+        <ul><li>Цена уже с доставкой и растаможкой</li><li>Сравнение комплектаций простым языком</li></ul>
+      </div>
+    </div>
+    <!-- 3 Проверка -->
+    <div class="ch" data-i="2">
+      <div class="card">
+        <div class="stage"><b>03</b>Проверка</div>
+        <h2>Проверяем до оплаты, а не после</h2>
+        <p>Инспектор на площадке смотрит машину вживую: толщиномер по всем элементам, компьютерная диагностика, история обслуживания.</p>
+        <ul><li>Фото- и видеоотчёт — до оплаты</li><li>Не понравилось — ищем следующую</li></ul>
+        <div class="pain">Главный страх покупателей — <em>битая машина или скрученный пробег</em>. Его снимает проверка на месте.</div>
+      </div>
+    </div>
+    <!-- 4 Договор -->
+    <div class="ch right" data-i="3">
+      <div class="card">
+        <div class="stage"><b>04</b>Договор</div>
+        <h2>Цена фиксируется в договоре</h2>
+        <p>Стоимость машины, доставка, пошлины и наши услуги — построчно в договоре. Оплата этапами, по счетам, с закрывающими документами.</p>
+        <div class="pain">«Цена выросла по дороге» — частая история рынка. Здесь итог прописан заранее (пример условий демо-сайта).</div>
+      </div>
+    </div>
+    <!-- 5 Порт Далянь -->
+    <div class="ch" data-i="4">
+      <div class="card">
+        <div class="stage"><b>05</b>Отправка</div>
+        <h2>Погрузка — с фотоотчётом</h2>
+        <p>Машину доставляют в порт Далянь и загружают на судно-автовоз. Вы получаете фото с погрузки и номер рейса.</p>
+        <ul><li>Страховка груза на весь путь</li><li>Срок доставки — в договоре</li></ul>
+      </div>
+    </div>
+    <!-- 6 Море -->
+    <div class="ch right" data-i="5">
+      <div class="card">
+        <div class="stage"><b>06</b>В пути</div>
+        <h2>Вы видите, где машина</h2>
+        <p>Статус и положение судна — в мессенджере в любой момент. Не нужно звонить и спрашивать «ну когда уже».</p>
+      </div>
+    </div>
+    <!-- 7 Владивосток -->
+    <div class="ch" data-i="6">
+      <div class="card">
+        <div class="stage"><b>07</b>Владивосток</div>
+        <h2>Таможня и ЭПТС — на нас</h2>
+        <p>Пошлину, утильсбор и оформление считаем до покупки под конкретную машину. Растамаживаем, оформляем ЭПТС и СБКТС — всё для постановки на учёт.</p>
+        <div class="pain">Утильсбор и пошлина зависят от мощности, объёма и возраста авто — поэтому <em>считаем заранее, а не по факту</em>.</div>
+      </div>
+    </div>
+    <!-- 8 Ключи -->
+    <div class="ch right" data-i="7">
+      <div class="card">
+        <div class="stage"><b>08</b>Ключи</div>
+        <h2>Ключи — в вашем городе</h2>
+        <p>Привозим автовозом до вашего города или выдаём во Владивостоке. Помогаем с постановкой на учёт и остаёмся на связи по обслуживанию.</p>
+        <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px"><a class="btn" href="#catalog">Выбрать модель</a><a class="btn ghost" href="#calc">Рассчитать стоимость</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="rail" id="rail" aria-label="Этапы истории"></nav>
+
+<!-- ============ CATALOG ============ -->
+<section class="block cat" id="catalog">
+  <div class="eyebrow">Сейчас в продаже · популярные классы</div>
+  <h2 class="h2">Выберите свою — она приедет к вам</h2>
+  <p class="lead">Пять самых востребованных классов китайских автомобилей. Листайте: каждая машина приезжает на подиум из своего мира — потом его можно покрутить.</p>
+
+  <div class="showroom" id="showroom" tabindex="0" aria-roledescription="карусель" aria-label="Каталог автомобилей">
+    <div class="sr-rot" id="rot" aria-hidden="true"></div>
+    <button class="sr-nav sr-prev" id="prev" aria-label="Предыдущая машина">←</button>
+    <button class="sr-nav sr-next" id="next" aria-label="Следующая машина">→</button>
+    <div class="sr-info" aria-live="polite"><div class="k" id="srK"></div><h3 id="srT"></h3><p id="srD"></p></div>
+    <div class="sr-price"><b id="srP"></b><small>под ключ в Иркутске, пример</small></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <p class="cat-note">Изображения — обобщённые модели без марок; цены — пример для демонстрации. Перетащите машину пальцем или мышью, чтобы повернуть подиум.</p>
+</section>
+
+<!-- ============ STEPS ============ -->
+<section class="block" id="steps" style="background:var(--bg2)">
+  <div class="eyebrow">Как работаем</div>
+  <h2 class="h2">Пять шагов. Каждый — с отчётом</h2>
+  <div class="steps">
+    <div><b>01</b><h4>Подбор</h4><p>Задача, бюджет, 3–5 вариантов с ценой под ключ</p></div>
+    <div><b>02</b><h4>Проверка</h4><p>Инспектор на месте, фото и видео до оплаты</p></div>
+    <div><b>03</b><h4>Доставка</h4><p>Страховка груза, статусы на каждом этапе</p></div>
+    <div><b>04</b><h4>Растаможка</h4><p>Пошлина, утильсбор, ЭПТС — по смете</p></div>
+    <div><b>05</b><h4>Ключи</h4><p>Сервис, антикор, выдача или доставка к дому</p></div>
+  </div>
+</section>
+
+<!-- ============ CALC ============ -->
+<section class="block" id="calc">
+  <div class="eyebrow">Расчёт-пример</div>
+  <h2 class="h2">Сколько будет стоить под ключ</h2>
+  <p class="lead">Двигайте ползунки — увидите, из чего складывается цена. Точный расчёт делаем под конкретную машину.</p>
+  <div class="calc">
+    <div class="panel">
+      <div class="field"><label>Цена авто в Китае <output id="oPrice"></output></label><input type="range" id="price" min="1200000" max="6000000" step="50000" value="2400000"></div>
+      <div class="field"><label>Мощность <output id="oHp"></output></label><input type="range" id="hp" min="100" max="300" step="5" value="150"></div>
+      <div class="field"><label>Возраст</label><div class="seg" id="age"><button data-v="0" class="on">Новый</button><button data-v="1">до 3 лет</button><button data-v="2">3–5 лет</button></div></div>
+      <div class="field"><label>Доставка</label><div class="seg" id="ship"><button data-v="0" class="on">Ж/д + автовоз</button><button data-v="1">Море + ж/д</button></div></div>
+    </div>
+    <div class="panel">
+      <div class="lines" id="lines"></div>
+      <div class="total"><small>Итого под ключ (пример)</small><b id="tot">—</b><div class="save" id="save"></div></div>
+      <a class="btn" href="#order" style="margin-top:18px">Рассчитать мой авто</a>
+      <p class="disc">Демонстрационный расчёт с условными коэффициентами. Не является публичной офертой. Реальные пошлина и утильсбор зависят от характеристик автомобиля и действующих ставок на дату ввоза.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="block" id="faq" style="background:var(--bg2)">
+  <div class="eyebrow">Частые вопросы</div>
+  <h2 class="h2">Отвечаем до того, как спросите</h2>
+  <div class="faq">
+    <details><summary>Сколько времени занимает доставка?</summary><p>Обычно от нескольких недель до пары месяцев — зависит от страны, наличия машины и маршрута. Срок фиксируем в договоре под конкретный автомобиль.</p></details>
+    <details><summary>Как я пойму, что машина не битая?</summary><p>До оплаты инспектор осматривает автомобиль на месте: толщиномер, диагностика, история. Вы получаете фото и видео и решаете сами.</p></details>
+    <details><summary>Может ли цена вырасти в процессе?</summary><p>Стоимость автомобиля, доставки и наших услуг фиксируется в договоре. Таможенные платежи считаем заранее по действующим ставкам и показываем в смете.</p></details>
+    <details><summary>Будет ли гарантия и обслуживание?</summary><p>Подскажем сервис-партнёров в городе и поможем с запчастями. Условия гарантии зависят от модели и способа покупки — обсуждаем при подборе.</p></details>
+    <details><summary>Как проходит оплата?</summary><p>Поэтапно, по счетам и договору, с закрывающими документами на каждый платёж.</p></details>
+  </div>
+</section>
+
+<!-- ============ FINAL ============ -->
+<section class="block final" id="order">
+  <img src="m/story/8.jpg" alt="" loading="lazy">
+  <div class="inner">
+    <div class="eyebrow">Подбор за 24 часа</div>
+    <h2 class="h2">Расскажите, какую машину ищете</h2>
+    <p class="lead">Пришлём 3–5 вариантов с ценой под ключ и сроком доставки.</p>
+    <form id="form" novalidate>
+      <input type="text" name="name" placeholder="Как к вам обращаться" autocomplete="name">
+      <input type="tel" name="phone" placeholder="Телефон" autocomplete="tel">
+      <select name="car"><option value="">Класс автомобиля</option><option>Кроссовер</option><option>Компактный кроссовер</option><option>Электромобиль</option><option>Пикап</option><option>Внедорожник</option><option>Пока не знаю</option></select>
+      <button class="btn" type="submit">Подобрать мой авто</button>
+      <div class="ok" id="ok" hidden>Это демо-сайт Synapse Business: заявка не отправляется. На настоящем сайте она сразу попадёт в CRM и менеджеру в мессенджер.</div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <span>«Восточный ключ» — вымышленная компания. Демо-сайт Synapse Business.</span>
+  <span>Изображения сгенерированы, без марок и логотипов. Цены и сроки — примеры.</span>
+</footer>
+<div class="demo-tag">Демо-сайт · не настоящая компания</div>
+
+<script>window.__AV_LOOPS=[];window.__AV_TRANS=[];</script>
+<script>
+(()=>{
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+
+/* ---------- STORY FILM ---------- */
+const N = 8, film = document.getElementById('film');
+/* Each block: a seamless loop while the visitor reads, then a transition clip (first frame = this block, last frame = next block) scrubbed by scroll. Missing clips fall back to stills with a crossfade. */
+const LOOPS = [1, 2, 3, 4, 5, 6, 7, 8].filter(n => (window.__AV_LOOPS || []).includes(n));
+const TRANS = (window.__AV_TRANS || []);
+function mkVideo(src, poster, loop, preload) {
+  const v = document.createElement('video'); v.muted = true; v.loop = loop; v.playsInline = true; v.setAttribute('playsinline', '');
+  v.preload = preload; if (poster) v.poster = poster; v.src = src; return v;
+}
+const loops = [], trans = [];
+for (let i = 1; i <= N; i++) {
+  const d = document.createElement('div'); d.className = 'fr';
+  if (LOOPS.includes(i)) d.append(mkVideo('m/v/loop' + i + '.mp4', 'm/story/' + i + '.jpg', true, i === 1 ? 'auto' : 'none'));
+  else { const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; if (i > 2) im.loading = 'lazy'; d.append(im); }
+  film.append(d); loops.push(d);
+  if (i < N && TRANS.includes(i)) {
+    const t = document.createElement('div'); t.className = 'fr';
+    const tv = mkVideo('m/v/t' + i + '.mp4', '', false, i <= 2 ? 'auto' : 'none'); tv.addEventListener('loadedmetadata', () => renderStory()); tv.addEventListener('seeked', () => {}); t.append(tv);
+    film.append(t); trans[i - 1] = t;
+  }
+}
+const chapters = [...document.querySelectorAll('.ch')];
+const rail = document.getElementById('rail');
+chapters.forEach((c, i) => {
+  const b = document.createElement('button'); b.textContent = String(i + 1).padStart(2, '0');
+  b.setAttribute('aria-label', 'Этап ' + (i + 1));
+  b.onclick = () => c.scrollIntoView({behavior: RM ? 'auto' : 'smooth'});
+  rail.append(b);
+});
+const railBtns = [...rail.children];
+const story = document.querySelector('.story');
+
+let auto = null; // autopilot: one swipe = one block, the transition plays by itself
+function renderStory() {
+  const r = story.getBoundingClientRect(), vh = innerHeight;
+  const total = r.height - vh;
+  const p = Math.min(Math.max(-r.top / total, 0), 1) * (N - 1); // 0..7
+  const i = Math.min(Math.floor(p + 1e-3), N - 1), f = Math.max(p - i, 0); // epsilon: landing exactly on a block must count as that block
+  const HOLD = 0.4;                       // share of a block spent on the loop before the transition starts
+  const t = Math.min(Math.max((f - HOLD) / (1 - HOLD), 0), 1);
+  const tr = trans[i], trv = tr && tr.querySelector('video');
+  const useTr = tr && t > 0 && i < N - 1;
+  loops.forEach((fr, k) => {
+    let o = 0;
+    if (k === i) o = useTr ? 0 : (tr ? 1 : 1 - (i < N - 1 ? t * t * (3 - 2 * t) : 0));
+    else if (k === i + 1 && !tr) o = t * t * (3 - 2 * t);
+    fr.style.opacity = o;
+    const v = fr.querySelector('video');
+    if (v) { const want = o > 0.02 && r.bottom > 0 && !RM; if (want && v.paused) v.play().catch(() => {}); else if (!want && !v.paused) v.pause(); }
+  });
+  trans.forEach((fr, k) => { if (!fr) return; const on = k === i && useTr; fr.style.opacity = on ? 1 : 0; });
+  if (useTr && trv) {
+    if (trv.preload !== 'auto') trv.preload = 'auto';
+    const d = trv.duration;
+    // while autopilot plays this video natively, scroll follows the video — don't seek it back
+    if (d && !(auto && auto.v === trv && auto.dir > 0)) { const want = Math.min(t * d, d - 0.04); if (Math.abs(trv.currentTime - want) > 0.03) trv.currentTime = want; }
+  }
+  [i + 1, i + 2].forEach(k => { const fr = trans[k - 1]; const v = fr && fr.querySelector('video'); if (v && v.preload !== 'auto') v.preload = 'auto'; });
+  const cur = Math.round(p);
+  chapters.forEach((c, k) => {
+    const cr = c.getBoundingClientRect();
+    const hold = (k === i && f < HOLD + 0.02) || (k === i + 1 && f > 0.985) || (k === N - 1 && i >= N - 1);
+    c.classList.toggle('on', hold && cr.top < vh * 0.9 && cr.bottom > vh * 0.3);
+  });
+  railBtns.forEach((b, k) => b.classList.toggle('on', k === cur));
+  rail.classList.toggle('off', r.bottom < vh * 0.6);
+}
+let ticking = false;
+addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { renderStory(); ticking = false; }); } }, {passive: true});
+const setH = () => document.querySelectorAll('.ch>.card').forEach(c => c.parentElement.style.setProperty('--h', c.offsetHeight + 'px'));
+addEventListener('resize', () => { setH(); renderStory(); });
+setH(); document.fonts && document.fonts.ready.then(setH);
+renderStory();
+
+/* ---------- STORY AUTOPILOT ----------
+   One wheel notch / swipe / arrow key moves exactly one block: the transition video
+   plays on its own (scroll follows it), then the next block's loop runs with its card
+   until the visitor swipes again. Swiping up plays the same transition backwards. */
+(function () {
+  const HOLD = 0.4, FADE = 1100;
+  const top0 = () => story.getBoundingClientRect().top + scrollY;
+  const total = () => story.offsetHeight - innerHeight;
+  const yAt = p => top0() + total() * p / (N - 1);
+  const curBlock = () => Math.min(Math.max(Math.round((scrollY - top0()) / total() * (N - 1)), 0), N - 1);
+  const inStory = () => { const s = scrollY, a = top0(), b = a + total(); return s >= a - innerHeight * 0.25 && s <= b + 2; };
+  let lockUntil = 0;
+  const jump = y => { document.documentElement.style.scrollBehavior = 'auto'; scrollTo(0, y); };
+  function finish(k) { jump(yAt(k)); if (auto && auto.v) auto.v.pause(); auto = null; lockUntil = performance.now() + 350; renderStory(); document.documentElement.style.scrollBehavior = ''; }
+  function step(dir) {
+    if (document.documentElement.classList.contains('intro-on')) return true; // the loader is still on screen
+    if (auto || performance.now() < lockUntil) return true;
+    const k = curBlock(), to = k + dir;
+    if (to < 0 || to > N - 1) return false;                 // let the page scroll out of the story
+    const i = Math.min(k, to), tr = trans[i], v = tr && tr.querySelector('video');
+    if (RM) { finish(to); return true; }
+    auto = {dir, v, i, k, to};
+    if (v && dir > 0) {                                      // forward: native playback, scroll follows the video
+      jump(yAt(i + HOLD)); v.currentTime = 0; v.preload = 'auto';
+      v.play().catch(() => {});
+      const t0 = performance.now();
+      const tick = () => {
+        if (!auto || auto.v !== v) return;
+        const d = v.duration || 0;
+        if (d && (v.ended || v.currentTime >= d - 0.06)) return finish(to);
+        if (!d && performance.now() - t0 > 6000) return finish(to);   // video never loaded
+        const t = d ? v.currentTime / d : 0;
+        jump(yAt(i + HOLD + (1 - HOLD) * t));
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    } else {                                                 // backwards (seek-driven) or a plain crossfade
+      const d = v && v.duration ? v.duration * 1000 : FADE, t0 = performance.now();
+      const tick = now => {
+        if (!auto) return;
+        const q = Math.min((now - t0) / d, 1), t = dir > 0 ? q : 1 - q;
+        jump(yAt(i + HOLD + (1 - HOLD) * t));
+        if (q >= 1) return finish(to);
+        requestAnimationFrame(tick);
+      };
+      jump(yAt(i + (dir > 0 ? HOLD : 1)));
+      requestAnimationFrame(tick);
+    }
+    return true;
+  }
+  addEventListener('wheel', e => {
+    if (!inStory() || Math.abs(e.deltaY) < 4) return;
+    const dir = e.deltaY > 0 ? 1 : -1;
+    if (auto || performance.now() < lockUntil) { e.preventDefault(); lockUntil = performance.now() + 350; return; } // swallow trackpad inertia
+    if (step(dir)) e.preventDefault();
+  }, {passive: false});
+  let ty = null;
+  addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, {passive: true});
+  addEventListener('touchmove', e => { if (inStory() && ty !== null) e.preventDefault(); }, {passive: false});
+  addEventListener('touchend', e => {
+    if (ty === null || !inStory()) { ty = null; return; }
+    const dy = ty - e.changedTouches[0].clientY; ty = null;
+    if (Math.abs(dy) < 30) return;
+    if (!step(dy > 0 ? 1 : -1)) jump(scrollY + dy * 2); // at the ends — let the visitor leave the story
+  }, {passive: true});
+  addEventListener('keydown', e => {
+    if (!inStory() || e.target.closest('input,textarea,select')) return;
+    const dir = ['ArrowDown', 'PageDown', ' '].includes(e.key) ? 1 : ['ArrowUp', 'PageUp'].includes(e.key) ? -1 : 0;
+    if (dir && step(dir)) e.preventDefault();
+  });
+  railBtns.forEach((b, k) => b.onclick = () => { if (auto) return; const c = curBlock(); if (Math.abs(k - c) === 1) step(k - c); else finish(k); });
+})();
+
+/* ---------- CATALOG SHOWROOM ---------- */
+const CARS = [
+  {id:'suv', k:'Внедорожник · горы', t:'Рамный внедорожник', d:'Полный привод, понижающая передача, клиренс для бездорожья. Выпрыгивает из-за холма — и встаёт на подиум.', p:4590000, start:2, video:'m/v/suv.mp4'},
+  {id:'crossover', k:'Кроссовер · равнина', t:'Семейный кроссовер', d:'Большой салон, полный привод, богатая комплектация. Самый популярный класс у наших клиентов.', p:3290000, start:1},
+  {id:'compact', k:'Компакт · лес', t:'Городской кроссовер', d:'Экономичный, манёвренный, с высокой посадкой. Выезжает из соснового леса.', p:2190000, start:1},
+  {id:'ev', k:'Электро · город', t:'Электролифтбек', d:'Запас хода для города и трассы, быстрая зарядка, тишина в салоне. Выезжает с ночного проспекта.', p:3750000, start:1},
+  {id:'pickup', k:'Пикап · побережье', t:'Пикап для работы и отдыха', d:'Грузовая платформа, полный привод, комфорт легкового авто. Едет по дороге вдоль штормового берега.', p:3890000, start:1},
+];
+const room = document.getElementById('showroom');
+const rot = document.getElementById('rot');
+const tabs = document.getElementById('tabs');
+const g = id => document.getElementById(id);
+const info = {k: g('srK'), t: g('srT'), d: g('srD'), p: g('srP')};
+const scenes = CARS.map(c => {
+  const s = document.createElement('div'); s.className = 'scene'; s.hidden = true;
+  const imgs = [];
+  for (let n = 1; n <= 9; n++) {
+    if (n < c.start) { imgs.push(null); continue; }
+    const im = new Image(); im.alt = n >= 5 ? c.t + ' на подиуме' : ''; im.decoding = 'async';
+    im.dataset.src = 'm/cat/' + c.id + '/' + n + '.jpg'; s.append(im); imgs.push(im);
+  }
+  let vid = null;
+  if (c.video) { vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.setAttribute('playsinline', ''); vid.preload = 'auto'; vid.poster = c.video.replace('.mp4', '.jpg'); vid.dataset.src = c.video; s.append(vid); }
+  room.prepend(s);
+  return {el: s, imgs, vid};
+});
+function load(i) { scenes[i].imgs.forEach(im => { if (im && !im.src) im.src = im.dataset.src; }); const v = scenes[i].vid; if (v && !v.src) v.src = v.dataset.src; }
+CARS.forEach((c, i) => { const b = document.createElement('button'); b.textContent = c.t; b.onclick = () => go(i); tabs.append(b); });
+for (let k = 0; k < 5; k++) { const d = document.createElement('i'); rot.append(d); }
+rot.insertAdjacentHTML('afterbegin', '<span>360°</span>');
+
+let cur = -1, view = 0, timers = [], autoRot = null, busy = false;
+const ROT = [5, 6, 7, 8, 9];
+function show(i, n) {
+  scenes[i].imgs.forEach((im, k) => im && im.classList.toggle('on', k + 1 === n));
+  const v = ROT.indexOf(n);
+  [...rot.querySelectorAll('i')].forEach((d, k) => d.classList.toggle('on', k === v));
+}
+function clear() { timers.forEach(clearTimeout); timers = []; clearInterval(autoRot); autoRot = null; }
+function arrive(i) {
+  const c = CARS[i]; const seq = [];
+  for (let n = c.start; n <= 5; n++) seq.push(n);
+  const v = scenes[i].vid;
+  if (v) {
+    if (RM) { v.classList.remove('on'); show(i, 5); view = 0; return; }
+    show(i, 0); v.classList.add('on'); v.currentTime = 0;
+    v.onended = () => { if (cur !== i) return; show(i, 5); timers.push(setTimeout(() => v.classList.remove('on'), 320)); view = 0; timers.push(setTimeout(startAuto, 1600)); };
+    v.play().catch(() => { v.onended(); });
+    return;
+  }
+  if (RM) { show(i, 5); view = 0; startAuto(); return; }
+  seq.forEach((n, k) => timers.push(setTimeout(() => show(i, n), k * 520)));
+  timers.push(setTimeout(() => { view = 0; startAuto(); }, seq.length * 520 + 1400));
+}
+function startAuto() {
+  clearInterval(autoRot);
+  if (RM) return;
+  autoRot = setInterval(() => { view = (view + 1) % 5; show(cur, ROT[view]); }, 1500);
+}
+function go(i, dir) {
+  i = (i + CARS.length) % CARS.length;
+  if (i === cur || busy) return;
+  clear(); load(i); load((i + 1) % CARS.length);
+  if (dir === undefined) dir = cur < 0 ? 1 : (i > cur ? 1 : -1);
+  const prev = cur >= 0 ? scenes[cur].el : null, next = scenes[i].el;
+  const c = CARS[i];
+  info.k.textContent = c.k; info.t.textContent = c.t; info.d.textContent = c.d; info.p.textContent = 'от ' + fmt(c.p);
+  [...tabs.children].forEach((b, k) => b.classList.toggle('on', k === i));
+  if (scenes[i].vid) { show(i, 0); scenes[i].vid.classList.add('on'); scenes[i].vid.pause(); try { scenes[i].vid.currentTime = 0; } catch (e) {} }
+  else show(i, c.start);
+  if (prev && cur >= 0 && scenes[cur].vid) scenes[cur].vid.pause();
+  next.hidden = false; next.className = 'scene ' + (dir > 0 ? 'in-r' : 'in-l');
+  void next.offsetWidth;
+  busy = true;
+  if (prev) prev.className = 'scene ' + (dir > 0 ? 'out-l' : 'out-r');
+  next.className = 'scene';
+  const was = cur; cur = i;
+  setTimeout(() => { if (prev && was !== cur) prev.hidden = true; busy = false; }, RM ? 300 : 900);
+  timers.push(setTimeout(() => arrive(i), RM ? 0 : 700));
+}
+g('prev').onclick = () => go(cur - 1, -1);
+g('next').onclick = () => go(cur + 1, 1);
+room.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') go(cur - 1, -1); if (e.key === 'ArrowRight') go(cur + 1, 1); });
+
+// drag to rotate podium; fast swipe = change car
+let dx0 = null, t0 = 0, v0 = 0;
+room.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; dx0 = e.clientX; t0 = Date.now(); v0 = view; clearInterval(autoRot); });
+addEventListener('pointermove', e => {
+  if (dx0 === null || cur < 0) return;
+  const step = Math.round((e.clientX - dx0) / (room.clientWidth / 7));
+  const v = ((v0 - step) % 5 + 5) % 5;
+  if (v !== view) { view = v; show(cur, ROT[view]); }
+});
+addEventListener('pointerup', e => {
+  if (dx0 === null) return;
+  const dx = e.clientX - dx0, dt = Date.now() - t0; dx0 = null;
+  if (Math.abs(dx) > 90 && dt < 260) go(cur + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+  else timers.push(setTimeout(startAuto, 2500));
+});
+
+// start when catalog scrolls into view
+const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); go(0, 1); } }, {threshold: .35});
+io.observe(room);
+
+/* ---------- CALC (illustrative coefficients) ---------- */
+const $ = id => document.getElementById(id);
+let age = 0, ship = 0;
+function seg(id, set) { $(id).querySelectorAll('button').forEach(b => b.onclick = () => { $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); set(+b.dataset.v); calc(); }); }
+seg('age', v => age = v); seg('ship', v => ship = v);
+let shown = 0, anim = null;
+function calc() {
+  const price = +$('price').value, hp = +$('hp').value;
+  $('oPrice').textContent = fmt(price); $('oHp').textContent = hp + ' л.с.';
+  const delivery = [240000, 190000][ship];
+  const duty = price * [0.48, 0.30, 0.38][age] * (hp > 160 ? 1.1 : 1);
+  const util = (hp <= 160 ? 3400 : 3400 + (hp - 160) * 2900) * [1, 1, 1.6][age];
+  const prep = 45000, fee = 90000;
+  const rows = [['Автомобиль', price], ['Доставка и страховка', delivery], ['Таможенные платежи', duty], ['Утильсбор', util], ['Сервис и антикор', prep], ['Наши услуги', fee]];
+  $('lines').innerHTML = rows.map(([a, b]) => `<div><span>${a}</span><span>${fmt(b)}</span></div>`).join('');
+  const total = rows.reduce((s, r) => s + r[1], 0);
+  $('save').textContent = 'В салоне такая комплектация — примерно ' + fmt(total * 1.18) + ' (пример)';
+  cancelAnimationFrame(anim);
+  const from = shown, t0 = performance.now();
+  const step = t => { const k = Math.min((t - t0) / 600, 1); shown = from + (total - from) * (1 - Math.pow(1 - k, 3)); $('tot').textContent = fmt(shown); if (k < 1) anim = requestAnimationFrame(step); };
+  RM ? ($('tot').textContent = fmt(shown = total)) : (anim = requestAnimationFrame(step));
+}
+$('price').oninput = calc; $('hp').oninput = calc; calc();
+
+/* ---------- FORM (demo) ---------- */
+$('form').onsubmit = e => { e.preventDefault(); $('ok').hidden = false; };
+})();
+
+/* ---------- INTRO ---------- */
+(function () {
+  const intro = document.getElementById('intro'); if (!intro) return;
+  const root = document.documentElement; root.classList.add('intro-on');
+  const bar = document.getElementById('loadbar'), push = document.getElementById('push');
+  const t0 = performance.now(), MIN = 3200;
+  let loaded = document.readyState === 'complete';
+  addEventListener('load', () => { loaded = true; });
+  const tick = () => {
+    const k = Math.min((performance.now() - t0) / MIN, loaded ? 1 : 0.85);
+    bar.style.width = (k * 100) + '%';
+    if (k >= 1) { push.classList.add('on'); return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  document.getElementById('enter').onclick = () => {
+    scrollTo(0, 0); intro.classList.add('leave');
+    setTimeout(() => { intro.classList.add('gone'); root.classList.remove('intro-on'); dispatchEvent(new Event('scroll')); }, 1100);
+  };
+})();
+</script>
+</body>
+</html>
