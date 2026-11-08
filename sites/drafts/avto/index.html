@@ -373,23 +373,32 @@ footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;bo
 </footer>
 <div class="demo-tag">Демо-сайт · не настоящая компания</div>
 
+<script>window.__AV_LOOPS=[1,2,3,5];window.__AV_TRANS=[1,2];</script>
 <script>
 (()=>{
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
 
 /* ---------- STORY FILM ---------- */
-const N = 8, film = document.getElementById('film'), frames = [];
+const N = 8, film = document.getElementById('film');
+/* Each block: a seamless loop while the visitor reads, then a transition clip (first frame = this block, last frame = next block) scrubbed by scroll. Missing clips fall back to stills with a crossfade. */
+const LOOPS = [1, 2, 3, 4, 5, 6, 7, 8].filter(n => (window.__AV_LOOPS || []).includes(n));
+const TRANS = (window.__AV_TRANS || []);
+function mkVideo(src, poster, loop, preload) {
+  const v = document.createElement('video'); v.muted = true; v.loop = loop; v.playsInline = true; v.setAttribute('playsinline', '');
+  v.preload = preload; if (poster) v.poster = poster; v.src = src; return v;
+}
+const loops = [], trans = [];
 for (let i = 1; i <= N; i++) {
   const d = document.createElement('div'); d.className = 'fr';
-  if ([1, 2, 3, 5].includes(i)) {
-    const v = document.createElement('video'); v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute('playsinline', '');
-    v.preload = i === 1 ? 'auto' : 'metadata'; if (i > 2) v.preload = 'none'; v.poster = 'm/v/story' + i + '.jpg'; v.src = 'm/v/story' + i + '.mp4';
-    d.append(v);
-  } else {
-    const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; im.loading = 'lazy'; d.append(im);
+  if (LOOPS.includes(i)) d.append(mkVideo('m/v/loop' + i + '.mp4', 'm/story/' + i + '.jpg', true, i === 1 ? 'auto' : 'none'));
+  else { const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; if (i > 2) im.loading = 'lazy'; d.append(im); }
+  film.append(d); loops.push(d);
+  if (i < N && TRANS.includes(i)) {
+    const t = document.createElement('div'); t.className = 'fr';
+    const tv = mkVideo('m/v/t' + i + '.mp4', '', false, i <= 2 ? 'auto' : 'none'); tv.addEventListener('loadedmetadata', () => renderStory()); tv.addEventListener('seeked', () => {}); t.append(tv);
+    film.append(t); trans[i - 1] = t;
   }
-  film.append(d); frames.push(d);
 }
 const chapters = [...document.querySelectorAll('.ch')];
 const rail = document.getElementById('rail');
@@ -406,23 +415,31 @@ function renderStory() {
   const r = story.getBoundingClientRect(), vh = innerHeight;
   const total = r.height - vh;
   const p = Math.min(Math.max(-r.top / total, 0), 1) * (N - 1); // 0..7
-  const i = Math.floor(p), f = p - i;
-  // transition happens in the last 45% of each segment: current frame pushes in, next fades over it
-  const t = Math.min(Math.max((f - 0.55) / 0.45, 0), 1);
-  const e = t * t * (3 - 2 * t);
-  frames.forEach((fr, k) => {
-    let o = 0, s = 1, x = 0;
-    if (k === i) { o = 1; s = 1 + 0.06 * f + (RM ? 0 : 0.08 * e); x = -1.2 * f; }
-    else if (k === i + 1) { o = e; s = 1.12 - 0.12 * e; x = 2 * (1 - e); }
+  const i = Math.min(Math.floor(p), N - 1), f = p - i;
+  const HOLD = 0.4;                       // share of a block spent on the loop before the transition starts
+  const t = Math.min(Math.max((f - HOLD) / (1 - HOLD), 0), 1);
+  const tr = trans[i], trv = tr && tr.querySelector('video');
+  const useTr = tr && t > 0 && i < N - 1;
+  loops.forEach((fr, k) => {
+    let o = 0;
+    if (k === i) o = useTr ? 0 : (tr ? 1 : 1 - (i < N - 1 ? t * t * (3 - 2 * t) : 0));
+    else if (k === i + 1 && !tr) o = t * t * (3 - 2 * t);
     fr.style.opacity = o;
-    const vid = fr.querySelector('video');
-    if (vid) { const want = o > 0.02 && r.bottom > 0 && !RM; if (want && vid.paused) vid.play().catch(() => {}); else if (!want && !vid.paused) vid.pause(); }
-    if (!RM) fr.style.transform = `scale(${s.toFixed(4)}) translateX(${x.toFixed(2)}%)`;
+    const v = fr.querySelector('video');
+    if (v) { const want = o > 0.02 && r.bottom > 0 && !RM; if (want && v.paused) v.play().catch(() => {}); else if (!want && !v.paused) v.pause(); }
   });
+  trans.forEach((fr, k) => { if (!fr) return; const on = k === i && useTr; fr.style.opacity = on ? 1 : 0; });
+  if (useTr && trv) {
+    if (trv.preload !== 'auto') trv.preload = 'auto';
+    const d = trv.duration;
+    if (d) { const want = Math.min(t * d, d - 0.04); if (Math.abs(trv.currentTime - want) > 0.03) trv.currentTime = want; }
+  }
+  [i + 1, i + 2].forEach(k => { const fr = trans[k - 1]; const v = fr && fr.querySelector('video'); if (v && v.preload !== 'auto') v.preload = 'auto'; });
   const cur = Math.round(p);
   chapters.forEach((c, k) => {
     const cr = c.getBoundingClientRect();
-    c.classList.toggle('on', k === 0 ? cr.bottom > vh * 0.5 : (cr.top < vh * 0.6 && cr.bottom > vh * 1.02));
+    const hold = (k === i && f < HOLD + 0.02) || (k === i + 1 && f > 0.985) || (k === N - 1 && i >= N - 1);
+    c.classList.toggle('on', hold && cr.top < vh * 0.9 && cr.bottom > vh * 0.3);
   });
   railBtns.forEach((b, k) => b.classList.toggle('on', k === cur));
   rail.classList.toggle('off', r.bottom < vh * 0.6);
