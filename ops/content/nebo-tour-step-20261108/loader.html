@@ -1,0 +1,14 @@
+<div id="nebo-loader" aria-hidden="true" style="position:fixed;inset:0;z-index:2147483000;background:#8fbbe6 url(/assets/tour-v9/stop-01-desktop.jpg) center/cover no-repeat;transition:opacity .8s ease;pointer-events:none">
+  <video id="nebo-loader-video" autoplay muted loop playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;display:block"></video>
+</div>
+<script>
+(function () {
+  var l = document.getElementById('nebo-loader'), v = document.getElementById('nebo-loader-video');
+  var m = window.matchMedia('(hover: none) and (pointer: coarse)').matches || window.matchMedia('(max-width: 860px)').matches;
+  if (m) l.style.backgroundImage = 'url(/assets/tour-v9/stop-01-mobile.jpg)';
+  v.src = m ? '/tour-media/clouds-mobile.mp4?v=1' : '/tour-media/clouds-desktop.mp4?v=1';
+  var p = v.play(); if (p && p.catch) p.catch(function () {});
+  // страховка: если скрипт экскурсии не загрузился — убрать заставку через 30 с
+  setTimeout(function () { if (l.parentNode) { l.style.opacity = '0'; setTimeout(function () { l.remove(); }, 900); } }, 30000);
+})();
+</script>
