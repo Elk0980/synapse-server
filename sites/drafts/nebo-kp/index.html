@@ -33,7 +33,20 @@ h2{font-size:clamp(30px,3.75vw,72px);font-weight:700;line-height:1.1;letter-spac
 @keyframes drift{to{background-position-x:-355.55vh}}
 .sky+.veil{position:absolute;inset:0;z-index:0;background:linear-gradient(90deg,rgba(237,245,252,.95) 0%,rgba(237,245,252,.82) 48%,rgba(237,245,252,0) 82%)}
 .dark .sky{opacity:.22}
-section>*:not(.sky):not(.veil){position:relative;z-index:1}
+#skybg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
+#deck{position:relative;z-index:1}
+section,section.alt{background:transparent}section.dark{background:rgba(20,47,72,.86)}
+.sky{display:none}
+.wash{position:absolute;inset:0;z-index:0;background:rgba(237,245,252,.72)}
+.alt>.wash{background:rgba(247,250,253,.76)}
+.sky{animation-play-state:paused}section.on .sky{animation-play-state:running}
+.num{all:unset;display:block;width:100%;font-size:clamp(40px,5vw,96px);font-weight:800;color:var(--ink);font-family:inherit;cursor:text;border-bottom:2px dashed var(--line)}
+.num::placeholder{color:var(--ink);opacity:1}
+.num:focus{border-bottom-color:var(--acc)}
+.loss{display:flex;align-items:center;gap:2vw;flex-wrap:wrap;padding:clamp(12px,1.4vw,28px) clamp(16px,2vw,40px)}
+.loss p{font-size:clamp(13px,1.45vw,28px);color:var(--ink)}
+.loss b{font-size:clamp(20px,2.2vw,44px);font-weight:800;color:var(--acc);white-space:nowrap}
+section>*:not(.sky):not(.veil):not(.wash){position:relative;z-index:1}
 /* cards */
 .grid{display:grid;gap:clamp(10px,1.4vw,28px)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:clamp(14px,1.45vw,28px);padding:clamp(16px,2vw,40px);box-shadow:0 16px 48px rgba(20,47,72,.08);transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s,border-color .35s}
@@ -104,6 +117,7 @@ tr.total td{background:var(--ink);color:#F7FAFD;font-weight:700}tr.total td.us{c
 <div id="bar"></div>
 <nav id="dots"></nav>
 <div id="hint">→ / пробел / колесо — дальше · ← — назад</div>
+<video id="skybg" muted loop playsinline autoplay preload="auto" poster="m/sky-h.jpg"></video>
 <main id="deck">
 
 <section>
@@ -143,11 +157,11 @@ tr.total td{background:var(--ink);color:#F7FAFD;font-weight:700}tr.total td.us{c
  <p class="eyebrow r">Посчитаем вместе</p>
  <h2 class="r" style="--d:1">Сколько стоит ещё месяц ожидания?</h2>
  <div class="grid" style="grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch">
-  <div class="card step" style="display:flex;flex-direction:column"><p>Не хватает пациентов в месяц</p><div style="flex:1"></div><p style="font-size:clamp(40px,5vw,96px);font-weight:800;color:var(--ink)">?</p></div>
+  <div class="card step" style="display:flex;flex-direction:column"><p>Не хватает пациентов в месяц</p><div style="flex:1"></div><input class="num" id="pN" inputmode="numeric" placeholder="?" aria-label="Пациентов в месяц"></div>
   <p class="step" style="align-self:center;font-size:clamp(36px,4vw,80px);color:var(--acc);font-weight:300">×</p>
-  <div class="card step" style="display:flex;flex-direction:column"><p>Приносит один пациент за лечение</p><div style="flex:1"></div><p style="font-size:clamp(40px,5vw,96px);font-weight:800;color:var(--ink)">? ₽</p></div>
+  <div class="card step" style="display:flex;flex-direction:column"><p>Приносит один пациент за лечение, ₽</p><div style="flex:1"></div><input class="num" id="pC" inputmode="numeric" placeholder="? ₽" aria-label="Чек пациента, рублей"></div>
   <p class="step" style="align-self:center;font-size:clamp(36px,4vw,80px);color:var(--acc);font-weight:300">=</p>
-  <div class="card ink step" style="display:flex;flex-direction:column"><p>Недополучено за месяц</p><div style="flex:1"></div><p style="font-size:clamp(40px,5vw,96px);font-weight:800;color:#F7FAFD">? ₽</p></div>
+  <div class="card ink step" style="display:flex;flex-direction:column"><p>Недополучено за месяц</p><div style="flex:1"></div><p id="pL" style="font-size:clamp(40px,5vw,96px);font-weight:800;color:#F7FAFD;white-space:nowrap">? ₽</p></div>
  </div>
  <p class="lead step">Цифры называете вы — мы только считаем. К этой сумме вернёмся, когда дойдём до стоимости.</p>
 </section>
@@ -295,7 +309,8 @@ tr.total td{background:var(--ink);color:#F7FAFD;font-weight:700}tr.total td.us{c
   <div class="card r" style="--d:2;display:flex;flex-direction:column;gap:1.6vh"><p class="eyebrow" style="color:var(--soft)">Вариант 1</p><h3 style="font-size:clamp(24px,2.5vw,48px)">Сайт</h3><p>Сайт-экскурсия под ключ за 2 недели (с правками — до 3–4). Дальше ведёте сами.</p><div style="flex:1"></div><p style="font-size:clamp(34px,3.75vw,72px);font-weight:800;color:var(--ink)">120 000 ₽</p><p>Можно двумя платежами по 60 000 ₽</p></div>
   <div class="card ink r" style="--d:3;display:flex;flex-direction:column;gap:1.6vh"><p class="eyebrow" style="color:var(--pale)">Вариант 2 · выгоднее</p><h3 style="font-size:clamp(24px,2.5vw,48px)">Комплексное ведение</h3><p>Сайт, Директ, контент, звонки и площадки — одна команда и отчёт каждый месяц. Выездные съёмки SMM-специалиста включены.</p><div style="flex:1"></div><p style="font-size:clamp(34px,3.75vw,72px);font-weight:800;color:#F7FAFD">100 000 ₽</p><p>первый месяц, сайт входит · далее 60 000 ₽ в месяц</p></div>
  </div>
- <p class="small r" style="--d:4">В стоимость входит работа команды, включая выездные съёмки SMM-специалиста. Рекламный бюджет (пополнение Яндекс Директа, 2ГИС и других площадок) оплачивается отдельно.</p>
+ <div class="card loss r" style="--d:4"><p>Помните: месяц ожидания —</p><b id="lossOut">? ₽</b><p id="lossTxt">недополучено. Первый месяц комплекса — 100 000 ₽, и сайт уже внутри.</p></div>
+ <p class="small r" style="--d:5">В стоимость входит работа команды, включая выездные съёмки SMM-специалиста. Рекламный бюджет (пополнение Яндекс Директа, 2ГИС и других площадок) оплачивается отдельно.</p>
 </section>
 
 <section class="dark">
@@ -318,6 +333,14 @@ tr.total td{background:var(--ink);color:#F7FAFD;font-weight:700}tr.total td.us{c
 (function(){
  var deck=document.getElementById('deck'),S=[].slice.call(document.querySelectorAll('#deck>section')),cur=0,lock=0;
  var mobile=matchMedia('(max-width:900px)').matches;
+ (function(){var v=document.getElementById('skybg'),pt=matchMedia('(orientation:portrait)').matches;v.poster=pt?'m/sky-v.jpg':'m/sky-h.jpg';v.src=pt?'m/sky-v.mp4':'m/sky-h.mp4';var p=v.play();if(p&&p.catch)p.catch(function(){})})();
+ S.forEach(function(s){if(!s.querySelector(':scope>.sky')){var k=document.createElement('div');k.className='sky';var w=document.createElement('div');w.className='wash';s.insertBefore(w,s.firstChild);s.insertBefore(k,s.firstChild)}});
+ var pN=document.getElementById('pN'),pC=document.getElementById('pC');
+ function fmt(n){return Math.round(n).toLocaleString('ru-RU').replace(/\u00a0/g,' ')+' ₽'}
+ function num(el){var v=parseFloat((el.value||'').replace(/[^\d.,]/g,'').replace(',','.'));return isFinite(v)?v:0}
+ function calc(){var n=num(pN),c=num(pC),L=n*c,t=L>0?fmt(L):'? ₽';document.getElementById('pL').textContent=t;document.getElementById('lossOut').textContent=t;
+  document.getElementById('lossTxt').textContent=L>100000?'недополучено. Это больше, чем первый месяц комплекса — 100 000 ₽, и сайт уже внутри.':'недополучено. Первый месяц комплекса — 100 000 ₽, и сайт уже внутри.'}
+ [pN,pC].forEach(function(el){el.addEventListener('input',calc);el.addEventListener('keydown',function(e){e.stopPropagation();if(e.key==='Enter'){el.blur()}})});
  var dots=document.getElementById('dots');
  S.forEach(function(s,i){var b=document.createElement('button');b.setAttribute('aria-label','Слайд '+(i+1));b.onclick=function(){go(i)};dots.appendChild(b)});
  function mark(i){cur=i;S.forEach(function(s,j){var on=j===i||(mobile&&s.classList.contains('on'));s.classList.toggle('on',on);var v=s.querySelector('video');if(v){if(j===i){var p=v.play();if(p&&p.catch)p.catch(function(){})}else v.pause()}});
@@ -331,7 +354,7 @@ tr.total td{background:var(--ink);color:#F7FAFD;font-weight:700}tr.total td.us{c
  if(!mobile){
   deck.addEventListener('wheel',function(e){e.preventDefault();var t=Date.now();if(t<lock||Math.abs(e.deltaY)<6)return;lock=t+750;(e.deltaY>0?next:prev)()},{passive:false});
   addEventListener('keydown',function(e){if(['ArrowDown','ArrowRight','PageDown',' ','Enter'].indexOf(e.key)>=0){e.preventDefault();next()}else if(['ArrowUp','ArrowLeft','PageUp'].indexOf(e.key)>=0){e.preventDefault();prev()}else if(e.key==='Home')go(0);else if(e.key==='End')go(S.length-1)});
-  deck.addEventListener('click',function(e){if(e.target.closest('a,button,video,.frame'))return;next()});
+  deck.addEventListener('click',function(e){if(e.target.closest('a,button,video,.frame,input'))return;next()});
   document.querySelectorAll('.frame').forEach(function(f){f.addEventListener('mousemove',function(e){var r=f.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;f.style.transform='perspective(1400px) rotateY('+(x*6)+'deg) rotateX('+(-y*5)+'deg) scale(1.01)'});f.addEventListener('mouseleave',function(){f.style.transform=''})});
   setTimeout(function(){document.getElementById('hint').style.opacity=0},6000);
  } else { document.querySelectorAll('.step').forEach(function(x){x.classList.add('shown')}); }
