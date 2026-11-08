@@ -30,7 +30,7 @@ def fixtures():
          'status': 'completed', 'conclusion': 'success', 'app': {'id': m.ACTIONS_APP}}
         for i, name in enumerate(sorted(m.REQUIRED_CHECKS), 1)]}
     statuses = {'sha': HEAD, 'total_count': 1, 'statuses': [
-        {'context': m.REQUIRED_STATUS, 'state': 'success', 'creator': {'login': 'github-actions[bot]'}}]}
+        {'id': 10, 'context': m.REQUIRED_STATUS, 'state': 'success'}]}
     return pr, files, tree, checks, statuses
 
 
@@ -43,10 +43,19 @@ class FakeAPI:
         self.ancestor = BASE
         self.latest = None
         self.reviews = []
+        self.history = [{'id': 10, 'context': m.REQUIRED_STATUS, 'state': 'success',
+                         'creator': {'login': 'github-actions[bot]'}}]
+        self.late_reviews = None
         self.calls = []
 
     def pages(self, path, limit=300):
-        return copy.deepcopy(self.files if path.endswith('/files') else self.reviews)
+        if path.endswith('/files'):
+            return copy.deepcopy(self.files)
+        if path.endswith('/statuses'):
+            return copy.deepcopy(self.history)
+        if self.late_reviews is not None and self.calls[-1][1] == '/git/ref/heads/main':
+            return copy.deepcopy(self.late_reviews)
+        return copy.deepcopy(self.reviews)
 
     def call(self, method, path, body=None):
         self.calls.append((method, path, body))
@@ -177,12 +186,35 @@ class AdmissionTests(unittest.TestCase):
         api.checks['total_count'] += 1
         self.assert_refused(api)
 
+    def test_same_name_other_app_cannot_hide_failure(self):
+        api = FakeAPI()
+        extra = copy.deepcopy(api.checks['check_runs'][0])
+        extra.update(name='optional-ci', app={'id': 123}, conclusion='failure', id=8)
+        other = copy.deepcopy(extra)
+        other.update(app={'id': 456}, conclusion='success', id=9, started_at='2026-11-08T02:00:00Z')
+        api.checks['check_runs'] += [extra, other]
+        api.checks['total_count'] += 2
+        self.assert_refused(api)
+
+    def test_queued_run_without_start_time_cannot_hide(self):
+        api = FakeAPI()
+        extra = copy.deepcopy(api.checks['check_runs'][0])
+        extra.update(id=9, status='queued', started_at=None)
+        api.checks['check_runs'].append(extra)
+        api.checks['total_count'] += 1
+        self.assert_refused(api)
+
     def test_protection_status_required_and_trusted(self):
-        for key, value in [('state', 'pending'), ('context', 'unrelated'),
-                           ('creator', {'login': 'someone'})]:
+        for key, value in [('state', 'pending'), ('context', 'unrelated')]:
             api = FakeAPI()
             api.statuses['statuses'][0][key] = value
             self.assert_refused(api)
+        api = FakeAPI()
+        api.history[0]['creator']['login'] = 'someone'
+        self.assert_refused(api)
+        api = FakeAPI()
+        api.history.append({'id': 11, 'context': m.REQUIRED_STATUS, 'state': 'pending'})
+        self.assert_refused(api)
         api = FakeAPI()
         api.statuses['sha'] = BASE
         self.assert_refused(api)
@@ -202,6 +234,17 @@ class AdmissionTests(unittest.TestCase):
         self.assert_refused(api)
         api = FakeAPI()
         api.ancestor = 'f'*40
+        self.assert_refused(api)
+
+    def test_retarget_same_base_sha_refused(self):
+        api = FakeAPI()
+        api.latest = copy.deepcopy(api.pr)
+        api.latest['base']['ref'] = 'release'
+        self.assert_refused(api)
+
+    def test_late_review_request_refused(self):
+        api = FakeAPI()
+        api.late_reviews = [{'state': 'CHANGES_REQUESTED', 'user': {'id': 3}, 'id': 1}]
         self.assert_refused(api)
 
     def test_review_request_blocks_until_dismissed_or_approved(self):

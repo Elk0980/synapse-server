@@ -76,17 +76,15 @@ def validate_files(pr, files, tree, roots, extensions):
         require(SHA.fullmatch(item.get('sha', '')) and entry.get('sha') == item['sha'], 'blob-mismatch')
 
 
-def validate_checks(head, checks, statuses):
+def validate_checks(head, checks, statuses, history):
     require(checks.get('total_count') == len(checks.get('check_runs', [])), 'incomplete-checks')
-    latest = {}
-    for run in checks.get('check_runs', []):
+    runs = checks.get('check_runs', [])
+    require(REQUIRED_CHECKS.issubset({run.get('name') for run in runs}), 'required-check-missing')
+    # GitHub's filter=latest supplies the current set. Do not collapse independent
+    # suites/apps with the same job name, or prefer an old success to a queued run.
+    for run in runs:
         require(run.get('head_sha') == head, 'wrong-check-head')
-        key = (run.get('started_at') or '', run.get('id', 0))
         name = run.get('name')
-        if name not in latest or key > latest[name][0]:
-            latest[name] = (key, run)
-    require(REQUIRED_CHECKS.issubset(latest), 'required-check-missing')
-    for name, (_, run) in latest.items():
         require(run.get('status') == 'completed', 'check-pending')
         require(run.get('conclusion') in {'success', 'neutral', 'skipped'}, 'check-failed')
         if name in REQUIRED_CHECKS:
@@ -97,8 +95,21 @@ def validate_checks(head, checks, statuses):
     require(statuses.get('total_count') == len(values), 'incomplete-statuses')
     require(values and all(s.get('state') == 'success' for s in values), 'status-not-green')
     protected = [s for s in values if s.get('context') == REQUIRED_STATUS]
-    require(len(protected) == 1 and protected[0].get('creator', {}).get('login') == 'github-actions[bot]',
-            'protection-status-missing-or-untrusted')
+    require(len(protected) == 1, 'protection-status-missing')
+    # Combined status deliberately omits creator. Read the authenticated history,
+    # bind by immutable status ID, and refuse if it changed between the two reads.
+    history_latest = {}
+    for value in history:
+        context = value.get('context')
+        require(type(value.get('id')) is int, 'invalid-status-id')
+        if context not in history_latest or value['id'] > history_latest[context]['id']:
+            history_latest[context] = value
+    require(set(history_latest) == {s.get('context') for s in values}, 'status-set-changed')
+    for value in values:
+        original = history_latest[value['context']]
+        require(original['id'] == value.get('id') and original.get('state') == value.get('state'), 'status-changed')
+    require(history_latest[REQUIRED_STATUS].get('creator', {}).get('login') == 'github-actions[bot]',
+            'protection-status-untrusted')
 
 
 def validate_reviews(reviews):
@@ -116,7 +127,9 @@ def validate_reviews(reviews):
 
 def signature(pr):
     return tuple(pr.get(k) for k in ('state', 'draft', 'changed_files', 'mergeable', 'mergeable_state')) + (
-        pr.get('head', {}).get('sha'), pr.get('base', {}).get('sha'),
+        pr.get('author_association'),
+        *((pr.get(side, {}).get('sha'), pr.get(side, {}).get('ref'),
+           pr.get(side, {}).get('repo', {}).get('full_name')) for side in ('head', 'base')),
         tuple(sorted(l.get('name', '') for l in pr.get('labels', []))),
     )
 
@@ -169,11 +182,14 @@ def consider(api, number, roots, extensions, apply=False):
             'branch-needs-update')
     validate_reviews(api.pages(endpoint + '/reviews'))
     validate_checks(head, api.call('GET', f'/commits/{head}/check-runs?per_page=100&filter=latest'),
-                    api.call('GET', f'/commits/{head}/status?per_page=100'))
+                    api.call('GET', f'/commits/{head}/status?per_page=100'),
+                    api.pages(f'/commits/{head}/statuses'))
     latest = api.call('GET', endpoint)
+    validate_pr(latest, api.repo)
     require(signature(pr) == signature(latest), 'pr-changed')
     main = api.call('GET', '/git/ref/heads/main')
     require(main.get('object', {}).get('sha') == base, 'main-changed')
+    validate_reviews(api.pages(endpoint + '/reviews'))
     if not apply:
         return {'pr': number, 'head': head, 'eligible': True, 'merged': False}
     # Server-side expected-head CAS and existing main rules remain authoritative.
