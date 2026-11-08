@@ -57,38 +57,51 @@
    return [event&&event.target,doc.activeElement].some(el=>el&&el.closest&&el.closest(editable));
   }
   function jump(y){win.scrollTo({top:y,left:0,behavior:'instant'});}
-  // "Breathing" at a stop: the hero video drifts a little forward at low speed and slowly
-  // back, again and again, until the next gesture. The opening scene keeps its own idle loop.
-  const BREATH_SPAN=0.8,BREATH_RATE=0.3;
-  let breath=null;
+  // Loop at a stop: a short pre-rendered clip that starts and ends on exactly the frame the
+  // hero video stops on (forward, then the same frames reversed) plays on top in a seamless
+  // loop until the next gesture. Stop i (1..4) uses video/alvi-stop-i.mp4.
+  const LOOPS=['','video/alvi-stop-1.mp4','video/alvi-stop-2.mp4','video/alvi-stop-3.mp4','video/alvi-stop-4.mp4'];
+  let breath=null,loopV=null;
+  function loopEl(){
+   if(loopV)return loopV;
+   const hv=doc.getElementById('hero-video');
+   if(!hv||!hv.parentNode)return null;
+   const v=doc.createElement('video');
+   v.className='hero__video hero__stop-loop';
+   v.muted=true;v.defaultMuted=true;v.playsInline=true;v.loop=true;v.preload='auto';
+   v.setAttribute('muted','');v.setAttribute('playsinline','');v.setAttribute('aria-hidden','true');
+   v.style.opacity='0';v.style.transition='opacity 240ms ease';
+   hv.parentNode.insertBefore(v,hv.nextSibling);
+   loopV=v;return v;
+  }
+  function prepLoop(i){
+   const src=LOOPS[i];if(!src||compact()||reduce)return null;
+   const v=loopEl();if(!v)return null;
+   if(v.getAttribute('src')!==src){v.style.opacity='0';v.setAttribute('src',src);try{v.load();}catch(_e){}}
+   return v;
+  }
   function stopBreath(){
-   if(!breath)return;
-   const v=breath.v;breath=null;
-   try{v.pause();v.playbackRate=1;}catch(_e){}
-   win.__alviAutoplay=false;
+   const b=breath;breath=null;
+   if(!b)return;
+   b.v.style.opacity='0';
+   win.setTimeout(()=>{if(!breath)try{b.v.pause();}catch(_e){}},260);
   }
   function startBreath(stopIndex){
    stopBreath();
-   if(stopIndex<1||compact()||reduce)return;
-   const v=doc.getElementById('hero-video');
-   if(!v||!Number.isFinite(v.duration)||v.duration<=0||v.readyState<2||v.style.opacity==='0')return;
-   const span=Math.max(v.duration-0.04,0.01);
-   const t0=Math.min(Math.max(v.currentTime,0),span),t1=Math.min(t0+BREATH_SPAN,span);
-   if(t1-t0<0.2)return;
-   const b={v,t0,t1,dir:1,y:win.scrollY,last:now()};
-   breath=b;win.__alviAutoplay=true;
-   v.playbackRate=BREATH_RATE;const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
+   if(stopIndex<1)return;
+   const hv=doc.getElementById('hero-video');
+   if(!hv||hv.style.opacity==='0'||!Number.isFinite(hv.duration))return;
+   // show the loop only if the hero video really stands on this stop's frame
+   const tStop=stops[stopIndex]*Math.max(hv.duration-0.04,0.01);
+   if(Math.abs(hv.currentTime-tStop)>0.35)return;
+   const v=prepLoop(stopIndex);if(!v)return;
+   const b={v,y:win.scrollY};breath=b;
+   try{v.currentTime=0;}catch(_e){}
+   const show=()=>{if(breath===b)v.style.opacity='1';};
+   const p=v.play();if(p&&p.then)p.then(show,()=>{});else show();
    const tick=()=>{
     if(breath!==b)return;
-    if(Math.abs(win.scrollY-b.y)>2){stopBreath();win.dispatchEvent(new Event('scroll'));return;} // visitor scrolled by hand
-    const t=now(),dt=(t-b.last)/1000;b.last=t;
-    if(b.dir>0){
-     if(v.currentTime>=b.t1-0.01){v.pause();b.dir=-1;}
-    }else{
-     const next=Math.max(v.currentTime-dt*BREATH_RATE,b.t0);
-     try{v.currentTime=next;}catch(_e){}
-     if(next<=b.t0+0.001){b.dir=1;const p2=v.play();if(p2&&p2.catch)p2.catch(()=>{});}
-    }
+    if(Math.abs(win.scrollY-b.y)>2){stopBreath();return;} // visitor scrolled by hand
     win.requestAnimationFrame(tick);
    };
    win.requestAnimationFrame(tick);
@@ -113,7 +126,7 @@
    if(playable){
     const top=heroTop(),h=hero.offsetHeight,span=Math.max(v.duration-0.04,0.01);
     const tEnd=Math.min(((target-top)/h)*span,span);
-    anim={to};win.__alviAutoplay=true;
+    anim={to};win.__alviAutoplay=true;prepLoop(to);
     v.playbackRate=SPEED;
     const done=()=>{v.pause();v.playbackRate=1;try{v.currentTime=tEnd;}catch(_e){}jump(target);win.__alviAutoplay=false;anim=null;lockUntil=now()+LOCK_MS;win.setTimeout(()=>{if(!anim)startBreath(to);},120);};
     const p=v.play();if(p&&p.catch)p.catch(()=>{});
