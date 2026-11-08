@@ -11,8 +11,8 @@ const STOPS = [0, 2247, 4761, 6272, 8385, 10070, 12263, 13868];
 const IDS = ['tour-sky','tour-building','tour-entrance','tour-reception','tour-prices','tour-doctor','tour-care','tour-microscope'];
 const FILM_H = 15152, INNER_H = 631, DURATION = 94.4;
 
-function page({ playable = true } = {}) {
-  let now = 0, rafQ = [], listeners = {};
+function page({ playable = true, loader = false } = {}) {
+  let now = 0, rafQ = [], listeners = {}, timers = [];
   const win = {
     scrollY: 0, innerHeight: INNER_H,
     scrollTo(o) { win.scrollY = Math.max(0, Math.min(FILM_H + 5000, typeof o === 'object' ? o.top : arguments[1])); },
@@ -29,12 +29,13 @@ function page({ playable = true } = {}) {
   });
   const el = (top, h) => ({ offsetHeight: h, getBoundingClientRect: () => ({ top: top - win.scrollY }) });
   const els = { 'tour-film': el(0, FILM_H) };
+  if (loader) els['nebo-loader'] = { style: {}, remove() { delete els['nebo-loader']; } };
   IDS.forEach((id, i) => { els[id] = el(STOPS[i], 1500); });
   const document = { getElementById: id => els[id] || null, querySelector: s => (s.includes('video') ? video : null) };
   const ctx = {
     window: win, document, HTMLMediaElement, matchMedia: win.matchMedia,
     performance: { now: () => now }, requestAnimationFrame: fn => { rafQ.push(fn); return rafQ.length; },
-    cancelAnimationFrame: () => {}, setTimeout: () => 0, Object, Math, Promise,
+    cancelAnimationFrame: () => {}, setTimeout: (fn) => { timers.push(fn); return timers.length; }, Object, Math, Promise,
   };
   ctx.window.window = ctx.window;
   vm.runInNewContext(SRC, ctx);
@@ -48,7 +49,8 @@ function page({ playable = true } = {}) {
     }
   };
   const wheel = (dy) => { now += 400; fire('wheel', { deltaY: dy, deltaX: 0 }); };
-  return { win, video, tick, wheel, fire };
+  const flush = () => { const q = timers; timers = []; q.forEach(fn => fn()); };
+  return { win, video, tick, wheel, fire, flush, els };
 }
 
 test('один щелчок вниз: видео играет и встаёт ровно на следующем блоке', () => {
@@ -103,4 +105,31 @@ test('если видео не готово — плавная прокрутк�
   p.wheel(100); p.tick(4000);
   assert.equal(p.win.scrollY, 2247);
   assert.equal(p.video.paused, true);
+});
+
+test('несколько свайпов подряд: видео играет до конца без прыжков (раньше рвалось через 30 с)', () => {
+  const p = page();
+  p.wheel(100); p.tick(500); p.wheel(100); p.tick(500); p.wheel(100);   // три блока вперёд
+  let prev = p.win.scrollY, maxJump = 0;
+  for (let i = 0; i < 4000 && !p.video.paused; i++) { p.tick(16); maxJump = Math.max(maxJump, p.win.scrollY - prev); prev = p.win.scrollY; }
+  assert.equal(p.win.scrollY, 6272, 'дошли до 4-го блока');
+  assert.ok(maxJump < 60, 'нет прыжков, максимум за кадр ' + maxJump + ' px');
+});
+
+test('загрузка: облака убираются, и видео само идёт до первого блока без касаний', () => {
+  const p = page({ loader: true });          // видео уже готово к моменту загрузки скрипта
+  assert.equal(p.els['nebo-loader'].style.opacity, '0', 'облака растворяются');
+  p.flush();                                  // пауза 0,7 с перед стартом
+  assert.equal(p.video.paused, false, 'видео пошло само');
+  p.tick(14000);
+  assert.equal(p.win.scrollY, 2247);
+  assert.equal(p.video.paused, true);
+});
+
+test('если человек уже листал во время загрузки — автостарт не вмешивается', () => {
+  const p = page({ loader: true });
+  p.wheel(100); p.tick(500);                  // сам свайпнул
+  p.flush();
+  p.tick(14000);
+  assert.equal(p.win.scrollY, 2247, 'ровно один блок, без лишнего шага');
 });
