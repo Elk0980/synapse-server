@@ -269,8 +269,10 @@ def write_atomic(ctx, full, data, mode):
     if parent != root and not parent.startswith(root + os.sep):
         raise RuntimeError('нет существующего публичного предка')
     for directory in reversed(missing):
-        os.mkdir(directory, mode=0o2775)
-        os.chmod(directory, 0o2775)  # Defeat UMask only for OUR new public dirs.
+        # 0o775 без setgid: юнит работает с RestrictSUIDSGID=yes, и chmod с битом
+        # setgid там падает EPERM (08.11: откат 223c5839 и 7b700c16 на alvi-svaip).
+        os.mkdir(directory, mode=0o775)
+        os.chmod(directory, 0o775)  # Defeat UMask only for OUR new public dirs.
     import tempfile
     fd, tmp = tempfile.mkstemp(prefix='.autosync-', dir=os.path.dirname(full))
     try:
