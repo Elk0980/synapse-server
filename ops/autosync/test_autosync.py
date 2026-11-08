@@ -260,7 +260,7 @@ class AutosyncTest(unittest.TestCase):
         self.assertFalse((self.tmp / 'bk').exists())
 
     @unittest.skipIf(os.name == 'nt', 'POSIX public directory modes require Linux CI')
-    def test_new_public_directories_keep_2775_under_restrictive_umask(self):
+    def test_new_public_directories_keep_775_under_restrictive_umask(self):
         root = self.live / 'sites/synapse/cabinet'
         existing_mode = stat.S_IMODE(root.stat().st_mode)
         state_dir_mode = stat.S_IMODE((self.tmp / 'st').stat().st_mode)
@@ -273,7 +273,7 @@ class AutosyncTest(unittest.TestCase):
         finally:
             os.umask(previous)
         for directory in [root / 'new', root / 'new/deeper']:
-            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o2775)
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o775)
         self.assertEqual(stat.S_IMODE((self.live / rel).stat().st_mode), 0o644)
         self.assertEqual(stat.S_IMODE(root.stat().st_mode), existing_mode)
         self.assertEqual(stat.S_IMODE((self.tmp / 'st').stat().st_mode), state_dir_mode)
