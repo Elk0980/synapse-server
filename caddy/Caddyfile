@@ -7,7 +7,14 @@
   acme_ca https://acme-v02.api.letsencrypt.org/directory
 }
 
+# HSTS поэтапно (решение Влада 04.11): сутки без includeSubDomains и preload;
+# через 7 дней без проблем — max-age=31536000 отдельной правкой.
+(hsts) {
+  header Strict-Transport-Security "max-age=86400"
+}
+
 (static) {
+  import hsts
   encode zstd gzip
   file_server
   header {
@@ -37,6 +44,7 @@ synapsebusiness.ru, www.synapsebusiness.ru {
 
 # --- Клиент: Авокадо (студия дизайна тела, Иркутск) -------------------------
 www.avokado38.ru {
+  import hsts
   redir https://avokado38.ru{uri} 301
 }
 
@@ -242,6 +250,7 @@ avokado3.synapsebusiness.ru {
 
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
 www.spaalvi-38.ru {
+  import hsts
   redir https://spaalvi-38.ru{uri} 301
 }
 
@@ -437,6 +446,7 @@ vhod.synapsebusiness.ru {
 
 # --- Единые задачи: MCP и существующий кабинет ------------------------------
 tasks.synapsebusiness.ru, board.synapsebusiness.ru {
+  import hsts
   @board host board.synapsebusiness.ru
   redir @board "https://synapse.synapsebusiness.ru/cabinet.html#tasks" 308
   reverse_proxy tasks-mcp:8080
@@ -500,6 +510,7 @@ chat.synapsebusiness.ru {
 # Боевой домен. Основной адрес — без www. Работает после того, как Анна направит
 # A-записи @ и www на этот сервер; до этого Caddy не сможет выпустить сертификат.
 www.palitra-love.ru {
+  import hsts
   redir https://palitra-love.ru{uri} 301
 }
 
