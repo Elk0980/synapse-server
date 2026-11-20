@@ -195,3 +195,36 @@ test('«Живой монтаж»: отрезок выключается, зву
   const v3=f.materials.addVersion('alpha',f.reel.id,{mediaUrl:asset('alpha','c'),durationMs:6000,segments:[{startMs:0,endMs:2000},{startMs:2000,endMs:6000}]});
   assert.equal(v3.version.segments.length,2,'агент монтажа передаёт отрезки вместе с версией');
 });
+
+test('Ревью PR 634: удалённая публикация закрывает просьбу, отмена «Переделать» — одна запись, неверный тип версии — 400',()=>{
+  const f=fixture();
+  const made=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'x1',kind:'publish'},editor);
+  assert.throws(()=>f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'x2',kind:'publish'},editor),{status:409});
+  f.posts.delete(made.request.postId);
+  const gone=f.materials.get('alpha',f.reel.id);
+  assert.equal(gone.requests[0].status,'rejected');assert.equal(gone.requests[0].reply,'Публикация удалена в «Постинге». Если нужно — попросите опубликовать ещё раз.');
+  assert.equal(gone.openRequests,0);assert.equal(f.materials.list('alpha').reels[0].openRequests,0,'счётчик в ленте не висит');
+  const again=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'x3',kind:'publish'},editor);
+  assert.equal(again.request.status,'ready','повторная просьба проходит');assert.equal(f.created.length,2);
+  /* Другая ошибка чтения публикации просьбу не закрывает и не прячется. */
+  const broken=f.posts.get(again.request.postId);f.posts.delete(again.request.postId);
+  const boom=Object.assign(Error('сбой чтения'),{status:500});
+  const failing=fixture(),first=failing.materials.createRequest('alpha',failing.reel.id,{clientRequestId:'y1',kind:'publish'},editor);
+  failing.posts.set(first.request.postId,new Proxy({},{get(){throw boom;}}));
+  assert.throws(()=>failing.materials.get('alpha',failing.reel.id),/сбой чтения/);
+  failing.posts.set(first.request.postId,broken);
+  assert.equal(failing.db.prepare('SELECT status FROM reel_requests WHERE id=?').get(first.request.id).status,'ready','сбой не превратился в отклонение');
+  /* Отмена «Переделать»: в истории просьбы одно отклонение — «Отменено автором.» */
+  const redo=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'x4',kind:'redo',text:'Короче'},editor);
+  const cancelled=f.materials.cancelRequest('alpha',f.reel.id,redo.request.id,editor).requests.find(r=>r.id===redo.request.id);
+  assert.deepEqual(cancelled.events.map(e=>[e.status,e.text]),[['accepted',''],['rejected','Отменено автором.']]);
+  assert.equal(cancelled.reply,'Отменено автором.');
+  assert.equal(f.db.prepare('SELECT status FROM reel_edits WHERE id=?').get(redo.request.editId).status,'cancelled');
+  /* Версия не целым числом — 400, а не внутренняя ошибка. */
+  for(const version of ['2',1.5,{},[],null,true,0])
+    assert.throws(()=>f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'v-'+JSON.stringify(version),kind:'redo',text:'x',version},editor),{status:400},JSON.stringify(version));
+  const toggles=[{startMs:0,endMs:10000,enabled:true,sound:false}];
+  for(const baseVersion of ['1',1.5,{},[],null,undefined,0])
+    assert.throws(()=>f.materials.liveEdit('alpha',f.reel.id,{clientRequestId:'lv',baseVersion,segments:toggles},editor),{status:400},JSON.stringify(baseVersion));
+  assert.equal(f.materials.liveEdit('alpha',f.reel.id,{clientRequestId:'lv',baseVersion:1,segments:toggles},editor).edit.edl.audio[0].muted,true);
+});

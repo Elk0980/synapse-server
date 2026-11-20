@@ -211,3 +211,48 @@ test('только просмотр: решение, подпись, прось�
   assert.equal(f.el.querySelectorAll('.mt-request').length, 3);assert.equal(f.el.querySelectorAll('[data-live-row]').length, 3);
   for (const selector of ['[data-review]', '[data-ask]', '[data-ask-form]', '[data-request-cancel]', '[data-live-toggle]', '[data-live-save]']) assert.equal(f.el.querySelector(selector), null, selector);
 });
+
+test('ревью PR 634: набранная подпись сохраняется до просьбы «Опубликовать» и не пропадает при перерисовках', async () => {
+  let saved = {caption: '', decision: 'take', decisionComment: ''}, failPatch = false;
+  const f = fixture({respond: ({method, path: route, body}) => {
+    if (method === 'PATCH' && route === 'crm/autoposting/reels/4') {
+      if (failPatch) throw Object.assign(new Error('нет связи'), {status: 502});
+      saved = {caption: body.caption.trim(), decision: body.decision, decisionComment: body.decisionComment};return full(saved);
+    }
+    if (method === 'GET' && route === 'crm/autoposting/reels/4') return full(saved);
+    if (method === 'POST' && route.endsWith('/requests')) return {reel: full(saved), request: {id: 9}, duplicate: false};
+    if (method === 'POST' && route.endsWith('/live-edit')) return {reel: full(saved), edit: {id: 5}, duplicate: false};
+    return undefined;
+  }});
+  await f.open();
+  const form = () => f.el.querySelector('[data-review]');
+  const type = (caption, decision, comment) => {form().elements.caption.value = caption;form().elements.decisionComment.value = comment;
+    for (const input of form().querySelectorAll('input[name="mt-decision"]')) input.checked = input.value === decision;};
+  const shown = () => [form().elements.caption.value, form().querySelector('input[name="mt-decision"]:checked').value, form().elements.decisionComment.value];
+  /* «Обновить» и правка монтажа перерисовывают окно — несохранённое остаётся в форме и на сервер само не уходит. */
+  type('Черновик подписи', 'redo', 'Затянуто');
+  await f.click('[data-requests-refresh]');
+  same(shown(), ['Черновик подписи', 'redo', 'Затянуто']);
+  await f.click('[data-live-toggle="enabled:1"]');await f.click('[data-live-save]');
+  same(shown(), ['Черновик подписи', 'redo', 'Затянуто']);
+  assert.equal(sent(f, 'PATCH', '/reels/4').length, 0);
+  /* Сохранение не прошло — просьба не отправляется, форма и набранное на месте. */
+  failPatch = true;
+  await f.click('[data-ask="publish"]');await f.submit('[data-ask-form]');
+  assert.equal(sent(f, 'POST', '/requests').length, 0, 'без сохранённой подписи просьба не уходит');
+  assert.match(f.el.querySelector('[data-review-status]').textContent, /Не удалось сохранить: нет связи/);
+  assert.match(f.el.querySelector('[data-ask-status]').textContent, /просьба не отправлена/);
+  assert.equal(f.el.querySelector('[data-ask-form]').hidden, false);same(shown(), ['Черновик подписи', 'redo', 'Затянуто']);
+  /* Сохранение прошло — сначала подпись, потом просьба; подпись в форме и в сохранённой карточке. */
+  failPatch = false;
+  await f.submit('[data-ask-form]');
+  const order = f.calls.filter((c) => c.method !== 'GET').map((c) => c.method + ' ' + c.path.replace('crm/autoposting/reels/4', ''));
+  same(order.slice(-2), ['PATCH ', 'POST /requests'], 'подпись сохранена до создания просьбы');
+  same(sent(f, 'PATCH', '/reels/4').at(-1).body, {caption: 'Черновик подписи', decision: 'redo', decisionComment: 'Затянуто'});
+  same(saved, {caption: 'Черновик подписи', decision: 'redo', decisionComment: 'Затянуто'});
+  same(shown(), ['Черновик подписи', 'redo', 'Затянуто']);
+  /* Форма без изменений лишний раз не сохраняется. */
+  const patches = sent(f, 'PATCH', '/reels/4').length;
+  await f.click('[data-ask="message"]');f.el.querySelector('[data-ask-form]').elements.text.value = 'Вопрос';await f.submit('[data-ask-form]');
+  assert.equal(sent(f, 'PATCH', '/reels/4').length, patches);assert.equal(sent(f, 'POST', '/requests').length, 2);
+});

@@ -488,6 +488,7 @@ function create(el, ctx) {
     const switcher = platformList(["instagram", "tiktok", "youtube_shorts", "vk", "telegram", ...targets]);
     const title = numTitle(item?.number, item?.title || reel.title);
     const published = stage === "published";
+    const unsaved = reviewDraft();
     node.innerHTML = `<header class="mt-modal__head"><h2 id="mt-detail-title" tabindex="-1" data-title>${esc(title)}</h2><button type="button" class="mt-x" data-back aria-label="Закрыть">✕</button></header>
       <p class="mt-detail__meta"><span class="muted">${esc(item?.date ? dateShort(item.date) : dateRu(reel.releaseDate))} · версия v${esc(version?.version ?? 1)}${version?.note ? " · " + esc(version.note) : ""}</span> ${chip(stage)}</p>
       <div class="mt-layout">
@@ -519,6 +520,7 @@ function create(el, ctx) {
           ${(reel.edits || []).length ? `<h3>Правки</h3><ul class="mt-edits">${reel.edits.map(e => `<li><strong>№${esc(e.id)}</strong> к v${esc(e.baseVersion)} · ${esc(STATE[e.status] || e.status)}${e.resultVersion ? " → v" + esc(e.resultVersion) : ""}<br><span class="muted">${esc(e.kind === "request" ? e.comment : "список правок монтажа" + (e.comment ? ": " + e.comment : ""))}</span></li>`).join("")}</ul>` : ""}
         </div></div>`;
     node.querySelector("[data-title]").focus({preventScroll: true});
+    restoreReview(unsaved);
     const player = node.querySelector("[data-player]");
     if (player) player.addEventListener("timeupdate", () => previewTick(player));
   }
@@ -535,7 +537,7 @@ function create(el, ctx) {
       ${reel.caption ? `<h3>Своя подпись</h3><p class="mt-caption" data-own-caption-view>${esc(reel.caption)}</p>` : ""}</section>`;
     const option = (id, label) => `<label class="mt-decision__item"><input type="radio" name="mt-decision" value="${id}"${(reel.decision || "") === id ? " checked" : ""}><span>${esc(label)}</span></label>`;
     return `<section class="mt-review" data-review-box><h3>Решение по ролику</h3>
-      <form data-review novalidate>
+      <form data-review data-reel="${esc(reel.id)}" novalidate>
         <div class="mt-decision" role="radiogroup" aria-label="Решение по ролику">${DECISIONS.map(([id, label]) => option(id, label)).join("")}${option("", "Пока не решили")}</div>
         <label class="mt-field">Комментарий к решению<input type="text" name="decisionComment" maxlength="1000" value="${esc(reel.decisionComment || "")}" placeholder="Например: хороший дубль, берём как есть"></label>
         <label class="mt-field">Своя подпись к публикации<textarea name="caption" rows="4" maxlength="4000" placeholder="Текст, который выйдет вместе с роликом">${esc(reel.caption || "")}</textarea></label>
@@ -543,6 +545,33 @@ function create(el, ctx) {
         <div class="mt-actions"><button type="submit" class="plain-button primary" data-review-save>Сохранить</button></div>
         <p class="mt-status" role="status" data-review-status></p>
       </form></section>`;
+  }
+  /* Несохранённые решение, комментарий и подпись не должны пропадать: окно перерисовывается после просьбы, отмены,
+     «Обновить» и правки монтажа. Черновик берётся из формы этого же ролика, только если он отличается от сохранённого. */
+  function reviewDraft() {
+    const form = el.querySelector("[data-review]"), reel = state.open;
+    if (!form || !reel?.id || form.dataset.reel !== String(reel.id)) return null;
+    const decision = form.querySelector('input[name="mt-decision"]:checked')?.value || "";
+    const draft = {caption: form.elements.caption.value, decision, comment: form.elements.decisionComment.value};
+    const same = draft.caption.trim() === (reel.caption || "") && decision === (reel.decision || "") && (decision ? draft.comment.trim() : "") === (reel.decisionComment || "");
+    return same ? null : draft;
+  }
+  const reviewBody = draft => ({caption: draft.caption, decision: draft.decision, decisionComment: draft.decision ? draft.comment.trim() : ""});
+  function restoreReview(draft) {
+    const form = el.querySelector("[data-review]");if (!draft || !form) return;
+    form.elements.caption.value = draft.caption;form.elements.decisionComment.value = draft.comment;
+    for (const input of form.querySelectorAll('input[name="mt-decision"]')) input.checked = input.value === draft.decision;
+  }
+  /* Перед просьбой агенту изменённая форма сохраняется тем же запросом, что и кнопкой «Сохранить»: иначе «Опубликовать»
+     создала бы публикацию без только что набранной подписи. Не сохранилось — просьба не отправляется. */
+  async function saveReviewFirst() {
+    const draft = reviewDraft();if (!draft) return true;
+    try {
+      const reel = await api.review(state.open.id, reviewBody(draft));if (ctx.signal.aborted || !state.open) return false;
+      state.open = keepPost(reel);
+      const summary = state.reels.find(entry => entry.id === reel.id);if (summary) {summary.decision = reel.decision;summary.caption = reel.caption;}
+      return true;
+    } catch (error) {setText("[data-review-status]", "Не удалось сохранить: " + (error?.message || "ошибка сети"));return false;}
   }
   async function saveReview(form) {
     if (state.busy) return;
@@ -615,6 +644,7 @@ function create(el, ctx) {
     if (kind === "publish") {const targets = [...el.querySelectorAll("[data-targets] input:checked")].map(input => input.value);if (targets.length) body.platformIds = targets;}
     state.busy = true;say("Отправляем…");
     try {
+      if (!(await saveReviewFirst())) {if (state.open) say("Подпись и решение не сохранились, поэтому просьба не отправлена. Попробуйте ещё раз.");return;}
       const result = await api.ask(state.open.id, body);if (ctx.signal.aborted || !state.open) return;
       state.ask = null;state.open = keepPost(result.reel);renderDetail();
       setText("[data-ask-status]", "Просьба отправлена. Статус и ответ агента появятся ниже.");

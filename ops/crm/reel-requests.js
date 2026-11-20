@@ -116,7 +116,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
   function liveEdit(code,id,body,actor){
     const owner=company(db,code),row=core.rowFor(owner,id);
     object(body,['clientRequestId','baseVersion','segments','comment']);
-    const version=core.liveVersion(row.id,body.baseVersion);if(!version)fail(400,'Версия ролика не найдена');
+    const version=core.liveVersion(row.id,int(body.baseVersion,1,Number.MAX_SAFE_INTEGER,'Версия ролика'));if(!version)fail(400,'Версия ролика не найдена');
     if(!Array.isArray(body.segments)||!body.segments.length||body.segments.length>maxClips)fail(400,`Отрезки: от 1 до ${maxClips}`);
     const toggles=body.segments.map(item=>{object(item,['startMs','endMs','enabled','sound']);
       if(typeof item.enabled!=='boolean'||typeof item.sound!=='boolean')fail(400,'«Включён» и «звук» — true или false');
@@ -173,7 +173,12 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
       return r;
     }
     if(r.post_id&&autoposting?.get){
-      let post;try{post=autoposting.get(r.post_id,owner.code);}catch{return r;}
+      /* Публикацию удалили в «Постинге» (404): просьба закрывается, иначе она навсегда осталась бы открытой и не давала
+         попросить ещё раз. Любая другая ошибка чтения просьбу не закрывает и не прячется — уходит вызывающему. */
+      let post;try{post=autoposting.get(r.post_id,owner.code);}catch(error){
+        if(error?.status===404)return setStatus(r,'rejected','Публикация удалена в «Постинге». Если нужно — попросите опубликовать ещё раз.','Автопостинг');
+        throw error;
+      }
       if(!post)return r;
       if(post.status==='published')return setStatus(r,'published','Опубликовано.','Автопостинг');
       if(post.status==='cancelled')return setStatus(r,'rejected','Публикация отменена в «Постинге».','Автопостинг');
@@ -213,7 +218,8 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     };
     const result=r=>({reel:core.full(owner,row.id),request:requestDto(r),duplicate:false});
     if(kind==='redo'||kind==='publish'){
-      const number=body.version===undefined?db.prepare('SELECT MAX(version) v FROM reel_versions WHERE reel_id=? AND archived_at IS NULL').get(row.id).v:body.version;
+      const number=body.version===undefined?db.prepare('SELECT MAX(version) v FROM reel_versions WHERE reel_id=? AND archived_at IS NULL').get(row.id).v
+        :int(body.version,1,Number.MAX_SAFE_INTEGER,'Версия ролика');
       const version=core.liveVersion(row.id,number);if(!version)fail(400,'Версия ролика не найдена');
       if(kind==='redo'){
         const whole=body.startMs===undefined&&body.endMs===undefined;
@@ -246,8 +252,9 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     if(r.reel_id!==row.id)fail(404,'Просьба не найдена','NOT_FOUND');
     if(actor?.role!=='owner'&&String(actor?.userId??'')!==r.author_id)fail(403,'Отменить просьбу может её автор','FORBIDDEN');
     if(r.status!=='accepted')fail(409,'Просьбу уже взяли в работу или закрыли','REQUEST_STATE');
-    if(r.edit_id)core.cancelEdit(owner.code,row.id,r.edit_id);else taskStatus(owner,r,'rejected');
+    /* Сначала закрывается просьба, затем правка: иначе чтение карточки внутри cancelEdit записало бы второе отклонение. */
     setStatus(r,'rejected','Отменено автором.',who(actor).name);
+    if(r.edit_id)core.cancelEdit(owner.code,row.id,r.edit_id);else taskStatus(owner,r,'rejected');
     return core.full(owner,row.id);
   }
   /* --- Служебный API агента (ключ сервиса) --- */
