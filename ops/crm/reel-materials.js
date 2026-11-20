@@ -6,6 +6,7 @@
    создаёт обычный черновик автопостинга, дальше работают его согласование и план. */
 const {company,fail,object,text}=require('./company-information');
 const {CAPTION_PLATFORMS}=require('./autoposting');
+const {createReelRequests}=require('./reel-requests');
 
 const PLATFORMS=Object.freeze(['instagram','tiktok','youtube_shorts','vk','telegram','max']);
 const SPEEDS=Object.freeze([1,1.25,1.5]);
@@ -46,9 +47,31 @@ const sha=value=>{if(value===undefined||value===null||value==='')return '';if(ty
 
 /* EDL v1. Порядок элементов массива — порядок на дорожке: «переставить» меняет порядок,
    «разделить» даёт два клипа, «удалить кусок» убирает клип, «обрезать края» меняет inMs/outMs.
-   Звук — отдельная дорожка с громкостью 0…2 и «без звука». Дополнительно: титры, кадр обложки, скорость. */
+   Звук — отдельная дорожка с громкостью 0…2 и «без звука». Дополнительно: титры, кадр обложки, скорость.
+   specs/231: необязательное поле live.segments — переключатели «живого монтажа» (отрезок включён / со звуком).
+   Если оно есть, дорожки обязаны ему соответствовать: видео — включённые отрезки в исходном порядке, звук — те же
+   отрезки с muted у отрезков без звука. EDL без live проверяется и хранится как раньше. */
+function liveOf(value,video,audio,limit){
+  object(value,['segments']);
+  if(!Array.isArray(value.segments)||!value.segments.length||value.segments.length>MAX_CLIPS)fail(400,`Живой монтаж: от 1 до ${MAX_CLIPS} отрезков`);
+  let cursor=0;
+  const segments=value.segments.map(item=>{
+    object(item,['inMs','outMs','enabled','sound','label']);
+    const inMs=int(item.inMs,0,limit,'Начало отрезка'),outMs=int(item.outMs,0,limit,'Конец отрезка');
+    if(inMs!==cursor||outMs-inMs<100)fail(400,'Живой монтаж: отрезки идут подряд от начала ролика и не короче 0,1 с');
+    if(typeof item.enabled!=='boolean'||typeof item.sound!=='boolean')fail(400,'Живой монтаж: «включён» и «звук» — true или false');
+    cursor=outMs;
+    const label=item.label===undefined?'':text(String(item.label).normalize('NFC'),80);
+    return {inMs,outMs,enabled:item.enabled,sound:item.sound,...(label?{label}:{})};
+  });
+  const kept=segments.filter(item=>item.enabled);
+  if(kept.length!==video.length||kept.length!==audio.length||kept.some((item,index)=>item.inMs!==video[index].inMs||item.outMs!==video[index].outMs
+    ||item.inMs!==audio[index].inMs||item.outMs!==audio[index].outMs||audio[index].muted!==!item.sound))
+    fail(400,'Живой монтаж: дорожки не соответствуют переключателям отрезков');
+  return {segments};
+}
 function edl(value,durationMs){
-  object(value,['v','video','audio','captions','coverMs','speed']);
+  object(value,['v','video','audio','captions','coverMs','speed','live']);
   if(value.v!==1)fail(400,'EDL: поддерживается версия 1');
   const limit=durationMs||MAX_MS;
   const clip=(item,audio)=>{
@@ -73,11 +96,15 @@ function edl(value,durationMs){
     return {startMs,endMs,text:text(String(item.text??'').normalize('NFC'),120,true)};});
   const coverMs=value.coverMs===undefined||value.coverMs===null?null:int(value.coverMs,0,total,'Кадр обложки');
   const speed=value.speed??1;if(!SPEEDS.includes(speed))fail(400,'Скорость: 1, 1.25 или 1.5');
-  return {v:1,video,audio,captions:titles,coverMs,speed,outputMs:Math.round(total/speed)};
+  const out={v:1,video,audio,captions:titles,coverMs,speed,outputMs:Math.round(total/speed)};
+  if(value.live!==undefined)out.live=liveOf(value.live,video,audio,limit);
+  return out;
 }
 
 function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,mediaOrigins=process.env.PUBLISHING_ASSET_ORIGINS||DEFAULT_MEDIA_ORIGINS}={}){
   const allowedOrigins=mediaOriginsOf(mediaOrigins);
+  /* specs/231: подпись, отметка, история, просьбы агенту и отрезки версий — в reel-requests.js; создаётся ниже, после таблиц. */
+  let ext=null;
   const mediaUrl=(value,code)=>{const result=checkMedia(value,code,allowedOrigins);if(!result.href)fail(result.status,result.message,result.code);return result.href;};
   db.exec(`CREATE TABLE IF NOT EXISTS reel_materials (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL REFERENCES companies(id),
@@ -115,6 +142,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
   const rowFor=(owner,id)=>{const row=rowAny(owner,id);if(row.archived_at)fail(409,'Ролик в архиве. Сначала верните его.','REEL_ARCHIVED');return row;};
   const archiveDto=row=>({archivedAt:row.archived_at||null,archivedBy:row.archived_by||null,reason:row.archive_reason||''});
   const versionDto=v=>({version:v.version,mediaUrl:v.media_url,sha256:v.sha256,durationMs:v.duration_ms,editId:v.edit_id,note:v.note,createdAt:v.created_at,
+    ...(v.segments&&Array.isArray(parse(v.segments,null))?{segments:parse(v.segments,null)}:{}),
     ...(v.archived_at?{archive:archiveDto(v)}:{})});
   const allVersions=id=>db.prepare('SELECT * FROM reel_versions WHERE reel_id=? ORDER BY version').all(id).map(versionDto);
   const versionsOf=id=>allVersions(id).filter(v=>!v.archive);
@@ -137,11 +165,11 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       currentVersion:current,versionCount:versions.length,archive:archiveDto(row),
       archivedVersions:db.prepare('SELECT COUNT(*) n FROM reel_versions WHERE reel_id=? AND archived_at IS NOT NULL').get(row.id).n,
       openEdits:db.prepare("SELECT COUNT(*) n FROM reel_edits WHERE reel_id=? AND status IN ('pending','in_progress')").get(row.id).n};
-    if(!full)return base;
+    if(!full)return ext.decorate(base,row,owner,false);
     const edits=db.prepare('SELECT * FROM reel_edits WHERE reel_id=? ORDER BY id').all(row.id).map(editDto);
     /* Журнал правок ролика; те же записи уходят в личный чат автора с Хью (hughLog → content). */
     const log=edits.flatMap(e=>logEntries(e,row.title,false));
-    return {...base,versions,archivedVersionList:allVersions(row.id).filter(v=>v.archive),edits,log};
+    return ext.decorate({...base,versions,archivedVersionList:allVersions(row.id).filter(v=>v.archive),edits,log},row,owner,true);
   }
   /* Рилсы из контент-плана: карточка автопостинга с видео, ещё не взятая в «Материалы». Показываются как v1, без копирования. */
   function planReels(owner,taken){
@@ -293,11 +321,16 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       return reelDto(rowFor(owner,id),owner,true);
     });
   }
-  function update(code,id,body){
-    const owner=company(db,code),row=rowFor(owner,id);object(body,['title','releaseDate','platforms']);
+  /* specs/231: вместе с названием, датой и площадками меняются подпись и отметка; каждое изменение пишется в историю с автором. */
+  function update(code,id,body,actor){
+    const owner=company(db,code),row=rowFor(owner,id);object(body,['title','releaseDate','platforms',...ext.REVIEW_FIELDS]);
     const next={title:Object.hasOwn(body,'title')?text(body.title,200,true):row.title,releaseDate:Object.hasOwn(body,'releaseDate')?date(body.releaseDate):row.release_date,
       platforms:JSON.stringify(Object.hasOwn(body,'platforms')?platforms(body.platforms):parse(row.platforms,[]))};
-    db.prepare('UPDATE reel_materials SET title=?,release_date=?,platforms=?,updated_at=? WHERE id=?').run(next.title,next.releaseDate,next.platforms,iso(),row.id);
+    const review=ext.reviewOf(row,body);
+    transaction(()=>{
+      db.prepare('UPDATE reel_materials SET title=?,release_date=?,platforms=?,updated_at=? WHERE id=?').run(next.title,next.releaseDate,next.platforms,iso(),row.id);
+      ext.saveReview(owner,row,next,review,actor);
+    });
     return reelDto(rowFor(owner,id),owner,true);
   }
   /* Правка уходит обычной задачей доски на исполнителя монтажа. Второй системы задач нет. */
@@ -390,7 +423,8 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const owner=company(db,code),row=rowFor(owner,id);object(body,['version','platformIds','title']);
     const version=liveVersion(row.id,body.version);if(!version)fail(400,'Версия ролика не найдена');
     const ids=platforms(body.platformIds??parse(row.platforms,[]));
-    const fromPlan=planText(owner,row,ids),{text:planBody,captions:planCaptions,topic,...report}=fromPlan,warnings=[...report.warnings];
+    /* specs/231: своя подпись ролика важнее текста из контент-плана; без неё — прежнее поведение. */
+    const fromPlan=ext.ownText(row,ids)||planText(owner,row,ids),{text:planBody,captions:planCaptions,topic,...report}=fromPlan,warnings=[...report.warnings];
     let title=body.title??row.title;
     if(body.title===undefined&&topic){
       if(topic.length<=200)title=topic;
@@ -400,10 +434,10 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     if(fromPlan.source==='plan'){
       const mark=`${origin} · текст из контент-плана, ревизия плана ${fromPlan.planRevision}`,withIdea=`${mark}, тема ${fromPlan.ideaId}`;
       origin=withIdea.length<=200?withIdea:mark;
-    }
+    }else if(fromPlan.source==='material')origin+=' · текст из подписи ролика';
     const post=autoposting.create(owner.code,{title:text(title,200,true),mediaUrls:[version.media_url],platformIds:ids,
       profileRevision:information.get(owner.code).revision,origin,format:'reel',
-      ...(fromPlan.source==='plan'?{...(planBody?{text:planBody}:{}),...(Object.keys(planCaptions).length?{captions:planCaptions}:{})}:{}),
+      ...(fromPlan.source!=='none'?{...(planBody?{text:planBody}:{}),...(Object.keys(planCaptions).length?{captions:planCaptions}:{})}:{}),
       ...(version.sha256?{mediaSha256:version.sha256}:{})},actor.userId);
     if(!row.post_id)db.prepare('UPDATE reel_materials SET post_id=?,updated_at=? WHERE id=? AND post_id IS NULL').run(post.id,iso(),row.id);
     return {post:{id:post.id,title:post.title,status:post.status,platformIds:post.platformIds,mediaUrls:post.mediaUrls},
@@ -425,15 +459,18 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     return editDto(db.prepare('SELECT * FROM reel_edits WHERE id=?').get(edit.id));
   }
   function addVersion(code,id,body,agent){
-    const owner=company(db,code),row=rowFor(owner,id);object(body,['mediaUrl','sha256','durationMs','editId','note']);
+    const owner=company(db,code),row=rowFor(owner,id);object(body,['mediaUrl','sha256','durationMs','editId','note','segments']);
     const media=mediaUrl(body.mediaUrl,owner.code),hash=sha(body.sha256),note=text(body.note??'',1000);
     const durationMs=body.durationMs===undefined||body.durationMs===null?null:int(body.durationMs,100,MAX_MS,'Длительность');
     const edit=body.editId===undefined||body.editId===null?null:editFor(owner,body.editId);
     if(edit&&(edit.reel_id!==row.id||!['pending','in_progress'].includes(edit.status)))fail(409,'Правка не относится к ролику или уже закрыта','EDIT_STATE');
+    /* specs/231: агент монтажа может сразу передать отрезки новой версии для «живого монтажа». */
+    const segments=body.segments===undefined||body.segments===null?null:ext.segmentsOf(body.segments,durationMs);
     return transaction(()=>{
       const at=iso(),version=(db.prepare('SELECT MAX(version) v FROM reel_versions WHERE reel_id=?').get(row.id).v||0)+1;
       db.prepare('INSERT INTO reel_versions(reel_id,version,media_url,sha256,duration_ms,edit_id,note,created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(row.id,version,media,hash,durationMs,edit?.id??null,note,at,text(String(agent||MONTAGE_EXECUTOR),200));
+      if(segments)db.prepare('UPDATE reel_versions SET segments=? WHERE reel_id=? AND version=?').run(JSON.stringify(segments),row.id,version);
       if(edit)db.prepare("UPDATE reel_edits SET status='done',result_version=?,updated_at=? WHERE id=?").run(version,at,edit.id);
       db.prepare('UPDATE reel_materials SET updated_at=? WHERE id=?').run(at,row.id);
       const reel=reelDto(rowFor(owner,id),owner,true);
@@ -445,8 +482,11 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const owner=company(db,code),author=String(authorId??'');if(!/^[1-9]\d{0,15}$/.test(author))fail(400,'Нужен автор правок');
     const rows=db.prepare(`SELECT e.*,r.title FROM reel_edits e JOIN reel_materials r ON r.id=e.reel_id AND r.company_id=e.company_id
       WHERE e.company_id=? AND e.author_id=? ORDER BY e.id DESC LIMIT 200`).all(owner.id,author).reverse();
-    return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id})))};
+    return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:[...rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id}))),
+      ...ext.hughEntries(owner,author)]};
   }
-  return {list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog};
+  ext=createReelRequests(db,{autoposting,maxMs:MAX_MS,maxClips:MAX_CLIPS,executor:MONTAGE_EXECUTOR,
+    core:{rowFor,liveVersion,transaction,requestEdit,cancelEdit,createPublication,full:(owner,id)=>reelDto(rowAny(owner,id),owner,true)}});
+  return {list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog,...ext.api};
 }
 module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR,DEFAULT_MEDIA_ORIGINS};
