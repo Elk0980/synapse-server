@@ -38,6 +38,19 @@ test('Лог правок попадает в личную комнату hugh:<
   assert.equal(f.db.prepare("SELECT COUNT(*) n FROM team_chat_messages WHERE room='common'").get().n,0,'в общий чат лог не попадает');
 });
 
+test('specs/231: просьба агенту и его ответ (reel-request) попадают в ту же личную комнату; похожие чужие ключи — нет',async()=>{
+  const asks=[{key:'reel-request:5:request',at:'2026-11-20T01:00:00.000Z',from:'user',text:'«Ролик» — Перенести дату на 2026-11-27'},
+    {key:'reel-request:5:reply:12',at:'2026-11-20T02:00:00.000Z',from:'hugh',text:'«Ролик» — готово, посмотрите: Перенёс на 27 ноября.'},
+    {key:'reel-request:5:reply:0',from:'hugh',text:'нулевой номер ответа'},{key:'reel-request:5:done',from:'hugh',text:'нет такого вида записи'},
+    {key:'reel-request:0:request',from:'user',text:'нулевой номер просьбы'},{key:'reel-request:5:reply:12:x',from:'hugh',text:'хвост'}];
+  const f=fixture({body:{companyCode:'avokado',authorId:7,entries:asks}});
+  assert.deepEqual(await f.log.sync('avokado',lena,{force:true}),{written:2});
+  assert.deepEqual(rows(f.db),[
+    {user_id:7,author_name:'Лена',text:asks[0].text,client_id:'reel-request:5:request',room:'hugh:7',kind:'reel-edit',audience_id:7},
+    {user_id:0,author_name:'Хью · ИИ',text:asks[1].text,client_id:'reel-request:5:reply:12',room:'hugh:7',kind:'reel-edit-result',audience_id:7}]);
+  assert.deepEqual(await f.log.sync('avokado',lena,{force:true}),{written:0},'повтор без дублей');
+});
+
 test('Без комнат чата (PR 504 не выпущен) запись пропускается и не падает; CRM не вызывается',async()=>{
   const f=fixture({rooms:false});
   assert.deepEqual(await f.log.sync('avokado',lena,{force:true}),{written:0,skipped:'NO_ROOMS'});
