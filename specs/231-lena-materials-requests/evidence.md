@@ -27,7 +27,7 @@
 
 ## Сверка падений с origin/main
 
-BASELINE_PLACEHOLDER
+На `origin/main` 61e271e2 (без файлов этой ветки, те же зависимости): `node --test smoke-test.js email-campaigns.test.js task-products-http.test.js` — 17 тестов, 14 прошли, 3 упали: те же `notification priority … SMTP`, `smoke-test.js`, `board products and plan …`. Падения не связаны с этой работой; здесь они не исправлялись.
 
 ## Чего проверки не доказывают
 
