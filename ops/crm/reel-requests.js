@@ -174,10 +174,12 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     }
     if(r.post_id&&autoposting?.get){
       /* Публикацию удалили в «Постинге» (404): просьба закрывается, иначе она навсегда осталась бы открытой и не давала
-         попросить ещё раз. Любая другая ошибка чтения просьбу не закрывает и не прячется — уходит вызывающему. */
+         попросить ещё раз. Любая другая ошибка чтения (временный сбой) просьбу не закрывает: статус остаётся прежним, карточка ролика
+         и очередь продолжают открываться, сбой пишется в журнал. */
       let post;try{post=autoposting.get(r.post_id,owner.code);}catch(error){
         if(error?.status===404)return setStatus(r,'rejected','Публикация удалена в «Постинге». Если нужно — попросите опубликовать ещё раз.','Автопостинг');
-        throw error;
+        console.error('reel-requests: не удалось прочитать публикацию',r.post_id,error?.message||error);
+        return r;
       }
       if(!post)return r;
       if(post.status==='published')return setStatus(r,'published','Опубликовано.','Автопостинг');

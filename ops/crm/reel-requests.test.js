@@ -206,12 +206,12 @@ test('Ревью PR 634: удалённая публикация закрыва�
   assert.equal(gone.openRequests,0);assert.equal(f.materials.list('alpha').reels[0].openRequests,0,'счётчик в ленте не висит');
   const again=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'x3',kind:'publish'},editor);
   assert.equal(again.request.status,'ready','повторная просьба проходит');assert.equal(f.created.length,2);
-  /* Другая ошибка чтения публикации просьбу не закрывает и не прячется. */
+  /* Другая ошибка чтения публикации просьбу не закрывает; карточка при этом открывается с прежним статусом. */
   const broken=f.posts.get(again.request.postId);f.posts.delete(again.request.postId);
   const boom=Object.assign(Error('сбой чтения'),{status:500});
   const failing=fixture(),first=failing.materials.createRequest('alpha',failing.reel.id,{clientRequestId:'y1',kind:'publish'},editor);
   failing.posts.set(first.request.postId,new Proxy({},{get(){throw boom;}}));
-  assert.throws(()=>failing.materials.get('alpha',failing.reel.id),/сбой чтения/);
+  assert.equal(failing.materials.get('alpha',failing.reel.id).requests.find(r=>r.id===first.request.id).status,'ready','карточка открывается при сбое');
   failing.posts.set(first.request.postId,broken);
   assert.equal(failing.db.prepare('SELECT status FROM reel_requests WHERE id=?').get(first.request.id).status,'ready','сбой не превратился в отклонение');
   /* Отмена «Переделать»: в истории просьбы одно отклонение — «Отменено автором.» */
