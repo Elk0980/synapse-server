@@ -100,11 +100,46 @@ function publicationStage(posts) {
   return "";
 }
 
+/* specs/231-lena-materials-requests: решение по ролику, своя подпись, просьбы агенту и «живой монтаж».
+   Слова на экране — простые: без названий форматов и служебных адресов. Сервер старой версии этих полей не отдаёт —
+   тогда блоки не показываются (признак нового сервера: список requests в карточке ролика). */
+const DECISIONS = [["take", "Берём"], ["skip", "Не берём"], ["redo", "Переделать"]];
+const REQUEST_STATUS = {accepted: "принято", in_progress: "в работе", ready: "готово, посмотрите", published: "опубликовано", rejected: "отклонено", waiting_owner: "ждёт решения владельца"};
+const ASKS = [
+  {kind: "redo", label: "Переделать", hint: "Напишите, что не так. Если дело в одном месте ролика — укажите отрезок.", text: "required", placeholder: "Например: затянуто начало, уберите паузу", segment: true},
+  {kind: "publish", label: "Опубликовать", hint: "Агент подготовит публикацию этой версии. Сам ролик на площадки сразу не уйдёт: если нужно согласие владельца, просьба подождёт его решения.", text: "none"},
+  {kind: "reschedule", label: "Перенести дату", hint: "Выберите новую дату выхода. Можно добавить пояснение.", text: "optional", placeholder: "Пояснение (необязательно)", date: true},
+  {kind: "replace_text", label: "Заменить текст", hint: "Напишите новый текст или что в нём поменять.", text: "required", placeholder: "Например: короче и без цены"},
+  {kind: "remove_from_plan", label: "Убрать из плана", hint: "Агент уберёт ролик из плана выхода. Можно написать причину.", text: "optional", placeholder: "Причина (необязательно)"},
+  {kind: "message", label: "Написать агенту", hint: "Любой вопрос или пожелание по этому ролику.", text: "required", placeholder: "Ваше сообщение"}];
+const mmss = ms => {const total = Math.max(0, Math.round(Number(ms) / 1000) || 0);return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;};
+const parseMmss = value => {
+  const m = /^\s*(?:(\d{1,2}):)?(\d{1,3})(?:[.,](\d))?\s*$/.exec(String(value ?? ""));
+  return m ? (Number(m[1] || 0) * 60 + Number(m[2])) * 1000 + Number(m[3] || 0) * 100 : null;
+};
+const requestId = () => `mt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+/* «Живой монтаж»: чистые функции. Отрезки — как их отдал сервер; порядок не меняется, границы не двигаются. */
+const liveOps = {
+  initial: segments => segments.map(() => ({enabled: true, sound: true})),
+  changed: toggles => toggles.some(item => !item.enabled || !item.sound),
+  /* Что делать плееру в момент ms: перейти к началу следующего отрезка «в ролике», остановиться (дальше всё убрано) или заглушить звук. */
+  at(segments, toggles, ms) {
+    const index = segments.findIndex(item => ms >= item.startMs && ms < item.endMs);
+    if (index < 0) return {index, seekMs: null, stop: false, mute: false};
+    if (toggles[index].enabled) return {index, seekMs: null, stop: false, mute: !toggles[index].sound};
+    const next = segments.findIndex((_, i) => i > index && toggles[i].enabled);
+    return next < 0 ? {index, seekMs: null, stop: true, mute: false} : {index, seekMs: segments[next].startMs, stop: false, mute: false};
+  },
+  body: (segments, toggles) => segments.map((item, i) => ({startMs: item.startMs, endMs: item.endMs, enabled: toggles[i].enabled, sound: toggles[i].sound}))
+};
+sb.materialsLive = {...liveOps, mmss, parseMmss};
+
 function create(el, ctx) {
   const canEdit = ctx.can("autoposting.edit");
   const sameCompany = data => data && (!data.companyCode || String(data.companyCode).toLowerCase() === String(ctx.companyCode).toLowerCase());
   const state = {reels: [], mentor: null, posts: [], shooting: {}, settings: null, info: null, items: [], sort: "date", open: null, item: null,
-    platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null};
+    platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null,
+    live: null, ask: null};
   const api = {
     list: () => ctx.api.get("crm/autoposting/reels"),
     get: id => ctx.api.get("crm/autoposting/reels/" + id),
@@ -115,7 +150,12 @@ function create(el, ctx) {
     archive: (id, body) => ctx.api.post("crm/autoposting/reels/" + id + "/archive", body),
     restore: id => ctx.api.post("crm/autoposting/reels/" + id + "/restore", {}),
     archiveVersion: (id, version, body) => ctx.api.post(`crm/autoposting/reels/${id}/versions/${version}/archive`, body),
-    restoreVersion: (id, version) => ctx.api.post(`crm/autoposting/reels/${id}/versions/${version}/restore`, {})
+    restoreVersion: (id, version) => ctx.api.post(`crm/autoposting/reels/${id}/versions/${version}/restore`, {}),
+    /* specs/231: подпись и решение, просьбы агенту, «живой монтаж». */
+    review: (id, body) => ctx.api.patch("crm/autoposting/reels/" + id, body),
+    ask: (id, body) => ctx.api.post(`crm/autoposting/reels/${id}/requests`, body),
+    cancelAsk: (id, request) => ctx.api.post(`crm/autoposting/reels/${id}/requests/${request}/cancel`, {}),
+    liveEdit: (id, body) => ctx.api.post(`crm/autoposting/reels/${id}/live-edit`, body)
   };
   /* Дополнительные данные необязательны: без плана или публикаций экран показывает ролики как есть. */
   const optional = promise => Promise.resolve().then(() => promise()).catch(() => null);
@@ -294,6 +334,12 @@ function create(el, ctx) {
     if (!number || /^№\s?\d+/.test(text)) return text;
     return `№${number} ${text}`;
   }
+  /* specs/231: решение по ролику и число открытых просьб видны прямо в ленте. */
+  function reviewNote(reel) {
+    const decision = DECISIONS.find(([id]) => id === reel?.decision), asks = Number(reel?.openRequests) || 0;
+    return (decision ? `<span class="mt-card__note mt-decision-note" data-decision="${decision[0]}">${esc(decision[1])}</span>` : "")
+      + (asks ? `<span class="mt-card__note" data-open-requests>Просьб: ${asks}</span>` : "");
+  }
   function cardHtml(item) {
     const media = hasCut(item) ? safeUrl(item.reel.currentVersion.mediaUrl) : "";
     const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata" src="${esc(media)}#t=0.5"></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
@@ -303,7 +349,7 @@ function create(el, ctx) {
     const title = numTitle(item.number, item.title);
     const stageChip = item.retired ? `<span class="cfk-chip mt-chip-retired" data-stage="unpublished">${item.retired === "cancelled" ? "Публикация отменена" : "Заменён в плане"}</span>` : chip(item.stage);
     const body = `${thumb}<span class="mt-card__body"><strong class="mt-card__title">${esc(title)}</strong><span class="mt-card__date">${when}</span>
-      <span class="mt-card__foot"><span class="mt-card__st">${stageChip}${note ? `<span class="mt-card__note">${note}</span>` : ""}</span>
+      <span class="mt-card__foot"><span class="mt-card__st">${stageChip}${note ? `<span class="mt-card__note">${note}</span>` : ""}${reviewNote(item.reel)}</span>
       <span class="mt-card__pf">${item.platforms.map(id => esc(platformOf(id).short)).join(" · ")}</span></span></span>`;
     const clickable = item.reel || (canEdit && AT_EDITOR.has(item.stage));
     const removable = canEdit && item.reel && (item.reel.id || item.reel.postId != null);
@@ -349,7 +395,7 @@ function create(el, ctx) {
     }
   }
   function close() {
-    state.open = null;state.item = null;$("[data-detail]").hidden = true;modal("detail", false);
+    state.open = null;state.item = null;state.live = null;state.ask = null;$("[data-detail]").hidden = true;modal("detail", false);
     const opener = $("[data-upload-open]");if (opener) opener.hidden = false;
     if (returnFocus?.isConnected) returnFocus.focus?.({preventScroll: true});
   }
@@ -442,6 +488,7 @@ function create(el, ctx) {
     const switcher = platformList(["instagram", "tiktok", "youtube_shorts", "vk", "telegram", ...targets]);
     const title = numTitle(item?.number, item?.title || reel.title);
     const published = stage === "published";
+    const unsaved = reviewDraft();
     node.innerHTML = `<header class="mt-modal__head"><h2 id="mt-detail-title" tabindex="-1" data-title>${esc(title)}</h2><button type="button" class="mt-x" data-back aria-label="Закрыть">✕</button></header>
       <p class="mt-detail__meta"><span class="muted">${esc(item?.date ? dateShort(item.date) : dateRu(reel.releaseDate))} · версия v${esc(version?.version ?? 1)}${version?.note ? " · " + esc(version.note) : ""}</span> ${chip(stage)}</p>
       <div class="mt-layout">
@@ -466,12 +513,220 @@ function create(el, ctx) {
             ${canEdit && versions.length > 1 && reel.id ? `<button type="button" class="plain-button" data-remove-version>Убрать версию v${esc(version?.version ?? state.version)}</button>` : ""}
             ${canEdit && (reel.id || reel.postId != null) ? `<button type="button" class="plain-button mt-remove" data-remove-open>Убрать</button>` : ""}
           </div>
+          ${reviewHtml(reel)}${askHtml(reel)}${liveHtml(reel, version)}${historyHtml(reel)}
           ${(reel.archivedVersionList || []).length ? `<h3>Убранные версии</h3><ul class="mt-archived-versions">${reel.archivedVersionList.map(v => `<li><span>v${esc(v.version)}${v.archive?.reason ? " · " + esc(v.archive.reason) : ""}</span>${canEdit ? `<button type="button" class="plain-button" data-restore-version="${esc(v.version)}">Вернуть</button>` : ""}</li>`).join("")}</ul>` : ""}
           ${canEdit && reel.id && !published ? `<fieldset class="mt-targets" data-targets><legend>Площадки публикации</legend>${PLATFORMS.map(p => `<label><input type="checkbox" value="${p.id}"${(targets.length ? targets : [state.platform]).includes(p.id) ? " checked" : ""}> ${esc(p.label)}</label>`).join("")}</fieldset>` : ""}
           <p class="mt-status" role="status" data-detail-status></p>
           ${(reel.edits || []).length ? `<h3>Правки</h3><ul class="mt-edits">${reel.edits.map(e => `<li><strong>№${esc(e.id)}</strong> к v${esc(e.baseVersion)} · ${esc(STATE[e.status] || e.status)}${e.resultVersion ? " → v" + esc(e.resultVersion) : ""}<br><span class="muted">${esc(e.kind === "request" ? e.comment : "список правок монтажа" + (e.comment ? ": " + e.comment : ""))}</span></li>`).join("")}</ul>` : ""}
         </div></div>`;
     node.querySelector("[data-title]").focus({preventScroll: true});
+    restoreReview(unsaved);
+    const player = node.querySelector("[data-player]");
+    if (player) player.addEventListener("timeupdate", () => previewTick(player));
+  }
+
+  /* ---------- specs/231: решение, подпись, просьбы агенту, «живой монтаж», история ---------- */
+  const fresh = reel => Boolean(reel?.id) && Array.isArray(reel.requests);
+  const setText = (selector, text) => {const target = el.querySelector(selector);if (target) target.textContent = text || "";};
+  const keepPost = reel => ({...reel, lastPostId: state.open?.lastPostId || null});
+  function reviewHtml(reel) {
+    if (!fresh(reel)) return "";
+    const current = DECISIONS.find(([id]) => id === reel.decision);
+    if (!canEdit) return `<section class="mt-review" data-review-box><h3>Решение по ролику</h3>
+      <p data-decision-view>${current ? esc(current[1]) : "Решения пока нет"}${reel.decisionComment ? " — " + esc(reel.decisionComment) : ""}</p>
+      ${reel.caption ? `<h3>Своя подпись</h3><p class="mt-caption" data-own-caption-view>${esc(reel.caption)}</p>` : ""}</section>`;
+    const option = (id, label) => `<label class="mt-decision__item"><input type="radio" name="mt-decision" value="${id}"${(reel.decision || "") === id ? " checked" : ""}><span>${esc(label)}</span></label>`;
+    return `<section class="mt-review" data-review-box><h3>Решение по ролику</h3>
+      <form data-review data-reel="${esc(reel.id)}" novalidate>
+        <div class="mt-decision" role="radiogroup" aria-label="Решение по ролику">${DECISIONS.map(([id, label]) => option(id, label)).join("")}${option("", "Пока не решили")}</div>
+        <label class="mt-field">Комментарий к решению<input type="text" name="decisionComment" maxlength="1000" value="${esc(reel.decisionComment || "")}" placeholder="Например: хороший дубль, берём как есть"></label>
+        <label class="mt-field">Своя подпись к публикации<textarea name="caption" rows="4" maxlength="4000" placeholder="Текст, который выйдет вместе с роликом">${esc(reel.caption || "")}</textarea></label>
+        <p class="muted mt-hint">Если подпись заполнена, в публикацию пойдёт она, а не текст из контент-плана.</p>
+        <div class="mt-actions"><button type="submit" class="plain-button primary" data-review-save>Сохранить</button></div>
+        <p class="mt-status" role="status" data-review-status></p>
+      </form></section>`;
+  }
+  /* Несохранённые решение, комментарий и подпись не должны пропадать: окно перерисовывается после просьбы, отмены,
+     «Обновить» и правки монтажа. Черновик берётся из формы этого же ролика, только если он отличается от сохранённого. */
+  function reviewDraft() {
+    const form = el.querySelector("[data-review]"), reel = state.open;
+    if (!form || !reel?.id || form.dataset.reel !== String(reel.id)) return null;
+    const decision = form.querySelector('input[name="mt-decision"]:checked')?.value || "";
+    const draft = {caption: form.elements.caption.value, decision, comment: form.elements.decisionComment.value};
+    const same = draft.caption.trim() === (reel.caption || "") && decision === (reel.decision || "") && (decision ? draft.comment.trim() : "") === (reel.decisionComment || "");
+    return same ? null : draft;
+  }
+  const reviewBody = draft => ({caption: draft.caption, decision: draft.decision, decisionComment: draft.decision ? draft.comment.trim() : ""});
+  function restoreReview(draft) {
+    const form = el.querySelector("[data-review]");if (!draft || !form) return;
+    form.elements.caption.value = draft.caption;form.elements.decisionComment.value = draft.comment;
+    for (const input of form.querySelectorAll('input[name="mt-decision"]')) input.checked = input.value === draft.decision;
+  }
+  /* Перед просьбой агенту изменённая форма сохраняется тем же запросом, что и кнопкой «Сохранить»: иначе «Опубликовать»
+     создала бы публикацию без только что набранной подписи. Не сохранилось — просьба не отправляется. */
+  async function saveReviewFirst() {
+    const draft = reviewDraft();if (!draft) return true;
+    try {
+      const reel = await api.review(state.open.id, reviewBody(draft));if (ctx.signal.aborted || !state.open) return false;
+      state.open = keepPost(reel);
+      const summary = state.reels.find(entry => entry.id === reel.id);if (summary) {summary.decision = reel.decision;summary.caption = reel.caption;}
+      return true;
+    } catch (error) {setText("[data-review-status]", "Не удалось сохранить: " + (error?.message || "ошибка сети"));return false;}
+  }
+  async function saveReview(form) {
+    if (state.busy) return;
+    const decision = form.querySelector('input[name="mt-decision"]:checked')?.value || "";
+    const body = {caption: form.elements.caption.value, decision, decisionComment: decision ? form.elements.decisionComment.value.trim() : ""};
+    state.busy = true;setText("[data-review-status]", "Сохраняем…");
+    try {
+      const reel = await api.review(state.open.id, body);if (ctx.signal.aborted || !state.open) return;
+      state.open = keepPost(reel);renderDetail();setText("[data-review-status]", "Сохранено.");
+      const summary = state.reels.find(entry => entry.id === reel.id);if (summary) {summary.decision = reel.decision;summary.caption = reel.caption;}
+    } catch (error) {setText("[data-review-status]", "Не удалось сохранить: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;}
+  }
+  function requestHtml(request) {
+    const where = request.kind === "redo" && request.startMs != null ? ` · отрезок ${mmss(request.startMs)}–${mmss(request.endMs)}` : "";
+    const date = request.date ? ` · на ${esc(dateRu(request.date))}` : "";
+    const label = ASKS.find(item => item.kind === request.kind)?.label || request.kindLabel || "Просьба";
+    return `<li class="mt-request" data-request="${esc(request.id)}" data-request-status="${esc(request.status)}">
+      <p class="mt-request__head"><strong>${esc(label)}</strong><span class="mt-request__status">${esc(REQUEST_STATUS[request.status] || request.statusLabel || request.status)}</span></p>
+      <p class="muted mt-request__meta">${esc(timeIn(request.createdAt, state.timeZone))}${request.authorName ? " · " + esc(request.authorName) : ""}${request.version ? " · версия v" + esc(request.version) : ""}${where}${date}</p>
+      ${request.text ? `<p class="mt-request__text">${esc(request.text)}</p>` : ""}
+      ${request.reply ? `<p class="mt-request__reply" data-request-reply><b>Ответ:</b> ${esc(request.reply)}</p>` : `<p class="muted mt-request__reply">Ответа пока нет.</p>`}
+      ${canEdit && request.status === "accepted" ? `<button type="button" class="plain-button" data-request-cancel="${esc(request.id)}">Отменить просьбу</button>` : ""}</li>`;
+  }
+  function askHtml(reel) {
+    if (!fresh(reel)) return "";
+    const list = [...reel.requests].reverse();
+    return `<section class="mt-ask" data-ask-box><h3>Попросить агента</h3>
+      ${canEdit ? `<div class="mt-actions mt-ask__buttons">${ASKS.map(item => `<button type="button" class="plain-button" data-ask="${item.kind}">${esc(item.label)}</button>`).join("")}</div>
+        <form class="mt-ask__form" data-ask-form hidden novalidate></form>` : ""}
+      <p class="mt-status" role="status" data-ask-status></p>
+      <div class="mt-requests__head"><h3>Просьбы по этому ролику</h3><button type="button" class="plain-button" data-requests-refresh>Обновить</button></div>
+      ${list.length ? `<ul class="mt-requests" data-requests>${list.map(requestHtml).join("")}</ul>` : `<p class="muted" data-requests-empty>Просьб пока нет.</p>`}</section>`;
+  }
+  function openAsk(kind) {
+    const form = el.querySelector("[data-ask-form]"), def = ASKS.find(item => item.kind === kind);if (!form || !def) return;
+    if (!state.ask || state.ask.kind !== kind) state.ask = {kind, id: requestId()};
+    const version = currentVersion()?.version ?? state.version;
+    form.dataset.kind = kind;form.hidden = false;
+    form.innerHTML = `<h4 class="mt-ask__title">${esc(def.label)}${def.segment || kind === "publish" ? ` · версия v${esc(version)}` : ""}</h4><p class="muted mt-hint">${esc(def.hint)}</p>
+      ${def.date ? `<label class="mt-field">Новая дата<input type="date" name="date" required></label>` : ""}
+      ${def.text === "none" ? "" : `<label class="mt-field">${def.text === "required" ? "Текст просьбы" : "Пояснение"}<textarea name="text" rows="3" maxlength="1900" placeholder="${esc(def.placeholder || "")}"></textarea></label>`}
+      ${def.segment ? `<div class="mt-ask__segment"><label class="mt-field">С (мин:сек)<input type="text" name="from" inputmode="numeric" placeholder="0:05"></label>
+        <button type="button" class="plain-button" data-ask-now="from">Сейчас в плеере</button>
+        <label class="mt-field">По (мин:сек)<input type="text" name="to" inputmode="numeric" placeholder="0:12"></label>
+        <button type="button" class="plain-button" data-ask-now="to">Сейчас в плеере</button></div>
+        <p class="muted mt-hint">Отрезок можно не указывать — тогда просьба относится ко всему ролику.</p>` : ""}
+      <div class="mt-actions"><button type="submit" class="plain-button primary" data-ask-send>Отправить</button><button type="button" class="plain-button" data-ask-cancel>Отмена</button></div>`;
+    setText("[data-ask-status]", "");
+    (form.querySelector("textarea,input") || form.querySelector("button")).focus({preventScroll: true});
+  }
+  function closeAsk() {const form = el.querySelector("[data-ask-form]");if (form) {form.hidden = true;form.innerHTML = "";}state.ask = null;}
+  function askNow(field) {
+    const form = el.querySelector("[data-ask-form]"), player = el.querySelector("[data-player]");
+    if (form?.elements[field] && player) form.elements[field].value = mmss((Number(player.currentTime) || 0) * 1000);
+  }
+  async function sendAsk(form) {
+    if (state.busy || !state.ask) return;
+    const kind = state.ask.kind, def = ASKS.find(item => item.kind === kind), say = text => setText("[data-ask-status]", text);
+    const text = form.elements.text?.value.trim() || "";
+    if (def.text === "required" && !text) {say("Напишите, что нужно сделать.");return;}
+    const body = {clientRequestId: state.ask.id, kind, ...(text ? {text} : {})};
+    if (def.date) {if (!form.elements.date.value) {say("Выберите новую дату.");return;}body.date = form.elements.date.value;}
+    if (kind === "redo" || kind === "publish") body.version = currentVersion()?.version ?? state.version;
+    if (def.segment && (form.elements.from.value.trim() || form.elements.to.value.trim())) {
+      const from = parseMmss(form.elements.from.value), to = parseMmss(form.elements.to.value);
+      if (from === null || to === null || to <= from) {say("Отрезок: укажите начало и конец, например 0:05 и 0:12. Конец — позже начала.");return;}
+      body.startMs = from;body.endMs = to;
+    }
+    if (kind === "publish") {const targets = [...el.querySelectorAll("[data-targets] input:checked")].map(input => input.value);if (targets.length) body.platformIds = targets;}
+    state.busy = true;say("Отправляем…");
+    try {
+      if (!(await saveReviewFirst())) {if (state.open) say("Подпись и решение не сохранились, поэтому просьба не отправлена. Попробуйте ещё раз.");return;}
+      const result = await api.ask(state.open.id, body);if (ctx.signal.aborted || !state.open) return;
+      state.ask = null;state.open = keepPost(result.reel);renderDetail();
+      setText("[data-ask-status]", "Просьба отправлена. Статус и ответ агента появятся ниже.");
+      const summary = state.reels.find(entry => entry.id === result.reel.id);if (summary) summary.openRequests = result.reel.openRequests;
+    } catch (error) {say("Не удалось отправить: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;}
+  }
+  async function reloadOpen(message) {
+    if (state.busy || !state.open?.id) return;state.busy = true;
+    try {const reel = await api.get(state.open.id);if (ctx.signal.aborted || !state.open) return;state.open = keepPost(reel);renderDetail();setText("[data-ask-status]", message || "");}
+    catch (error) {setText("[data-ask-status]", "Не удалось обновить: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;}
+  }
+  async function cancelAsk(id) {
+    if (state.busy) return;state.busy = true;
+    try {const reel = await api.cancelAsk(state.open.id, id);if (ctx.signal.aborted || !state.open) return;state.open = keepPost(reel);renderDetail();setText("[data-ask-status]", "Просьба отменена.");}
+    catch (error) {setText("[data-ask-status]", "Не удалось отменить: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;}
+  }
+  /* Переключатели «живого монтажа» живут, пока открыта эта версия ролика. Границы отрезков — только с сервера. */
+  function liveFor(reel, version) {
+    const segments = Array.isArray(version?.segments) ? version.segments.filter(item => Number.isFinite(item?.startMs) && Number.isFinite(item?.endMs)) : [];
+    const key = `${reel.key}:${version?.version}:${segments.length}`;
+    if (!state.live || state.live.key !== key) state.live = {key, segments, toggles: liveOps.initial(segments), muted: false, id: null};
+    return state.live;
+  }
+  function liveHtml(reel, version) {
+    if (!fresh(reel)) return "";
+    const live = liveFor(reel, version), head = `<h3>Живой монтаж · версия v${esc(version?.version ?? 1)}</h3>`;
+    if (!live.segments.length) return `<section class="mt-live" data-live-box>${head}<p class="muted" data-live-empty>Отрезки появятся после разметки ролика.</p></section>`;
+    const changed = liveOps.changed(live.toggles);
+    const row = (item, i) => {
+      const t = live.toggles[i];
+      return `<li class="mt-live__row${t.enabled ? "" : " is-off"}" data-live-row="${i}"><span class="mt-live__name"><b>${i + 1}</b> ${item.label ? esc(item.label) + " " : ""}<span class="muted">${mmss(item.startMs)}–${mmss(item.endMs)}</span></span>
+        ${canEdit ? `<span class="mt-live__switch"><button type="button" class="plain-button mt-live__btn" data-live-toggle="enabled:${i}" aria-pressed="${t.enabled}">${t.enabled ? "В ролике" : "Убран"}</button>
+        <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}"${t.enabled ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
+    };
+    return `<section class="mt-live" data-live-box>${head}
+      <p class="muted mt-hint">${canEdit ? "Нажмите на отрезок, чтобы убрать его из ролика или оставить без звука (останутся только титры). Порядок отрезков не меняется. " : ""}При просмотре убранные отрезки пропускаются, а на отрезках без звука звук выключается.</p>
+      <ol class="mt-live__list" data-live-list>${live.segments.map(row).join("")}</ol>
+      ${canEdit ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed ? "" : " disabled"}>Сохранить правку</button><button type="button" class="plain-button" data-live-reset${changed ? "" : " disabled"}>Вернуть как было</button></div>` : ""}
+      <p class="mt-status" role="status" data-live-status></p></section>`;
+  }
+  /* Блок перерисовывается отдельно от плеера: позиция воспроизведения сохраняется. */
+  function renderLive(message) {
+    const box = el.querySelector("[data-live-box]");if (!box || !state.open) return;
+    box.outerHTML = liveHtml(state.open, currentVersion());setText("[data-live-status]", message || "");
+  }
+  function toggleLive(value) {
+    const [field, index] = String(value).split(":"), toggle = state.live?.toggles[Number(index)];
+    if (!toggle || !["enabled", "sound"].includes(field)) return;
+    toggle[field] = !toggle[field];state.live.id = null;renderLive();
+    el.querySelector(`[data-live-toggle="${field}:${Number(index)}"]`)?.focus({preventScroll: true});
+  }
+  function previewTick(player) {
+    const live = state.live;if (!live) return;
+    const step = live.segments.length && liveOps.changed(live.toggles) ? liveOps.at(live.segments, live.toggles, (Number(player.currentTime) || 0) * 1000) : {seekMs: null, stop: false, mute: false};
+    if (step.stop) {if (!player.paused) player.pause();return;}
+    if (step.seekMs !== null) {player.currentTime = step.seekMs / 1000;return;}
+    if (step.mute && !player.muted) {player.muted = true;live.muted = true;}
+    else if (!step.mute && live.muted) {player.muted = false;live.muted = false;}
+  }
+  async function saveLive() {
+    const live = state.live;if (state.busy || !live || !liveOps.changed(live.toggles)) return;
+    if (!live.toggles.some(item => item.enabled)) {setText("[data-live-status]", "Оставьте в ролике хотя бы один отрезок.");return;}
+    live.id = live.id || requestId();state.busy = true;setText("[data-live-status]", "Сохраняем правку…");
+    try {
+      const result = await api.liveEdit(state.open.id, {clientRequestId: live.id, baseVersion: currentVersion()?.version ?? state.version, segments: liveOps.body(live.segments, live.toggles)});
+      if (ctx.signal.aborted || !state.open) return;
+      state.live = null;state.open = keepPost(result.reel);renderDetail();
+      setText("[data-live-status]", "Правка сохранена. Агент соберёт новую версию — она появится в этом окне.");
+    } catch (error) {setText("[data-live-status]", "Не удалось сохранить правку: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;}
+  }
+  function historyHtml(reel) {
+    if (!fresh(reel) || !Array.isArray(reel.history) || !reel.history.length) return "";
+    const cut = value => {const text = String(value || "");return text ? `«${text.length > 80 ? text.slice(0, 80) + "…" : text}»` : "пусто";};
+    const line = entry => {
+      const what = entry.field === "decision" ? `${entry.afterLabel || "без решения"}${entry.comment ? " — " + entry.comment : ""}` : `${cut(entry.before)} → ${cut(entry.after)}`;
+      return `<li><span class="muted">${esc(timeIn(entry.at, state.timeZone))}${entry.authorName ? " · " + esc(entry.authorName) : ""}</span><br>${esc(entry.fieldLabel || entry.field)}: ${esc(what)}</li>`;
+    };
+    return `<details class="mt-history" data-history><summary>История изменений (${reel.history.length})</summary><ul>${reel.history.map(line).join("")}</ul></details>`;
   }
   const detailStatus = text => {const target = el.querySelector("[data-detail-status]");if (target) target.textContent = text;};
   async function ensureReel() {
@@ -779,6 +1034,18 @@ function create(el, ctx) {
     else if (target.dataset.restore) void restoreReel(target.dataset.restore, target);
     else if (target.hasAttribute("data-confirm-no")) {if (!state.busy) closeConfirm();}
     else if (target.hasAttribute("data-archive-toggle")) void toggleArchive();
+    else if (target.dataset.ask) openAsk(target.dataset.ask);
+    else if (target.hasAttribute("data-ask-cancel")) closeAsk();
+    else if (target.dataset.askNow) askNow(target.dataset.askNow);
+    else if (target.dataset.requestCancel) void cancelAsk(Number(target.dataset.requestCancel));
+    else if (target.hasAttribute("data-requests-refresh")) void reloadOpen("Обновлено.");
+    else if (target.dataset.liveToggle) toggleLive(target.dataset.liveToggle);
+    else if (target.hasAttribute("data-live-save")) void saveLive();
+    else if (target.hasAttribute("data-live-reset")) {if (state.live) {state.live.toggles = liveOps.initial(state.live.segments);state.live.id = null;renderLive();}}
+  });
+  el.addEventListener("submit", event => {
+    if (event.target.matches?.("[data-review]")) {event.preventDefault();void saveReview(event.target);}
+    else if (event.target.matches?.("[data-ask-form]")) {event.preventDefault();void sendAsk(event.target);}
   });
   el.addEventListener("keydown", event => {
     if (event.key !== "Escape" || event.target.closest?.(".re-editor")) return;

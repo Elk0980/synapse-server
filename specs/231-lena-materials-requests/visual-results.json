@@ -1,0 +1,22 @@
+[
+  {
+    "width": 390,
+    "tappable": 33,
+    "scrollWidth": 390,
+    "files": [
+      "montage-list-390.png",
+      "montage-detail-390-top.png",
+      "montage-detail-390.png"
+    ]
+  },
+  {
+    "width": 1366,
+    "tappable": 33,
+    "scrollWidth": 1366,
+    "files": [
+      "montage-list-1366.png",
+      "montage-detail-1366-top.png",
+      "montage-detail-1366.png"
+    ]
+  }
+]

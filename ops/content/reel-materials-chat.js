@@ -5,7 +5,8 @@
    к «Материалам» и перед чтением комнаты hugh:<id>. Записи идемпотентны (client_id = ключ записи).
    Без комнат чата (PR 504 ещё не выпущен) ничего не пишется и ничего не падает: лог остаётся в карточке ролика. */
 const CODE=/^[a-z0-9][a-z0-9_-]{0,63}$/i;
-const KEY=/^reel-edit:[1-9]\d{0,15}:(?:request|done|cancelled)$/;
+/* specs/231: кроме правок монтажа (reel-edit) — просьбы агенту с ролика (reel-request): сама просьба и ответы агента. */
+const KEY=/^(?:reel-edit:[1-9]\d{0,15}:(?:request|done|cancelled)|reel-request:[1-9]\d{0,15}:(?:request|reply:[1-9]\d{0,15}))$/;
 function createReelHughLog({db,crmUrl,crmKey,fetchImpl=globalThis.fetch,timeoutMs=1500,minIntervalMs=15000,now=()=>Date.now(),warn=console.warn}) {
   const last=new Map(),running=new Map();
   function rooms() {
