@@ -88,7 +88,7 @@ function createReelMaterialsHandler({materials,companyModuleContext,readJson,sen
     else if(section==='requests'&&action==='cancel'&&request.method==='POST')result=materials.cancelRequest(code,reelId,Number(editId),identity);
     else if(section==='live-edit'&&!editId&&request.method==='POST'){result=materials.liveEdit(code,reelId,await readJson(request),identity);status=result.duplicate?200:201;}
     else if(section==='edits'&&!editId&&request.method==='POST'){result=materials.requestEdit(code,reelId,await readJson(request),identity);status=result.duplicate?200:201;}
-    else if(section==='edits'&&action==='cancel'&&request.method==='POST')result=materials.cancelEdit(code,reelId,Number(editId));
+    else if(section==='edits'&&action==='cancel'&&request.method==='POST')result=materials.cancelEdit(code,reelId,Number(editId),identity);
     else if(section==='publication'&&request.method==='POST'){result=materials.createPublication(code,reelId,await readJson(request),identity);status=201;}
     else fail(405,'Метод не поддерживается');
     send(response,status,result,headers);return true;

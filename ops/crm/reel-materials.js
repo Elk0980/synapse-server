@@ -122,6 +122,8 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       edl TEXT, comment TEXT NOT NULL DEFAULT '', start_ms INTEGER, end_ms INTEGER, status TEXT NOT NULL DEFAULT 'pending',
       task_id INTEGER, result_version INTEGER, client_request_id TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(company_id,client_request_id));`);
+  if(!db.prepare('PRAGMA table_info(reel_edits)').all().some(column=>column.name==='status_actor_id'))
+    db.exec("ALTER TABLE reel_edits ADD COLUMN status_actor_id TEXT NOT NULL DEFAULT ''");
   /* Связь ролика с идеей контент-плана (specs/209-cf-stages): добавочная колонка, старые строки остаются без связи. */
   if(!db.prepare('PRAGMA table_info(reel_materials)').all().some(column=>column.name==='idea_id')){
     db.exec('ALTER TABLE reel_materials ADD COLUMN idea_id TEXT');
@@ -362,11 +364,11 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     });
   }
   function editFor(owner,editId){const edit=Number.isSafeInteger(editId)&&db.prepare('SELECT * FROM reel_edits WHERE id=? AND company_id=?').get(editId,owner.id);if(!edit)fail(404,'Правка не найдена','NOT_FOUND');return edit;}
-  function cancelEdit(code,id,editId){
+  function cancelEdit(code,id,editId,actor){
     const owner=company(db,code),row=rowFor(owner,id),edit=editFor(owner,editId);
     if(edit.reel_id!==row.id)fail(404,'Правка не найдена','NOT_FOUND');
     if(edit.status!=='pending')fail(409,'Правку уже взяли в монтаж или закрыли','EDIT_STATE');
-    db.prepare("UPDATE reel_edits SET status='cancelled',updated_at=? WHERE id=?").run(iso(),edit.id);
+    db.prepare("UPDATE reel_edits SET status='cancelled',status_actor_id=?,updated_at=? WHERE id=?").run(String(actor?.userId??''),iso(),edit.id);
     if(edit.task_id)db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND company_code=? COLLATE NOCASE").run(iso(),edit.task_id,owner.code);
     return reelDto(row,owner,true);
   }
@@ -456,7 +458,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
   function claim(code,editId){
     const owner=company(db,code),edit=editFor(owner,editId);
     if(!['pending','in_progress'].includes(edit.status))fail(409,'Правка уже закрыта','EDIT_STATE');
-    db.prepare("UPDATE reel_edits SET status='in_progress',updated_at=? WHERE id=?").run(iso(),edit.id);
+    db.prepare("UPDATE reel_edits SET status='in_progress',status_actor_id='',updated_at=? WHERE id=?").run(iso(),edit.id);
     if(edit.task_id)db.prepare("UPDATE tasks SET status='in_progress',updated_at=? WHERE id=? AND company_code=? COLLATE NOCASE AND status IN ('inbox','planned')").run(iso(),edit.task_id,owner.code);
     return editDto(db.prepare('SELECT * FROM reel_edits WHERE id=?').get(edit.id));
   }
@@ -473,7 +475,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
       db.prepare('INSERT INTO reel_versions(reel_id,version,media_url,sha256,duration_ms,edit_id,note,created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(row.id,version,media,hash,durationMs,edit?.id??null,note,at,text(String(agent||MONTAGE_EXECUTOR),200));
       if(segments)db.prepare('UPDATE reel_versions SET segments=? WHERE reel_id=? AND version=?').run(JSON.stringify(segments),row.id,version);
-      if(edit)db.prepare("UPDATE reel_edits SET status='done',result_version=?,updated_at=? WHERE id=?").run(version,at,edit.id);
+      if(edit)db.prepare("UPDATE reel_edits SET status='done',status_actor_id='',result_version=?,updated_at=? WHERE id=?").run(version,at,edit.id);
       db.prepare('UPDATE reel_materials SET updated_at=? WHERE id=?').run(at,row.id);
       const reel=reelDto(rowFor(owner,id),owner,true);
       return {reel,version:reel.versions.at(-1),hughChat:edit?{companyCode:reel.companyCode,authorId:edit.author_id,text:`Исправлено: «${row.title}» — готова v${version}.`}:null};
@@ -484,7 +486,8 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const owner=company(db,code),author=String(authorId??'');if(!/^[1-9]\d{0,15}$/.test(author))fail(400,'Нужен автор правок');
     const rows=db.prepare(`SELECT e.*,r.title FROM reel_edits e JOIN reel_materials r ON r.id=e.reel_id AND r.company_id=e.company_id
       WHERE e.company_id=? AND e.author_id=? ORDER BY e.id DESC LIMIT 200`).all(owner.id,author).reverse();
-    const entries=[...rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id}))),...ext.hughEntries(owner,author)];
+    const entries=[...rows.flatMap(row=>logEntries(editDto(row),row.title,true)
+      .filter(entry=>entry.from!=='hugh'||row.status_actor_id!==row.author_id).map(entry=>({...entry,reelId:row.reel_id}))),...ext.hughEntries(owner,author)];
     return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:entries.map(entry=>notificationsEnabled&&entry.from==='hugh'?
       {...entry,text:entry.text.slice(0,3800)+`\n/cabinet.html#content/materials/reel/${entry.reelId}?company=${encodeURIComponent(owner.code.toLowerCase())}`}:entry)};
   }
