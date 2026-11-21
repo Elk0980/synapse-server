@@ -309,6 +309,26 @@ def queues():
 
 
 def main():
+    if sys.argv[1:] == ['claim7']:
+        # №283/2054: exactly one authorized POST; no retries or other API calls.
+        program = r'''
+(async()=>{
+ const key=process.env.CRM_API_KEY;if(!key)throw Error();
+ const agent=Buffer.from('Claude \u00b7 \u043c\u043e\u043d\u0442\u0430\u0436','utf8').toString('latin1');
+ const r=await fetch('http://crm:8080/internal/reel-materials/edits/7/claim?companyCode=taisabai',{
+  method:'POST',headers:{'x-api-key':key,'x-agent-name':agent},redirect:'error',signal:AbortSignal.timeout(15000)});
+ let body={};try{body=await r.json()}catch{}
+ console.log(JSON.stringify({http:r.status,status:body.status==='in_progress'?'in_progress':null}));
+})().catch(()=>{console.log(JSON.stringify({http:0,status:null}));process.exitCode=1});
+'''
+        try:
+            result = subprocess.run(['docker','exec','-i','synapse-content-1','node'], input=program.encode(), capture_output=True, timeout=25)
+            data = json.loads(result.stdout)
+            print(json.dumps({'http':data['http'],'status':data['status']},separators=(',', ':')))
+            return result.returncode
+        except Exception:
+            print('{"http":0,"status":null}')
+            return 1
     if sys.argv[1:] == ['after-approved644']:
         return after_approved644()
     if sys.argv[1:] == ['stage644']:
