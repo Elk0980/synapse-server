@@ -173,7 +173,40 @@ def stage():
   print('STAGED298',s,json.dumps(prepared[s]))
  save(work/'checked298.json',json.dumps(prepared,indent=2).encode());print('STAGE298_OK crm content')
  return 0
+def verify():
+ prepared=json.loads((ROOT/'w658/checked298.json').read_text());receipt=json.loads((PRE/'receipt.json').read_text())
+ for s in ['crm','content']:
+  current=state(s)
+  if current['image']!=prepared[s]['image'] or current['status']!='running' or current['restarts']!=0 or current['flag']!='1':raise RuntimeError('service state '+s)
+  print('RUNNING298',s,json.dumps(current))
+ for f in receipt['files']:
+  if not f['path'].startswith('ops/'):continue
+  row=next(r for r in DATA['files'] if r['path']==f['path']);h=sha(live(row))
+  if h!=f['sha']:raise RuntimeError('deployed file differs '+f['path'])
+  print('EXACT298',f['path'],h)
+ program=r'''
+(async()=>{
+ const key=process.env.CRM_API_KEY;if(!key)throw Error();const out={contentFlag:process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1'};
+ for(const [name,url] of [['crmHealth','http://crm:8080/health'],['contentHealth','http://127.0.0.1:'+(process.env.PORT||8080)+'/health'],['feed','http://crm:8080/internal/reel-materials/notifications?after=0&limit=100']]){
+  const r=await fetch(url,{headers:name==='feed'?{'x-api-key':key}:{},redirect:'error',signal:AbortSignal.timeout(8000)});out[name]=r.status;if(!r.ok)throw Error();
+  if(name==='feed'){const b=await r.json();out.feedEnabled=b.enabled===true;out.feedCount=Array.isArray(b.events)?b.events.length:null;if(!out.feedEnabled)throw Error();}
+ }console.log(JSON.stringify(out));
+})().catch(()=>{console.log('HEALTH298_FAILED');process.exitCode=1});
+'''
+ print('HTTP298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
+ dbprogram=r'''
+const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/data/crm.sqlite',{readOnly:true});
+const enabled=db.prepare('SELECT enabled FROM reel_notification_settings WHERE id=1').get()?.enabled===1;
+const edits=db.prepare('PRAGMA table_info(reel_edits)').all().some(x=>x.name==='status_actor_id');
+const requests=db.prepare('PRAGMA table_info(reel_request_events)').all().some(x=>x.name==='actor_id');
+console.log(JSON.stringify({crmFlag:process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1',settingsEnabled:enabled,editActorColumn:edits,requestActorColumn:requests}));
+db.close();if(!enabled||!edits||!requests||process.env.MONTAGE_NOTIFICATIONS_ENABLED!=='1')process.exitCode=1;
+'''
+ print('SETTINGS298',run(['docker','exec','-i','synapse-crm-1','node'],input=dbprogram.encode()).decode().strip())
+ save(PRE/'verified.json',json.dumps({'at':time.time(),'bothFlags':True,'health':True,'settings':True}).encode());print('VERIFIED298_OK')
+ return 0
 def main():
+ if sys.argv[1:]==['verify']:return verify()
  if sys.argv[1:] in [['backup-before-build'],['backup-before-up']]:return backup(sys.argv[1][7:])
  if sys.argv[1:]==['stage']:return stage()
  if sys.argv[1:]==['pin']:
