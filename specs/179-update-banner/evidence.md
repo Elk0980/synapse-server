@@ -1,0 +1,3 @@
+Локально06.11: node --test sites/synapse/cabinet/update-banner.test.cjs sites/synapse/cabinet/shell-version.test.cjs:10/10, fail0,skip0. Playwright20/20,4страницы,0pageerror/overflow,44px и отсутствие пересечения с навигацией/Хью. Скриншоты рядом. Стенд с навигацией и Хью — изолированная fixture, не живой кабинет. Все окна закрыты finally.
+
+Исправление ревью: dirty проверяет getClientRects и отличие value/defaultValue, checked/defaultChecked, исходный contenteditable. node12/12; real-cabinet.cjs запускает настоящую cabinet.html и её bootstrap с API-заглушкой:24/24,390/1440×2темы, нетронутая страница dirty=false, клик reload=1, видимый черновик блокирует второй reload. Скриншоты real-cabinet-* рядом.

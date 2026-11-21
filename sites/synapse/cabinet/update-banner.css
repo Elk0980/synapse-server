@@ -1,0 +1,4 @@
+.sb-update-banner {position:fixed;left:16px;right:80px;bottom:140px;z-index:39;max-width:440px;height:44px;min-height:44px;padding:0 12px;border:1px solid var(--line,#ccc);border-radius:12px;background:var(--card,#fff);color:var(--text,#18212b);box-shadow:0 3px 16px #0002;font:inherit;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
+.sb-update-banner:focus-visible {outline:2px solid var(--accent,#36c);outline-offset:3px}
+.sb-update-banner[data-waiting] {border-color:var(--accent,#36c)}
+@media(prefers-color-scheme:dark){html:not([data-theme="light"]) .sb-update-banner {background:var(--card,#222a35);color:var(--text,#f4f5f6)}}
