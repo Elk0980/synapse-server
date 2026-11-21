@@ -73,7 +73,8 @@ body.mt-modal-open { overflow:hidden; }
 .mt-layout { display:grid; gap:18px; margin-top:10px; grid-template-columns:minmax(0,1fr); }
 @media (min-width:900px) { .mt-layout { grid-template-columns:minmax(260px,320px) minmax(0,1fr); align-items:start; } }
 .mt-phone { width:100%; max-width:320px; justify-self:center; min-width:0; }
-/* Плеер остаётся на экране, пока листают фразы «живого монтажа» (specs/232, доделка): на широком экране закреплена колонка, на телефоне — уменьшенный плеер под шапкой окна. */
+/* На телефоне кадр и управление заполняют закреплённую полосу; на ПК закреплена колонка. */
+.mt-transport { display:none; }
 @media (min-width:900px) { .mt-phone { position:sticky; top:56px; } }
 @media (max-width:899px) {
   .mt-layout { display:flex; flex-direction:column; gap:0; }
@@ -81,8 +82,16 @@ body.mt-modal-open { overflow:hidden; }
   .mt-stick { order:-3; }
   .mt-live { order:-2; }
   .mt-modal__head h2 { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
-  .mt-stick { position:sticky; top:58px; z-index:1; display:grid; justify-items:center; margin:0 -16px 10px; padding:6px 16px; background:var(--bg,#0f141d); }
-  .mt-stick .mt-screen { width:auto; height:32vh; max-width:100%; border-radius:16px; border-width:4px; }
+  .mt-stick { position:sticky; top:58px; z-index:1; display:flex; align-items:stretch; gap:8px; margin:0 -16px 0; padding:6px 8px; background:var(--bg,#0f141d); }
+  .mt-stick .mt-screen { flex:none; width:auto; height:40vh; min-height:40vh; max-width:none; border-radius:12px; border-width:4px; }
+  .mt-transport { display:flex; flex:1; flex-direction:column; justify-content:space-between; gap:4px; min-width:0; font-size:14px; }
+  .mt-view .mt-transport button { box-sizing:border-box; width:100%; min-width:0; min-height:44px; padding:6px 4px; font-size:14px; white-space:normal; line-height:1.2; }
+  .mt-transport p { margin:0; overflow-wrap:anywhere; }
+  .mt-transport input[type=range] { box-sizing:border-box; width:100%; min-width:0; min-height:44px; margin:0; }
+  .mt-transport .mt-actions { display:grid; gap:4px; margin:0; }
+  .mt-transport .mt-status { margin:4px 0 0; font-size:13px; line-height:1.25; }
+  .mt-platforms { margin-top:10px; }
+  .mt-platforms label, .mt-toggle { min-height:44px; }
 }
 .mt-screen { position:relative; width:100%; aspect-ratio:9/16; border-radius:24px; overflow:hidden; background:#000; border:6px solid #222; box-shadow:0 10px 30px #0006; box-sizing:border-box; }
 .mt-screen video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
@@ -214,6 +223,13 @@ body.mt-modal-open { overflow:hidden; }
 .mt-live__list { list-style:none; margin:6px 0; padding:0; display:grid; gap:4px; }
 .mt-live__row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 4px 0 8px; border:1px solid var(--line,#283143); border-left:4px solid #3fae6a; border-radius:8px; }
 .mt-live__row.is-off { border-left-color:var(--line,#283143); background:transparent; }
+.mt-live__row.is-current { border-color:var(--accent,#9fb3ff); background:rgba(159,179,255,.16); }
+.mt-live { position:relative; }
+.mt-live > h3 { padding-right:44px; }
+.mt-live__help { position:absolute; top:0; right:0; }
+.mt-live__help summary { display:grid; place-items:center; min-width:44px; min-height:44px; cursor:pointer; }
+.mt-live__help[open] { position:static; }
+.mt-live__btn[data-live-toggle^="sound"] { order:-1; }
 .view-panel .mt-view button.mt-live__name, .mt-live__name { min-width:0; min-height:44px; overflow-wrap:anywhere; font:inherit; font-size:14px; line-height:1.25; text-align:left; color:inherit; background:none; border:0; border-radius:0; padding:4px 0; cursor:pointer; box-shadow:none; }
 .mt-live__name .muted { font-size:12px; white-space:nowrap; }
 .mt-live__row.is-off .mt-live__name { color:var(--muted,#8c97ab); text-decoration:line-through; text-decoration-color:var(--line,#283143); }

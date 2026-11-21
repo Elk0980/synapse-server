@@ -57,6 +57,24 @@ const REEL={...summary,versions:[{version:1,mediaUrl:media,durationMs:16000},{ve
       assert.ok(m.detailScroll<=m.detailClient+1,'горизонтальная прокрутка окна ролика: '+JSON.stringify(m));
       assert.deepEqual(m.outside,[],'элементы за шириной окна');assert.deepEqual(m.low,[],'нажимаемое ниже 44 px');
       assert.equal(m.blocks,4);assert.equal(m.rows,4);assert.equal(m.requests,3);assert.deepEqual(errors,[]);
+      await page.evaluate(()=>document.querySelector('[data-detail-modal]').scrollTo(0,0));
+      if(width<900){
+        const mobile=await page.evaluate(()=>{
+          const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,width:r.width,height:r.height};};
+          return {screen:rect('.mt-stick .mt-screen'),strip:rect('.mt-stick'),live:rect('.mt-live'),platforms:rect('.mt-platforms'),
+            controls:[...document.querySelectorAll('.mt-transport button,.mt-transport input')].map(n=>n.getBoundingClientRect().height),
+            saveInStrip:!!document.querySelector('.mt-stick [data-live-save]'),saveCount:document.querySelectorAll('[data-live-save]').length};
+        });
+        assert.ok(mobile.screen.height>=height*.4-1,'плеер не меньше 40vh');
+        assert.ok(Math.abs(mobile.screen.width/mobile.screen.height-9/16)<.02,'кадр 9:16');
+        assert.ok(mobile.controls.every(h=>h>=44),'управление не мельче 44px');
+        assert.ok(mobile.live.top>=mobile.strip.bottom-1&&mobile.live.top<mobile.strip.bottom+20,'фразы сразу под плеером');
+        assert.ok(mobile.platforms.top>mobile.live.bottom,'маска после фраз');
+        assert.ok(mobile.saveInStrip);assert.equal(mobile.saveCount,1);
+        await page.evaluate(()=>document.querySelector('[data-detail-modal]').scrollBy(0,500));
+        assert.ok(await page.locator('.mt-stick').evaluate(n=>Math.abs(n.getBoundingClientRect().top-58)<1),'полоса закреплена');
+        await page.evaluate(()=>document.querySelector('[data-detail-modal]').scrollTo(0,0));
+      }
       await page.screenshot({path:path.join(out,`montage-detail-${width}-top.png`)});
       /* Вся карточка одним кадром: окно того же размера по ширине, высота — по содержимому. */
       await page.setViewportSize({width,height:Math.min(m.height+80,6000)});await page.waitForTimeout(100);

@@ -95,6 +95,38 @@ test('живой монтаж, расчёт предпросмотра: убра
   assert.equal(live.mmss(65400), '1:05');
 });
 
+test('итоговое время и перемотка исключают убранные фразы, включая конец и пустой монтаж', t => {
+  const f = fixture();t.after(() => f.w.close());
+  const list = segments(), toggles = [{enabled: true}, {enabled: false}, {enabled: true}];
+  same(f.live.timeline(list, toggles, 7000), {total: 7000, elapsed: 4000, count: 2});
+  same(f.live.timeline(list, toggles, 4500), {total: 7000, elapsed: 3000, count: 2});
+  assert.equal(f.live.sourceAt(list, toggles, 3000), 6000);
+  assert.equal(f.live.sourceAt(list, toggles, 7000), 10000);
+  assert.equal(f.live.sourceAt(list, toggles, 0), 0);
+  same(f.live.timeline(list, toggles.map(() => ({enabled: false})), 7000), {total: 0, elapsed: 0, count: 0});
+  assert.equal(f.live.sourceAt(list, toggles.map(() => ({enabled: false})), 0), 0);
+});
+
+test('управление плеером: итоговый прогресс, пауза, с начала и подсветка без записи на сервер', async t => {
+  const marked = segments().map((s, i) => i === 1 ? {...s, enabled: false} : s);
+  const f = fixture({reel: () => full({versions: [{version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
+  t.after(() => f.w.close());await f.open();
+  const player = f.el.querySelector('[data-player]');let paused = true;
+  Object.defineProperty(player, 'paused', {get: () => paused});
+  player.play = () => {paused = false;player.dispatchEvent(new f.w.Event('play'));return Promise.resolve();};
+  player.pause = () => {paused = true;player.dispatchEvent(new f.w.Event('pause'));};
+  assert.equal(f.el.querySelector('[data-live-count]').textContent, 'В ролике 2 из 3 фраз');
+  await f.click('[data-live-play]');assert.equal(paused, false);
+  player.currentTime = 7;player.dispatchEvent(new f.w.Event('timeupdate'));
+  assert.equal(f.el.querySelector('[data-live-time]').textContent, '0:04 / 0:07');
+  assert.equal(f.el.querySelector('[data-live-row="2"]').getAttribute('aria-current'), 'true');
+  await f.click('[data-live-play]');assert.equal(paused, true);
+  const progress = f.el.querySelector('[data-live-progress]');progress.value = 500;progress.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+  assert.equal(player.currentTime, 6.5);
+  await f.click('[data-live-start]');assert.equal(player.currentTime, 0);assert.equal(paused, false);
+  assert.equal(f.calls.filter(call => call.method !== 'GET').length, 0);
+});
+
 test('старый сервер (без списка просьб): новые блоки не показываются, окно работает как раньше', async () => {
   const f = fixture({reel: () => {const {requests: _r, history: _h, ...rest} = full();return rest;}});
   await f.open();

@@ -126,6 +126,16 @@ const liveOps = {
     ? toggles.some((item, i) => item.enabled !== (segments[i]?.enabled !== false) || item.sound !== (segments[i]?.sound !== false))
     : toggles.some(item => !item.enabled || !item.sound),
   active: toggles => toggles.some(item => !item.enabled || !item.sound),
+  timeline(segments, toggles, ms) {
+    let total = 0, elapsed = 0, count = 0;
+    segments.forEach((s, i) => {if (toggles[i].enabled) {const length = s.endMs - s.startMs;total += length;elapsed += Math.max(0, Math.min(length, ms - s.startMs));count++;}});
+    return {total, elapsed, count};
+  },
+  sourceAt(segments, toggles, elapsed) {
+    const included = segments.filter((_, i) => toggles[i].enabled);
+    for (const s of included) {const length = s.endMs - s.startMs;if (elapsed < length) return s.startMs + Math.max(0, elapsed);elapsed -= length;}
+    return included.at(-1)?.endMs ?? 0;
+  },
   /* Что делать плееру в момент ms: перейти к началу следующего отрезка «в ролике», остановиться (дальше всё убрано) или заглушить звук. */
   at(segments, toggles, ms) {
     const index = segments.findIndex(item => ms >= item.startMs && ms < item.endMs);
@@ -498,7 +508,7 @@ function create(el, ctx) {
       <div class="mt-layout">
         <div class="mt-phone">
           <fieldset class="mt-platforms" aria-label="Маска площадки">${switcher.map(id => `<label title="${esc(platformOf(id).label)}"><input type="radio" name="mt-platform" value="${id}"${id === state.platform ? " checked" : ""}><span>${esc(platformOf(id).short)}</span></label>`).join("")}</fieldset>
-          <div class="mt-stick"><div class="mt-screen">${media ? `<video controls playsinline preload="metadata" src="${esc(media)}" data-player></video>` : "<p>Файл не найден</p>"}${maskHtml(state.platform)}</div></div>
+          <div class="mt-stick"><div class="mt-screen">${media ? `<video controls playsinline preload="metadata" src="${esc(media)}" data-player></video>` : "<p>Файл не найден</p>"}${maskHtml(state.platform)}</div>${fresh(reel) && liveFor(reel, version).segments.length ? `<div class="mt-transport" data-live-transport><button type="button" class="plain-button" data-live-play>▶ Смотреть</button><button type="button" class="plain-button" data-live-start>⏮ С начала</button><input type="range" min="0" max="1000" value="0" aria-label="Прогресс итогового ролика" data-live-progress><p data-live-time></p><p data-live-count></p><div data-live-mobile-actions></div></div>` : ""}</div>
           <label class="mt-toggle"><input type="checkbox" data-mask-toggle checked> Маска площадки</label>
           <p class="muted mt-note">Тёмные зоны — где лягут шапка, подпись и кнопки ${esc(platformOf(state.platform).label)}. Зоны ориентировочные.</p>
         </div>
@@ -527,7 +537,11 @@ function create(el, ctx) {
     node.querySelector("[data-title]").focus({preventScroll: true});
     restoreReview(unsaved);
     const player = node.querySelector("[data-player]");
-    if (player) player.addEventListener("timeupdate", () => previewTick(player));
+    if (player) {
+      player.addEventListener("timeupdate", () => previewTick(player));
+      for (const event of ["play", "pause", "ended", "loadedmetadata"]) player.addEventListener(event, () => paintPlayback(player));
+    }
+    placeLiveActions();paintPlayback(player);
   }
 
   /* ---------- specs/231: решение, подпись, просьбы агенту, «живой монтаж», история ---------- */
@@ -688,15 +702,42 @@ function create(el, ctx) {
         <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}" title="${t.sound ? "Выключить звук у фразы" : "Включить звук у фразы"}"${t.enabled ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
     };
     return `<section class="mt-live" data-live-box>${head}
-      <p class="muted mt-hint">${canEdit ? "Фраза — посмотреть её. «−» убрать, «+» вернуть, динамик — звук. " : ""}Убранное при просмотре пропускается.</p>
+      <details class="mt-live__help"><summary aria-label="Помощь по фразам">?</summary><p class="muted mt-hint">Фраза — посмотреть; динамик — звук; − убрать, + вернуть.</p></details>
       <ol class="mt-live__list" data-live-list>${live.segments.map(row).join("")}</ol>
-      ${canEdit ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed ? "" : " disabled"}>Сохранить правку</button><button type="button" class="plain-button" data-live-reset${changed ? "" : " disabled"}>Вернуть как было</button></div>` : ""}
-      <p class="mt-status" role="status" data-live-status></p></section>`;
+      <div data-live-actions>${canEdit ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed ? "" : " disabled"}>Сохранить правку</button><button type="button" class="plain-button" data-live-reset${changed ? "" : " disabled"}>Вернуть как было</button></div>` : ""}
+      <p class="mt-status" role="status" data-live-status></p></div></section>`;
+  }
+  const mobilePlayback = window.matchMedia?.("(max-width:899px)");
+  function placeLiveActions() {
+    const actions = el.querySelector("[data-live-actions]"), host = el.querySelector(mobilePlayback?.matches ? "[data-live-mobile-actions]" : "[data-live-box]");
+    if (actions && host) host.append(actions);
+  }
+  mobilePlayback?.addEventListener("change", placeLiveActions, {signal: ctx.signal});
+  function paintPlayback(player) {
+    const live = state.live;if (!live || !player) return;
+    const ms = (Number(player.currentTime) || 0) * 1000, timeline = liveOps.timeline(live.segments, live.toggles, ms);
+    setText("[data-live-time]", `${mmss(timeline.elapsed)} / ${mmss(timeline.total)}`);
+    setText("[data-live-count]", `В ролике ${timeline.count} из ${live.segments.length} фраз`);
+    setText("[data-live-play]", player.paused ? "▶ Смотреть" : "Ⅱ Пауза");
+    for (const button of el.querySelectorAll("[data-live-play],[data-live-start]")) button.disabled = !timeline.total;
+    const progress = el.querySelector("[data-live-progress]");if (progress) {progress.value = timeline.total ? Math.round(timeline.elapsed / timeline.total * 1000) : 0;progress.disabled = !timeline.total;}
+    const index = live.segments.findIndex(s => ms >= s.startMs && ms < s.endMs);
+    for (const row of el.querySelectorAll("[data-live-row]")) {
+      const active = Number(row.dataset.liveRow) === index, was = row.classList.contains("is-current");
+      row.classList.toggle("is-current", active);
+      if (active) row.setAttribute("aria-current", "true");else row.removeAttribute("aria-current");
+      if (active && !was && !player.paused) {
+        const modal = el.querySelector("[data-detail-modal]"), sticky = el.querySelector(".mt-stick"), rect = row.getBoundingClientRect();
+        const top = mobilePlayback?.matches ? sticky.getBoundingClientRect().bottom + 8 : 70;
+        if (modal && (rect.top < top || rect.bottom > window.innerHeight)) modal.scrollBy?.({top: rect.top - top, behavior: "smooth"});
+      }
+    }
   }
   /* Блок перерисовывается отдельно от плеера: позиция воспроизведения сохраняется. */
   function renderLive(message) {
     const box = el.querySelector("[data-live-box]");if (!box || !state.open) return;
-    box.outerHTML = liveHtml(state.open, currentVersion());setText("[data-live-status]", message || "");
+    el.querySelector("[data-live-actions]")?.remove();
+    box.outerHTML = liveHtml(state.open, currentVersion());placeLiveActions();setText("[data-live-status]", message || "");paintPlayback(el.querySelector("[data-player]"));
   }
   function toggleLive(value) {
     const [field, index] = String(value).split(":"), toggle = state.live?.toggles[Number(index)];
@@ -712,10 +753,11 @@ function create(el, ctx) {
     if (!inspecting) live.inspect = null;
     const step = inspecting ? {seekMs: null, stop: false, mute: !live.toggles[live.inspect].sound}
       : live.segments.length && liveOps.active(live.toggles) ? liveOps.at(live.segments, live.toggles, ms) : {seekMs: null, stop: false, mute: false};
-    if (step.stop) {if (!player.paused) player.pause();return;}
-    if (step.seekMs !== null) {player.currentTime = step.seekMs / 1000;return;}
+    if (step.stop) {if (!player.paused) player.pause();paintPlayback(player);return;}
+    if (step.seekMs !== null) {player.currentTime = step.seekMs / 1000;paintPlayback(player);return;}
     if (step.mute && !player.muted) {player.muted = true;live.muted = true;}
     else if (!step.mute && live.muted) {player.muted = false;live.muted = false;}
+    paintPlayback(player);
   }
   async function saveLive() {
     const live = state.live;if (state.busy || !live || !liveOps.changed(live.toggles, live.segments)) return;
@@ -1051,6 +1093,15 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-requests-refresh")) void reloadOpen("Обновлено.");
     else if (target.dataset.liveToggle) toggleLive(target.dataset.liveToggle);
     else if (target.hasAttribute("data-live-save")) void saveLive();
+    else if (target.hasAttribute("data-live-play") || target.hasAttribute("data-live-start")) {
+      const player = el.querySelector("[data-player]"), live = state.live;if (!player || !live) return;
+      if (target.hasAttribute("data-live-start")) {live.inspect = null;player.currentTime = liveOps.sourceAt(live.segments, live.toggles, 0) / 1000;}
+      else if (!player.paused) {player.pause();paintPlayback(player);return;}
+      const timeline = liveOps.timeline(live.segments, live.toggles, player.currentTime * 1000);
+      if (!timeline.total) return;
+      if (player.ended || timeline.elapsed >= timeline.total) {live.inspect = null;player.currentTime = liveOps.sourceAt(live.segments, live.toggles, 0) / 1000;}
+      previewTick(player);player.play?.()?.catch?.(() => {});
+    }
     else if (target.hasAttribute("data-live-seek")) {
       /* specs/232: нажатие на фразу показывает её в плеере — так решают, убирать её или добавлять. */
       const index = Number(target.getAttribute("data-live-seek")), item = state.live?.segments[index], player = el.querySelector("[data-player]");
@@ -1069,6 +1120,12 @@ function create(el, ctx) {
     if (!$("[data-detail-modal]").hidden) close();else if (uploadForm && !uploadForm.hidden && !state.busy) toggleUpload(false);
   });
   el.addEventListener("change", event => {
+    if (event.target.hasAttribute("data-live-progress") && state.live) {
+      const player = el.querySelector("[data-player]"), live = state.live;
+      live.inspect = null;
+      if (player) {player.currentTime = liveOps.sourceAt(live.segments, live.toggles, liveOps.timeline(live.segments, live.toggles, 0).total * Number(event.target.value) / 1000) / 1000;previewTick(player);}
+      return;
+    }
     if (event.target.name === "mt-platform") {
       /* Смена маски не перерисовывает плеер: позиция воспроизведения сохраняется. */
       state.platform = event.target.value;const label = platformOf(state.platform);
