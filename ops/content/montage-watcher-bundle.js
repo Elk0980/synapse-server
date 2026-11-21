@@ -22,6 +22,10 @@ function createStore(db,{now=Date.now}={}){
       reason TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS montage_watcher_lock(id INTEGER PRIMARY KEY CHECK(id=1),owner TEXT,until_ms INTEGER NOT NULL);`);
   db.exec('CREATE TABLE IF NOT EXISTS montage_watcher_health(id INTEGER PRIMARY KEY CHECK(id=1),last_success_ms INTEGER NOT NULL)');
+  db.exec(`CREATE TABLE IF NOT EXISTS montage_watcher_queue_incident (
+    id INTEGER PRIMARY KEY CHECK(id=1),episode INTEGER NOT NULL,open INTEGER NOT NULL CHECK(open IN (0,1)));
+    INSERT OR IGNORE INTO montage_watcher_queue_incident VALUES(1,1,
+      EXISTS(SELECT 1 FROM montage_watcher_work WHERE key='synapse-business:system:1'));`);
   const owner=randomUUID(),leaseMs=300000;
   const row=key=>db.prepare('SELECT * FROM montage_watcher_work WHERE key=?').get(key);
   function lock(){
@@ -38,7 +42,12 @@ function createStore(db,{now=Date.now}={}){
   }
   const unfinished=()=>db.prepare("SELECT * FROM montage_watcher_work WHERE phase IN ('processing','replying','reply_uncertain','dispatching','escalating')").all();
   const healthy=()=>db.prepare('INSERT INTO montage_watcher_health VALUES(1,?) ON CONFLICT(id) DO UPDATE SET last_success_ms=excluded.last_success_ms').run(now());
-  return {row,claim,save,lock,renew,unlock,unfinished,healthy};
+  function queueIncident(){
+    db.prepare('UPDATE montage_watcher_queue_incident SET open=1 WHERE id=1').run();
+    return db.prepare('SELECT episode FROM montage_watcher_queue_incident WHERE id=1').get().episode;
+  }
+  const queueRecovered=()=>db.prepare('UPDATE montage_watcher_queue_incident SET open=0,episode=episode+1 WHERE id=1 AND open=1').run();
+  return {row,claim,save,lock,renew,unlock,unfinished,healthy,queueIncident,queueRecovered};
 }
 module.exports={createStore};
 }],
@@ -99,7 +108,7 @@ function createWatcher({store,crm,classify,executor,now=Date.now,log=()=>{},inte
     if(was)return;
     if(!store.claim(key,item))return;
     try{
-      const decision=item.type==='edit'?{action:'montage'}:await classify(item);
+      const decision=item.type==='edit'||item.kind!=='message'?{action:'montage'}:await classify(item);
       if(decision.action==='reply'&&item.type==='request'&&item.kind==='message'){
         // Сначала сохраняем результат; после неизвестного HTTP-исхода повторный reply не отправляем.
         store.save(key,'replying',{replyHash:replyHash(decision.reply),status:decision.status});
@@ -123,8 +132,8 @@ function createWatcher({store,crm,classify,executor,now=Date.now,log=()=>{},inte
     try{
       let items;
       try{const [requests,edits]=await Promise.all([crm.requests(),crm.queue()]);items=snapshot(requests,edits);}
-      catch{emit('QUEUE_UNAVAILABLE');await escalate({companyCode:'synapse-business',type:'system',id:1,reelId:null},'QUEUE_UNAVAILABLE');return;}
-      store.healthy();const tickStarted=now();
+      catch{emit('QUEUE_UNAVAILABLE');await escalate({companyCode:'synapse-business',type:'system',id:store.queueIncident(),reelId:null},'QUEUE_UNAVAILABLE');return;}
+      store.queueRecovered();store.healthy();const tickStarted=now();
       const byKey=new Map(items.map(item=>[keyOf(item),item]));
       for(const row of store.unfinished()){
         if(stopping)break;store.renew();if(byKey.has(row.key))continue;

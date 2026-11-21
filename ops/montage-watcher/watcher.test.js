@@ -74,6 +74,31 @@ test('сбой GET → задача и ноль модели; повреждён
   assert.throws(()=>snapshot({requests:[request({companyCode:'../beta'})]},{edits:[]}),/INVALID_QUEUE/);
   assert.throws(()=>snapshot({requests:[request({editId:2,reelId:99})]},{edits:[edit()]}),/INVALID_QUEUE/);
 });
+
+test('после восстановления следующая авария получает новый постоянный ключ, повторы и рестарт не дублируют',async t=>{
+  const f=fixture(t);let failed=true;
+  f.crm.requests=async()=>{if(failed)throw Error('SAMPLE');return {requests:[]};};
+  await f.watcher.tick();await f.watcher.tick();assert.equal(f.tasks.size,1);
+  failed=false;await f.watcher.tick();
+  const restarted=createWatcher({...f.options,store:createStore(f.db,{now:()=>CLOCK})});
+  failed=true;await restarted.tick();await restarted.tick();assert.equal(f.tasks.size,2);
+  assert.deepEqual([...f.tasks.keys()],['montage-watcher:v1:synapse-business:system:1','montage-watcher:v1:synapse-business:system:2']);
+  assert.ok(f.store.row('synapse-business:system:1').task_id,'прежняя квитанция сохранена');
+});
+
+test('миграция прежней одноразовой тревоги: история сохраняется, восстановление открывает следующий эпизод',t=>{
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());let store=createStore(db,{now:()=>CLOCK});
+  store.claim('synapse-business:system:1',{companyCode:'synapse-business',type:'system',id:1,reelId:null});store.save('synapse-business:system:1','escalated',{taskId:71});
+  db.exec('DROP TABLE montage_watcher_queue_incident');
+  store=createStore(db,{now:()=>CLOCK});assert.equal(store.queueIncident(),1);store.queueRecovered();assert.equal(store.queueIncident(),2);
+  assert.equal(store.row('synapse-business:system:1').task_id,71);
+});
+
+test('non-message просьбы передаются или эскалируются без модели, прежние обработанные записи не запускаются заново',async t=>{
+  const requests=['reschedule','replace_text','remove_from_plan','publish','redo'].map((kind,i)=>request({id:i+1,kind}));
+  const f=fixture(t,{requests,executor:null});await f.watcher.tick();await createWatcher(f.options).tick();
+  assert.equal(f.calls.model.length,0);assert.equal(f.tasks.size,5);
+});
 test('журнал: только разрешённый код/число/время; никакой переписки, ключей и ошибок',()=>{
   const lines=[],log=safeLogger(line=>lines.push(line));log({code:'REPLIED',count:1,text:'SECRET',key:'TOKEN'});log({code:'SECRET',count:2});
   assert.equal(lines.length,1);assert.deepEqual(Object.keys(JSON.parse(lines[0])),['at','code','count']);assert.ok(!lines[0].includes('SECRET'));
