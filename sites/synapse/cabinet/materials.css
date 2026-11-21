@@ -76,12 +76,13 @@ body.mt-modal-open { overflow:hidden; }
 /* Плеер остаётся на экране, пока листают фразы «живого монтажа» (specs/232, доделка): на широком экране закреплена колонка, на телефоне — уменьшенный плеер под шапкой окна. */
 @media (min-width:900px) { .mt-phone { position:sticky; top:56px; } }
 @media (max-width:899px) {
-  .mt-layout { display:block; }
-  .mt-phone { display:contents; }
+  .mt-layout { display:flex; flex-direction:column; gap:0; }
+  .mt-phone, .mt-side { display:contents; }
+  .mt-stick { order:-3; }
+  .mt-live { order:-2; }
   .mt-modal__head h2 { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
   .mt-stick { position:sticky; top:58px; z-index:1; display:grid; justify-items:center; margin:0 -16px 10px; padding:6px 16px; background:var(--bg,#0f141d); }
-  .mt-stick .mt-screen { width:auto; height:36vh; max-width:100%; border-radius:16px; border-width:4px; }
-  .mt-side { margin-top:14px; }
+  .mt-stick .mt-screen { width:auto; height:32vh; max-width:100%; border-radius:16px; border-width:4px; }
 }
 .mt-screen { position:relative; width:100%; aspect-ratio:9/16; border-radius:24px; overflow:hidden; background:#000; border:6px solid #222; box-shadow:0 10px 30px #0006; box-sizing:border-box; }
 .mt-screen video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
@@ -209,15 +210,27 @@ body.mt-modal-open { overflow:hidden; }
 .mt-request__meta { font-size:13px; }
 .mt-request__reply { padding:8px 10px; border-radius:9px; background:rgba(163,172,187,.07); }
 .mt-view .mt-request button { min-height:44px; }
-.mt-live__list { list-style:none; margin:8px 0; padding:0; display:grid; gap:8px; }
-.mt-live__row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid var(--line,#283143); border-radius:10px; }
-.mt-live__row.is-off { opacity:.6; border-style:dashed; }
-.mt-live__name { min-width:0; flex:1 1 220px; overflow-wrap:anywhere; font:inherit; font-size:15px; line-height:1.35; text-align:left; color:inherit; background:none; border:0; padding:4px 0; cursor:pointer; }
-.mt-live__row.is-off .mt-live__name { text-decoration:line-through; text-decoration-color:var(--line,#283143); }
-.mt-live__switch { display:flex; flex-wrap:wrap; gap:8px; }
-.mt-view .mt-live__btn { min-height:44px; min-width:112px; }
-.mt-live__btn[aria-pressed="true"] { border-color:var(--accent,#9fb3ff); }
-.mt-live__btn[aria-pressed="false"] { opacity:.85; }
+/* Компактный список фраз (решение владельца 21.11): одна строка — фраза, звук, убрать/вернуть. Текст кнопок остаётся в разметке для чтения с экрана, на вид — значки. */
+.mt-live__list { list-style:none; margin:6px 0; padding:0; display:grid; gap:4px; }
+.mt-live__row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 4px 0 8px; border:1px solid var(--line,#283143); border-left:4px solid #3fae6a; border-radius:8px; }
+.mt-live__row.is-off { border-left-color:var(--line,#283143); background:transparent; }
+.view-panel .mt-view button.mt-live__name, .mt-live__name { min-width:0; min-height:44px; overflow-wrap:anywhere; font:inherit; font-size:14px; line-height:1.25; text-align:left; color:inherit; background:none; border:0; border-radius:0; padding:4px 0; cursor:pointer; box-shadow:none; }
+.mt-live__name .muted { font-size:12px; white-space:nowrap; }
+.mt-live__row.is-off .mt-live__name { color:var(--muted,#8c97ab); text-decoration:line-through; text-decoration-color:var(--line,#283143); }
+.mt-live__switch { display:flex; gap:4px; }
+.view-panel .mt-view button.mt-live__btn, .mt-view .mt-live__btn { box-sizing:border-box; width:44px; min-width:44px; height:44px; min-height:44px; padding:0; font-size:0; border-radius:8px; }
+.mt-live__btn::before { font-size:20px; line-height:1; font-weight:700; }
+.mt-live__btn[data-live-toggle^="sound"]::before { content:"🔊"; font-size:17px; }
+.mt-live__btn[data-live-toggle^="sound"][aria-pressed="false"]::before { content:"🔇"; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="true"] { border-color:rgba(240,121,108,.55); color:#f0796c; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="true"]::before { content:"−"; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="false"] { border-color:rgba(88,201,135,.6); color:#58c987; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="false"]::before { content:"+"; }
+.mt-live__btn:disabled { opacity:.35; }
+.mt-live { margin:8px 0 14px; padding:8px 10px; }
+.mt-live .mt-hint { margin:2px 0 4px; font-size:12px; line-height:1.35; }
+.mt-live .mt-actions { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
+.mt-live .mt-actions > * { flex:1 1 140px; font-size:14px; }
 .mt-history { margin:12px 0; }
 .mt-history > summary { cursor:pointer; min-height:44px; padding:10px 0; color:var(--muted,#8c97ab); font-weight:600; }
 .mt-history ul { margin:0; padding-left:18px; }

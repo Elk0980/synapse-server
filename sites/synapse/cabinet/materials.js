@@ -503,6 +503,7 @@ function create(el, ctx) {
           <p class="muted mt-note">Тёмные зоны — где лягут шапка, подпись и кнопки ${esc(platformOf(state.platform).label)}. Зоны ориентировочные.</p>
         </div>
         <div class="mt-side">
+          ${liveHtml(reel, version)}
           <h3>Публикация по площадкам</h3>
           <ul class="mt-pubs" data-pubs>${targets.map(id => publicationRow(id, posts, item?.publications)).join("") || `<li class="muted">Площадки не выбраны</li>`}</ul>
           <h3 data-caption-head>Текст публикации · ${esc(platformOf(state.platform).short)}</h3>
@@ -517,7 +518,7 @@ function create(el, ctx) {
             ${canEdit && versions.length > 1 && reel.id ? `<button type="button" class="plain-button" data-remove-version>Убрать версию v${esc(version?.version ?? state.version)}</button>` : ""}
             ${canEdit && (reel.id || reel.postId != null) ? `<button type="button" class="plain-button mt-remove" data-remove-open>Убрать</button>` : ""}
           </div>
-          ${reviewHtml(reel)}${askHtml(reel)}${liveHtml(reel, version)}${historyHtml(reel)}
+          ${reviewHtml(reel)}${askHtml(reel)}${historyHtml(reel)}
           ${(reel.archivedVersionList || []).length ? `<h3>Убранные версии</h3><ul class="mt-archived-versions">${reel.archivedVersionList.map(v => `<li><span>v${esc(v.version)}${v.archive?.reason ? " · " + esc(v.archive.reason) : ""}</span>${canEdit ? `<button type="button" class="plain-button" data-restore-version="${esc(v.version)}">Вернуть</button>` : ""}</li>`).join("")}</ul>` : ""}
           ${canEdit && reel.id && !published ? `<fieldset class="mt-targets" data-targets><legend>Площадки публикации</legend>${PLATFORMS.map(p => `<label><input type="checkbox" value="${p.id}"${(targets.length ? targets : [state.platform]).includes(p.id) ? " checked" : ""}> ${esc(p.label)}</label>`).join("")}</fieldset>` : ""}
           <p class="mt-status" role="status" data-detail-status></p>
@@ -683,11 +684,11 @@ function create(el, ctx) {
     const row = (item, i) => {
       const t = live.toggles[i];
       return `<li class="mt-live__row${t.enabled ? "" : " is-off"}" data-live-row="${i}"><button type="button" class="mt-live__name" data-live-seek="${i}" title="Показать эту фразу в плеере"><b>${i + 1}</b> ${item.label ? esc(item.label) + " " : ""}<span class="muted">${mmss(item.startMs)}–${mmss(item.endMs)}</span></button>
-        ${canEdit ? `<span class="mt-live__switch"><button type="button" class="plain-button mt-live__btn" data-live-toggle="enabled:${i}" aria-pressed="${t.enabled}">${t.enabled ? "В ролике" : "Убран"}</button>
-        <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}"${t.enabled ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
+        ${canEdit ? `<span class="mt-live__switch"><button type="button" class="plain-button mt-live__btn" data-live-toggle="enabled:${i}" aria-pressed="${t.enabled}" title="${t.enabled ? "Убрать фразу из ролика" : "Добавить фразу в ролик"}">${t.enabled ? "В ролике" : "Убран"}</button>
+        <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}" title="${t.sound ? "Выключить звук у фразы" : "Включить звук у фразы"}"${t.enabled ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
     };
     return `<section class="mt-live" data-live-box>${head}
-      <p class="muted mt-hint">${canEdit ? "Ролик разбит на фразы. «В ролике» / «Убран» — убрать фразу или добавить ту, что сейчас не в ролике; «Со звуком» / «Без звука» — оставить картинку без голоса. Порядок отрезков не меняется. " : ""}При просмотре убранные отрезки пропускаются, а на отрезках без звука звук выключается.</p>
+      <p class="muted mt-hint">${canEdit ? "Фраза — посмотреть её. «−» убрать, «+» вернуть, динамик — звук. " : ""}Убранное при просмотре пропускается.</p>
       <ol class="mt-live__list" data-live-list>${live.segments.map(row).join("")}</ol>
       ${canEdit ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed ? "" : " disabled"}>Сохранить правку</button><button type="button" class="plain-button" data-live-reset${changed ? "" : " disabled"}>Вернуть как было</button></div>` : ""}
       <p class="mt-status" role="status" data-live-status></p></section>`;
