@@ -219,6 +219,9 @@ body.mt-modal-open { overflow:hidden; }
 .mt-request__meta { font-size:13px; }
 .mt-request__reply { padding:8px 10px; border-radius:9px; background:rgba(163,172,187,.07); }
 .mt-view .mt-request button { min-height:44px; }
+.mt-request-cancel{margin-top:8px;padding:10px;border:1px solid var(--line,#283143);border-radius:10px}
+.mt-request-cancel .mt-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+.mt-view .mt-request-cancel button{white-space:normal;min-width:0;flex:1 1 130px}
 /* Компактный список фраз (решение владельца 21.11): одна строка — фраза, звук, убрать/вернуть. Текст кнопок остаётся в разметке для чтения с экрана, на вид — значки. */
 .mt-live__list { list-style:none; margin:6px 0; padding:0; display:grid; gap:4px; }
 .mt-live__row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 4px 0 8px; border:1px solid var(--line,#283143); border-left:4px solid #3fae6a; border-radius:8px; }

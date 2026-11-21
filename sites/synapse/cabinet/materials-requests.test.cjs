@@ -72,6 +72,43 @@ test('№290: связанная правка в прежних и новых п
 const sourceSummary = () => summary({versionCount:1,openRequests:0,currentVersion:{version:1,mediaUrl:asset('a'),durationMs:10000,segments:segments()}});
 const sourceFull = (over={}) => full({...sourceSummary(),versions:[sourceSummary().currentVersion],requests:[],edits:[],history:[],...over});
 
+test('№290/2025: прежняя EDL-просьба показывает человеческие числа и пожелания один раз; отмена отличается от отказа',async t=>{
+  const notes=[{type:'other',option:'text',text:'Теплее цвет'}];
+  const f=fixture({reel:()=>full({requests:[
+    {id:10,kind:'redo',editId:5,status:'rejected',reply:'Отменено автором.',text:'Живой монтаж; выключены отрезки: 1, 4, 6; без звука: 2. Другое — Теплее цвет',notes},
+    {id:11,kind:'redo',editId:6,status:'rejected',reply:'Не удалось выполнить',text:'Сохранённое пожелание'},
+    {id:12,kind:'redo',editId:7,status:'ready',text:'Живой монтаж; выключены отрезки: 1, 4, 6; без звука: 2. Другое — Теплее цвет',notes}
+  ],edits:[{id:5,kind:'edl',edl:{live:{segments:[{enabled:false,sound:true},{enabled:true,sound:false},{enabled:false,sound:true},{enabled:false,sound:false}]}}}]})});
+  t.after(()=>f.w.close());await f.open();
+  const card=id=>f.el.querySelector(`[data-request="${id}"]`);
+  assert.equal(card(10).querySelector('.mt-request__status').textContent,'отменено');
+  assert.equal(card(11).querySelector('.mt-request__status').textContent,'отклонено');assert.equal(card(11).querySelector('.mt-request__text').textContent,'Сохранённое пожелание');
+  for(const id of [10,12]) {
+    assert.equal(card(id).querySelector('.mt-request__text').textContent,'Убрано фраз: 3, без звука: 1');
+    assert.equal(card(id).textContent.match(/Теплее цвет/g).length,1);assert.doesNotMatch(card(id).textContent,/Живой монтаж|выключены отрезки/);
+  }
+  assert.equal(f.calls.some(c=>c.method!=='GET'),false);
+});
+
+test('№290/2025: подтверждение отмены в карточке, отказ от отмены без API, ошибка видна и черновик/плеер сохранены',async t=>{
+  let fail=true;
+  const f=fixture({respond:({method,path})=>{
+    if(method==='POST'&&path.endsWith('/requests/3/cancel')) {
+      if(fail)throw Error('Сеть недоступна');
+      return full({requests:requests().map(r=>r.id===3?{...r,status:'rejected',reply:'Отменено автором.'}:r)});
+    }
+  }});t.after(()=>f.w.close());f.w.confirm=()=>{throw Error('Native confirm запрещён');};await f.open();
+  const player=f.el.querySelector('[data-player]'),caption=f.el.querySelector('[data-review] [name="caption"]');caption.value='Набранная подпись';
+  await f.click('[data-request-cancel="3"]');assert.ok(f.el.querySelector('[data-request="3"] [role="group"]'));
+  assert.equal(sent(f,'POST','/requests/3/cancel').length,0);assert.equal(f.el.querySelector('[data-player]'),player);assert.equal(caption.value,'Набранная подпись');
+  await f.click('[data-request-cancel-no="3"]');assert.equal(f.el.querySelector('[data-request-cancel-confirm]'),null);assert.equal(sent(f,'POST','/requests/3/cancel').length,0);
+  await f.click('[data-request-cancel="3"]');await f.click('[data-request-cancel-confirm="3"]');
+  assert.match(f.el.querySelector('[data-requests-status]').textContent,/Не удалось отменить: Сеть недоступна/);assert.equal(f.el.querySelector('[data-request-cancel-confirm="3"]').disabled,false);
+  assert.equal(f.el.querySelector('[data-player]'),player);assert.equal(caption.value,'Набранная подпись');
+  fail=false;await f.click('[data-request-cancel-confirm="3"]');assert.equal(sent(f,'POST','/requests/3/cancel').length,2);
+  assert.equal(f.el.querySelector('[data-request="3"] .mt-request__status').textContent,'отменено');assert.equal(f.el.querySelector('[data-review] [name="caption"]').value,'Набранная подпись');
+});
+
 test('№290: исходник → шесть пожеланий → одна отправка; публикация скрыта, плеер сохраняется',async t=>{
   const f=fixture({list:()=>[sourceSummary()],reel:sourceFull,respond:({method,path,body})=>{
     if(method==='POST'&&path.endsWith('/live-edit')) {
@@ -370,7 +407,9 @@ test('просьбы: отмена своей просьбы, обновлени
   assert.match(f.el.querySelector('[data-ask-status]').textContent, /Не удалось отправить: Просьба опубликовать эту версию уже есть/);
   assert.equal(f.el.querySelector('[data-ask-form]').hidden, false, 'форма остаётся — можно повторить');
   await f.click('[data-request-cancel="3"]');
-  assert.equal(f.el.querySelector('[data-request="3"] .mt-request__status').textContent, 'отклонено');assert.equal(f.el.querySelector('[data-request-cancel]'), null);
+  assert.equal(sent(f,'POST','/requests/3/cancel').length,0);
+  await f.click('[data-request-cancel-confirm="3"]');
+  assert.equal(f.el.querySelector('[data-request="3"] .mt-request__status').textContent, 'отменено');assert.equal(f.el.querySelector('[data-request-cancel]'), null);
   const before = f.calls.filter((c) => c.method === 'GET' && c.path === 'crm/autoposting/reels/4').length;
   await f.click('[data-requests-refresh]');
   assert.equal(f.calls.filter((c) => c.method === 'GET' && c.path === 'crm/autoposting/reels/4').length, before + 1);

@@ -23,7 +23,8 @@ const reel={...summary,versions:[summary.currentVersion],requests:[],edits:[],hi
    const definition=window.SynapseModulesQueue.find(x=>x[0]==='content-materials')[1];
    const answer=async(method,route,body)=>{
     if(route==='crm/autoposting/reels')return {companyCode:'sample',reels:[structuredClone(summary)]};
-    if(route.endsWith('/live-edit')) {const request={id:1,kind:'redo',status:'accepted',version:1,editId:9,notes:body.notes,clientRequestId:body.clientRequestId,createdAt:'2026-11-21T09:40:00Z'};current={...current,openEdits:1,requests:[request],edits:[{id:9,baseVersion:1,status:'pending'}]};return {reel:structuredClone(current),request};}
+    if(route.endsWith('/live-edit')) {const request={id:1,kind:'redo',status:'accepted',version:1,editId:9,notes:body.notes,text:'Живой монтаж; выключены отрезки: 3. SAMPLE пожелания',clientRequestId:body.clientRequestId,createdAt:'2026-11-21T09:40:00Z'};current={...current,openEdits:1,requests:[request],edits:[{id:9,kind:'edl',baseVersion:1,status:'pending',edl:{live:{segments:body.segments}}}]};return {reel:structuredClone(current),request};}
+    if(route.endsWith('/requests/1/cancel')){current={...current,openEdits:0,requests:current.requests.map(r=>({...r,status:'rejected',reply:'Отменено автором.'})),edits:current.edits.map(e=>({...e,status:'cancelled'}))};return structuredClone(current);}
     if(route==='crm/autoposting/reels/4')return structuredClone(current);
     throw Object.assign(Error('нет данных'),{status:404});
    };
@@ -35,13 +36,15 @@ const reel={...summary,versions:[summary.currentVersion],requests:[],edits:[],hi
     const rect=n=>n.getBoundingClientRect(),detail=document.querySelector('[data-detail]'),layer=document.querySelector('[data-wish-layer]');
     const visible=n=>rect(n).width&&rect(n).height&&getComputedStyle(n).visibility!=='hidden';
     const scope=layer&&!layer.hidden?layer:detail;
-    return {width:innerWidth,scroll:document.documentElement.scrollWidth,detailScroll:detail.scrollWidth,detailClient:detail.clientWidth,screenHeight:rect(document.querySelector('.mt-screen')).height,
+    const bar=document.querySelector('[data-live-actions]'),mask=document.querySelector('.mt-toggle'),a=bar&&rect(bar),b=rect(mask);
+    const maskOverlap=Boolean(a&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top);
+    return {maskOverlap,width:innerWidth,scroll:document.documentElement.scrollWidth,detailScroll:detail.scrollWidth,detailClient:detail.clientWidth,screenHeight:rect(document.querySelector('.mt-screen')).height,
       outside:[...scope.querySelectorAll('*')].filter(n=>visible(n)&&(rect(n).right>innerWidth+1||rect(n).left<-1)).map(n=>n.className||n.tagName),
       low:[...scope.querySelectorAll('button,select,textarea,summary')].filter(n=>visible(n)&&rect(n).height<43.5).map(n=>n.textContent.trim().slice(0,25)+':'+Math.round(rect(n).height)),
       save:document.querySelector('[data-live-save]')?{top:rect(document.querySelector('[data-live-save]')).top,bottom:rect(document.querySelector('[data-live-save]')).bottom}:null};
    });
    assert.equal(m.scroll,width,JSON.stringify(m));assert.ok(m.detailScroll<=m.detailClient+1,JSON.stringify(m));assert.deepEqual(m.outside,[],JSON.stringify(m));assert.deepEqual(m.low,[],JSON.stringify(m));
-   if(width<900)assert.ok(m.screenHeight>=height*.4-1,'плеер уменьшен');
+   if(width<900)assert.ok(m.screenHeight>=height*.4-1,'плеер уменьшен');else assert.equal(m.maskOverlap,false,'кнопки перекрывают Маску площадки');
    results.push({width,height,state,...m});
   };
   await measure('phrases');await page.screenshot({path:path.join(out,`sample-${width}-phrases.png`)});
@@ -55,6 +58,16 @@ const reel={...summary,versions:[summary.currentVersion],requests:[],edits:[],hi
   await page.click('[data-live-toggle="enabled:2"]');
   await page.locator('[data-wish-list]').scrollIntoViewIfNeeded();await measure('summary');if(width===390)await page.screenshot({path:path.join(out,'sample-390-summary.png')});
   await page.click('[data-live-save]');await page.waitForSelector('[data-request="1"]');await measure('sent');if(width===390)await page.screenshot({path:path.join(out,'sample-390-sent.png')});
+  await page.click('[data-request-cancel="1"]');await measure('cancel-confirm');if(width===390)await page.screenshot({path:path.join(out,'sample-390-cancel-confirm.png')});
+  await page.click('[data-request-cancel-no="1"]');assert.equal(await page.locator('[data-request-cancel-confirm]').count(),0);
+  await page.click('[data-request-cancel="1"]');await page.click('[data-request-cancel-confirm="1"]');await measure('cancelled');assert.equal(await page.locator('[data-request="1"] .mt-request__status').textContent(),'отменено');if(width===390)await page.screenshot({path:path.join(out,'sample-390-cancelled.png')});
+  if(width>=900){
+    await page.evaluate(()=>window.samplePlayer=document.querySelector('[data-player]'));
+    await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.querySelector('[data-live-actions]').parentElement.matches('[data-detail]'));
+    assert.ok(await page.locator('.mt-screen').evaluate(n=>n.getBoundingClientRect().height>=337));
+    await page.setViewportSize({width,height});await page.waitForFunction(()=>document.querySelector('[data-live-actions]').parentElement.matches('.mt-side'));
+    assert.ok(await page.locator('[data-player]').evaluate(n=>n===window.samplePlayer),'изменение ширины пересоздало плеер');
+  }
   assert.deepEqual(errors,[]);await page.close();
  }}finally{await browser.close();}
  fs.writeFileSync(path.join(out,'visual-results.json'),JSON.stringify(results,null,2)+'\n');console.log(JSON.stringify({states:results.length,widths:[360,390,430,1366],pass:true}));
