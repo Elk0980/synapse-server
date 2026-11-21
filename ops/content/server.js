@@ -245,7 +245,7 @@ const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSE
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send,contentSettings,shootingFacts:shooting.factsHeader});
 // Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
-const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
+const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY,beforeSync:()=>montageNotifications.tick()});
 const montageNotifications=require('./montage-notifications').createMontageNotifications({db,authStore,crmUrl:CRM_URL,crmKey:CRM_API_KEY,
   enabled:process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1',warn:code=>console.warn('content:',code)});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,

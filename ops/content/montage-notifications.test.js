@@ -46,3 +46,10 @@ test('повреждённый feed и ошибка записи не продв
   assert.equal((await f.worker.tick()).error,true);assert.equal(f.db.prepare('SELECT COUNT(*) n FROM team_chat_messages').get().n,0);
   f.db.exec('DROP TRIGGER sample_abort');assert.equal((await f.worker.tick()).written,2);
 });
+test('прежний pull успел получить done: поздний worker не добавляет устаревшее «взяли» после «готово»',async t=>{
+ const f=fixture(t);
+ const log=createReelHughLog({...f.options,notificationsEnabled:true,fetchImpl:async()=>({ok:true,json:async()=>({companyCode:'avokado',authorId:7,
+  entries:[{key:'reel-edit:9:done',text:'SAMPLE готово',from:'hugh'}]})})});
+ await log.sync('avokado',{id:7});await f.worker.tick();
+ assert.deepEqual(f.db.prepare('SELECT client_id FROM team_chat_messages ORDER BY id').all().map(r=>r.client_id),['reel-edit:9:done']);
+});
