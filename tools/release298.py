@@ -6,7 +6,13 @@ ROOT=Path('/root/claude-rel')
 PRE=ROOT/'pre298-live'
 FLAG='MONTAGE_NOTIFICATIONS_ENABLED'
 def run(args,**kw):
- return subprocess.run(args,capture_output=True,check=True,timeout=45,**kw).stdout
+ result=subprocess.run(args,capture_output=True,timeout=45,**kw)
+ if result.returncode:
+  if PRE.exists():
+   stamp=str(time.time_ns());save(PRE/('failure-'+stamp+'.log'),result.stdout+result.stderr)
+  print('FAILED_STEP',json.dumps(args[:6]),'rc',result.returncode)
+  result.check_returncode()
+ return result.stdout
 def sha(b):return hashlib.sha256(b).hexdigest()
 def save(p,b):
  p.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -228,6 +234,17 @@ def verify_crm():
  print('CRM_READY298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
  print('CRM_STATE298',json.dumps(current));save(PRE/'crm-ready.json',json.dumps({'image':current['image'],'at':time.time()}).encode());return 0
 def main():
+ if sys.argv[1:]==['stage-status']:
+  for s in ['crm','content']:
+   print('STATE',s,json.dumps(state(s)))
+   p=PRE/('build-'+s+'.log');print('BUILD_LOG',s,p.exists())
+   if p.exists():print(p.read_text(errors='replace')[-1200:])
+   build=ROOT/'w658'/('b-'+s);print('DOCKERFILE',s,(build/'Dockerfile').read_text())
+   cand=json.loads((ROOT/'w658'/('cand-'+s+'.json')).read_text());print('CANDIDATE_CONFIG',s,json.dumps(cand))
+   for n in (ROOT/'w658'/('files-'+s+'.txt')).read_text().splitlines():
+    r=subprocess.run(['docker','run','--rm','--network','none','--entrypoint','node',cand['services'][s]['image'],'--check','/app/'+n],capture_output=True,timeout=30)
+    print('NODE_CHECK',s,n,r.returncode)
+  print('REL_RESTORE\n'+'\n'.join((ROOT/'rel.sh').read_text().splitlines()[-25:]));return 0
  if sys.argv[1:]==['verify-crm']:return verify_crm()
  if sys.argv[1:]==['db-before-build']:return dbsnap('before-build')
  if sys.argv[1:]==['verify']:return verify()
