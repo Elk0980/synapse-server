@@ -700,12 +700,17 @@ function create(el, ctx) {
   function toggleLive(value) {
     const [field, index] = String(value).split(":"), toggle = state.live?.toggles[Number(index)];
     if (!toggle || !["enabled", "sound"].includes(field)) return;
-    toggle[field] = !toggle[field];state.live.id = null;renderLive();
+    toggle[field] = !toggle[field];state.live.inspect = null;state.live.id = null;renderLive();
     el.querySelector(`[data-live-toggle="${field}:${Number(index)}"]`)?.focus({preventScroll: true});
   }
   function previewTick(player) {
     const live = state.live;if (!live) return;
-    const step = live.segments.length && liveOps.active(live.toggles) ? liveOps.at(live.segments, live.toggles, (Number(player.currentTime) || 0) * 1000) : {seekMs: null, stop: false, mute: false};
+    const ms = (Number(player.currentTime) || 0) * 1000, inspected = live.segments[live.inspect];
+    // По нажатию можно посмотреть и убранную фразу. За её границами снова действует монтаж.
+    const inspecting = Number.isInteger(live.inspect) && inspected && ms >= inspected.startMs && ms < inspected.endMs;
+    if (!inspecting) live.inspect = null;
+    const step = inspecting ? {seekMs: null, stop: false, mute: !live.toggles[live.inspect].sound}
+      : live.segments.length && liveOps.active(live.toggles) ? liveOps.at(live.segments, live.toggles, ms) : {seekMs: null, stop: false, mute: false};
     if (step.stop) {if (!player.paused) player.pause();return;}
     if (step.seekMs !== null) {player.currentTime = step.seekMs / 1000;return;}
     if (step.mute && !player.muted) {player.muted = true;live.muted = true;}
@@ -1047,10 +1052,10 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-live-save")) void saveLive();
     else if (target.hasAttribute("data-live-seek")) {
       /* specs/232: нажатие на фразу показывает её в плеере — так решают, убирать её или добавлять. */
-      const item = state.live?.segments[Number(target.getAttribute("data-live-seek"))], player = el.querySelector("[data-player]");
-      if (item && player) {player.currentTime = item.startMs / 1000;player.play?.()?.catch?.(() => {});}
+      const index = Number(target.getAttribute("data-live-seek")), item = state.live?.segments[index], player = el.querySelector("[data-player]");
+      if (item && player) {state.live.inspect = index;player.currentTime = item.startMs / 1000;player.play?.()?.catch?.(() => {});}
     }
-    else if (target.hasAttribute("data-live-reset")) {if (state.live) {state.live.toggles = liveOps.initial(state.live.segments);state.live.id = null;renderLive();}}
+    else if (target.hasAttribute("data-live-reset")) {if (state.live) {state.live.toggles = liveOps.initial(state.live.segments);state.live.inspect = null;state.live.id = null;renderLive();}}
   });
   el.addEventListener("submit", event => {
     if (event.target.matches?.("[data-review]")) {event.preventDefault();void saveReview(event.target);}

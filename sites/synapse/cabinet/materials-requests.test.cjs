@@ -54,6 +54,25 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel =
 }
 const sent = (f, method, suffix) => f.calls.filter((call) => call.method === method && call.path.endsWith(suffix));
 
+test('нажатие показывает убранную фразу, затем обычный просмотр снова пропускает её без изменения монтажа', async t => {
+  const marked = segments().map((s, i) => i === 1 ? {...s, enabled: false} : s);
+  const f = fixture({reel: () => full({versions: [{version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
+  t.after(() => f.w.close());
+  await f.open();
+  const player = f.el.querySelector('[data-player]');
+  player.play = () => {player.dispatchEvent(new f.w.Event('timeupdate'));return Promise.resolve();};
+  await f.click('[data-live-seek="1"]');
+  assert.equal(player.currentTime, 3, 'убранную фразу можно посмотреть перед добавлением');
+  player.currentTime = 4;player.dispatchEvent(new f.w.Event('timeupdate'));
+  assert.equal(player.currentTime, 4, 'просмотр выбранной фразы продолжается');
+  player.currentTime = 6.1;player.dispatchEvent(new f.w.Event('timeupdate'));
+  player.currentTime = 3.5;player.dispatchEvent(new f.w.Event('timeupdate'));
+  assert.equal(player.currentTime, 6, 'за границами выбранной фразы снова действует монтаж');
+  assert.equal(f.el.querySelector('[data-live-toggle="enabled:1"]').textContent, 'Убран');
+  assert.equal(f.el.querySelector('[data-live-save]').disabled, true);
+  assert.equal(f.calls.filter(call => call.method !== 'GET').length, 0, 'просмотр не сохраняет и не меняет разметку');
+});
+
 test('живой монтаж, расчёт предпросмотра: убранный отрезок пропускается, дальше всё убрано — стоп, без звука — глушим', () => {
   const {live} = fixture(), list = segments();
   const toggles = [{enabled: true, sound: true}, {enabled: false, sound: true}, {enabled: true, sound: false}];
