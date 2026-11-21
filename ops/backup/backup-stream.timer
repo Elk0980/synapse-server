@@ -1,0 +1,10 @@
+[Unit]
+Description=Synapse cipher stream window at 01:00 Bangkok
+
+[Timer]
+OnCalendar=*-*-* 01:00:00 Asia/Bangkok
+Persistent=true
+Unit=backup-stream.service
+
+[Install]
+WantedBy=timers.target

@@ -16,3 +16,4 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y age
       - run: python -m unittest discover -s ops/backup -p 'test_*.py' -v
       - run: bash -n ops/backup/inventory.sh
+      - run: systemd-analyze verify ops/backup/backup-stream.service ops/backup/backup-stream.timer
