@@ -148,6 +148,62 @@ def verify(number):
         print('VERIFY_OK', path)
 
 
+def approved644():
+    """№285/2026: four exact insertions on a private copy; no build/up."""
+    live = livefile('ops/content/server.js')
+    if sha(live) != '2f263385139afac0e383f11299ca7f60eebf2f97a965fd24bd531bcff3f38379':
+        raise RuntimeError('approved live SHA changed')
+    lines = live.decode().splitlines(True)
+    worker = [line for line in lines if line.startswith("const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker(")]
+    if len(worker) != 1:
+        raise RuntimeError('worker anchor count')
+    additions = [
+        (worker[0], "// №285: отдельная очередь монтажа; используются действующие providers/budget, без нового процесса модели.\n"
+         "const montageWatcher = require('./montage-watcher-bundle').createContentWatcher({db,fallback:projectChat.fallback,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,\n"
+         "  log:({code,count})=>console.log('montage-watcher',code,count)});\n"),
+        ('  taskDispatchWorker.start();\n', '  montageWatcher.start();\n'),
+        ('  taskDispatchWorker.stop();\n', '  const montageStopped=montageWatcher.stop();\n'),
+        ('    await contentPlanStopped;\n', '    await montageStopped;\n'),
+    ]
+    result = live.decode()
+    for anchor, insert in additions:
+        if lines.count(anchor) != 1 or insert in result:
+            raise RuntimeError('anchor not unique or already inserted')
+        result = result.replace(anchor, anchor + insert, 1)
+    trial = result.encode()
+    d = difference(live, trial)
+    undo = result
+    for anchor, insert in reversed(additions):
+        undo = undo.replace(anchor + insert, anchor, 1)
+    if (d['added'], d['removed']) != (6, 0) or undo.encode() != live:
+        raise RuntimeError('unexpected source difference')
+    if result.count('montageWatcher') != 3 or result.count('montageStopped') != 2:
+        raise RuntimeError('watcher occurrence count')
+    if result.count('salonCompanyApp.close()') != live.decode().count('salonCompanyApp.close()'):
+        raise RuntimeError('existing shutdown changed')
+    directory = ROOT / 'pre644-approved'
+    directory.mkdir(mode=0o700)
+    private_file(directory / 'server.live.js', live)
+    private_file(directory / 'server.js', trial)
+    patch = ''.join(difflib.unified_diff(lines, result.splitlines(True), fromfile='server.js', tofile='server.js')).encode()
+    private_file(directory / 'server.diff', patch)
+    private_file(directory / 'patch-trial.js', live)
+    tested = subprocess.run(['patch', '--dry-run', '--batch', '--forward', '--fuzz=0', str(directory / 'patch-trial.js'), str(directory / 'server.diff')], capture_output=True, timeout=30)
+    tested.check_returncode()
+    syntax = subprocess.run(['docker', 'exec', '-i', 'synapse-content-1', 'node', '--check'], input=trial, capture_output=True, timeout=30)
+    syntax.check_returncode()
+    bundle = gitfile(RELEASES['644'][1], 'ops/content/montage-watcher-bundle.js')
+    if sha(bundle) != '4b90e6b0e17cc3ac1bdd23527e99b29792f7ee4d576fb3565e9f8a82722aac4a':
+        raise RuntimeError('bundle SHA mismatch')
+    if livefile('ops/content/montage-watcher-bundle.js') is not None or livefile('ops/content/server.js') != live:
+        raise RuntimeError('live changed during trial')
+    private_file(directory / 'montage-watcher-bundle.js', bundle)
+    manifest = {'approvedComment': 2026, 'live': sha(live), 'server': sha(trial), 'bundle': sha(bundle), 'added': 6, 'removed': 0, 'anchors': [1,1,1,1], 'syntax': True}
+    private_file(directory / 'manifest.json', json.dumps(manifest, indent=2).encode())
+    print('APPROVED644_COPY_OK', json.dumps(manifest, separators=(',', ':')))
+    return 0
+
+
 def queues():
     # The existing service credential stays inside the content container.
     # Only HTTP codes and aggregate counts leave that process.
@@ -178,6 +234,8 @@ def queues():
 
 
 def main():
+    if sys.argv[1:] == ['approved644']:
+        return approved644()
     if sys.argv[1:] == ['inspect']:
         inspect()
         return 0
