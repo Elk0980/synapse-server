@@ -239,6 +239,22 @@ def verify_crm():
  print('CRM_READY298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
  print('CRM_STATE298',json.dumps(current));save(PRE/'crm-ready.json',json.dumps({'image':current['image'],'at':time.time()}).encode());return 0
 def main():
+ if sys.argv[1:]==['verify-env']:
+  work=ROOT/'w658'
+  for s in ['crm','content']:
+   ins=json.loads(run(['docker','inspect','synapse-'+s+'-1']))[0]
+   image=json.loads(run(['docker','image','inspect',ins['Image']]))[0]
+   args=shlex.split((work/('args-'+s+'.new')).read_text())
+   cfg=json.loads(run(['docker','compose','-p','synapse','--project-directory','/opt/synapse']+args+['config','--format','json']))
+   env=cfg['services'][s].get('environment') or {}
+   expected=dict(e.split('=',1) for e in image['Config']['Env'])
+   expected.update({k:'' if v is None else str(v) for k,v in env.items()})
+   actual=dict(e.split('=',1) for e in ins['Config']['Env'])
+   diff=sorted(k for k in set(expected)|set(actual) if (expected.get(k) or '').replace('$$','$')!=actual.get(k))
+   expected_diff=[] if state(s)['flag']=='1' else [FLAG]
+   print('ENV298',s,json.dumps({'diffKeysAgainstPrepared':diff,'expectedWhileNotSwitched':expected_diff}))
+   if diff!=expected_diff:raise RuntimeError('unexpected actual environment difference '+s)
+  print('ENV298_OK');return 0
  if sys.argv[1:]==['rollback-recipe']:
   text=(ROOT/'rel.sh').read_text();found=re.search(r'(?m)^\s*restore\)',text)
   print('RESTORE_BRANCH',text[found.start():] if found else 'NO_RESTORE_BRANCH')
