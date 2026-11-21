@@ -9,6 +9,8 @@ from pathlib import Path
 import subprocess
 import sys
 import urllib.request
+import base64
+import zlib
 
 ROOT = Path('/root/claude-rel')
 REPO = 'https://raw.githubusercontent.com/Elk0980/synapse-server/'
@@ -309,6 +311,39 @@ def queues():
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == 'submit7':
+        # №283/2054,2059: body travels privately via stdin; exactly one POST.
+        try:
+            packed = base64.b64decode(sys.argv[2], validate=True)
+            decoder = zlib.decompressobj()
+            data = decoder.decompress(packed, 8193)
+            if len(data) > 8192 or not decoder.eof or decoder.unused_data:
+                raise ValueError()
+            body = json.loads(data)
+            if set(body) != {'mediaUrl','sha256','durationMs','editId','note'} or body['editId'] != 7 or body['durationMs'] != 59900:
+                raise ValueError()
+            if not re.fullmatch(r'https://synapse\.synapsebusiness\.ru/content/publishing-assets/taisabai/[a-f0-9]{32}\.mp4', body['mediaUrl']) or not re.fullmatch(r'[a-f0-9]{64}', body['sha256']):
+                raise ValueError()
+            if not isinstance(body['note'], str) or not 1 <= len(body['note']) <= 1000:
+                raise ValueError()
+            program = r'''
+(async()=>{
+ const key=process.env.CRM_API_KEY;if(!key)throw Error();
+ const data=require('fs').readFileSync(0,'utf8');
+ const agent=Buffer.from('Claude \u00b7 \u043c\u043e\u043d\u0442\u0430\u0436','utf8').toString('latin1');
+ const r=await fetch('http://crm:8080/internal/reel-materials/reels/21/versions?companyCode=taisabai',{
+  method:'POST',headers:{'x-api-key':key,'x-agent-name':agent,'content-type':'application/json'},body:data,redirect:'error',signal:AbortSignal.timeout(15000)});
+ let body={};try{body=await r.json()}catch{}
+ console.log(JSON.stringify({http:r.status,version:Number.isSafeInteger(body.version?.version)?body.version.version:null}));
+})().catch(()=>{console.log(JSON.stringify({http:0,version:null}));process.exitCode=1});
+'''
+            result = subprocess.run(['docker','exec','-i','synapse-content-1','node','-e',program], input=data, capture_output=True, timeout=25)
+            answer = json.loads(result.stdout)
+            print(json.dumps({'http':answer['http'],'version':answer['version']},separators=(',', ':')))
+            return result.returncode
+        except Exception:
+            print('{"http":0,"version":null}')
+            return 1
     if sys.argv[1:] == ['claim7']:
         # №283/2054: exactly one authorized POST; no retries or other API calls.
         program = r'''
