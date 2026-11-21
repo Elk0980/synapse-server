@@ -180,6 +180,24 @@ function create(el, ctx) {
   const state = {reels: [], mentor: null, posts: [], shooting: {}, settings: null, info: null, items: [], sort: "date", open: null, item: null,
     platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null,
     live: null, ask: null, cancelRequest: null, reviewDrafts: new Map()};
+  const notices=ctx.montageNotifications||window.SynapseModules?.montageNotifications;
+  let notificationState=null;
+  const noticeFor=id=>notificationState?.reels?.find(row=>row.reelId===Number(id));
+  function noticeBadges(){
+    el.querySelectorAll('.mt-card').forEach(card=>{
+      card.querySelector('[data-montage-notice]')?.remove();
+      const key=card.querySelector('[data-open]')?.dataset.open;
+      const item=state.items.find(row=>row.key===key),notice=noticeFor(item?.reel?.id);
+      if(!notice)return;
+      const badge=document.createElement('span');badge.className='mt-card__notice';badge.dataset.montageNotice='';
+      badge.textContent=notice.newVersion?'Новая версия':'Новый ответ';
+      card.querySelector('.mt-card__body')?.append(badge);
+    });
+  }
+  const unsubscribeNotices=notices?.subscribe(data=>{
+    notificationState=data?.enabled&&data.companyCode===ctx.companyCode?data:null;noticeBadges();
+  });
+  ctx.signal.addEventListener('abort',()=>unsubscribeNotices?.(),{once:true});
   const api = {
     list: () => ctx.api.get("crm/autoposting/reels"),
     get: id => ctx.api.get("crm/autoposting/reels/" + id),
@@ -418,6 +436,7 @@ function create(el, ctx) {
       K.feedStart(list, {isAbove: node => feed && node.dataset.group === "above", aboveLabel: "↑ выше — опубликованные",
         ...(feed ? {aheadSelector: '[data-group="ahead"]', aheadLabel: "↓ впереди — ещё без материалов"} : {})});
     }
+    noticeBadges();
   }
 
   /* ---------- Окно публикации ---------- */
@@ -426,13 +445,15 @@ function create(el, ctx) {
   async function open(key) {
     const item = state.items.find(entry => entry.key === key) || null;
     const summary = item?.reel || state.reels.find(reel => reel.key === key);if (!summary) return;
+    const visibleNotice=noticeFor(summary.id);
     returnFocus = document.activeElement;
     state.item = item;state.open = {...summary, versions: [summary.currentVersion].filter(Boolean), log: []};
     const targets = item?.platforms?.length ? item.platforms : platformList(summary.platforms);
     state.platform = targets[0] || PLATFORMS[0].id;state.version = summary.currentVersion?.version ?? 1;
     renderDetail();
     if (summary.id) {
-      try {const full = await api.get(summary.id);if (state.open?.key !== key || ctx.signal.aborted) return;state.open = full;state.version = full.currentVersion?.version ?? 1;renderDetail();}
+      try {const full = await api.get(summary.id);if (state.open?.key !== key || ctx.signal.aborted) return;state.open = full;state.version = full.currentVersion?.version ?? 1;renderDetail();
+        if(visibleNotice)void notices.read(summary.id,visibleNotice.throughId).catch(()=>{});}
       catch (error) {if (!ctx.signal.aborted) detailStatus("Не удалось обновить ролик: " + (error?.message || "ошибка сети"));}
     }
   }

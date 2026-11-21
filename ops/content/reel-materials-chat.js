@@ -6,8 +6,9 @@
    Без комнат чата (PR 504 ещё не выпущен) ничего не пишется и ничего не падает: лог остаётся в карточке ролика. */
 const CODE=/^[a-z0-9][a-z0-9_-]{0,63}$/i;
 /* specs/231: кроме правок монтажа (reel-edit) — просьбы агенту с ролика (reel-request): сама просьба и ответы агента. */
-const KEY=/^(?:reel-edit:[1-9]\d{0,15}:(?:request|done|cancelled)|reel-request:[1-9]\d{0,15}:(?:request|reply:[1-9]\d{0,15}))$/;
-function createReelHughLog({db,crmUrl,crmKey,fetchImpl=globalThis.fetch,timeoutMs=1500,minIntervalMs=15000,now=()=>Date.now(),warn=console.warn}) {
+const KEY=/^(?:reel-edit:[1-9]\d{0,15}:(?:request|in_progress|done|cancelled)|reel-request:[1-9]\d{0,15}:(?:request|reply:[1-9]\d{0,15}))$/;
+function createReelHughLog({db,crmUrl,crmKey,fetchImpl=globalThis.fetch,timeoutMs=1500,minIntervalMs=15000,now=()=>Date.now(),warn=console.warn,
+  notificationsEnabled=process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1',beforeSync=async()=>{}}) {
   const last=new Map(),running=new Map();
   function rooms() {
     try {
@@ -24,6 +25,7 @@ function createReelHughLog({db,crmUrl,crmKey,fetchImpl=globalThis.fetch,timeoutM
     if(!force&&last.has(key)&&now()-last.get(key)<minIntervalMs)return Promise.resolve({written:0,skipped:'RECENT'});
     last.set(key,now());
     const job=(async()=>{
+      if(notificationsEnabled)await beforeSync();
       const response=await fetchImpl(`${crmUrl}/internal/reel-materials/hugh-log?companyCode=${encodeURIComponent(code)}&authorId=${user.id}`,
         {headers:{'x-api-key':crmKey},redirect:'error',signal:AbortSignal.timeout(timeoutMs)});
       if(!response.ok)throw Object.assign(Error('CRM: лог правок недоступен'),{status:response.status});
@@ -33,6 +35,7 @@ function createReelHughLog({db,crmUrl,crmKey,fetchImpl=globalThis.fetch,timeoutM
         VALUES(?,?,?,?,?,?,?,?,?)`);
       let written=0;
       for(const entry of body.entries) {
+        if(!notificationsEnabled&&entry?.key?.endsWith(':in_progress'))continue;
         if(!entry||typeof entry.key!=='string'||!KEY.test(entry.key)||typeof entry.text!=='string'||!entry.text.trim())continue;
         const mine=entry.from==='user',at=typeof entry.at==='string'&&!Number.isNaN(Date.parse(entry.at))?entry.at:new Date(now()).toISOString();
         written+=Number(insert.run(code,mine?user.id:0,mine?String(user.displayName||user.login||'Я').slice(0,120):'Хью · ИИ',entry.text.slice(0,4000),

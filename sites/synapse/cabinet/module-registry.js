@@ -82,6 +82,7 @@
       settings: Object.freeze({ content: Object.freeze(contentSettings(companyCode, signal)) }),
       navigate: (target) => shell.navigate(String(target || '').replace(/^#/, '')),
       openHughChat: () => dock.open(),
+      montageNotifications: montageNotices,
       escapeHTML: shell.escapeHTML
     });
   }
@@ -211,11 +212,68 @@
       init() { build(); fab.hidden = false; },
       open, close: closePanel,
       isOpen: () => !!panel && !panel.hidden,
-      companyChanged() { if (panel && !panel.hidden) mountChat(); },
+      companyChanged() { montageNotices.refresh(); if (panel && !panel.hidden) mountChat(); },
       remount(id) { if (id === 'hugh-chat' && panel && !panel.hidden) mountChat(); }
     };
   })();
 
+  // Состояние привязано к фактическому входу и выбранной компании, не к последнему открытому ролику.
+  const montageNotices = (() => {
+    let key='',value=null,pending=null,abort=null,timer=null,generation=0;
+    const observers=new Set();
+    const identityKey=()=>{
+      const user=currentUser(),code=currentCompany()?.id;
+      return user&&!user.viewAs&&code&&(can('autoposting.view')||can('autoposting.edit'))?`${user.userId}:${code}`:'';
+    };
+    function publish(next){
+      value=next;
+      document.querySelectorAll('[data-view-link="content-materials"]').forEach(link=>{
+        link.querySelector('[data-montage-count]')?.remove();
+        if(next?.enabled&&next.count>0){
+          const badge=node('span','sb-montage-count',String(next.count));
+          badge.dataset.montageCount='';badge.setAttribute('aria-label',`Непрочитанных событий монтажа: ${next.count}`);
+          badge.style.cssText='display:inline-block;margin-inline-start:.5em;padding:0 .45em;border-radius:1em;background:#bff36b;color:#172013;font-weight:700';
+          link.append(badge);
+        }
+      });
+      observers.forEach(fn=>{try{fn(next);}catch{}});
+    }
+    function context(){
+      const next=identityKey();
+      if(next!==key){key=next;generation++;abort?.abort();abort=new AbortController();pending=null;publish(null);}
+      return {key,generation,code:currentCompany()?.id,signal:abort?.signal};
+    }
+    function accept(data,captured){
+      if(captured.key!==identityKey()||captured.generation!==generation)return;
+      if(data?.enabled!==true||data.companyCode!==captured.code||!Number.isSafeInteger(data.count)||data.count<0||!Array.isArray(data.reels))return publish(null);
+      if(data.reels.some(r=>!Number.isSafeInteger(r.reelId)||r.reelId<1||!Number.isSafeInteger(r.throughId)||r.throughId<1||!Number.isSafeInteger(r.count)||r.count<1))return publish(null);
+      publish(data);
+    }
+    function refresh(){
+      const captured=context();if(!captured.key||pending)return pending||Promise.resolve();
+      const job=apiClient(captured.code,captured.signal).get('crm/autoposting/reels/notifications')
+        .then(data=>accept(data,captured)).catch(error=>{if(captured.generation===generation&&[401,403].includes(error?.status))publish(null);})
+        .finally(()=>{if(pending===job)pending=null;});
+      pending=job;return job;
+    }
+    async function read(reelId,throughId){
+      if(!context().key||!value?.enabled)return;
+      // Старый GET не должен вернуть badge после подтверждённого mark-read.
+      generation++;abort?.abort();abort=new AbortController();pending=null;
+      const captured=context();
+      const job=apiClient(captured.code,captured.signal).post(`crm/autoposting/reels/${reelId}/notifications/read`,{throughId})
+        .then(data=>accept(data,captured)).finally(()=>{if(pending===job)pending=null;});
+      pending=job;return job;
+    }
+    function init(){
+      if(!document.querySelector('[data-view-link="content-materials"]'))return;
+      clearInterval(timer);void refresh();timer=setInterval(()=>{context();if(!document.hidden)void refresh();},30000);
+    }
+    window.addEventListener('focus',()=>{context();if(timer)void refresh();});
+    document.addEventListener('visibilitychange',()=>{context();if(timer&&!document.hidden)void refresh();});
+    return {init,refresh,read,snapshot:()=>identityKey()===key?value:null,
+      subscribe(fn){observers.add(fn);fn(identityKey()===key?value:null);return ()=>observers.delete(fn);}};
+  })();
   const registry = {
     version: 1,
     register(id, definition) {
@@ -232,11 +290,12 @@
     get: (id) => definitions.get(id) || null,
     list: () => [...definitions.keys()],
     onRegister(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    attachShell(api) { shell = api; dock.init(); },
+    attachShell(api) { shell = api; dock.init(); montageNotices.init(); },
     mount,
     createContext,
     contentSettings: (companyCode) => contentSettings(companyCode || currentCompany()?.id || ''),
-    chat: dock
+    chat: dock,
+    montageNotifications: montageNotices
   };
   window.SynapseModules = registry;
   // Модуль, загруженный раньше реестра, может оставить очередь: window.SynapseModulesQueue = [[id, def], …].

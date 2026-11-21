@@ -9,7 +9,7 @@ test('Материалы через настоящий CRM: ролик → пр�
   const key=randomBytes(24).toString('hex'),probe=http.createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');
   const port=probe.address().port;await new Promise(resolve=>probe.close(resolve));let child;
   t.after(async()=>{if(child&&child.exitCode===null){const done=once(child,'exit');child.kill();await done;}await fs.rm(directory,{recursive:true,force:true});});
-  let output='';child=spawn(process.execPath,[path.join(__dirname,'server.js')],{env:{PATH:process.env.PATH||'',PORT:String(port),DATABASE_PATH:path.join(directory,'crm.sqlite'),API_KEY:key},stdio:['ignore','pipe','ignore']});
+  let output='';child=spawn(process.execPath,[path.join(__dirname,'server.js')],{env:{PATH:process.env.PATH||'',PORT:String(port),DATABASE_PATH:path.join(directory,'crm.sqlite'),API_KEY:key,MONTAGE_NOTIFICATIONS_ENABLED:'1'},stdio:['ignore','pipe','ignore']});
   child.stdout.on('data',chunk=>{output+=chunk;});
   for(let i=0;i<200&&!output.includes('слушает');i++){if(child.exitCode!==null)throw Error('CRM не запустился');await new Promise(r=>setTimeout(r,25));}
   const encode=identity=>Buffer.from(JSON.stringify({v:1,userId:5,role:'editor',permissions:[],companyCodes:[],...identity})).toString('base64url');
@@ -40,6 +40,17 @@ test('Материалы через настоящий CRM: ролик → пр�
   assert.equal((await request('GET','/internal/reel-materials/hugh-log?companyCode=avokado&authorId=5',{identity:smm})).status,403,'лог только ключом сервиса');
   const hughLog=await request('GET','/internal/reel-materials/hugh-log?companyCode=avokado&authorId=5',{identity:null});
   assert.deepEqual(hughLog.body.entries.map(e=>e.from),['user','hugh']);assert.match(hughLog.body.entries[1].text,/Исправлено: «Рилс №1» — готова v2/);
+  const feed=await request('GET','/internal/reel-materials/notifications',{identity:null});
+  assert.equal(feed.status,200);assert.deepEqual(feed.body.events.map(e=>e.kind),['in_progress','done']);
+  assert.equal((await request('GET','/internal/reel-materials/notifications',{identity:smm})).status,403);
+  const notices='/autoposting/reels/notifications?companyCode=avokado';
+  assert.equal((await request('GET',notices,{identity:smm})).body.count,2);
+  const someone=encode({userId:6,permissions:['autoposting.view'],companyCodes:['avokado']});
+  assert.equal((await request('GET',notices,{identity:someone})).body.count,0);
+  const readPath=`/autoposting/reels/${reel.body.id}/notifications/read?companyCode=avokado`;
+  assert.equal((await request('POST',readPath,{identity:someone,body:{throughId:feed.body.events[0].id}})).status,404);
+  assert.equal((await request('POST',readPath,{identity:smm,body:{throughId:feed.body.events[0].id}})).body.count,1);
+  assert.equal((await request('POST',readPath,{identity:smm,body:{throughId:feed.body.events[1].id}})).body.count,0);
   const tasks=await request('GET','/tasks?companyCode=avokado');
   assert.ok(JSON.stringify(tasks.body).includes('Монтаж: «Рилс №1» v1'),'задача монтажа на общей доске');
   const pub=await request('POST',`/autoposting/reels/${reel.body.id}/publication?companyCode=avokado`,{identity:smm,body:{version:2,platformIds:['instagram']}});

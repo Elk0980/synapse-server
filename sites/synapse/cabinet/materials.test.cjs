@@ -74,6 +74,28 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], respon
     navigate: (route) => navigations.push(route)};
   return {w, el, id, definition, ctx, calls, navigations, mount: async () => {await definition.mount(el, ctx);await settle(2);}};
 }
+test('уведомление карточки: только своя компания; poll сохраняет видео и черновик, read берёт лишь видимый курсор',async t=>{
+  let listener,notice={enabled:true,companyCode:'avokado',count:1,reels:[{reelId:4,count:1,throughId:10,newVersion:0}]};
+  const reads=[],f=fixture({respond:({path})=>path==='crm/autoposting/reels/4'?{...full(),requests:[]}:undefined});t.after(()=>f.w.close());
+  f.ctx.montageNotifications={subscribe(fn){listener=fn;fn(notice);return ()=>{};},async read(id,through){reads.push({id,through});}};
+  await f.mount();assert.equal(f.el.querySelector('[data-montage-notice]').textContent,'Новый ответ');
+  const thumb=f.el.querySelector('.mt-card video');f.el.querySelector('[data-open="reel:4"]').click();await settle();
+  assert.deepEqual(reads,[{id:4,through:10}]);
+  const player=f.el.querySelector('[data-detail] video'),caption=f.el.querySelector('[data-review] textarea[name="caption"]');
+  caption.value='SAMPLE несохранённая подпись';
+  notice={...notice,count:2,reels:[{reelId:4,count:2,throughId:11,newVersion:1}]};listener(notice);
+  assert.equal(f.el.querySelector('[data-montage-notice]').textContent,'Новая версия');
+  assert.equal(f.el.querySelector('.mt-card video'),thumb);assert.equal(f.el.querySelector('[data-detail] video'),player);
+  assert.equal(caption.value,'SAMPLE несохранённая подпись');assert.equal(reads.length,1,'событие после открытия ещё не прочитано');
+  listener({...notice,companyCode:'alvi'});assert.equal(f.el.querySelector('[data-montage-notice]'),null);
+});
+test('после восстановления экрана серверный unread появляется снова; выключенный флаг скрывает отметку',async t=>{
+  const unread={enabled:true,companyCode:'avokado',count:1,reels:[{reelId:4,count:1,throughId:12,newVersion:1}]};
+  for(const enabled of [true,true,false]){
+    const f=fixture();t.after(()=>f.w.close());f.ctx.montageNotifications={subscribe(fn){fn({...unread,enabled});return ()=>{};}};
+    await f.mount();assert.equal(!!f.el.querySelector('[data-montage-notice]'),enabled);
+  }
+});
 const titles = (f) => [...f.el.querySelectorAll('.mt-card .mt-card__title')].map((n) => n.textContent);
 
 test('Монтаж: модуль content-materials; шапка «Монтаж» + «Загрузить ролик» + календарь ▦ ⇅ в одну строку; фильтров нет', async () => {
