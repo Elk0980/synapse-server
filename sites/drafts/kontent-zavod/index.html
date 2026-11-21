@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Контент-завод: инструкция · Монтаж с телефона</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap">
+<style>
+  *{box-sizing:border-box} body{margin:0} img{max-width:100%} [hidden]{display:none!important}
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --ink: #1b1d22; --muted: #5d6470; --line: #e2ddd2;
+    --accent: #0f6b5c; --accent-soft: #e3f1ed; --mark: #e8483d; --mark-soft: #fde9e6; --note: #fff6dc; --note-line: #ecd9a0;
+    --shadow: 0 10px 30px rgba(30, 30, 40, .12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151b; --surface: #1b2029; --ink: #eef0f4; --muted: #a2aab8; --line: #2c3340;
+      --accent: #5fd0bb; --accent-soft: #17332f; --mark: #ff6a5e; --mark-soft: #3a1f1d; --note: #2d2814; --note-line: #5a4d1d;
+      --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151b; --surface: #1b2029; --ink: #eef0f4; --muted: #a2aab8; --line: #2c3340;
+    --accent: #5fd0bb; --accent-soft: #17332f; --mark: #ff6a5e; --mark-soft: #3a1f1d; --note: #2d2814; --note-line: #5a4d1d;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--ink); font: 400 17px/1.55 Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1, h2, h3 { font-family: Manrope, Inter, system-ui, sans-serif; text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
+  .lead { font-size: 19px; color: var(--muted); max-width: 62ch; margin: 14px 0 0; }
+  .eyebrow { font: 600 13px/1 Inter, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  p { margin: 0 0 12px; max-width: 62ch; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
+  .short { margin-top: 26px; }
+  .short h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+  .short ol { margin: 0; padding-left: 22px; }
+  .short li { margin: 6px 0; }
+  .legend { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; padding: 14px 16px; background: var(--mark-soft); border-radius: 14px; }
+  .dot { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 15px/26px Inter, system-ui, sans-serif; text-align: center; }
+  .legend p { margin: 0; }
+  .where { margin-top: 14px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 14px; }
+  .where p { margin: 0; }
+  .step { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; margin-top: 44px; padding-top: 36px; border-top: 1px solid var(--line); }
+  .step > div { min-width: 0; }
+  .num { display: inline-block; font: 800 15px/1 Manrope, Inter, sans-serif; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 7px 12px; margin-bottom: 12px; }
+  .step h2 { font-size: clamp(22px, 4.2vw, 28px); font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+  .step ul { margin: 0 0 12px; padding-left: 20px; max-width: 62ch; }
+  .step li { margin: 6px 0; }
+  .m { display: inline-block; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--mark); color: #fff; font: 700 13px/22px Inter, system-ui, sans-serif; text-align: center; vertical-align: 2px; }
+  .btn { display: inline-block; padding: 1px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; white-space: nowrap; }
+  .btn.url { white-space: normal; overflow-wrap: anywhere; }
+  .note { background: var(--note); border: 1px solid var(--note-line); border-radius: 14px; padding: 12px 14px; margin: 12px 0 0; max-width: 62ch; }
+  .note p { margin: 0; }
+  figure { margin: 0; }
+  .phone { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto; border-radius: 26px; border: 6px solid #0b0d11; box-shadow: var(--shadow); background: #0b0d11; }
+  figcaption { font-size: 14px; color: var(--muted); text-align: center; margin-top: 10px; }
+  .pair { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .tbl { overflow-x: auto; margin: 6px 0 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 420px; font-size: 16px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 600 13px/1.2 Inter, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .faq { margin-top: 52px; }
+  .faq h2 { font-size: 26px; font-weight: 700; margin-bottom: 16px; }
+  .faq dl { margin: 0; display: grid; gap: 12px; }
+  .faq div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .faq dt { font-weight: 600; margin-bottom: 4px; }
+  .faq dd { margin: 0; color: var(--muted); max-width: 66ch; }
+  .foot { margin-top: 40px; font-size: 14px; color: var(--muted); }
+  .foot p { max-width: 74ch; }
+  @media (max-width: 760px) {
+    body { font-size: 16px; }
+    .step { grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 36px; padding-top: 28px; }
+    .phone { max-width: min(300px, 82vw); }
+    table { min-width: 0; font-size: 15px; }
+    td:first-child { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">ТайСабай · Контент-завод · Монтаж</p>
+    <h1>Монтаж с телефона: как поправить ролик</h1>
+    <p class="lead">Вы решаете, какие фразы останутся в ролике, пишете пожелания и отправляете всё монтажёру одной кнопкой. Монтировать самому ничего не нужно.</p>
+
+    <nav class="card short parts" aria-label="Части инструкции">
+      <h2>Части инструкции</h2>
+      <ol>
+        <li>Контент-план — готовится</li>
+        <li>Съёмка — готовится</li>
+        <li><strong>Монтаж — на этой странице</strong></li>
+        <li>Постинг: текст, дата и площадки — готовится</li>
+        <li>Подключения и статистика — готовится</li>
+      </ol>
+    </nav>
+    <section class="card short">
+      <h2>Весь путь за минуту</h2>
+      <ol>
+        <li>Откройте ролик со статусом «Выберите фразы».</li>
+        <li>Посмотрите его и уберите лишние фразы.</li>
+        <li>Добавьте пожелания: шрифт, переход, громкость, музыка, врезка.</li>
+        <li>Проверьте список «Что поменять» и нажмите «Отправить монтажёру».</li>
+        <li>Ждите новую версию в этой же карточке.</li>
+      </ol>
+      <div class="legend"><span class="dot">1</span><p>Красные цифры и рамки на снимках показывают, куда нажимать. В самом кабинете их нет.</p></div>
+      <div class="where"><p><strong>Где это.</strong> Кабинет <span class="btn url">synapse.synapsebusiness.ru/cabinet.html</span> → проект «ТайСабай» → в меню «Контент-завод» → «Монтаж».</p></div>
+    </section>
+  </header>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 1</span>
+      <h2>Откройте ролик</h2>
+      <p>На экране «Монтаж» лежат ролики со съёмки. Под названием — статус. «Выберите фразы» значит, что ролик ждёт вас.</p>
+      <ul>
+        <li><span class="m">1</span> Нажмите на ролик — откроется его карточка.</li>
+      </ul>
+      <p>Статусы меняются так: «Выберите фразы» → «У монтажёра» → «Монтаж на согласовании».</p>
+      <div class="note"><p>Кнопку «Убрать» справа от названия не трогайте: она убирает весь ролик в архив, а не фразу.</p></div>
+    </div>
+    <figure><img class="phone" src="img/01-list.jpg" alt="Экран «Монтаж»: четыре ролика, первый обведён рамкой" width="780" height="1688" ><figcaption>Список роликов</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 2</span>
+      <h2>Посмотрите ролик</h2>
+      <p>Сверху закреплён плеер, он остаётся на месте, пока вы листаете фразы.</p>
+      <ul>
+        <li><span class="m">1</span> «Смотреть» проигрывает ролик так, как он получится: убранные фразы пропускаются. «С начала» возвращает к первой секунде.</li>
+        <li><span class="m">2</span> Ниже — список «Фразы»: весь ролик, разбитый на реплики.</li>
+      </ul>
+      <p>Строка «В ролике 20 из 30 фраз» показывает, сколько фраз сейчас оставлено.</p>
+    </div>
+    <figure><img class="phone" src="img/02-card.jpg" alt="Карточка ролика: плеер, кнопка «Смотреть» и начало списка фраз" width="780" height="1688" ><figcaption>Карточка ролика</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 3</span>
+      <h2>Уберите лишние фразы</h2>
+      <p>У каждой фразы справа две кнопки.</p>
+      <ul>
+        <li><span class="m">1</span> «−» убирает фразу из ролика. У убранной фразы кнопка меняется на «+» — он возвращает её обратно.</li>
+        <li><span class="m">2</span> Динамик выключает звук у этой фразы: картинка останется, голоса не будет. Нажмите ещё раз — звук вернётся.</li>
+      </ul>
+      <p>Зелёная полоска слева — фраза в ролике. Серая строка — фраза убрана. Паузы и куски без слов убраны заранее, их можно вернуть тем же «+».</p>
+      <div class="note"><p>Само видео при этом не режется и не портится. Это только пометки — любую можно отменить.</p></div>
+    </div>
+    <figure><img class="phone" src="img/03-phrases.jpg" alt="Список фраз: у шестой фразы кнопка «плюс», у восьмой выключен звук" width="780" height="1688" ><figcaption>Фраза 6 убрана, у фразы 8 выключен звук</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 4</span>
+      <h2>Нажмите на текст фразы</h2>
+      <p>Если нажать не на кнопки, а на сами слова, снизу выедет шторка этой фразы.</p>
+      <ul>
+        <li><span class="m">1</span> «Показать в плеере» — плеер перейдёт к этой фразе, даже если она убрана. Удобно, чтобы послушать и решить.</li>
+        <li><span class="m">2</span> «Пожелание к этой фразе» — попросить что-то именно про неё, например сделать её громче.</li>
+      </ul>
+      <p>Крестик в углу закрывает шторку.</p>
+    </div>
+    <figure><img class="phone" src="img/04-phrase-sheet.jpg" alt="Шторка «Фраза 9» с кнопками «Показать в плеере» и «Пожелание к этой фразе»" width="780" height="1688" ><figcaption>Шторка фразы</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 5</span>
+      <h2>Добавьте пожелания к монтажу</h2>
+      <p>Пролистайте фразы до конца — под ними шесть плиток <span class="m">1</span>. Каждая открывает шторку с готовыми вариантами и полем для пояснения.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Плитка</th><th>Что можно попросить</th></tr></thead>
+          <tbody>
+            <tr><td>Шрифт и титры</td><td>Крупнее, мельче, другой стиль, убрать титры</td></tr>
+            <tr><td>Переход</td><td>Резкая склейка, плавно, приближение — и между какими фразами</td></tr>
+            <tr><td>Громкость</td><td>Громче или тише — весь ролик или одна фраза</td></tr>
+            <tr><td>Музыка на фон</td><td>Добавить, убрать, тише, громче; можно написать, какая</td></tr>
+            <tr><td>Врезка</td><td>Показать другую картинку поверх видео, голос остаётся</td></tr>
+            <tr><td>Другое</td><td>Всё остальное своими словами</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Пожеланий может быть несколько, до двадцати на одну отправку.</p>
+    </div>
+    <figure><img class="phone" src="img/05-tiles.jpg" alt="Шесть плиток пожеланий под списком фраз" width="780" height="1688" ><figcaption>Плитки пожеланий</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 6</span>
+      <h2>Пример: врезка поверх голоса</h2>
+      <p>Нажмите плитку «Врезка». В шторке:</p>
+      <ul>
+        <li>«От фразы» и «До фразы» — на каком куске ролика показать врезку.</li>
+        <li>«Что показать» — опишите словами. Сюда же можно вставить ссылку на файл или папку.</li>
+        <li><span class="m">1</span> «Добавить пожелание» — оно попадёт в список, но ещё никуда не отправится.</li>
+      </ul>
+      <p>Голос выбранных фраз остаётся на фоне — монтажёр меняет только картинку.</p>
+      <p>Остальные плитки устроены так же: выбрали вариант, при желании дописали пояснение, нажали «Добавить пожелание».</p>
+    </div>
+    <div class="pair">
+      <figure><img class="phone" src="img/06-insert.jpg" alt="Шторка «Врезка»: выбраны фразы 9–10 и написано, что показать" width="780" height="1688" ><figcaption>Врезка на фразы 9–10</figcaption></figure>
+      <figure><img class="phone" src="img/06b-music.jpg" alt="Шторка «Музыка на фон» с вариантами: добавить, убрать, тише, громче" width="780" height="1688" ><figcaption>Музыка на фон</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 7</span>
+      <h2>Проверьте, что уйдёт монтажёру</h2>
+      <p>Под плитками собирается список «Что поменять» <span class="m">1</span>. В нём одной строкой написано, сколько фраз убрано и где выключен звук, а ниже — каждое пожелание.</p>
+      <ul>
+        <li><span class="m">2</span> Крестик справа снимает пожелание, если передумали.</li>
+      </ul>
+      <p>Прочитайте список целиком: монтажёр получит ровно это.</p>
+    </div>
+    <figure><img class="phone" src="img/07-summary.jpg" alt="Список «Что поменять»: строка про фразы и три пожелания с крестиками" width="780" height="1688" ><figcaption>Список «Что поменять»</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 8</span>
+      <h2>Отправьте одной кнопкой</h2>
+      <p>Внизу экрана всегда видны две кнопки.</p>
+      <ul>
+        <li><span class="m">1</span> «Отправить монтажёру» — отправляет сразу и фразы, и все пожелания. Кнопка серая, пока вы ничего не изменили.</li>
+        <li><span class="m">2</span> «Вернуть как было» — сбрасывает всё, что вы наменяли и ещё не отправили.</li>
+      </ul>
+      <div class="note"><p>Отправка ничего не публикует в соцсети. Ролик уходит только монтажёру.</p></div>
+    </div>
+    <figure><img class="phone" src="img/08-send.jpg" alt="Кнопки «Отправить монтажёру» и «Вернуть как было» внизу экрана" width="780" height="1688" ><figcaption>Отправка</figcaption></figure>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Шаг 9</span>
+      <h2>Что будет дальше</h2>
+      <p>Внизу появится строка «Отправлено монтажёру…» с датой и временем <span class="m">1</span>. Статус ролика сменится на «У монтажёра».</p>
+      <p>В блоке «Просьбы по этому ролику» видна ваша правка: что вы просили и её состояние — «принято», потом «в работе», потом «готово, посмотрите». Ответ монтажёра появится там же.</p>
+      <ul>
+        <li>Пока правка у монтажёра, менять фразы нельзя.</li>
+        <li>Ошиблись — нажмите «Отменить просьбу», поправьте и отправьте заново. Отмена срабатывает сразу, без вопроса.</li>
+      </ul>
+      <div class="note"><p>Новая версия появляется не сразу, срок на экране не показывается. Обновлять страницу каждую минуту не нужно.</p></div>
+    </div>
+    <div class="pair">
+      <figure><img class="phone" src="img/09-sent.jpg" alt="Строка «Отправлено монтажёру» внизу карточки" width="780" height="1688" ><figcaption>Подтверждение отправки</figcaption></figure>
+      <figure><img class="phone" src="img/09b-request.jpg" alt="Просьба «Правка монтажа» со статусом «принято» и списком пожеланий" width="780" height="1688" ><figcaption>Ваша правка и её статус</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step">
+    <div>
+      <span class="num">Если сломалось</span>
+      <h2>Сообщите о проблеме</h2>
+      <p>Ролик не запускается, кнопка не нажимается, пропали фразы — это не к монтажёру.</p>
+      <ul>
+        <li><span class="m">1</span> Нажмите «Сообщить о проблеме» — кнопка есть в карточке ролика и вверху экрана «Монтаж».</li>
+        <li>Напишите коротко, что не работает, и нажмите «Отправить».</li>
+      </ul>
+      <p>Появится «Отправлено, задача №…». Сообщение уходит в поддержку кабинета, а не в очередь монтажа.</p>
+    </div>
+    <div class="pair">
+      <figure><img class="phone" src="img/10-problem-button.jpg" alt="Кнопка «Сообщить о проблеме» в карточке ролика" width="780" height="1688" ><figcaption>Кнопка в карточке</figcaption></figure>
+      <figure><img class="phone" src="img/11-problem-form.jpg" alt="Форма «Сообщить о проблеме» с полем «Что не работает?»" width="780" height="1688" ><figcaption>Форма сообщения</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="faq">
+    <h2>Частые вопросы</h2>
+    <dl>
+      <div><dt>Я случайно убрал нужную фразу. Она пропала?</dt><dd>Нет. Нажмите «+» в её строке — фраза вернётся. До отправки можно сбросить всё кнопкой «Вернуть как было».</dd></div>
+      <div><dt>Закрыл карточку и не отправил. Всё потерялось?</dt><dd>Несохранённые пометки и пожелания остаются, пока открыта эта вкладка кабинета. Если вкладку закрыть, придётся отметить заново.</dd></div>
+      <div><dt>Можно отправить только пожелание, не трогая фразы?</dt><dd>Да. Достаточно одного пожелания — кнопка «Отправить монтажёру» станет активной.</dd></div>
+      <div><dt>Где публикация и «Берём / Не берём»?</dt><dd>Они появятся в этой же карточке под строкой «Публикация и решение», когда у ролика будет собранная версия монтажа. У исходника их нет, чтобы не мешали.</dd></div>
+      <div><dt>Уйдёт ли что-то в Instagram само?</dt><dd>Нет. На этом экране ничего не публикуется.</dd></div>
+    </dl>
+  </section>
+
+  <div class="foot">
+    <p>Снимки сделаны 21.11.2026 на версии экрана, выпущенной в рабочий кабинет в этот же день, с настоящими фразами ролика «Приехали на месяц — и не уехали». Время отправки и номер задачи на снимках условные.</p>
+  </div>
+</div>
+</body>
+</html>
