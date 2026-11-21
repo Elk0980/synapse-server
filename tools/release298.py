@@ -166,10 +166,15 @@ def stage():
    if sha(b)!=f['sha']:raise RuntimeError('candidate bytes changed')
    replace_private(build/name,b) if (build/name).exists() else save(build/name,b)
    os.chmod(build/name,0o644);names.append(name)
-  recipe='FROM '+old['image']+'\n'+''.join('COPY '+n+' /app/'+n+'\n' for n in names)
+  tags=json.loads(run(['docker','image','inspect',old['image']]))[0].get('RepoTags') or []
+  tags=[t for t in tags if re.fullmatch(r'synapse-'+s+r':[A-Za-z0-9_.-]+',t)]
+  if not tags:raise RuntimeError('existing local live image tag required')
+  base_tag=sorted(tags)[0]
+  if run(['docker','image','inspect','--format','{{.Id}}',base_tag]).decode().strip()!=old['image']:raise RuntimeError('tag does not resolve to pinned live image')
+  recipe='FROM '+base_tag+'\n'+''.join('COPY '+n+' /app/'+n+'\n' for n in names)
   replace_private(build/'Dockerfile',recipe.encode())
   result=subprocess.run(['docker','build','-q','-t','synapse-'+s+':pr658-claude',str(build)],capture_output=True,timeout=300)
-  save(PRE/('build-'+s+'.log'),result.stdout+result.stderr);result.check_returncode();image=result.stdout.decode().strip().splitlines()[-1]
+  save(PRE/('build-'+s+'-'+str(time.time_ns())+'.log'),result.stdout+result.stderr);result.check_returncode();image=result.stdout.decode().strip().splitlines()[-1]
   if not re.fullmatch(r'sha256:[0-9a-f]{64}',image):raise RuntimeError('image id')
   for n in names:run(['docker','run','--rm','--network','none','--entrypoint','node',image,'--check','/app/'+n])
   candidate['services'][s]={'image':image,'environment':{FLAG:'1'}}
