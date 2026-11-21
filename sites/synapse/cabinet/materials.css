@@ -202,7 +202,8 @@ body.mt-modal-open { overflow:hidden; }
 .mt-live__list { list-style:none; margin:8px 0; padding:0; display:grid; gap:8px; }
 .mt-live__row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid var(--line,#283143); border-radius:10px; }
 .mt-live__row.is-off { opacity:.6; border-style:dashed; }
-.mt-live__name { min-width:0; overflow-wrap:anywhere; font-size:14px; }
+.mt-live__name { min-width:0; flex:1 1 220px; overflow-wrap:anywhere; font:inherit; font-size:15px; line-height:1.35; text-align:left; color:inherit; background:none; border:0; padding:4px 0; cursor:pointer; }
+.mt-live__row.is-off .mt-live__name { text-decoration:line-through; text-decoration-color:var(--line,#283143); }
 .mt-live__switch { display:flex; flex-wrap:wrap; gap:8px; }
 .mt-view .mt-live__btn { min-height:44px; min-width:112px; }
 .mt-live__btn[aria-pressed="true"] { border-color:var(--accent,#9fb3ff); }

@@ -54,6 +54,25 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel =
 }
 const sent = (f, method, suffix) => f.calls.filter((call) => call.method === method && call.path.endsWith(suffix));
 
+test('нажатие показывает убранную фразу, затем обычный просмотр снова пропускает её без изменения монтажа', async t => {
+  const marked = segments().map((s, i) => i === 1 ? {...s, enabled: false} : s);
+  const f = fixture({reel: () => full({versions: [{version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
+  t.after(() => f.w.close());
+  await f.open();
+  const player = f.el.querySelector('[data-player]');
+  player.play = () => {player.dispatchEvent(new f.w.Event('timeupdate'));return Promise.resolve();};
+  await f.click('[data-live-seek="1"]');
+  assert.equal(player.currentTime, 3, 'убранную фразу можно посмотреть перед добавлением');
+  player.currentTime = 4;player.dispatchEvent(new f.w.Event('timeupdate'));
+  assert.equal(player.currentTime, 4, 'просмотр выбранной фразы продолжается');
+  player.currentTime = 6.1;player.dispatchEvent(new f.w.Event('timeupdate'));
+  player.currentTime = 3.5;player.dispatchEvent(new f.w.Event('timeupdate'));
+  assert.equal(player.currentTime, 6, 'за границами выбранной фразы снова действует монтаж');
+  assert.equal(f.el.querySelector('[data-live-toggle="enabled:1"]').textContent, 'Убран');
+  assert.equal(f.el.querySelector('[data-live-save]').disabled, true);
+  assert.equal(f.calls.filter(call => call.method !== 'GET').length, 0, 'просмотр не сохраняет и не меняет разметку');
+});
+
 test('живой монтаж, расчёт предпросмотра: убранный отрезок пропускается, дальше всё убрано — стоп, без звука — глушим', () => {
   const {live} = fixture(), list = segments();
   const toggles = [{enabled: true, sound: true}, {enabled: false, sound: true}, {enabled: true, sound: false}];
@@ -63,6 +82,14 @@ test('живой монтаж, расчёт предпросмотра: убра
   assert.equal(live.at(list, [toggles[0], toggles[1], {enabled: false, sound: true}], 4000).stop, true);
   assert.equal(live.at(list, toggles, 99000).index, -1);
   assert.equal(live.changed(live.initial(list)), false);assert.equal(live.changed(toggles), true);
+  /* specs/232: фраза размечена «не в ролике» — это исходное состояние, её можно добавить. */
+  const marked = [{startMs: 0, endMs: 3000, label: 'Беру'}, {startMs: 3000, endMs: 6000, label: 'Не вошло', enabled: false}, {startMs: 6000, endMs: 10000, sound: false}];
+  same(live.initial(marked), [{enabled: true, sound: true}, {enabled: false, sound: true}, {enabled: true, sound: false}]);
+  assert.equal(live.changed(live.initial(marked), marked), false, 'исходная разметка — не правка');
+  assert.equal(live.active(live.initial(marked)), true, 'но плеер уже пропускает фразу «не в ролике»');
+  const addedBack = live.initial(marked);addedBack[1].enabled = true;
+  assert.equal(live.changed(addedBack, marked), true, 'добавленная фраза — правка');
+  assert.equal(live.at(marked, live.initial(marked), 3500).seekMs, 6000);assert.equal(live.at(marked, addedBack, 3500).seekMs, null);
   same(live.body(list, toggles)[1], {startMs: 3000, endMs: 6000, enabled: false, sound: true}, 'границы и порядок — как у версии, без подписей');
   assert.equal(live.parseMmss('1:05'), 65000);assert.equal(live.parseMmss('12'), 12000);assert.equal(live.parseMmss('0:07,5'), 7500);assert.equal(live.parseMmss('скоро'), null);
   assert.equal(live.mmss(65400), '1:05');

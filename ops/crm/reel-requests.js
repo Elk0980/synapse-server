@@ -94,13 +94,15 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     if(!Array.isArray(value)||!value.length||value.length>maxClips)fail(400,`Отрезки: от 1 до ${maxClips}`);
     const limit=durationMs||maxMs;let cursor=0;
     return value.map(item=>{
-      object(item,['startMs','endMs','label']);
+      object(item,['startMs','endMs','label','enabled','sound']);
       const startMs=int(item.startMs,0,limit,'Начало отрезка'),endMs=int(item.endMs,0,limit,'Конец отрезка');
       if(startMs!==cursor)fail(400,'Отрезки идут подряд от начала ролика, без пропусков и наложений');
       if(endMs-startMs<100)fail(400,'Отрезок короче 0,1 с');
       cursor=endMs;
-      const label=item.label===undefined||item.label===null?'':text(String(item.label).normalize('NFC'),80);
-      return {startMs,endMs,...(label?{label}:{})};
+      const label=item.label===undefined||item.label===null?'':text(String(item.label).normalize('NFC'),200);
+      /* specs/232: отрезок может быть размечен как «не в ролике» или «без звука» — тогда его можно добавить/озвучить в «живом монтаже». */
+      for(const key of ['enabled','sound'])if(item[key]!==undefined&&typeof item[key]!=='boolean')fail(400,'«Включён» и «звук» у отрезка — true или false');
+      return {startMs,endMs,...(label?{label}:{}),...(item.enabled===false?{enabled:false}:{}),...(item.sound===false?{sound:false}:{})};
     });
   }
   const storedSegments=version=>{const list=version?.segments?parse(version.segments,null):null;return Array.isArray(list)&&list.length?list:null;};
@@ -135,9 +137,12 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     if(!kept.length)fail(400,'Нельзя выключить все отрезки: оставьте хотя бы один');
     const numbers=test=>toggles.map((item,index)=>test(item)?index+1:0).filter(Boolean);
     const off=numbers(item=>!item.enabled),silent=numbers(item=>item.enabled&&!item.sound);
-    if(!off.length&&!silent.length)fail(400,'Ничего не изменено: выключите отрезок или уберите у него звук');
+    /* specs/232: исходное состояние берётся из разметки версии; без разметки все отрезки включены и со звуком. */
+    const was=index=>({enabled:base[index].enabled!==false,sound:base[index].sound!==false});
+    const added=toggles.map((item,index)=>item.enabled&&!was(index).enabled?index+1:0).filter(Boolean);
+    if(!toggles.some((item,index)=>item.enabled!==was(index).enabled||item.sound!==was(index).sound))fail(400,'Ничего не изменено: уберите или добавьте отрезок либо поменяйте у него звук');
     const note=text(body.comment??'',1500);
-    const summary=['Живой монтаж',off.length?`выключены отрезки: ${off.join(', ')}`:'',silent.length?`без звука: ${silent.join(', ')}`:''].filter(Boolean).join('; ');
+    const summary=['Живой монтаж',added.length?`добавлены отрезки: ${added.join(', ')}`:'',off.length?`выключены отрезки: ${off.join(', ')}`:'',silent.length?`без звука: ${silent.join(', ')}`:''].filter(Boolean).join('; ');
     const edl={v:1,video:kept.map(item=>({inMs:item.startMs,outMs:item.endMs})),audio:kept.map(item=>({inMs:item.startMs,outMs:item.endMs,gain:1,muted:!item.sound})),
       captions:[],coverMs:null,speed:1,
       live:{segments:toggles.map((item,index)=>({inMs:item.startMs,outMs:item.endMs,enabled:item.enabled,sound:item.sound,...(base[index].label?{label:base[index].label}:{})}))}};
