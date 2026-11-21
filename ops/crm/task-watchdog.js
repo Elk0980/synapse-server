@@ -222,6 +222,12 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       observations:db.prepare('SELECT * FROM task_watchdog_observations ORDER BY id DESC LIMIT 20').all(),
       audits:db.prepare('SELECT * FROM task_watchdog_audits ORDER BY created_at DESC LIMIT 20').all()};
   }
+  // №194 п.2в: одна строка о зависших запусках за сутки, без отдельных ночных уведомлений.
+  function agentHandoffLines() {
+    if(!table(db,'task_dispatch_agent_handoffs'))return [];
+    const rows=db.prepare('SELECT task_id FROM task_dispatch_agent_handoffs WHERE created_at>=? ORDER BY created_at').all(new Date(now()-24*60*MINUTE).toISOString());
+    return rows.length?[`Запуски Codex не стартовали и переданы запасному: ${rows.length} (${[...new Set(rows.map(r=>`№${r.task_id}`))].join(', ')}).`]:[];
+  }
   function digest() {
     const s=snapshot(),lines=[`Сводка доски · ${new Intl.DateTimeFormat('ru-RU',{timeZone:'Asia/Bangkok',dateStyle:'short',timeStyle:'short'}).format(now())} (Бангкок)`,
       `Задач в базе: ${s.total}. Отметок этапов за сутки: ${s.events.length}; удостоверены сторожем: ${s.events.filter(e=>e.trusted).length}.`,
@@ -230,6 +236,7 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       `Тишина от 3 часов: ${s.stalled.length}.`,...s.stalled.map(a=>`№${a.task_id} · ${a.minutes} мин · ${a.waiting_for} · ${a.blocker}`),
       `Ждут Влада: ${s.waiting_vlad.length}.`,...s.waiting_vlad.map(t=>`№${t.task_id} · ${t.blocker}`),
       ...rules.lines(s.rules),
+      ...agentHandoffLines(),
       'Исторические подтверждения — записи базы; их внешняя перепроверка указана отдельно. Рассылка выключена.'];
     return {...s,text:lines.join('\n')};
   }

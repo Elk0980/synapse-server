@@ -209,6 +209,19 @@ const init = (context) => {
     ${d?.question?`<p><strong>Вопрос:</strong> ${escapeHTML(d.question)}</p>`:''}
     ${d?.result?`<p style="white-space:pre-wrap">${escapeHTML(d.result)}</p>`:''}
     ${d?.model?`<p class="crm-muted">${escapeHTML(d.provider)} · ${escapeHTML(d.model)}${d.usage?.promptTokens!=null?' · Вход: '+d.usage.promptTokens+' токенов':''}${d.usage?.completionTokens!=null?' · Ответ: '+d.usage.completionTokens+' токенов':''}</p>`:''}`;
+  // №194: виден ли локальный обработчик Codex и что ждёт в очереди.
+  const workerIndicator = status => {
+    if (!status) return '';
+    const ago = Number.isFinite(status.minutes_ago) ? ` (последний сигнал ${Number(status.minutes_ago)} мин назад)` : '';
+    const text = status.online ? `Обработчик Codex: в сети${ago}` : status.last_seen_at ? `Обработчик Codex: не в сети${ago}` : 'Обработчик Codex: не в сети (ни разу не выходил на связь)';
+    const queued = (status.queued || []).length, handed = (status.handoffs_24h || []).length;
+    const extra = [queued ? `в очереди: ${queued}, дольше всех ждёт ${Number(Math.max(...status.queued.map(item => item.waiting_minutes)))} мин` : '',
+      handed ? `передано запасному за сутки: ${handed}` : ''].filter(Boolean).join(' · ');
+    return `<p class="tasks-worker-indicator" data-worker-online="${status.online ? 'yes' : 'no'}" role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 0;padding:8px 12px;border:1px solid ${status.online ? '#2e9d5b' : '#d14343'};border-radius:10px;overflow-wrap:anywhere">
+      <span aria-hidden="true" style="flex:none;width:10px;height:10px;border-radius:50%;background:${status.online ? '#2e9d5b' : '#d14343'}"></span><strong>${escapeHTML(text)}</strong>${extra ? `<span class="crm-muted">${escapeHTML(extra)}</span>` : ''}
+      ${status.online ? '' : `<span class="crm-muted" style="flex-basis:100%">Запуск, который ${Number(status.handoff_minutes || 10)} мин никто не забрал, автоматически переходит запасному исполнителю.</span>`}</p>`;
+  };
+  const loadWorkerStatus = () => ownerTool('agent_workers_status').catch(() => null);
   const renderDispatchControls = (container, task, data, version) => {
     container.innerHTML=`<h3>Работа помощников</h3>${dispatchSummary(data)}${reviewMarkup(data.review)}<p class="crm-muted">Простой текст готовит недорогой API. Код, файлы и публикации ожидают подключённого исполнителя. Результат принимает владелец.</p>
       ${['manual','done','cancelled'].includes(data.state)?'':`<p>Исполнитель: ${escapeHTML(data.executor||'Не назначен')}. Попытки: ${data.attempts||0} из 2.</p>`}
@@ -236,9 +249,9 @@ const init = (context) => {
     try {
       loadTaskCompanies();
       if (boardView === 'agents') {
-        const data = await ownerTool('agents_list');
+        const [data, workers] = await Promise.all([ownerTool('agents_list'), loadWorkerStatus()]);
         if (version !== renderVersion || ctx.currentView !== 'tasks') return;
-        content.innerHTML = `${boardTabs()}<h2>Агенты</h2><p class="crm-muted">Состояние сообщают сами агенты. Запись в каталоге не подтверждает запуск.</p>
+        content.innerHTML = `${boardTabs()}<h2>Агенты</h2>${workerIndicator(workers)}<p class="crm-muted">Состояние сообщают сами агенты. Запись в каталоге не подтверждает запуск.</p>
           <button class="plain-button" type="button" data-agents-refresh>Обновить</button><div class="tasks-mcp-grid">${(data.agents || []).map(agent => `<article class="crm-card" style="padding:16px;border:1px solid #d8dde5;border-radius:12px;overflow-wrap:anywhere">
           <h3>${escapeHTML(agent.name)}</h3><p>${escapeHTML(agent.kind)} · ${escapeHTML({work:'Работает',wait:'Ожидает',idle:'Свободен',unknown:'Неизвестно',error:'Ошибка'}[agent.state] || agent.state)}</p>
           <p>${escapeHTML(agent.function || '')}${agent.chat ? '<br>' + escapeHTML(agent.chat) : ''}</p><p>Режим: ${escapeHTML({permanent:'Постоянный',periodic:'Периодический',event:'По событию',once:'Разовый'}[agent.mode] || agent.mode)}</p>
@@ -737,6 +750,12 @@ const init = (context) => {
         const dispatch=await crmQuery(`/coordination/dispatch/${task.id}`,{companyCode:task.companyCode});
         if(version!==renderVersion||ctx.currentView!=='tasks')return;
         renderDispatchControls(content.querySelector('[data-task-dispatch]'),task,dispatch,version);
+        // Индикатор нужен там, где задачу может забрать локальный обработчик.
+        if(String(dispatch?.state||'').startsWith('agent_')||/codex/i.test(task.assigneeName||task.assignee_name||'')){
+          const workers=await loadWorkerStatus();
+          const section=content.querySelector('[data-task-dispatch]');
+          if(workers&&section&&version===renderVersion&&ctx.currentView==='tasks')section.insertAdjacentHTML('afterbegin',workerIndicator(workers));
+        }
       }
       const form = content.querySelector("[data-task-form]");
       form.addEventListener("submit", async (event) => {

@@ -344,3 +344,15 @@ test('ordinary titles keep Latin, paths, long text and numbers in every task vie
     for(const row of rows){await f.controller.openTask(row.id);assert.equal(f.d.querySelector('[data-task-simple] h3').textContent,row.title);}
   }finally{f.close();}
 });
+test('№194: «Агенты» и карточка задачи Codex показывают, в сети ли обработчик',async()=>{
+  const offline={online:false,last_seen_at:'2026-11-08T07:00:00Z',minutes_ago:42,handoff_minutes:10,queued:[{run_id:'r',task_id:1,waiting_minutes:7}],handoffs_24h:[{task_id:1}]};
+  const f=fixture('owner',{view:'agents'});f.intercept('agent_workers_status',()=>offline);try{await settle();f.d.querySelector('[data-board-refresh]').click();await settle();
+    const line=f.d.querySelector('.tb-worker');assert.ok(line);assert.equal(line.dataset.workerOnline,'no');
+    assert.match(line.textContent,/Обработчик Codex: не в сети \(последний сигнал 42 мин назад\)/);assert.match(line.textContent,/В очереди: 1, дольше всех ждёт 7 мин/);
+    assert.match(line.textContent,/Передано запасному за сутки: 1/);assert.match(line.textContent,/10 мин никто не забрал/);
+    await f.controller.openTask(1);assert.match(f.d.querySelector('.tb-sheet .tb-worker').textContent,/не в сети/);}finally{f.close();}
+  const g=fixture('owner',{view:'agents'});g.intercept('agent_workers_status',()=>({online:true,last_seen_at:'x',minutes_ago:0,queued:[],handoffs_24h:[]}));try{await settle();g.d.querySelector('[data-board-refresh]').click();await settle();
+    const line=g.d.querySelector('.tb-worker');assert.equal(line.dataset.workerOnline,'yes');assert.match(line.textContent,/в сети \(последний сигнал 0 мин назад\)/);assert.doesNotMatch(line.textContent,/запасному исполнителю/);}finally{g.close();}
+  const h=fixture('owner',{view:'agents'});h.intercept('agent_workers_status',()=>({online:false,last_seen_at:'',minutes_ago:null,queued:[],handoffs_24h:[]}));try{await settle();h.d.querySelector('[data-board-refresh]').click();await settle();
+    assert.match(h.d.querySelector('.tb-worker').textContent,/ни разу не выходил на связь/);}finally{h.close();}
+});

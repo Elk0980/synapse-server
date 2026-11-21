@@ -35,3 +35,5 @@
 /* №177: время видно и без пары вариантов ответа. */
 .tb-owner-minutes{grid-column:1/-1;font-size:13px;color:var(--tb-muted)}
 .tb-board button,.tb-sheet button,.tb-waiting-links a{word-break:normal;hyphens:none;overflow-wrap:normal}
+/* №194: индикатор обработчика Codex */
+.tb-worker{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:0 0 12px;padding:9px 12px;border:1px solid #d14343;border-radius:10px;overflow-wrap:anywhere;min-width:0}.tb-worker[data-worker-online=yes]{border-color:#2e9d5b}.tb-worker i{flex:none;width:10px;height:10px;border-radius:50%;background:#d14343}.tb-worker[data-worker-online=yes] i{background:#2e9d5b}.tb-worker strong{font-size:13px}.tb-worker small{flex-basis:100%;font-size:12px;color:var(--tb-muted)}

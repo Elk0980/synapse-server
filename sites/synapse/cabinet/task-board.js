@@ -30,7 +30,7 @@
     const prior = controllers.get(container);
     if (prior) { void prior.render(initial); return prior; }
     let alive = true, sequence = 0, detailSequence = 0, focusBeforeSheet, draggedId;
-    let tasks = [], products = [], agents = [], taskSheet, createSheet;
+    let tasks = [], products = [], agents = [], workers = null, taskSheet, createSheet;
     let structuralTaskIds = new Set();
     const overviewCache = new Map();
     const waitingInflight = {
@@ -183,14 +183,15 @@
         page = await tool('tasks_list', {limit:100, offset,overview:true});
         records.push(...(page.tasks || [])); offset = records.length;
       } while (page.tasks?.length && offset < (page.pagination?.total ?? page.total ?? 0));
-      const [productData, agentData] = await Promise.all([tool('products_list',{limit:100,offset:0}), tool('agents_list')]);
+      // №194: индикатор обработчика необязателен — старый сервер без инструмента не ломает доску.
+      const [productData, agentData, workerData] = await Promise.all([tool('products_list',{limit:100,offset:0}), tool('agents_list'), tool('agent_workers_status').catch(() => null)]);
       const allProducts = [...(productData.products || [])];
       while (allProducts.length < (productData.pagination?.total || 0)) {
         const next = await tool('products_list',{limit:100,offset:allProducts.length});
         if (!next.products?.length) break;
         allProducts.push(...next.products);
       }
-      return {tasks:await hydrateOverview(records), products:allProducts, agents:agentData.agents || []};
+      return {tasks:await hydrateOverview(records), products:allProducts, agents:agentData.agents || [], workers:workerData};
     }
     // Background refresh must not replace the search field or quick-task input while someone types.
     const editingField = () => { const field = document.activeElement; return !!field && container.contains(field) && !!field.matches?.('[data-board-search],[data-quick-task] input'); };
@@ -201,7 +202,7 @@
       if (!tasks.length) container.innerHTML = '<p class="tb-loading" role="status">Загрузка задач…</p>';
       try {
         const data = await load(); if (!alive || version !== sequence) return;
-        ({tasks, products, agents} = data);
+        ({tasks, products, agents, workers} = data);
         if (background && editingField()) { deferredRefresh = true; return; }
         draw();
         if (next.taskId) await openTask(Number(next.taskId));
@@ -217,7 +218,7 @@
       const records = filtered().sort(dueSort), visibleProducts = products.filter(item => !state.project || item.company_code === state.project);
       let body;
       if (state.view === 'projects') body = `<div class="tb-projects">${projects().map(summary).join('') || '<p>Проектов пока нет.</p>'}</div>`;
-      else if (state.view === 'agents') body = `<div class="tb-agents">${agents.map(agent => {
+      else if (state.view === 'agents') body = `${workerLine(workers)}<div class="tb-agents">${agents.map(agent => {
         const href = safeUrl(agent.chat_url || agent.chat);
         return `<article class="tb-agent"><strong>${esc(agent.name)}</strong><span>${esc({work:'Работает',wait:'Ожидает',idle:'Свободен',error:'Ошибка',unknown:'Неизвестно'}[agent.state] || agent.state)}</span>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Открыть чат ↗</a>` : ''}${agent.last_event ? `<p>${esc(agent.last_event)}</p>` : ''}${agent.last_event_at ? `<small>${esc(stamp(agent.last_event_at))}</small>` : ''}${agent.no_report ? '<span class="tb-overdue">Нет отчёта</span>' : ''}</article>`;
       }).join('') || '<p>Агенты пока не зарегистрированы.</p>'}</div>`;
@@ -409,6 +410,16 @@
       details.ontoggle=()=>write(`details:${task.id}`,details.open);
       details.addEventListener('click',event=>{ if (event.target.closest('[data-wait-edit-plan]')) details.open=true; });
     }
+    // №194: «обработчик Codex: в сети / не в сети (последний сигнал N мин назад)».
+    function workerLine(status) {
+      if (!status || typeof status !== 'object') return '';
+      const ago = Number.isFinite(status.minutes_ago) ? ` (последний сигнал ${Number(status.minutes_ago)} мин назад)` : '';
+      const text = status.online ? `Обработчик Codex: в сети${ago}` : status.last_seen_at ? `Обработчик Codex: не в сети${ago}` : 'Обработчик Codex: не в сети (ни разу не выходил на связь)';
+      const queued = Array.isArray(status.queued) ? status.queued : [], handed = Array.isArray(status.handoffs_24h) ? status.handoffs_24h.length : 0;
+      const extra = [queued.length ? `В очереди: ${queued.length}, дольше всех ждёт ${Math.max(...queued.map(item => Number(item.waiting_minutes) || 0))} мин` : '',
+        handed ? `Передано запасному за сутки: ${handed}` : '', status.online ? '' : `Запуск, который ${Number(status.handoff_minutes) || 10} мин никто не забрал, уходит запасному исполнителю.`].filter(Boolean);
+      return `<p class="tb-worker" data-worker-online="${status.online ? 'yes' : 'no'}" role="status"><i aria-hidden="true"></i><strong>${esc(text)}</strong>${extra.map(item => `<small>${esc(item)}</small>`).join('')}</p>`;
+    }
     async function openTask(id) {
       taskSheet?.close(); createSheet?.close();
       const current = ++detailSequence;
@@ -433,7 +444,7 @@
         const field = (key, fallback = '') => draft[key] ?? fallback;
         const parentTasks = tasks.filter(item => item.status !== 'cancelled' && item.company_code === task.company_code && item.id !== id && !item.parent_task_id);
         const listComment = comment => `<li data-comment-id="${Number(comment.id)}"><small>${esc(comment.author)} · ${esc(stamp(comment.created_at))}</small><p>${linkedText(comment.text)}</p></li>`;
-        own.body.innerHTML = `<h3 class="tb-task-title">${esc(displayTitle(task))}</h3><p class="tb-task-project">${esc(name(task.company_code))}${task.product_name ? ` · ${esc(task.product_name)}` : ''}</p>${href ? `<a class="tb-chat-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Открыть чат исполнителя ↗</a>` : ''}<p><a href="#tasks/record/${Number(id)}" data-task-record>Расширенная карточка · вложения и работа помощников</a></p><dl class="tb-facts">${coord.result ? `<div><dt>Результат</dt><dd>${linkedText(coord.result)}</dd></div>` : ''}${task.assignee_name ? `<div><dt>Делает</dt><dd>${esc(task.assignee_name)}</dd></div>` : ''}${task.reviewer_name ? `<div><dt>Проверяет</dt><dd>${esc(task.reviewer_name)}</dd></div>` : ''}${task.due_date ? `<div><dt>Срок</dt><dd>${esc(task.due_date)}</dd></div>` : ''}${coord.nextAction ? `<div><dt>Следующий шаг</dt><dd>${linkedText(coord.nextAction)}</dd></div>` : ''}${coord.blocker ? `<div><dt>Мешает</dt><dd>${linkedText(coord.blocker)}</dd></div>` : ''}</dl><div class="tb-status-buttons" aria-label="Статус задачи">${Object.entries(STATUS).map(([status,label]) => `<button type="button" data-detail-status="${status}" aria-pressed="${task.status === status}">${label}</button>`).join('')}</div><p data-detail-result role="status"></p>${task.description ? `<details class="tb-description"><summary>Описание · показать всё</summary><p>${linkedText(task.description)}</p></details>` : ''}<section class="tb-detail-section"><h3>Этапы</h3>${Object.entries(STAGES).map(([code,label]) => {
+        own.body.innerHTML = `<h3 class="tb-task-title">${esc(displayTitle(task))}</h3><p class="tb-task-project">${esc(name(task.company_code))}${task.product_name ? ` · ${esc(task.product_name)}` : ''}</p>${/codex/i.test(task.assignee_name || '') ? workerLine(workers) : ''}${href ? `<a class="tb-chat-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Открыть чат исполнителя ↗</a>` : ''}<p><a href="#tasks/record/${Number(id)}" data-task-record>Расширенная карточка · вложения и работа помощников</a></p><dl class="tb-facts">${coord.result ? `<div><dt>Результат</dt><dd>${linkedText(coord.result)}</dd></div>` : ''}${task.assignee_name ? `<div><dt>Делает</dt><dd>${esc(task.assignee_name)}</dd></div>` : ''}${task.reviewer_name ? `<div><dt>Проверяет</dt><dd>${esc(task.reviewer_name)}</dd></div>` : ''}${task.due_date ? `<div><dt>Срок</dt><dd>${esc(task.due_date)}</dd></div>` : ''}${coord.nextAction ? `<div><dt>Следующий шаг</dt><dd>${linkedText(coord.nextAction)}</dd></div>` : ''}${coord.blocker ? `<div><dt>Мешает</dt><dd>${linkedText(coord.blocker)}</dd></div>` : ''}</dl><div class="tb-status-buttons" aria-label="Статус задачи">${Object.entries(STATUS).map(([status,label]) => `<button type="button" data-detail-status="${status}" aria-pressed="${task.status === status}">${label}</button>`).join('')}</div><p data-detail-result role="status"></p>${task.description ? `<details class="tb-description"><summary>Описание · показать всё</summary><p>${linkedText(task.description)}</p></details>` : ''}<section class="tb-detail-section"><h3>Этапы</h3>${Object.entries(STAGES).map(([code,label]) => {
           const stage = coord.milestones?.[code] || {};
           return `<details class="tb-milestone"><summary><span class="tb-stage" data-state="${esc(stage.state || 'pending')}"></span>${label}${stage.checkedAt ? `<time>${esc(stamp(stage.checkedAt))}</time>` : ''}</summary>${stage.evidence ? `<p>${linkedText(stage.evidence)}</p>` : ''}<form data-stage-form="${code}"><label>Основание<textarea name="evidence" maxlength="4000" required>${esc(stage.evidence || '')}</textarea></label><label>Дата проверки<input name="checked_at" type="datetime-local" required></label><button type="submit">Подтвердить этап</button><p data-stage-result role="status"></p></form></details>`;
         }).join('')}</section>${taskLinks(task).length ? `<section class="tb-detail-section"><h3>Ссылки</h3><ul>${taskLinks(task).map(link => { const url = safeUrl(link.url); return url ? `<li><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(link.label || url)}</a></li>` : ''; }).join('')}</ul></section>` : ''}<section class="tb-detail-section"><h3>Подзадачи <span>${childProgress(task).done}/${childProgress(task).count}</span></h3><ul class="tb-subtasks" data-subtasks>${(task.subtasks || []).filter(isVisibleWork).map(item => `<li><button type="button" data-child-open="${item.id}">${STATUS[item.status] || ''} · №${item.id} ${esc(displayTitle(item))}</button></li>`).join('')}</ul>${(task.subtasks_pagination?.total || 0) > (task.subtasks || []).length ? '<button type="button" data-subtasks-more>Ещё подзадачи</button>' : ''}<button type="button" data-add-subtask>+ Подзадача</button></section><details class="tb-detail-section"${Object.keys(draft).length ? ' open' : ''}><summary>План задачи</summary><form class="tb-form" data-plan-form><label>Исполнитель<input name="executor" maxlength="200" value="${esc(field('executor',task.assignee_name))}"></label><label>Проверяет<input name="reviewer" maxlength="200" value="${esc(field('reviewer',task.reviewer_name))}"></label><label>Срок<input name="due_date" type="date" value="${esc(field('due_date',task.due_date))}"></label><label>Приоритет<select name="priority">${options(PRIORITY,field('priority',task.priority))}</select></label><label class="tb-wide">Следующий шаг<textarea name="next_step" maxlength="4000">${esc(field('next_step',coord.nextAction))}</textarea></label><label class="tb-wide">Мешает<textarea name="blocker" maxlength="4000">${esc(field('blocker',coord.blocker))}</textarea></label><label class="tb-wide">Чат исполнителя<input name="chat_url" type="url" value="${esc(field('chat_url',href))}" placeholder="https://"></label><label>Продукт<select name="product_id">${productOptions(task.company_code,field('product_id',task.product_id))}</select></label><label>Родительская задача<select name="parent_id"><option value="">Без родителя</option>${parentTasks.map(item => `<option value="${item.id}"${String(field('parent_id',task.parent_task_id)) === String(item.id) ? ' selected' : ''}>№${item.id} ${esc(displayTitle(item))}</option>`).join('')}</select></label><button type="submit">Сохранить план</button><p class="tb-wide" data-plan-result role="status"></p></form></details><section class="tb-detail-section"><h3>Ход работы</h3><ol class="tb-comments" data-comments>${(task.comments || []).map(listComment).join('')}</ol>${(task.comments_pagination?.total || 0) > (task.comments || []).length ? '<button type="button" data-comments-more>Все комментарии</button>' : ''}<form class="tb-comment-form" data-comment-form><label>Комментарий от Влада<textarea name="text" maxlength="10000" required>${esc(read(`comment:${id}`)?.text || '')}</textarea></label><button type="submit">Добавить комментарий</button><p data-comment-result role="status"></p></form></section>`;

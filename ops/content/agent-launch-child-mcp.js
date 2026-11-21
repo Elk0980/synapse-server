@@ -4,6 +4,14 @@
 const http = require('node:http');
 const {randomBytes, timingSafeEqual} = require('node:crypto');
 const MAX_BODY = 64 * 1024;
+// Похожие латинские буквы, невидимые символы и разделители не обходят запрет «КОД ПРИНЯТ».
+const LOOKALIKE = {a:'а',b:'в',c:'с',e:'е',h:'н',k:'к',m:'м',n:'п',o:'о',p:'р',r:'г',t:'т',u:'и',x:'х',y:'у','0':'о','3':'з'};
+function claimsAcceptance(value) {
+  if (typeof value !== 'string') return false;
+  const letters = value.normalize('NFKC').toLowerCase().replace(/\p{Cf}/gu,'')
+    .replace(/[a-z03]/g, char => LOOKALIKE[char] || char).replace(/[^\p{L}]/gu,'');
+  return letters.includes('кодпринят');
+}
 const fail = (message = 'Запрос вне разрешённой области запуска') => {
   throw Object.assign(Error(message),{code:'CHILD_SCOPE_REJECTED'});
 };
@@ -73,6 +81,8 @@ async function startChildMcp({upstreamCall, job, agentName}) {
     }
     if (name === 'doc_read' && !documents.has(args.path)) fail();
     if (name === 'session_end' && !sessions.has(args.session_id)) fail();
+    // №194: приёмку кода фиксирует только доверенный обработчик после проверки CI — ни в одном поле.
+    if (Object.values(args).some(claimsAcceptance)) fail('«КОД ПРИНЯТ» оставляет только доверенный обработчик после зелёного CI.');
   }
   async function call(name,args) {
     validate(name,args);
