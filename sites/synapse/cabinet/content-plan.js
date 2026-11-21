@@ -99,6 +99,8 @@
   });
 
   let state = null, epoch = 0;
+  const hasIdeaId = idea => typeof idea.ideaId === 'string' && idea.ideaId.trim().length > 0;
+  const rowOpen = (key, idea) => hasIdeaId(idea) && state[key] === idea.ideaId;
   const sortKey = ctx => `sb-content-plan:${ctx.user?.id || ctx.user?.login || 'user'}:${ctx.companyCode}:sort`;
   /* ⇅ по макету 07.11: дата выхода (по умолчанию), статус — сначала на согласовании, площадка, номер рилса. */
   const SORTS = [{id: 'date', label: 'По дате выхода'}, {id: 'status', label: 'По статусу: сначала на согласовании'},
@@ -128,7 +130,8 @@
       const view = ctx.route?.params?.get?.('view') === 'full' ? 'full' : 'short';
       state = {code, ctx, api, container, mentor, questionnaire, signoffs, settings: settings || null,
         tab: 'plan', qOpen: false, qMode: 'edit', sort: savedSort(ctx), sortOpen: false, feedReset: true, calOpen: state?.code === code ? state.calOpen : false,
-        strip: state?.code === code ? state.strip : null, editDrafts: new Map(), view, open: state?.code === code ? state.open : new Set(), pending: {}, saving: null, suggestion: null};
+        strip: state?.code === code ? state.strip : null, editDrafts: new Map(), view, open: state?.code === code ? state.open : new Set(), pending: {}, saving: null, suggestion: null,
+        menuOpen: null, removeOpen: null, fixOpen: null, linksOpen: null, textsOpen: null, rowBusy: null};
       draw();
     } catch (error) {
       if (mine === epoch && !ctx.signal?.aborted) container.innerHTML = `<p class="cp-error" role="alert">${esc(error.status === 403
@@ -233,8 +236,8 @@
         return `<li class="cp-row${open ? ' cp-open' : ''}${rework ? ' cp-rework' : ''}"data-idea="${esc(idea.ideaId)}" data-date="${esc(idea.date || '')}" data-above="${above(idea) ? 1 : 0}"><div class="cp-top"><span class="cp-date">${esc(day(idea.date))}</span>${status(idea, true)}</div>
           <button type="button" class="cp-line" data-toggle aria-expanded="${open}"><span class="cp-topic">${esc(idea.topic)}</span><span class="cp-chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
           ${open ? full(idea, edit, st, status, archiving) : ''}
-          <div class="cp-acts"><span class="cp-btns">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu aria-haspopup="menu" aria-expanded="${state.menuOpen === idea.ideaId}">Сменить статус ▾</button>` : ''}${archiving ? `<button type="button" class="cp-act cp-remove" data-cp-remove aria-expanded="${state.removeOpen === idea.ideaId}" aria-label="${esc('Убрать «' + idea.topic + '» в архив')}">Убрать</button>` : ''}</span>${nets(idea, platformLabel)}</div>
-          ${owner && state.menuOpen === idea.ideaId ? rowMenu(idea, st) : ''}${archiving && state.removeOpen === idea.ideaId ? removeForm(idea) : ''}</li>`; }).join('')}</ol>`}</section>`;
+          <div class="cp-acts"><span class="cp-btns">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu${hasIdeaId(idea) ? '' : ' disabled'} aria-haspopup="menu" aria-expanded="${rowOpen('menuOpen', idea)}">Сменить статус ▾</button>` : ''}${archiving ? `<button type="button" class="cp-act cp-remove" data-cp-remove${hasIdeaId(idea) ? '' : ' disabled'} aria-expanded="${rowOpen('removeOpen', idea)}" aria-label="${esc('Убрать «' + idea.topic + '» в архив')}">Убрать</button>` : ''}</span>${nets(idea, platformLabel)}</div>
+          ${owner && rowOpen('menuOpen', idea) ? rowMenu(idea, st) : ''}${archiving && rowOpen('removeOpen', idea) ? removeForm(idea) : ''}</li>`; }).join('')}</ol>`}</section>`;
     const keepScroll = container.querySelector('.cp-list')?.scrollTop || 0;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
       ${plan}${approve}
@@ -318,7 +321,7 @@
      «На согласовании» = withdrawn (отмена согласования), «Внести правки» → поле и «Отправить» = rejected с комментарием.
      Согласует владелец; остальным кнопка не показывается, сервер проверяет право сам. */
   function rowMenu(idea, st) {
-    const busy = state.rowBusy === idea.ideaId ? ' disabled' : '', fixing = state.fixOpen === idea.ideaId;
+    const busy = rowOpen('rowBusy', idea) ? ' disabled' : '', fixing = rowOpen('fixOpen', idea);
     const item = (stg, attr, label, current, off) => `<button type="button" role="menuitemradio" class="cp-stg" data-stg="${stg}" ${attr} aria-checked="${current}"${off || busy}>${label}</button>`;
     return `<div class="cp-pop"><div class="cp-menu" role="menu" aria-label="Сменить статус">
         ${item('wait', 'data-cp-decide="withdrawn"', 'На согласовании', st === 'pending', st === 'approved' ? '' : ' disabled')}
@@ -346,7 +349,7 @@
   /* «Убрать» (specs/224): подтверждение прямо под строкой. Идея уходит в «Архив» с причиной; версия плана и решения
      по остальным строкам не меняются. Опубликованное остаётся на площадках — архив убирает строку только из кабинета. */
   function removeForm(idea) {
-    const busy = state.rowBusy === idea.ideaId ? ' disabled' : '', live = ['published', 'unpublished'].includes(serverStage(idea));
+    const busy = rowOpen('rowBusy', idea) ? ' disabled' : '', live = ['published', 'unpublished'].includes(serverStage(idea));
     return `<form class="cp-fix cp-remove-form" data-cp-remove-form role="group" aria-label="Убрать в архив"><b>Убрать «${esc(idea.topic)}» в архив?</b>
       <p class="cp-note">${live ? 'Рилс уже выходил: посты на площадках останутся, архив уберёт строку только из кабинета. ' : ''}Строка уйдёт из плана, согласования и «Съёмки». Сценарий и подписи сохранятся — вернуть можно во вкладке «Архив». Ролики и публикации не меняются.</p>
       <label class="cp-note">Причина (необязательно)<input type="text" name="reason" maxlength="500" placeholder="Например: дубль темы"></label>
@@ -358,7 +361,7 @@
       <p class="cp-note">Убранные строки плана. Сценарий, подписи и история сохранены. «Вернуть» ставит строку обратно в план${list.some((i) => !i.inPlan) ? '; строки, убранные до пересохранения плана, вернутся новой версией плана и согласуются заново' : ''}.</p>
       ${list.length ? `<ol class="cp-archive-list">${list.map((idea) => `<li class="cp-arow" data-archived-idea="${esc(idea.ideaId)}"><div class="cp-arow-main"><span class="cp-date">${esc(day(idea.date))}</span>
         <b class="cp-arow-topic">${esc(idea.topic || 'Без темы')}</b><span class="cp-note">Убрано ${esc(when(idea.archive?.archivedAt))}${idea.archive?.archivedByName ? ' · ' + esc(idea.archive.archivedByName) : ''}${idea.archive?.reason ? ' · Причина: ' + esc(idea.archive.reason) : ''}</span></div>
-        ${edit ? `<button type="button" class="cp-act" data-cp-restore="${esc(idea.ideaId)}"${state.rowBusy === idea.ideaId ? ' disabled' : ''}>Вернуть</button>` : ''}</li>`).join('')}</ol>`
+        ${edit ? `<button type="button" class="cp-act" data-cp-restore="${esc(idea.ideaId)}"${rowOpen('rowBusy', idea) ? ' disabled' : ''}>Вернуть</button>` : ''}</li>`).join('')}</ol>`
         : '<p class="cp-note">В архиве пусто.</p>'}</section>`;
   }
   async function archiveIdea(ideaId, reason) {
@@ -379,7 +382,7 @@
   function linksBlock(idea, edit) {
     const all = state.mentor.ideaLinks;
     if (!all || typeof all !== 'object') return '';
-    const own = all[idea.ideaId] || {}, editing = edit && state.linksOpen === idea.ideaId, busy = state.rowBusy === idea.ideaId ? ' disabled' : '';
+    const own = all[idea.ideaId] || {}, editing = edit && rowOpen('linksOpen', idea), busy = rowOpen('rowBusy', idea) ? ' disabled' : '';
     const link = (value, icon, label) => { const href = folderHref(value);
       return href ? `<a class="cp-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(href)}">${icon} ${label}</a>`
         : `<span class="cp-link cp-link--none">${icon} ${label}<small> · не указано</small></span>`; };
@@ -417,7 +420,7 @@
     const ids = Object.keys(idea.variants || {}).sort((a, b) => rank(a) - rank(b));
     if (!ids.length) return '';
     const stateOf = (id) => (mentor.variants || []).find((v) => v.ideaId === idea.ideaId && v.platform === id) || null;
-    const editing = edit && state.textsOpen === idea.ideaId, busy = state.rowBusy === idea.ideaId ? ' disabled' : '';
+    const editing = edit && rowOpen('textsOpen', idea), busy = rowOpen('rowBusy', idea) ? ' disabled' : '';
     const empty = ids.filter((id) => !idea.variants[id]?.excluded && !String(idea.variants[id]?.text || '').trim()).length;
     const item = (id) => { const v = idea.variants[id] || {}, body = String(v.text || ''), st = v.excluded ? 'excluded' : stateOf(id)?.status || (body.trim() ? 'pending' : 'empty');
       const [abbr, color] = NET[id] || [String(id).slice(0, 3).toUpperCase(), '#667085'], max = limits[id];

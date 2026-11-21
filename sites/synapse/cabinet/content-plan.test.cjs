@@ -62,6 +62,39 @@ function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stag
 }
 // Объекты из окна jsdom приводятся к обычным, чтобы deepEqual сравнивал содержимое.
 const plain = (v) => v === undefined ? v : JSON.parse(JSON.stringify(v));
+
+test('№289: отсутствующий или пустой ideaId не раскрывает формы и не отправляет решение/архив', async () => {
+  const plan = [undefined, null, '', '   '].map((ideaId, n) => idea(n + 1, { ideaId }));
+  const a = api({ plan: [...plan, idea(5), idea(6)], mentorExtra: { archivedIdeas: [] } });
+  await a.mount();
+  const closed = () => {
+    assert.equal(a.root.querySelectorAll('.cp-pop, [data-cp-fix-form], [data-cp-remove-form]').length, 0);
+    assert.equal(a.root.querySelectorAll('[aria-expanded="true"]').length, 0);
+  };
+  closed();
+  for (const row of [...a.root.querySelectorAll('.cp-row')].slice(0, 4)) {
+    for (const button of row.querySelectorAll('[data-cp-menu], [data-cp-remove]')) {
+      assert.equal(button.disabled, true);
+      button.click();
+    }
+  }
+  closed();
+  assert.equal(a.calls.some(c => c.method !== 'GET'), false);
+  const click = (id, selector) => a.root.querySelector(`[data-idea="${id}"] ${selector}`).click();
+  click('s-5', '[data-cp-menu]');
+  assert.equal(a.root.querySelectorAll('.cp-pop').length, 1);
+  click('s-6', '[data-cp-menu]');
+  assert.equal(a.root.querySelectorAll('.cp-pop').length, 1);
+  assert.ok(a.root.querySelector('[data-idea="s-6"] .cp-pop'));
+  click('s-6', '[data-cp-fix]');
+  assert.equal(a.root.querySelectorAll('[data-cp-fix-form]').length, 1);
+  click('s-5', '[data-cp-remove]');
+  assert.equal(a.root.querySelectorAll('.cp-pop').length, 0);
+  assert.equal(a.root.querySelectorAll('[data-cp-remove-form]').length, 1);
+  await a.mount();
+  closed();
+  a.def().unmount(); a.window.close();
+});
 // №186: анкета открывается окном поверх (⚙ или «+ Новый»), на вкладке её нет.
 const openQ = (a, sel = '[data-cp="settings-plan"]') => a.root.querySelector(sel).click();
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
