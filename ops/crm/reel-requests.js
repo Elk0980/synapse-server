@@ -184,6 +184,8 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
       const id=Number(db.prepare(`INSERT INTO reel_requests(company_id,reel_id,kind,text,version,edit_id,task_id,client_request_id,author_id,author_name,created_at,updated_at,notes)
         VALUES(?,?,'redo',?,?,?,?,?,?,?,?,?,?)`).run(owner.id,row.id,comment,version.version,made.edit.id,made.edit.taskId,clientRequestId,author.id,author.name,at,at,JSON.stringify(notes)).lastInsertRowid);
       db.prepare('INSERT INTO reel_request_events(request_id,company_id,status,text,actor,created_at) VALUES(?,?,?,?,?,?)').run(id,owner.id,'accepted','',author.name,at);
+      if(notes.length&&made.edit.taskId&&hasTasks())db.prepare('UPDATE tasks SET description=description||? WHERE id=? AND company_code=? COLLATE NOCASE')
+        .run(`\nПожелания к монтажу, версия v${version.version}:\n${notesText(notes)}\nПолные notes: GET /internal/reel-materials/requests?companyCode=${owner.code}; связь по editId=${made.edit.id}.`,made.edit.taskId,owner.code);
       return requestDto(db.prepare('SELECT * FROM reel_requests WHERE id=?').get(id));
     });
     return {...made,request,reel:core.full(owner,row.id)};
@@ -277,6 +279,8 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
         const whole=body.startMs===undefined&&body.endMs===undefined;
         const startMs=whole?0:body.startMs,endMs=whole?(version.duration_ms||maxMs):body.endMs;
         const made=core.requestEdit(owner.code,row.id,{clientRequestId:'rq:'+clientRequestId,baseVersion:version.version,kind:'request',comment:whole?`Весь ролик. ${message}`:message,startMs,endMs},actor);
+        if(notes.length&&made.edit.taskId&&hasTasks())db.prepare('UPDATE tasks SET description=description||? WHERE id=? AND company_code=? COLLATE NOCASE')
+          .run(`\nПожелания к монтажу, версия v${version.version}:\n${notesText(notes)}\nПолные notes: GET /internal/reel-materials/requests?companyCode=${owner.code}; связь по editId=${made.edit.id}.`,made.edit.taskId,owner.code);
         return result(insert({version:version.version,startMs:whole?null:startMs,endMs:whole?null:endMs,editId:made.edit.id,taskId:made.edit.taskId}));
       }
       if(db.prepare("SELECT 1 FROM reel_requests WHERE company_id=? AND reel_id=? AND kind='publish' AND version=? AND status NOT IN ('published','rejected') LIMIT 1").get(owner.id,row.id,version.version))
