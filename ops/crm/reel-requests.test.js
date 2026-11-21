@@ -26,6 +26,68 @@ const editor={userId:7,userName:'Редактор',role:'editor'};
 const other={userId:8,userName:'Другой',role:'editor'};
 const tasks=f=>f.db.prepare('SELECT * FROM tasks ORDER BY id').all();
 
+test('№290: пожелания и фразы создают одну просьбу/правку/задачу, DTO агента и старые записи сохраняются',()=>{
+  const f=fixture(),id=f.reel.id;
+  const segments=[{startMs:0,endMs:5000,label:'Первая'},{startMs:5000,endMs:10000,label:'Вторая'}];
+  f.materials.setSegments('alpha',id,1,{segments});
+  const toggles=segments.map(s=>({startMs:s.startMs,endMs:s.endMs,enabled:true,sound:true}));
+  const notes=[{type:'font',option:'larger'},{type:'insert',option:'overlay',from:1,to:2,text:'Вид с балкона, https://example.test/folder'}];
+  const body={clientRequestId:'w1',baseVersion:1,segments:toggles,notes};
+  const made=f.materials.liveEdit('alpha',id,body,editor);
+  assert.equal(made.reel.requests.length,1);assert.equal(made.reel.edits.length,1);assert.equal(tasks(f).length,1);
+  assert.deepEqual(made.request.notes,notes);assert.equal(made.request.version,1);assert.equal(made.request.editId,made.edit.id);
+  assert.deepEqual(f.materials.requestQueue('alpha').requests[0].notes,notes);
+  assert.match(tasks(f)[0].description,/голос остаётся на фоне/);
+  assert.equal(f.materials.liveEdit('alpha',id,body,editor).duplicate,true);
+  assert.equal(f.materials.get('alpha',id).requests.length,1);assert.equal(tasks(f).length,1);
+  // Потеря связи между двумя сохранениями: повтор восстанавливает просьбу без второй правки/задачи.
+  f.db.prepare('DELETE FROM reel_request_events WHERE request_id=?').run(made.request.id);
+  f.db.prepare('DELETE FROM reel_requests WHERE id=?').run(made.request.id);
+  assert.equal(f.materials.liveEdit('alpha',id,body,editor).edit.id,made.edit.id);
+  assert.equal(f.materials.get('alpha',id).requests.length,1);assert.equal(tasks(f).length,1);
+  assert.deepEqual(createReelMaterials(f.db).get('alpha',id).requests[0].notes,notes,'повторный запуск не переписывает пожелания');
+  f.materials.claim('alpha',made.edit.id);
+  assert.equal(f.materials.get('alpha',id).requests[0].status,'in_progress');
+  f.materials.addVersion('alpha',id,{mediaUrl:asset('alpha','b'),durationMs:10000,editId:made.edit.id});
+  assert.equal(f.materials.get('alpha',id).requests[0].status,'ready');
+  const request=f.materials.createRequest('alpha',id,{clientRequestId:'w2',kind:'redo',version:2,notes:[{type:'music',option:'quieter'}]},editor);
+  assert.deepEqual(request.request.notes,[{type:'music',option:'quieter'}]);
+  const old=f.materials.createRequest('alpha',id,{clientRequestId:'old',kind:'message',text:'Прежняя просьба'},editor);
+  assert.deepEqual(old.request.notes,[]);
+  f.db.close();
+});
+
+test('№290: пустая отправка, неизвестные поля/варианты, длины, диапазоны и чужая компания отклоняются без записи',()=>{
+  const f=fixture(),id=f.reel.id;
+  const segments=[{startMs:0,endMs:5000},{startMs:5000,endMs:10000}];f.materials.setSegments('alpha',id,1,{segments});
+  const body={clientRequestId:'bad-wishes',baseVersion:1,segments:segments.map(s=>({...s,enabled:true,sound:true}))};
+  const valid={type:'font',option:'larger'};
+  const bad=[undefined,[],null,{},Array(21).fill(valid),[{...valid,type:'__proto__'}],[{...valid,option:'bad'}],[{...valid,extra:1}],
+    [{...valid,from:0}],[{...valid,from:3}],[{...valid,from:2,to:1}],[{...valid,to:2}],[{...valid,from:'1'}],[{...valid,text:'x'.repeat(501)}],
+    [{type:'insert',option:'overlay'}],[{type:'other',option:'text',text:' '}],Array(11).fill({...valid,text:'x'.repeat(500)})];
+  for(const notes of bad)assert.throws(()=>f.materials.liveEdit('alpha',id,{...body,notes},editor),{status:400},JSON.stringify(notes));
+  assert.throws(()=>f.materials.liveEdit('beta',id,{...body,notes:[valid]},editor),{status:404});
+  assert.equal(tasks(f).length,0);assert.equal(f.materials.get('alpha',id).requests.length,0);
+  assert.throws(()=>f.materials.createRequest('alpha',id,{clientRequestId:'bad-other',kind:'message',text:'x',notes:[valid]},editor),{status:400});
+  f.db.close();
+});
+
+test('№290: прежняя таблица без notes мигрирует без потери текста/решений/событий; старый live ключ до 80 знаков',()=>{
+  const f=fixture(),id=f.reel.id;
+  const old=f.materials.createRequest('alpha',id,{clientRequestId:'legacy-message',kind:'message',text:'Сохранённый текст'},editor);
+  f.materials.update('alpha',id,{caption:'Сохранённая подпись',decision:'take'},editor);
+  f.db.exec('ALTER TABLE reel_requests DROP COLUMN notes');
+  const before=f.db.prepare('SELECT * FROM reel_request_events').all();
+  const materials=createReelMaterials(f.db),current=materials.get('alpha',id);
+  assert.equal(current.caption,'Сохранённая подпись');assert.equal(current.decision,'take');assert.equal(current.requests[0].id,old.request.id);
+  assert.equal(current.requests[0].text,'Сохранённый текст');assert.deepEqual(current.requests[0].notes,[]);
+  assert.deepEqual(f.db.prepare('SELECT * FROM reel_request_events').all(),before);
+  const segments=[{startMs:0,endMs:10000}];materials.setSegments('alpha',id,1,{segments});
+  const body={clientRequestId:'l'.repeat(80),baseVersion:1,segments:[{...segments[0],enabled:true,sound:false}]};
+  assert.equal(materials.liveEdit('alpha',id,body,editor).duplicate,false);assert.equal(materials.liveEdit('alpha',id,body,editor).duplicate,true);
+  f.db.close();
+});
+
 test('Подпись и отметка: сохраняются, история хранит кто, когда и что; чужая компания не видит ролик',()=>{
   const f=fixture();
   assert.equal(f.reel.caption,'');assert.equal(f.reel.decision,'');assert.deepEqual(f.reel.history,[]);assert.deepEqual(f.reel.requests,[]);

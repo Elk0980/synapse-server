@@ -57,6 +57,24 @@ const AT_EDITOR = new Set(["shot", "editing"]);
 const groupOf = stage => ABOVE.has(stage) ? "above" : CUT.has(stage) || AT_EDITOR.has(stage) ? "now" : "ahead";
 const STAGE_RANK = {edit_review: 0, edit_rework: 0, ready: 0, scheduled: 0, publish_error: 0, shot: 1, editing: 2, planned: 3, script_review: 3, script_rework: 3, draft: 3, published: 4, unpublished: 4};
 const SORTS = [{id: "date", label: "Дата выхода"}, {id: "stage", label: "Этап: смонтировано → отснято → в монтаже → без материалов"}, {id: "uploads", label: "Новые загрузки сверху"}, {id: "number", label: "Номер"}];
+const WISHES = [
+  {type:"font",label:"Шрифт и титры",options:[["larger","Крупнее"],["smaller","Мельче"],["style","Другой стиль"],["none","Убрать титры"]]},
+  {type:"transition",label:"Переход",options:[["cut","Резкая склейка"],["smooth","Плавно"],["zoom","Приближение"]]},
+  {type:"volume",label:"Громкость",options:[["louder","Громче"],["quieter","Тише"]]},
+  {type:"music",label:"Музыка на фон",options:[["add","Добавить"],["remove","Убрать"],["quieter","Тише"],["louder","Громче"]]},
+  {type:"insert",label:"Врезка",options:[["overlay","Показать поверх видео"]]},
+  {type:"other",label:"Другое",options:[["text","Своё пожелание"]]}
+];
+const phraseSource = v => Array.isArray(v?.segments) && v.segments.length > 0 && !v.editId;
+const montageChip = (reel, stage, v = reel?.currentVersion) => {
+  const pending = reel?.openEdits || reel?.requests?.some(r => r.kind === "redo" && ["accepted","in_progress"].includes(r.status));
+  return pending || phraseSource(v) ? `<span class="cfk-chip" data-stage="${pending ? "editing" : "shot"}">${pending ? "У монтажёра" : "Выберите фразы"}</span>` : chip(stage);
+};
+const wishLine = note => {
+  const def = WISHES.find(w => w.type === note.type), option = def?.options.find(o => o[0] === note.option)?.[1] || note.option;
+  const where = note.from ? `${note.to && note.to !== note.from ? "Фразы " + note.from + "–" + note.to : "Фраза " + note.from}: ` : "Весь ролик: ";
+  return `${where}${def?.label || note.type} — ${option}${note.text ? ": " + note.text : ""}${note.type === "insert" ? ". Голос остаётся на фоне" : ""}`;
+};
 
 const WD = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const dayOf = value => {const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;};
@@ -161,7 +179,7 @@ function create(el, ctx) {
   const sameCompany = data => data && (!data.companyCode || String(data.companyCode).toLowerCase() === String(ctx.companyCode).toLowerCase());
   const state = {reels: [], mentor: null, posts: [], shooting: {}, settings: null, info: null, items: [], sort: "date", open: null, item: null,
     platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null,
-    live: null, ask: null};
+    live: null, ask: null, reviewDrafts: new Map()};
   const api = {
     list: () => ctx.api.get("crm/autoposting/reels"),
     get: id => ctx.api.get("crm/autoposting/reels/" + id),
@@ -193,7 +211,7 @@ function create(el, ctx) {
     ${canEdit ? `<div class="mt-modal" data-upload-modal hidden><form class="mt-modal__box mt-upload" data-upload hidden role="dialog" aria-modal="true" aria-labelledby="mt-upload-title">
       <header class="mt-modal__head"><h2 id="mt-upload-title">Загрузить ролик</h2><button type="button" class="mt-x" data-upload-cancel aria-label="Закрыть">✕</button></header>
       <label>Файл<input type="file" name="file" accept="video/mp4,video/webm,.mp4,.webm" required></label>
-      <p class="muted mt-hint">Готовый смонтированный MP4 или WebM до 60 МБ. На площадки ничего не уходит.</p>
+      <p class="muted mt-hint">MP4 или WebM до 60 МБ. Если исходник больше — положите его в папку и укажите ссылку в «Контент-плане → Исходники». На площадки ничего не уходит.</p>
       <label>К какому рилсу из плана?<select name="idea" data-upload-idea></select></label>
       <p class="muted mt-hint" data-upload-link-note></p>
       <label>Название<input type="text" name="title" maxlength="200" required placeholder="Например: №2 «Первый визит»"></label>
@@ -371,7 +389,7 @@ function create(el, ctx) {
     const when = item.date ? `${esc(dateShort(item.date))}${version}` : `${item.number ? "дата — по плану" : "без даты"}${version}`;
     const note = item.retired ? "" : AT_EDITOR.has(item.stage) ? "Идёт монтаж" : item.group === "ahead" ? "Материалы не загружены" : "";
     const title = numTitle(item.number, item.title);
-    const stageChip = item.retired ? `<span class="cfk-chip mt-chip-retired" data-stage="unpublished">${item.retired === "cancelled" ? "Публикация отменена" : "Заменён в плане"}</span>` : chip(item.stage);
+    const stageChip = item.retired ? `<span class="cfk-chip mt-chip-retired" data-stage="unpublished">${item.retired === "cancelled" ? "Публикация отменена" : "Заменён в плане"}</span>` : montageChip(item.reel, item.stage);
     const body = `${thumb}<span class="mt-card__body"><strong class="mt-card__title">${esc(title)}</strong><span class="mt-card__date">${when}</span>
       <span class="mt-card__foot"><span class="mt-card__st">${stageChip}${note ? `<span class="mt-card__note">${note}</span>` : ""}${reviewNote(item.reel)}</span>
       <span class="mt-card__pf">${item.platforms.map(id => esc(platformOf(id).short)).join(" · ")}</span></span></span>`;
@@ -419,9 +437,14 @@ function create(el, ctx) {
     }
   }
   function close() {
-    state.open = null;state.item = null;state.live = null;state.ask = null;$("[data-detail]").hidden = true;modal("detail", false);
+    const key=state.open?.key,scroll=$("[data-grid]").scrollTop;
+    const review=reviewDraft();if(review&&key)state.reviewDrafts.set(key,review);
+    if (state.open?.id) syncReelSummary(state.open);
+    storeLive();closeWish();state.open = null;state.item = null;state.live = null;state.ask = null;$("[data-detail]").hidden = true;modal("detail", false);
+    build();renderGrid();$("[data-grid]").scrollTop=scroll;
     const opener = $("[data-upload-open]");if (opener) opener.hidden = false;
-    if (returnFocus?.isConnected) returnFocus.focus?.({preventScroll: true});
+    const focus=returnFocus?.isConnected?returnFocus:[...el.querySelectorAll('[data-open]')].find(n=>n.dataset.open===key);
+    focus?.focus?.({preventScroll: true});
   }
   const currentVersion = () => (state.open.versions || []).find(v => v.version === state.version) || state.open.currentVersion;
   /* Ссылка на страницу сообщества/канала из ссылок компании (CRM socials) — когда ссылку на сам пост получить нельзя. */
@@ -512,10 +535,12 @@ function create(el, ctx) {
     const switcher = platformList(["instagram", "tiktok", "youtube_shorts", "vk", "telegram", ...targets]);
     const title = numTitle(item?.number, item?.title || reel.title);
     const published = stage === "published";
-    const unsaved = reviewDraft();
+    const review=reviewDraft(),form=el.querySelector('[data-review]');
+    if(review)state.reviewDrafts.set(reel.key,review);
+    else if(form?.dataset.reel===String(reel.id))state.reviewDrafts.delete(reel.key);
+    const unsaved=state.reviewDrafts.get(reel.key)||null;
     node.innerHTML = `<header class="mt-modal__head"><h2 id="mt-detail-title" tabindex="-1" data-title>${esc(title)}</h2><button type="button" class="mt-x" data-back aria-label="Закрыть">✕</button></header>
-      <p class="mt-detail__meta"><span class="muted">${esc(item?.date ? dateShort(item.date) : dateRu(reel.releaseDate))} · версия v${esc(version?.version ?? 1)}${version?.note ? " · " + esc(version.note) : ""}</span> ${chip(stage)}</p>
-      ${canReport && reel.id ? `<div class="mt-problem-card"><button type="button" class="plain-button" data-problem-card>Сообщить о проблеме</button><p role="status" data-problem-result>${(reel.problemReports || []).map(r => `Отправлено, задача №${esc(r.taskId)}`).join(" · ")}</p></div>` : ""}
+      <p class="mt-detail__meta"><span class="muted">${esc(item?.date ? dateShort(item.date) : dateRu(reel.releaseDate))} · версия v${esc(version?.version ?? 1)}${version?.note ? " · " + esc(version.note) : ""}</span> ${montageChip(reel, stage, version)}</p>
       <div class="mt-layout">
         <div class="mt-phone">
           <fieldset class="mt-platforms" aria-label="Маска площадки">${switcher.map(id => `<label title="${esc(platformOf(id).label)}"><input type="radio" name="mt-platform" value="${id}"${id === state.platform ? " checked" : ""}><span>${esc(platformOf(id).short)}</span></label>`).join("")}</fieldset>
@@ -524,12 +549,13 @@ function create(el, ctx) {
           <p class="muted mt-note">Тёмные зоны — где лягут шапка, подпись и кнопки ${esc(platformOf(state.platform).label)}. Зоны ориентировочные.</p>
         </div>
         <div class="mt-side">
+          ${versions.length > 1 ? `<label class="mt-version">Версия<select data-version>${versions.map(v => `<option value="${v.version}"${v.version === state.version ? " selected" : ""}>v${v.version}${v.editId ? " · правка №" + esc(v.editId) : ""}</option>`).join("")}</select></label>` : ""}
           ${liveHtml(reel, version)}
+          ${phraseSource(version) ? "" : `<details class="mt-publication" data-publication><summary>Публикация и решение</summary>
           <h3>Публикация по площадкам</h3>
           <ul class="mt-pubs" data-pubs>${targets.map(id => publicationRow(id, posts, item?.publications)).join("") || `<li class="muted">Площадки не выбраны</li>`}</ul>
           <h3 data-caption-head>Текст публикации · ${esc(platformOf(state.platform).short)}</h3>
           <div data-caption-box>${captionHtml(posts, item?.ideaId || reel.ideaId)}</div>
-          ${versions.length > 1 ? `<label class="mt-version">Версия<select data-version>${versions.map(v => `<option value="${v.version}"${v.version === state.version ? " selected" : ""}>v${v.version}${v.editId ? " · правка №" + esc(v.editId) : ""}</option>`).join("")}</select></label>` : ""}
           ${folderLinks(item?.ideaId)}
           <div class="mt-actions">
             ${media ? `<a class="plain-button" href="${esc(media)}" download="${esc(reel.title)} v${esc(version?.version ?? 1)}.mp4" data-download>Скачать</a>` : ""}
@@ -542,8 +568,11 @@ function create(el, ctx) {
           ${reviewHtml(reel)}${askHtml(reel)}${historyHtml(reel)}
           ${(reel.archivedVersionList || []).length ? `<h3>Убранные версии</h3><ul class="mt-archived-versions">${reel.archivedVersionList.map(v => `<li><span>v${esc(v.version)}${v.archive?.reason ? " · " + esc(v.archive.reason) : ""}</span>${canEdit ? `<button type="button" class="plain-button" data-restore-version="${esc(v.version)}">Вернуть</button>` : ""}</li>`).join("")}</ul>` : ""}
           ${canEdit && reel.id && !published ? `<fieldset class="mt-targets" data-targets><legend>Площадки публикации</legend>${PLATFORMS.map(p => `<label><input type="checkbox" value="${p.id}"${(targets.length ? targets : [state.platform]).includes(p.id) ? " checked" : ""}> ${esc(p.label)}</label>`).join("")}</fieldset>` : ""}
-          <p class="mt-status" role="status" data-detail-status></p>
           ${(reel.edits || []).length ? `<h3>Правки</h3><ul class="mt-edits">${reel.edits.map(e => `<li><strong>№${esc(e.id)}</strong> к v${esc(e.baseVersion)} · ${esc(STATE[e.status] || e.status)}${e.resultVersion ? " → v" + esc(e.resultVersion) : ""}<br><span class="muted">${esc(e.kind === "request" ? e.comment : "список правок монтажа" + (e.comment ? ": " + e.comment : ""))}</span></li>`).join("")}</ul>` : ""}
+          </details>`}
+          <p class="mt-status" role="status" data-detail-status></p>
+          ${requestsHtml(reel)}
+          ${canReport && reel.id ? `<div class="mt-problem-card"><button type="button" class="plain-button" data-problem-card>Сообщить о проблеме</button><p role="status" data-problem-result>${(reel.problemReports || []).map(r => `Отправлено, задача №${esc(r.taskId)}`).join(" · ")}</p></div>` : ""}
         </div></div>`;
     node.querySelector("[data-title]").focus({preventScroll: true});
     restoreReview(unsaved);
@@ -624,6 +653,9 @@ function create(el, ctx) {
   }
   const setText = (selector, text) => {const target = el.querySelector(selector);if (target) target.textContent = text || "";};
   const keepPost = reel => ({...reel, lastPostId: state.open?.lastPostId || null});
+  function syncReelSummary(reel) {
+    const summary=state.reels.find(r=>r.id===reel.id);if (summary) Object.assign(summary,reel);
+  }
   function reviewHtml(reel) {
     if (!fresh(reel)) return "";
     const current = DECISIONS.find(([id]) => id === reel.decision);
@@ -688,18 +720,22 @@ function create(el, ctx) {
       <p class="mt-request__head"><strong>${esc(label)}</strong><span class="mt-request__status">${esc(REQUEST_STATUS[request.status] || request.statusLabel || request.status)}</span></p>
       <p class="muted mt-request__meta">${esc(timeIn(request.createdAt, state.timeZone))}${request.authorName ? " · " + esc(request.authorName) : ""}${request.version ? " · версия v" + esc(request.version) : ""}${where}${date}</p>
       ${request.text ? `<p class="mt-request__text">${esc(request.text)}</p>` : ""}
+      ${(request.notes || []).length ? `<ul class="mt-request-notes">${request.notes.map(n => `<li>${esc(wishLine(n))}</li>`).join("")}</ul>` : ""}
       ${request.reply ? `<p class="mt-request__reply" data-request-reply><b>Ответ:</b> ${esc(request.reply)}</p>` : `<p class="muted mt-request__reply">Ответа пока нет.</p>`}
       ${canEdit && request.status === "accepted" ? `<button type="button" class="plain-button" data-request-cancel="${esc(request.id)}">Отменить просьбу</button>` : ""}</li>`;
   }
   function askHtml(reel) {
     if (!fresh(reel)) return "";
-    const list = [...reel.requests].reverse();
     return `<section class="mt-ask" data-ask-box><h3>Попросить агента</h3>
       ${canEdit ? `<div class="mt-actions mt-ask__buttons">${ASKS.map(item => `<button type="button" class="plain-button" data-ask="${item.kind}">${esc(item.label)}</button>`).join("")}</div>
         <form class="mt-ask__form" data-ask-form hidden novalidate></form>` : ""}
-      <p class="mt-status" role="status" data-ask-status></p>
-      <div class="mt-requests__head"><h3>Просьбы по этому ролику</h3><button type="button" class="plain-button" data-requests-refresh>Обновить</button></div>
-      ${list.length ? `<ul class="mt-requests" data-requests>${list.map(requestHtml).join("")}</ul>` : `<p class="muted" data-requests-empty>Просьб пока нет.</p>`}</section>`;
+      <p class="mt-status" role="status" data-ask-status></p></section>`;
+  }
+  function requestsHtml(reel) {
+    if (!fresh(reel)) return "";
+    const list = [...reel.requests].reverse();
+    return `<section class="mt-requests-box"><div class="mt-requests__head"><h3>Просьбы по этому ролику</h3><button type="button" class="plain-button" data-requests-refresh>Обновить</button></div>
+      ${list.length ? `<ul class="mt-requests" data-requests>${list.map(requestHtml).join("")}</ul>` : `<p class="muted" data-requests-empty>Просьб пока нет.</p>`}<p class="mt-status" role="status" data-requests-status></p></section>`;
   }
   function openAsk(kind) {
     const form = el.querySelector("[data-ask-form]"), def = ASKS.find(item => item.kind === kind);if (!form || !def) return;
@@ -749,8 +785,9 @@ function create(el, ctx) {
   }
   async function reloadOpen(message) {
     if (state.busy || !state.open?.id) return;state.busy = true;
-    try {const reel = await api.get(state.open.id);if (ctx.signal.aborted || !state.open) return;state.open = keepPost(reel);renderDetail();setText("[data-ask-status]", message || "");}
-    catch (error) {setText("[data-ask-status]", "Не удалось обновить: " + (error?.message || "ошибка сети"));}
+    const key=state.open.key,latest=state.version===state.open.currentVersion?.version;
+    try {const reel = await api.get(state.open.id);if (ctx.signal.aborted || state.open?.key!==key) return;state.open = keepPost(reel);if(latest)state.version=reel.currentVersion?.version??state.version;syncReelSummary(reel);state.busy=false;renderDetail();setText("[data-ask-status]", message || "");setText("[data-requests-status]", message || "");}
+    catch (error) {setText("[data-requests-status]", "Не удалось обновить: " + (error?.message || "ошибка сети"));}
     finally {state.busy = false;}
   }
   async function cancelAsk(id) {
@@ -760,35 +797,70 @@ function create(el, ctx) {
     finally {state.busy = false;}
   }
   /* Переключатели «живого монтажа» живут, пока открыта эта версия ролика. Границы отрезков — только с сервера. */
+  const montageDraftKey = key => `mt-wishes:${ctx.companyCode}:${ctx.user?.id || ctx.user?.login || "session"}:${key}`;
+  function storeLive() {
+    const live = state.live;if (!live) return;
+    try {sessionStorage.setItem(montageDraftKey(live.key), JSON.stringify({toggles:live.toggles,notes:live.notes,pending:live.pending,id:live.id,wishDraft:live.wishDraft}));} catch (_) {}
+  }
+  const liveChanged = live => Boolean(live && (live.notes.length || liveOps.changed(live.toggles, live.segments)));
   function liveFor(reel, version) {
     const segments = Array.isArray(version?.segments) ? version.segments.filter(item => Number.isFinite(item?.startMs) && Number.isFinite(item?.endMs)) : [];
-    const key = `${reel.key}:${version?.version}:${segments.length}`;
-    if (!state.live || state.live.key !== key) state.live = {key, segments, toggles: liveOps.initial(segments), muted: false, id: null};
+    const key = `${reel.key}:${version?.version}:${segments.map(s => `${s.startMs}-${s.endMs}`).join(",")}`;
+    if (!state.live || state.live.key !== key) {
+      let draft;try {draft = JSON.parse(sessionStorage.getItem(montageDraftKey(key)) || "null");} catch (_) {}
+      const toggles = Array.isArray(draft?.toggles) && draft.toggles.length === segments.length && draft.toggles.every(t => typeof t.enabled === "boolean" && typeof t.sound === "boolean") ? draft.toggles : liveOps.initial(segments);
+      state.live = {key,segments,toggles,notes:Array.isArray(draft?.notes) ? draft.notes.slice(0,20) : [],pending:draft?.pending || null,muted:false,id:draft?.id || null,wishDraft:draft?.wishDraft || null};
+    }
+    if (state.live.pending && reel.requests?.some(r=>r.clientRequestId===state.live.pending.clientRequestId)) {
+      state.live.toggles=liveOps.initial(segments);state.live.notes=[];state.live.pending=null;state.live.id=null;state.live.wishDraft=null;
+      try {sessionStorage.removeItem(montageDraftKey(key));} catch (_) {}
+    }
     return state.live;
+  }
+  function montageRequest(reel, version) {
+    return [...(reel.requests || [])].reverse().find(r => r.kind === "redo" && r.status !== "rejected" && (r.version === version?.version || (reel.edits || []).some(e => e.id === r.editId && e.resultVersion === version?.version)));
+  }
+  function montageState(reel, version) {
+    const r = montageRequest(reel, version);if (!r) return "";
+    if (r.status === "accepted") return `Отправлено монтажёру ${timeIn(r.createdAt, state.timeZone)}. Новая версия появится здесь`;
+    if (r.status === "in_progress") return "В работе. Новая версия появится здесь";
+    if (r.status === "ready") {
+      const result = (reel.edits || []).find(e => e.id === r.editId)?.resultVersion || version?.version;
+      return `Версия v${result} готова — посмотрите`;
+    }
+    return r.reply || r.statusLabel || "";
   }
   function liveHtml(reel, version) {
     if (!fresh(reel)) return "";
-    const live = liveFor(reel, version), head = `<h3>Живой монтаж · версия v${esc(version?.version ?? 1)}</h3>`;
-    if (!live.segments.length) return `<section class="mt-live" data-live-box>${head}<p class="muted" data-live-empty>Отрезки появятся после разметки ролика.</p></section>`;
-    const changed = liveOps.changed(live.toggles, live.segments);
+    const live = liveFor(reel, version), head = `<h3>1. Фразы</h3>`;
+    if (!live.segments.length) return `<section class="mt-live" data-live-box>${head}<p class="muted" data-live-empty>Отрезки появятся после разметки ролика.</p>${montageState(reel,version) ? `<div class="mt-submit-bar" data-live-actions><p class="mt-status" role="status" data-live-status>${esc(montageState(reel,version))}</p></div>` : ''}</section>`;
+    const changed = liveChanged(live), request = montageRequest(reel, version), waiting = ["accepted","in_progress"].includes(request?.status);
+    const locked = Boolean(live.pending || waiting || state.busy);
     const row = (item, i) => {
       const t = live.toggles[i];
-      return `<li class="mt-live__row${t.enabled ? "" : " is-off"}" data-live-row="${i}"><button type="button" class="mt-live__name" data-live-seek="${i}" title="Показать эту фразу в плеере"><b>${i + 1}</b> ${item.label ? esc(item.label) + " " : ""}<span class="muted">${mmss(item.startMs)}–${mmss(item.endMs)}</span></button>
-        ${canEdit ? `<span class="mt-live__switch"><button type="button" class="plain-button mt-live__btn" data-live-toggle="enabled:${i}" aria-pressed="${t.enabled}" title="${t.enabled ? "Убрать фразу из ролика" : "Добавить фразу в ролик"}">${t.enabled ? "В ролике" : "Убран"}</button>
-        <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}" title="${t.sound ? "Выключить звук у фразы" : "Включить звук у фразы"}"${t.enabled ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
+      return `<li class="mt-live__row${t.enabled ? "" : " is-off"}" data-live-row="${i}"><button type="button" class="mt-live__name" data-live-seek="${i}" title="Действия с фразой"><b>${i + 1}</b> ${item.label ? esc(item.label) + " " : ""}<span class="muted">${mmss(item.startMs)}–${mmss(item.endMs)}</span></button>
+        ${canEdit ? `<span class="mt-live__switch"><button type="button" class="plain-button mt-live__btn" data-live-toggle="enabled:${i}" aria-pressed="${t.enabled}" title="${t.enabled ? "Убрать фразу из ролика" : "Добавить фразу в ролик"}"${locked ? " disabled" : ""}>${t.enabled ? "В ролике" : "Убран"}</button>
+        <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}" title="${t.sound ? "Выключить звук у фразы" : "Включить звук у фразы"}"${t.enabled && !locked ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
     };
+    const initial = liveOps.initial(live.segments);
+    const removed = live.toggles.filter((t,i) => !t.enabled && initial[i].enabled).length;
+    const added = live.toggles.filter((t,i) => t.enabled && !initial[i].enabled).length;
+    const silent = live.toggles.filter((t,i) => t.enabled && !t.sound && initial[i].sound).length;
+    const voiced = live.toggles.filter((t,i) => t.enabled && t.sound && !initial[i].sound).length;
+    const phraseChanges = liveOps.changed(live.toggles, live.segments);
     return `<section class="mt-live" data-live-box>${head}
-      <details class="mt-live__help"><summary aria-label="Помощь по фразам">?</summary><p class="muted mt-hint">Фраза — посмотреть; динамик — звук; − убрать, + вернуть.</p></details>
+      <details class="mt-live__help"><summary aria-label="Помощь по фразам">?</summary><p class="muted mt-hint">Фраза — действия и пожелание; динамик — звук; − убрать, + вернуть.</p></details>
       <ol class="mt-live__list" data-live-list>${live.segments.map(row).join("")}</ol>
-      <div data-live-actions>${canEdit ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed ? "" : " disabled"}>Сохранить правку</button><button type="button" class="plain-button" data-live-reset${changed ? "" : " disabled"}>Вернуть как было</button></div>` : ""}
-      <p class="mt-status" role="status" data-live-status></p></div></section>`;
+      ${canEdit ? `<h3>2. Пожелания к монтажу</h3><div class="mt-wish-tiles">${WISHES.map(w => `<button type="button" class="plain-button" data-wish-type="${w.type}"${locked ? " disabled" : ""}>${w.label}</button>`).join("")}</div>
+      <h3>Что поменять (${live.notes.length + (phraseChanges ? 1 : 0)})</h3><ul class="mt-wish-list" data-wish-list>${phraseChanges ? `<li data-phrase-changes>Убрано фраз: ${removed}, добавлено: ${added}, без звука: ${silent}${voiced ? ', возвращён звук: '+voiced : ''}</li>` : ""}${live.notes.map((n,i) => `<li><span>${esc(wishLine(n))}</span><button type="button" class="plain-button" data-wish-remove="${i}" aria-label="Удалить пожелание ${i+1}"${locked ? " disabled" : ""}>×</button></li>`).join("")}</ul>${changed ? "" : `<p class="muted mt-hint">Пока без изменений. Выберите фразы или добавьте пожелание.</p>`}` : ""}
+      <div class="mt-submit-bar" data-live-actions><p class="mt-status" role="status" data-live-status>${esc(montageState(reel,version))}${live.pending ? " Результат отправки пока неизвестен. Черновик сохранён; повторите отправку." : ""}</p>
+        ${canEdit && !waiting ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed && !state.busy ? "" : " disabled"}>Отправить монтажёру</button><button type="button" class="plain-button" data-live-reset${changed && !locked ? "" : " disabled"}>Вернуть как было</button></div>` : ""}</div></section>`;
   }
   const mobilePlayback = window.matchMedia?.("(max-width:899px)");
   function placeLiveActions() {
-    const actions = el.querySelector("[data-live-actions]"), host = el.querySelector(mobilePlayback?.matches ? "[data-live-mobile-actions]" : "[data-live-box]");
+    const actions = el.querySelector("[data-live-actions]"), host = el.querySelector("[data-detail]");
     if (actions && host) host.append(actions);
   }
-  mobilePlayback?.addEventListener("change", placeLiveActions, {signal: ctx.signal});
   function paintPlayback(player) {
     const live = state.live;if (!live || !player) return;
     const ms = (Number(player.currentTime) || 0) * 1000, timeline = liveOps.timeline(live.segments, live.toggles, ms);
@@ -813,12 +885,76 @@ function create(el, ctx) {
   function renderLive(message) {
     const box = el.querySelector("[data-live-box]");if (!box || !state.open) return;
     el.querySelector("[data-live-actions]")?.remove();
-    box.outerHTML = liveHtml(state.open, currentVersion());placeLiveActions();setText("[data-live-status]", message || "");paintPlayback(el.querySelector("[data-player]"));
+    box.outerHTML = liveHtml(state.open, currentVersion());placeLiveActions();if (message) setText("[data-live-status]", message);paintPlayback(el.querySelector("[data-player]"));
+  }
+  let wishOpener = null, wishDraft = null;
+  function wishLayer() {
+    let layer = el.querySelector('[data-wish-layer]');
+    if (!layer) {layer = document.createElement('div');layer.className = 'mt-wish-layer';layer.dataset.wishLayer = '';layer.hidden = true;el.append(layer);}
+    return layer;
+  }
+  function closeWish() {
+    const layer = el.querySelector('[data-wish-layer]');if (layer) layer.hidden = true;
+    wishOpener?.focus?.({preventScroll:true});
+  }
+  function showWish(title, body) {
+    const layer = wishLayer();layer.hidden = false;
+    layer.innerHTML = `<section class="mt-wish-sheet" role="dialog" aria-modal="true" aria-labelledby="mt-wish-title" tabindex="-1"><header><h3 id="mt-wish-title">${esc(title)}</h3><button type="button" class="plain-button" data-wish-close aria-label="Закрыть">×</button></header>${body}</section>`;
+    layer.querySelector('.mt-wish-sheet').focus({preventScroll:true});
+  }
+  function openPhrase(index) {
+    if (!state.live?.segments[index]) return;
+    wishOpener = el.querySelector(`[data-live-seek="${index}"]`);
+    showWish(`Фраза ${index+1}`, `<p>${esc(state.live.segments[index].label || 'Выбранная фраза')}</p><div class="mt-wish-choices"><button type="button" class="plain-button" data-phrase-preview="${index}">Показать в плеере</button>${canEdit && !state.live.pending ? `<button type="button" class="plain-button" data-phrase-wish="${index}">Пожелание к этой фразе</button>` : ''}</div>`);
+  }
+  function openPhraseWishes(index) {
+    showWish(`Пожелание к фразе ${index+1}`, `<div class="mt-wish-tiles">${WISHES.map(w=>`<button type="button" class="plain-button" data-bound-wish="${w.type}" data-phrase="${index}">${w.label}</button>`).join('')}</div>`);
+  }
+  function openWish(type, phrase = null) {
+    if (!canEdit || state.busy || state.live?.pending || ['accepted','in_progress'].includes(montageRequest(state.open,currentVersion())?.status)) return;
+    const def = WISHES.find(w=>w.type===type);if (!def || !state.live) return;
+    const count = state.live.segments.length;
+    wishOpener = wishOpener || el.querySelector(`[data-wish-type="${type}"]`);
+    const key = `${state.live.key}:${type}:${phrase}`;
+    const saved = wishDraft?.key === key ? wishDraft : state.live.wishDraft?.key === key ? state.live.wishDraft : null;
+    wishDraft = saved || {key,type,option:def.options[0][0],from:phrase === null ? (type==='insert'?'1':'') : String(phrase+1),to:phrase === null ? (type==='insert'?String(count):'') : String(phrase+1),text:''};
+    const options = value => `<option value="">${type==='transition'?'Везде':'Весь ролик'}</option>`+state.live.segments.map((s,i)=>`<option value="${i+1}"${String(i+1)===value?' selected':''}>${i+1}${s.label?' · '+esc(s.label.slice(0,48)):''}</option>`).join('');
+    const range = ['transition','volume','insert'].includes(type);
+    showWish(def.label+(phrase===null?'':` · фраза ${phrase+1}`), `<form data-wish-form novalidate>
+      ${type==='insert'?'<p class="muted">Покажем врезку поверх видео, голос выбранных фраз остаётся на фоне. В описании можно указать ссылку на файл или папку с материалами.</p>':''}
+      <fieldset class="mt-wish-choices"><legend>Как изменить</legend>${def.options.map(([value,label])=>`<label><input type="radio" name="option" value="${value}"${wishDraft.option===value?' checked':''}>${esc(label)}</label>`).join('')}</fieldset>
+      ${range?`<div class="mt-wish-range"><label class="mt-field">${type==='transition'?'Между фразами — от':'От фразы'}<select name="from">${options(wishDraft.from)}</select></label>${type==='volume'?'':`<label class="mt-field">До фразы<select name="to">${options(wishDraft.to)}</select></label>`}</div>`:''}
+      <label class="mt-field">${type==='insert'?'Что показать':type==='music'?'Какая музыка или ссылка (необязательно)':'Пояснение'+(type==='other'?'':' (необязательно)')}<textarea name="text" rows="3" maxlength="500">${esc(wishDraft.text)}</textarea></label>
+      <p class="mt-status" role="status" data-wish-error></p><button type="submit" class="plain-button primary">Добавить пожелание</button></form>`);
+  }
+  function readWishDraft(form) {
+    if (!wishDraft) return;
+    wishDraft.option = form.elements.option.value;wishDraft.text = form.elements.text.value;
+    if (form.elements.from) wishDraft.from = form.elements.from.value;
+    if (form.elements.to) wishDraft.to = form.elements.to.value;
+    state.live.wishDraft={...wishDraft};storeLive();
+  }
+  function addWish(form) {
+    if (!canEdit || state.busy || state.live?.pending || !wishDraft) return;
+    readWishDraft(form);
+    const {type,option} = wishDraft, text = wishDraft.text.trim(), note = {type,option};
+    const error = text => {form.querySelector('[data-wish-error]').textContent=text;};
+    if (['insert','other'].includes(type) && !text) {error(type==='insert'?'Напишите, что показать во врезке.':'Напишите пожелание.');return;}
+    const from = Number(wishDraft.from), to = Number(type==='volume'?wishDraft.from:wishDraft.to || wishDraft.from);
+    if (!from && to || from && (to<from || to>state.live.segments.length)) {error('Выберите диапазон фраз от первой до последней.');return;}
+    if (from) {note.from=from;note.to=to;}
+    if (text) note.text=text;
+    if (state.live.notes.length>=20 || state.live.notes.reduce((n,x)=>n+(x.text||'').length,0)+text.length>5000) {error('Слишком много пожеланий. Отправьте текущие изменения монтажёру.');return;}
+    state.live.notes.push(note);state.live.id=null;state.live.wishDraft=null;wishDraft=null;storeLive();closeWish();renderLive();
+  }
+  function previewPhrase(index) {
+    const item=state.live?.segments[index],player=el.querySelector('[data-player]');
+    if (item&&player) {state.live.inspect=index;player.currentTime=item.startMs/1000;player.play?.()?.catch?.(()=>{});}
   }
   function toggleLive(value) {
     const [field, index] = String(value).split(":"), toggle = state.live?.toggles[Number(index)];
-    if (!toggle || !["enabled", "sound"].includes(field)) return;
-    toggle[field] = !toggle[field];state.live.inspect = null;state.live.id = null;renderLive();
+    if (!toggle || state.busy || state.live.pending || !["enabled", "sound"].includes(field)) return;
+    toggle[field] = !toggle[field];state.live.inspect = null;state.live.id = null;storeLive();renderLive();
     el.querySelector(`[data-live-toggle="${field}:${Number(index)}"]`)?.focus({preventScroll: true});
   }
   function previewTick(player) {
@@ -836,16 +972,23 @@ function create(el, ctx) {
     paintPlayback(player);
   }
   async function saveLive() {
-    const live = state.live;if (state.busy || !live || !liveOps.changed(live.toggles, live.segments)) return;
+    const live = state.live;if (state.busy || !live || !liveChanged(live)) return;
     if (!live.toggles.some(item => item.enabled)) {setText("[data-live-status]", "Оставьте в ролике хотя бы один отрезок.");return;}
-    live.id = live.id || requestId();state.busy = true;setText("[data-live-status]", "Сохраняем правку…");
+    live.id = live.id || requestId();
+    live.pending = live.pending || {clientRequestId:live.id,baseVersion:currentVersion()?.version ?? state.version,segments:liveOps.body(live.segments,live.toggles),notes:JSON.parse(JSON.stringify(live.notes))};
+    storeLive();state.busy = true;renderLive("Отправляем монтажёру…");
     try {
-      const result = await api.liveEdit(state.open.id, {clientRequestId: live.id, baseVersion: currentVersion()?.version ?? state.version, segments: liveOps.body(live.segments, live.toggles)});
-      if (ctx.signal.aborted || !state.open) return;
-      state.live = null;state.open = keepPost(result.reel);renderDetail();
-      setText("[data-live-status]", "Правка сохранена. Агент соберёт новую версию — она появится в этом окне.");
-    } catch (error) {setText("[data-live-status]", "Не удалось сохранить правку: " + (error?.message || "ошибка сети"));}
-    finally {state.busy = false;}
+      const result = await api.liveEdit(state.open.id, live.pending);
+      if (ctx.signal.aborted || state.live !== live || !state.open) return;
+      try {sessionStorage.removeItem(montageDraftKey(live.key));} catch (_) {}
+      state.live = null;state.open = keepPost(result.reel);state.busy = false;renderDetail();
+      const summary = state.reels.find(r => r.id === result.reel.id);if (summary) Object.assign(summary,result.reel);
+      if (!result.request) setText("[data-live-status]", "Отправлено монтажёру. Новая версия появится здесь");
+    } catch (error) {
+      if (state.live !== live || ctx.signal.aborted) return;
+      if (error?.status >= 400 && error.status < 500) {live.pending = null;storeLive();}
+      state.busy = false;renderLive("Не удалось подтвердить отправку: " + (error?.message || "ошибка сети") + ". Черновик сохранён; повторите отправку.");
+    } finally {state.busy = false;if(state.live&&state.live!==live&&state.open&&!ctx.signal.aborted)renderLive();}
   }
   function historyHtml(reel) {
     if (!fresh(reel) || !Array.isArray(reel.history) || !reel.history.length) return "";
@@ -1183,26 +1326,36 @@ function create(el, ctx) {
       if (player.ended || timeline.elapsed >= timeline.total) {live.inspect = null;player.currentTime = liveOps.sourceAt(live.segments, live.toggles, 0) / 1000;}
       previewTick(player);player.play?.()?.catch?.(() => {});
     }
-    else if (target.hasAttribute("data-live-seek")) {
-      /* specs/232: нажатие на фразу показывает её в плеере — так решают, убирать её или добавлять. */
-      const index = Number(target.getAttribute("data-live-seek")), item = state.live?.segments[index], player = el.querySelector("[data-player]");
-      if (item && player) {state.live.inspect = index;player.currentTime = item.startMs / 1000;player.play?.()?.catch?.(() => {});}
-    }
-    else if (target.hasAttribute("data-live-reset")) {if (state.live) {state.live.toggles = liveOps.initial(state.live.segments);state.live.inspect = null;state.live.id = null;renderLive();}}
+    else if (target.hasAttribute("data-live-seek")) openPhrase(Number(target.dataset.liveSeek));
+    else if (target.hasAttribute("data-phrase-preview")) {const index=Number(target.dataset.phrasePreview);closeWish();previewPhrase(index);}
+    else if (target.hasAttribute("data-phrase-wish")) openPhraseWishes(Number(target.dataset.phraseWish));
+    else if (target.dataset.boundWish) openWish(target.dataset.boundWish,Number(target.dataset.phrase));
+    else if (target.dataset.wishType) {wishOpener=target;openWish(target.dataset.wishType);}
+    else if (target.hasAttribute("data-wish-close")) closeWish();
+    else if (target.hasAttribute("data-wish-remove")) {if (state.live&&!state.live.pending&&!state.busy) {state.live.notes.splice(Number(target.dataset.wishRemove),1);state.live.id=null;storeLive();renderLive();}}
+    else if (target.hasAttribute("data-live-reset")) {if (state.live&&!state.live.pending&&!state.busy) {state.live.toggles=liveOps.initial(state.live.segments);state.live.notes=[];state.live.inspect=null;state.live.id=null;state.live.wishDraft=null;wishDraft=null;storeLive();renderLive();}}
   });
   el.addEventListener("submit", event => {
-    if (event.target.matches?.("[data-problem-form]")) {event.preventDefault();void sendProblem(event.target);}
+    if (event.target.matches?.("[data-wish-form]")) {event.preventDefault();addWish(event.target);}
+    else if (event.target.matches?.("[data-problem-form]")) {event.preventDefault();void sendProblem(event.target);}
     else if (event.target.matches?.("[data-review]")) {event.preventDefault();void saveReview(event.target);}
     else if (event.target.matches?.("[data-ask-form]")) {event.preventDefault();void sendAsk(event.target);}
   });
   el.addEventListener("keydown", event => {
+    const layer=el.querySelector('[data-wish-layer]');
+    if (layer&&!layer.hidden&&event.key==='Tab') {
+      const focus=[...layer.querySelectorAll('button,input,select,textarea')].filter(n=>!n.disabled),first=focus[0],last=focus.at(-1);
+      if (event.shiftKey&&(document.activeElement===first||!focus.includes(document.activeElement))) {event.preventDefault();last?.focus();}
+      else if (!event.shiftKey&&(document.activeElement===last||!focus.includes(document.activeElement))) {event.preventDefault();first?.focus();}
+    }
     if (event.key !== "Escape" || event.target.closest?.(".re-editor")) return;
+    if (layer&&!layer.hidden) {event.stopPropagation();closeWish();return;}
     if ($("[data-problem-modal]") && !$("[data-problem-modal]").hidden) {closeProblem();return;}
     const confirmBox = el.querySelector("[data-confirm-modal]");
     if (confirmBox && !confirmBox.hidden) {if (!state.busy) closeConfirm();return;}
     if (!$("[data-detail-modal]").hidden) close();else if (uploadForm && !uploadForm.hidden && !state.busy) toggleUpload(false);
   });
-  el.addEventListener("input", event => {if (event.target.matches?.("[data-problem-text]") && problem) {problem.text = event.target.value;storeProblems();}});
+  el.addEventListener("input", event => {if (event.target.closest?.("[data-wish-form]")) readWishDraft(event.target.closest("form"));if (event.target.matches?.("[data-problem-text]") && problem) {problem.text = event.target.value;storeProblems();}});
   el.addEventListener("change", event => {
     if (event.target.matches?.("[data-problem-reel]")) {if (problem) problem.text = $("[data-problem-text]").value;selectProblem(event.target.value);return;}
     if (event.target.hasAttribute("data-live-progress") && state.live) {
@@ -1217,8 +1370,8 @@ function create(el, ctx) {
       el.querySelector(".mt-mask").outerHTML = maskHtml(state.platform);
       el.querySelector(".mt-mask").hidden = !el.querySelector("[data-mask-toggle]").checked;
       el.querySelector(".mt-note").textContent = `Тёмные зоны — где лягут шапка, подпись и кнопки ${label.label}. Зоны ориентировочные.`;
-      el.querySelector("[data-caption-head]").textContent = `Текст публикации · ${label.short}`;
-      el.querySelector("[data-caption-box]").innerHTML = captionHtml(state.item?.posts || [], state.item?.ideaId || state.open?.ideaId);
+      if (el.querySelector("[data-caption-head]")) el.querySelector("[data-caption-head]").textContent = `Текст публикации · ${label.short}`;
+      if (el.querySelector("[data-caption-box]")) el.querySelector("[data-caption-box]").innerHTML = captionHtml(state.item?.posts || [], state.item?.ideaId || state.open?.ideaId);
     }
     else if (event.target.matches("[data-mask-toggle]")) el.querySelector(".mt-mask").hidden = !event.target.checked;
     else if (event.target.matches("[data-version]")) {state.version = Number(event.target.value);renderDetail();}

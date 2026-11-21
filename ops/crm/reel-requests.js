@@ -25,6 +25,10 @@ const parse=(value,fallback)=>{try{return JSON.parse(value);}catch{return fallba
 const int=(value,min,max,label)=>{if(!Number.isSafeInteger(value)||value<min||value>max)fail(400,`${label}: целое от ${min} до ${max}`);return value;};
 const day=value=>{if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||Number.isNaN(Date.parse(value+'T00:00:00Z')))fail(400,'Дата: ГГГГ-ММ-ДД');return value;};
 const seconds=ms=>(ms/1000).toFixed(1);
+const NOTE_OPTIONS=Object.freeze({font:['larger','smaller','style','none'],transition:['cut','smooth','zoom'],volume:['louder','quieter'],music:['add','remove','quieter','louder'],insert:['overlay'],other:['text']});
+const NOTE_LABELS={font:'Шрифт и титры',transition:'Переход',volume:'Громкость',music:'Музыка на фон',insert:'Врезка (голос остаётся на фоне)',other:'Другое'};
+const OPTION_LABELS={larger:'крупнее',smaller:'мельче',style:'другой стиль',none:'убрать титры',cut:'резкая склейка',smooth:'плавно',zoom:'приближение',louder:'громче',quieter:'тише',add:'добавить',remove:'убрать',overlay:'показать',text:''};
+const notesText=notes=>notes.map(n=>`${n.from?`Фразы ${n.from}${n.to!==n.from?'–'+n.to:''}: `:''}${NOTE_LABELS[n.type]} — ${OPTION_LABELS[n.option]}${n.text?' '+n.text:''}`).join('; ');
 
 function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
   const problems=require('./reel-problems').createReelProblems(db,{core});
@@ -47,6 +51,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     CREATE TABLE IF NOT EXISTS reel_request_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL REFERENCES reel_requests(id), company_id INTEGER NOT NULL REFERENCES companies(id),
       status TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', actor TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);`);
+  addColumns('reel_requests',[['notes',"TEXT NOT NULL DEFAULT '[]'"]]);
   const who=actor=>({id:String(actor?.userId??''),name:String(actor?.userName||'')});
   const hasTasks=()=>db.prepare('PRAGMA table_info(tasks)').all().some(column=>column.name==='company_code');
 
@@ -107,6 +112,24 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     });
   }
   const storedSegments=version=>{const list=version?.segments?parse(version.segments,null):null;return Array.isArray(list)&&list.length?list:null;};
+  function notesOf(value,version){
+    if(value===undefined)return [];
+    if(!Array.isArray(value)||value.length>20)fail(400,'Пожелания: не больше 20');
+    const count=storedSegments(version)?.length||0;
+    const notes=value.map(note=>{
+      object(note,['type','option','from','to','text']);
+      if(typeof note.type!=='string'||!Object.hasOwn(NOTE_OPTIONS,note.type)||!NOTE_OPTIONS[note.type].includes(note.option))fail(400,'Неизвестный вид или вариант пожелания');
+      const clean={type:note.type,option:note.option};
+      if(note.from!==undefined||note.to!==undefined){
+        clean.from=int(note.from,1,count,'Первая фраза');clean.to=note.to===undefined?clean.from:int(note.to,clean.from,count,'Последняя фраза');
+      }
+      const description=text(note.text??'',500,['other','insert'].includes(note.type));
+      if(description)clean.text=description;
+      return clean;
+    });
+    if(notes.reduce((n,note)=>n+(note.text||'').length,0)>5000)fail(400,'Общий текст пожеланий: не больше 5000 символов');
+    return notes;
+  }
   function setSegments(code,id,versionNumber,body){
     const owner=company(db,code),row=core.rowFor(owner,id);object(body,['segments']);
     const version=core.liveVersion(row.id,versionNumber);if(!version)fail(404,'Версия ролика не найдена','NOT_FOUND');
@@ -118,8 +141,14 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
      порядке, поэтому перестановка и подрезка невозможны. Рендера нет: правку забирает агент монтажа. */
   function liveEdit(code,id,body,actor){
     const owner=company(db,code),row=core.rowFor(owner,id);
-    object(body,['clientRequestId','baseVersion','segments','comment']);
+    object(body,['clientRequestId','baseVersion','segments','comment','notes']);
+    const clientRequestId=text(body.clientRequestId??'',80,true);
+    const repeat=db.prepare('SELECT * FROM reel_requests WHERE company_id=? AND client_request_id=?').get(owner.id,clientRequestId);
+    if(repeat){if(repeat.reel_id!==row.id||!repeat.edit_id)fail(409,'Ключ запроса уже использован');
+      const reel=core.full(owner,row.id);
+      return {reel,request:requestDto(refresh(owner,repeat)),edit:reel.edits.find(e=>e.id===repeat.edit_id),duplicate:true};}
     const version=core.liveVersion(row.id,int(body.baseVersion,1,Number.MAX_SAFE_INTEGER,'Версия ролика'));if(!version)fail(400,'Версия ролика не найдена');
+    const notes=notesOf(body.notes,version);
     if(!Array.isArray(body.segments)||!body.segments.length||body.segments.length>maxClips)fail(400,`Отрезки: от 1 до ${maxClips}`);
     const toggles=body.segments.map(item=>{object(item,['startMs','endMs','enabled','sound']);
       if(typeof item.enabled!=='boolean'||typeof item.sound!=='boolean')fail(400,'«Включён» и «звук» — true или false');
@@ -141,20 +170,30 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     /* specs/232: исходное состояние берётся из разметки версии; без разметки все отрезки включены и со звуком. */
     const was=index=>({enabled:base[index].enabled!==false,sound:base[index].sound!==false});
     const added=toggles.map((item,index)=>item.enabled&&!was(index).enabled?index+1:0).filter(Boolean);
-    if(!toggles.some((item,index)=>item.enabled!==was(index).enabled||item.sound!==was(index).sound))fail(400,'Ничего не изменено: уберите или добавьте отрезок либо поменяйте у него звук');
+    if(!notes.length&&!toggles.some((item,index)=>item.enabled!==was(index).enabled||item.sound!==was(index).sound))fail(400,'Ничего не изменено: выберите фразы или добавьте пожелание');
     const note=text(body.comment??'',1500);
     const summary=['Живой монтаж',added.length?`добавлены отрезки: ${added.join(', ')}`:'',off.length?`выключены отрезки: ${off.join(', ')}`:'',silent.length?`без звука: ${silent.join(', ')}`:''].filter(Boolean).join('; ');
     const edl={v:1,video:kept.map(item=>({inMs:item.startMs,outMs:item.endMs})),audio:kept.map(item=>({inMs:item.startMs,outMs:item.endMs,gain:1,muted:!item.sound})),
       captions:[],coverMs:null,speed:1,
       live:{segments:toggles.map((item,index)=>({inMs:item.startMs,outMs:item.endMs,enabled:item.enabled,sound:item.sound,...(base[index].label?{label:base[index].label}:{})}))}};
-    return core.requestEdit(owner.code,row.id,{clientRequestId:body.clientRequestId,baseVersion:version.version,kind:'edl',edl,comment:note?`${summary}. ${note}`:summary},actor);
+    const comment=[summary,note,notesText(notes)].filter(Boolean).join('. ').slice(0,1900);
+    const made=core.requestEdit(owner.code,row.id,{clientRequestId,baseVersion:version.version,kind:'edl',edl,comment},actor);
+    // requestEdit сам выполняет транзакцию. Повтор по его ключу достраивает просьбу после сбоя между двумя сохранениями.
+    const request=core.transaction(()=>{
+      const at=iso(),author=who(actor);
+      const id=Number(db.prepare(`INSERT INTO reel_requests(company_id,reel_id,kind,text,version,edit_id,task_id,client_request_id,author_id,author_name,created_at,updated_at,notes)
+        VALUES(?,?,'redo',?,?,?,?,?,?,?,?,?,?)`).run(owner.id,row.id,comment,version.version,made.edit.id,made.edit.taskId,clientRequestId,author.id,author.name,at,at,JSON.stringify(notes)).lastInsertRowid);
+      db.prepare('INSERT INTO reel_request_events(request_id,company_id,status,text,actor,created_at) VALUES(?,?,?,?,?,?)').run(id,owner.id,'accepted','',author.name,at);
+      return requestDto(db.prepare('SELECT * FROM reel_requests WHERE id=?').get(id));
+    });
+    return {...made,request,reel:core.full(owner,row.id)};
   }
 
   /* --- Просьбы агенту --- */
   const eventsOf=id=>db.prepare('SELECT status,text,actor,created_at FROM reel_request_events WHERE request_id=? ORDER BY id').all(id)
     .map(e=>({status:e.status,statusLabel:STATUSES[e.status]||e.status,text:e.text,actor:e.actor,at:e.created_at}));
-  const requestDto=r=>({id:r.id,reelId:r.reel_id,kind:r.kind,kindLabel:KINDS[r.kind]||r.kind,status:r.status,statusLabel:STATUSES[r.status]||r.status,text:r.text,
-    version:r.version,startMs:r.start_ms,endMs:r.end_ms,date:r.target_date||'',platformIds:parse(r.platform_ids,[]),reply:r.reply,repliedAt:r.replied_at||null,repliedBy:r.replied_by||'',
+  const requestDto=r=>({id:r.id,reelId:r.reel_id,clientRequestId:r.client_request_id,kind:r.kind,kindLabel:KINDS[r.kind]||r.kind,status:r.status,statusLabel:STATUSES[r.status]||r.status,text:r.text,
+    version:r.version,notes:parse(r.notes,[]),startMs:r.start_ms,endMs:r.end_ms,date:r.target_date||'',platformIds:parse(r.platform_ids,[]),reply:r.reply,repliedAt:r.replied_at||null,repliedBy:r.replied_by||'',
     editId:r.edit_id,postId:r.post_id,taskId:r.task_id,authorName:r.author_name,createdAt:r.created_at,updatedAt:r.updated_at,events:eventsOf(r.id)});
   function setStatus(r,status,reply,actor,at=iso()){
     db.prepare('UPDATE reel_requests SET status=?,reply=?,replied_at=?,replied_by=?,updated_at=? WHERE id=? AND company_id=?').run(status,reply,at,actor,at,r.id,r.company_id);
@@ -207,14 +246,18 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
   }
   function createRequest(code,id,body,actor){
     const owner=company(db,code),row=core.rowFor(owner,id);
-    object(body,['clientRequestId','kind','text','version','startMs','endMs','date','platformIds']);
+    object(body,['clientRequestId','kind','text','version','startMs','endMs','date','platformIds','notes']);
     const clientRequestId=text(body.clientRequestId??'',70,true);
     const repeat=db.prepare('SELECT * FROM reel_requests WHERE company_id=? AND client_request_id=?').get(owner.id,clientRequestId);
     if(repeat){if(repeat.reel_id!==row.id)fail(409,'Ключ запроса уже использован');return {reel:core.full(owner,row.id),request:requestDto(refresh(owner,repeat)),duplicate:true};}
     const kind=body.kind;if(typeof kind!=='string'||!Object.hasOwn(KINDS,kind))fail(400,'Вид просьбы: '+Object.keys(KINDS).join(', '));
     const allowed={redo:['version','startMs','endMs'],publish:['version','platformIds'],reschedule:['date']}[kind]||[];
     for(const field of ['version','startMs','endMs','date','platformIds'])if(body[field]!==undefined&&!allowed.includes(field))fail(400,`Поле ${field} не относится к просьбе «${KINDS[kind]}»`);
-    const message=text(body.text??'',1900,TEXT_REQUIRED.includes(kind));
+    if(body.notes!==undefined&&kind!=='redo')fail(400,'Пожелания относятся только к монтажу');
+    const noteVersion=kind==='redo'?core.liveVersion(row.id,body.version===undefined?db.prepare('SELECT MAX(version) v FROM reel_versions WHERE reel_id=? AND archived_at IS NULL').get(row.id).v:int(body.version,1,Number.MAX_SAFE_INTEGER,'Версия ролика')):null;
+    if(kind==='redo'&&!noteVersion)fail(400,'Версия ролика не найдена');
+    const notes=notesOf(body.notes,noteVersion);
+    const message=text(body.text??(notes.length?notesText(notes).slice(0,1900):''),1900,TEXT_REQUIRED.includes(kind));
     const author=who(actor),at=iso();
     const insert=fields=>{
       const data={version:null,startMs:null,endMs:null,date:'',platformIds:[],editId:null,postId:null,taskId:null,...fields};
@@ -222,6 +265,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,row.id,kind,message,data.version,data.startMs,data.endMs,data.date,JSON.stringify(data.platformIds),data.editId,data.postId,data.taskId,
         clientRequestId,author.id,author.name,at,at).lastInsertRowid);
       db.prepare('INSERT INTO reel_request_events(request_id,company_id,status,text,actor,created_at) VALUES(?,?,?,?,?,?)').run(requestId,owner.id,'accepted','',author.name,at);
+      db.prepare('UPDATE reel_requests SET notes=? WHERE id=?').run(JSON.stringify(notes),requestId);
       return db.prepare('SELECT * FROM reel_requests WHERE id=?').get(requestId);
     };
     const result=r=>({reel:core.full(owner,row.id),request:requestDto(r),duplicate:false});

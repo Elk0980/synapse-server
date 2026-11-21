@@ -265,3 +265,36 @@ body.mt-modal-open { overflow:hidden; }
 .mt-view .cfk-head-row{flex-wrap:wrap}
 .mt-view .cfk-head-row .mt-problem-open{order:4}
 @media(max-width:760px){.mt-view .cfk-head-row .mt-problem-open{flex-basis:100%;margin-top:4px}}
+/* specs/236: фразы → пожелания → одна отправка. Размер закреплённого плеера PR640 сохраняется. */
+.mt-wish-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 14px}
+.mt-view .mt-modal__head .mt-x{min-width:44px;min-height:44px}
+.mt-view .mt-wish-tiles button{min-width:0;min-height:52px;padding:10px 8px;white-space:normal;font-size:15px}
+.mt-wish-list{list-style:none;padding:0;margin:6px 0;display:grid;gap:6px}
+.mt-wish-list li{display:flex;align-items:center;gap:8px;justify-content:space-between;overflow-wrap:anywhere}
+.mt-wish-list li span{min-width:0}
+.mt-view .mt-wish-list button{flex:none;min-width:44px;min-height:44px;padding:0;font-size:22px}
+.mt-submit-bar{position:sticky;bottom:0;z-index:4;background:var(--bg,#0f141d);padding:8px 0 max(8px,env(safe-area-inset-bottom));border-top:1px solid var(--line,#283143);margin-top:12px}
+.mt-submit-bar .mt-status{margin:0 0 6px;overflow-wrap:anywhere;font-size:14px}
+.mt-submit-bar .mt-status:empty{display:none}
+.mt-submit-bar .mt-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0}
+.mt-view .mt-submit-bar button{min-height:44px;min-width:0;white-space:normal}
+.mt-submit-bar [data-live-save]{flex:2 1 180px}
+.mt-submit-bar [data-live-reset]{flex:1 1 120px}
+.mt-publication{margin:14px 0;border-top:1px solid var(--line,#283143)}
+.mt-publication>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600}
+.mt-publication>summary::after{content:'⌄';margin-left:auto}
+.mt-request-notes{margin:6px 0;padding-left:20px;font-size:14px;overflow-wrap:anywhere}
+.mt-wish-layer{position:fixed;inset:0;z-index:1650;background:#0009;display:flex;align-items:flex-end;justify-content:center}
+.mt-wish-layer[hidden]{display:none}
+.mt-wish-sheet{box-sizing:border-box;width:min(100%,640px);max-height:calc(100dvh - 12px);overflow:auto;overscroll-behavior:contain;padding:16px 16px max(16px,env(safe-area-inset-bottom));border-radius:18px 18px 0 0;background:var(--bg,#0f141d);color:var(--text,#f4f0eb);overflow-wrap:anywhere}
+.mt-wish-sheet header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mt-wish-sheet header h3{margin:0;font-size:18px}
+.mt-view .mt-wish-sheet button{min-height:44px;white-space:normal}
+.mt-wish-choices{display:grid;gap:8px;min-width:0;padding:0;border:0;margin:12px 0}
+.mt-wish-choices legend{font-size:14px;margin-bottom:8px}
+.mt-wish-choices label{box-sizing:border-box;display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:1px solid var(--line,#34404d);border-radius:10px;cursor:pointer}
+.mt-wish-range{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mt-wish-range select{width:100%;min-width:0;min-height:44px;font:inherit;font-size:16px;border:1px solid var(--line,#34404d);border-radius:8px;background:var(--bg,#0f141d);color:inherit}
+.mt-problem-card{font-size:13px;margin-top:16px}
+.mt-view .mt-problem-card button{font-size:13px;min-height:44px;padding:6px 8px}
+@media(max-width:899px){.mt-version{order:-2}.mt-live{order:-1}.mt-publication{order:1}.mt-requests-box{order:2}.mt-problem-card{order:3}}

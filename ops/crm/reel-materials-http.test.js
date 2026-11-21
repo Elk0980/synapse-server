@@ -48,4 +48,23 @@ test('Материалы через настоящий CRM: ролик → пр�
   assert.deepEqual(post.body.mediaUrls,[asset('avokado','b')]);assert.equal(post.body.status,'draft');assert.equal(post.body.scheduledAt,null);
   const list=await request('GET','/autoposting/reels?companyCode=avokado&platform=instagram',{identity:smm});
   assert.deepEqual(list.body.reels.map(r=>[r.title,r.currentVersion.version,r.postId]),[['Рилс №1',2,pub.body.post.id]]);
+  // №290: прежний ролик/собранная версия, пожелания через тот же защищённый API.
+  const base=`/autoposting/reels/${reel.body.id}`,query='?companyCode=avokado';
+  const segments=[{startMs:0,endMs:4000,label:'Начало'},{startMs:4000,endMs:8000,label:'Конец'}];
+  assert.equal((await request('POST',`${base}/versions/2/segments${query}`,{identity:smm,body:{segments}})).status,200);
+  const wishes={clientRequestId:'http-wishes',baseVersion:2,segments:segments.map(s=>({startMs:s.startMs,endMs:s.endMs,enabled:true,sound:true})),notes:[{type:'volume',option:'quieter',from:2,to:2}]};
+  assert.equal((await request('POST',`${base}/live-edit${query}`,{identity:smm,body:{...wishes,notes:[]}})).status,400);
+  const viewer=encode({permissions:['autoposting.view'],companyCodes:['avokado']});
+  assert.equal((await request('POST',`${base}/live-edit${query}`,{identity:viewer,body:wishes})).status,403);
+  assert.equal((await request('POST',`${base}/live-edit?companyCode=alvi`,{body:wishes})).status,404);
+  const sent=await request('POST',`${base}/live-edit${query}`,{identity:smm,body:wishes});
+  assert.equal(sent.status,201,JSON.stringify(sent.body));assert.equal(sent.body.reel.requests.length,1);assert.equal(sent.body.reel.edits.length,2);
+  assert.deepEqual(sent.body.request.notes,wishes.notes);assert.equal(sent.body.request.version,2);
+  const repeated=await request('POST',`${base}/live-edit${query}`,{identity:smm,body:wishes});
+  assert.equal(repeated.status,200);assert.equal(repeated.body.request.id,sent.body.request.id);
+  const requests=await request('GET','/internal/reel-materials/requests?companyCode=avokado',{identity:null});
+  assert.deepEqual(requests.body.requests[0].notes,wishes.notes);
+  assert.equal(requests.body.requests[0].editId,sent.body.edit.id);
+  const afterTasks=await request('GET','/tasks?companyCode=avokado');
+  assert.equal(afterTasks.body.tasks.filter(t=>t.title.startsWith('Монтаж:')).length,2,'одна задача на новую правку');
 });

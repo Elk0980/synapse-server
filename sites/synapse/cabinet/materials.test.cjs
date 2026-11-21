@@ -418,7 +418,7 @@ test('Без CfKit экран не падает: простая шапка и л
   assert.ok(Date.now() - started < 1400, 'событие cfkit:ready не заставляет ждать таймаут');
   assert.equal(el.querySelector('.cfk-title').textContent, 'Монтаж');
   assert.equal(el.querySelectorAll('.mt-card').length, 2);
-  assert.match(el.querySelector('.cfk-chip').textContent, /Монтаж на/);
+  assert.equal(el.querySelector('.cfk-chip').textContent, 'У монтажёра');
 });
 
 /* Пакет H (specs/209-cf-stages): ответ нового сервера — idea.stage, publications, plan.stageFacts, company.timeZone; ролик знает ideaId. */
