@@ -977,9 +977,11 @@ function create(el, ctx) {
     live.id = live.id || requestId();
     live.pending = live.pending || {clientRequestId:live.id,baseVersion:currentVersion()?.version ?? state.version,segments:liveOps.body(live.segments,live.toggles),notes:JSON.parse(JSON.stringify(live.notes))};
     storeLive();state.busy = true;renderLive("Отправляем монтажёру…");
+    let applied=false;
     try {
       const result = await api.liveEdit(state.open.id, live.pending);
       if (ctx.signal.aborted || state.live !== live || !state.open) return;
+      applied=true;
       try {sessionStorage.removeItem(montageDraftKey(live.key));} catch (_) {}
       state.live = null;state.open = keepPost(result.reel);state.busy = false;renderDetail();
       const summary = state.reels.find(r => r.id === result.reel.id);if (summary) Object.assign(summary,result.reel);
@@ -988,7 +990,7 @@ function create(el, ctx) {
       if (state.live !== live || ctx.signal.aborted) return;
       if (error?.status >= 400 && error.status < 500) {live.pending = null;storeLive();}
       state.busy = false;renderLive("Не удалось подтвердить отправку: " + (error?.message || "ошибка сети") + ". Черновик сохранён; повторите отправку.");
-    } finally {state.busy = false;if(state.live&&state.live!==live&&state.open&&!ctx.signal.aborted)renderLive();}
+    } finally {state.busy = false;if(!applied&&state.live&&state.live!==live&&state.open&&!ctx.signal.aborted)renderLive();}
   }
   function historyHtml(reel) {
     if (!fresh(reel) || !Array.isArray(reel.history) || !reel.history.length) return "";

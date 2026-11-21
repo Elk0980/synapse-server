@@ -287,8 +287,8 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
         fail(409,'Просьба опубликовать эту версию уже есть. Посмотрите её статус.','REQUEST_EXISTS');
       const made=core.createPublication(owner.code,row.id,{version:version.version,...(body.platformIds===undefined?{}:{platformIds:body.platformIds})},actor);
       let post=made.post;try{post={...post,...(autoposting.get(made.post.id,owner.code)||{})};}catch{/* состояние согласования неизвестно — считаем по ответу создания */}
-      const notes=(made.planText?.warnings||[]).map(item=>item.message).join(' ');
-      const reply=(needsOwner(post)?waitingText(post):`Черновик публикации №${post.id} создан в «Постинге», на площадки ничего не отправлено. Проверьте текст и дату и поставьте публикацию в план.`)+(notes?' Замечания: '+notes:'');
+      const warnings=(made.planText?.warnings||[]).map(item=>item.message).join(' ');
+      const reply=(needsOwner(post)?waitingText(post):`Черновик публикации №${post.id} создан в «Постинге», на площадки ничего не отправлено. Проверьте текст и дату и поставьте публикацию в план.`)+(warnings?' Замечания: '+warnings:'');
       return result(setStatus(insert({version:version.version,platformIds:post.platformIds||[],postId:post.id}),needsOwner(post)?'waiting_owner':'ready',reply,'Материалы'));
     }
     const date=kind==='reschedule'?day(body.date):'';
