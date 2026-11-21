@@ -239,6 +239,15 @@ def verify_crm():
  print('CRM_READY298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
  print('CRM_STATE298',json.dumps(current));save(PRE/'crm-ready.json',json.dumps({'image':current['image'],'at':time.time()}).encode());return 0
 def main():
+ if sys.argv[1:]==['observe']:
+  for s in ['crm','content']:
+   ins=json.loads(run(['docker','inspect','synapse-'+s+'-1']))[0]
+   logs=subprocess.run(['docker','logs','--since',ins['State']['StartedAt'],'synapse-'+s+'-1'],capture_output=True,timeout=30)
+   logs.check_returncode();lines=(logs.stdout+logs.stderr).decode(errors='replace').splitlines()
+   print('LOG298',s,json.dumps({'lines':len(lines),'errorLines':sum(bool(re.search(r'error|exception',x,re.I)) for x in lines),'notificationUnavailable':sum('MONTAGE_NOTIFICATIONS_UNAVAILABLE' in x for x in lines),'watcherTickFailed':sum('TICK_FAILED' in x for x in lines),'restarts':ins['RestartCount']}))
+  program="""const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('/data/content.sqlite',{readOnly:true});const cursor=d.prepare('SELECT after_id FROM montage_notification_cursor WHERE id=1').get();const count=d.prepare(\"SELECT count(*) AS n FROM team_chat_messages WHERE kind='reel-edit-result'\").get().n;console.log(JSON.stringify({cursorInitialized:Boolean(cursor),cursorAfter:cursor?.after_id??null,deliveredMessages:count}));d.close();"""
+  print('CURSOR298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
+  print('OBSERVE298_OK');return 0
  if sys.argv[1:]==['verify-env']:
   work=ROOT/'w658'
   for s in ['crm','content']:
