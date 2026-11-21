@@ -163,6 +163,21 @@ test('EDL: поле live необязательно, прежний EDL не м�
   for(const bad of [swapped,sound,gap,junk,{...live,live:{segments:[]}}])assert.throws(()=>validateEdl(bad,10000),{status:400});
 });
 
+test('specs/232: разметка версии хранит «не в ролике» и «без звука»; добавить фразу — правка, повторить исходное — нет',()=>{
+  const f=fixture();
+  const segments=[{startMs:0,endMs:3000,label:'Беру'},{startMs:3000,endMs:6000,label:'Не вошло в ролик: длинная фраза '.repeat(4).trim(),enabled:false},{startMs:6000,endMs:10000,sound:false}];
+  for(const bad of [[{startMs:0,endMs:10000,enabled:'нет'}],[{startMs:0,endMs:10000,sound:0}]])
+    assert.throws(()=>f.materials.setSegments('alpha',f.reel.id,1,{segments:bad}),{status:400},JSON.stringify(bad));
+  const stored=f.materials.setSegments('alpha',f.reel.id,1,{segments:[{...segments[0],enabled:true,sound:true},segments[1],segments[2]]}).versions[0].segments;
+  assert.deepEqual(stored,segments,'true не хранится, false хранится, подпись длиннее 80 знаков цела');
+  const same=[{startMs:0,endMs:3000,enabled:true,sound:true},{startMs:3000,endMs:6000,enabled:false,sound:true},{startMs:6000,endMs:10000,enabled:true,sound:false}];
+  assert.throws(()=>f.materials.liveEdit('alpha',f.reel.id,{clientRequestId:'p0',baseVersion:1,segments:same},editor),{status:400},'исходная разметка — не правка');
+  const add=same.map((item,index)=>index===1?{...item,enabled:true}:item);
+  const made=f.materials.liveEdit('alpha',f.reel.id,{clientRequestId:'p1',baseVersion:1,segments:add},editor);
+  assert.equal(made.edit.edl.video.length,3);assert.match(made.edit.comment,/добавлены отрезки: 2/);
+  assert.equal(made.edit.edl.live.segments[1].enabled,true);assert.equal(made.edit.edl.audio[2].muted,true);
+});
+
 test('«Живой монтаж»: отрезок выключается, звук убирается, порядок не меняется; правка уходит агенту как обычный EDL',()=>{
   const f=fixture();
   const segments=[{startMs:0,endMs:3000,label:'Вход'},{startMs:3000,endMs:6000},{startMs:6000,endMs:10000,label:'Финал'}];

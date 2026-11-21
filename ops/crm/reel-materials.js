@@ -61,7 +61,7 @@ function liveOf(value,video,audio,limit){
     if(inMs!==cursor||outMs-inMs<100)fail(400,'Живой монтаж: отрезки идут подряд от начала ролика и не короче 0,1 с');
     if(typeof item.enabled!=='boolean'||typeof item.sound!=='boolean')fail(400,'Живой монтаж: «включён» и «звук» — true или false');
     cursor=outMs;
-    const label=item.label===undefined?'':text(String(item.label).normalize('NFC'),80);
+    const label=item.label===undefined?'':text(String(item.label).normalize('NFC'),200);
     return {inMs,outMs,enabled:item.enabled,sound:item.sound,...(label?{label}:{})};
   });
   const kept=segments.filter(item=>item.enabled);

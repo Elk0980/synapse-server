@@ -120,8 +120,12 @@ const parseMmss = value => {
 const requestId = () => `mt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 /* «Живой монтаж»: чистые функции. Отрезки — как их отдал сервер; порядок не меняется, границы не двигаются. */
 const liveOps = {
-  initial: segments => segments.map(() => ({enabled: true, sound: true})),
-  changed: toggles => toggles.some(item => !item.enabled || !item.sound),
+  /* specs/232: разметка версии может пометить отрезок «не в ролике» / «без звука» — это исходное состояние. */
+  initial: segments => segments.map(item => ({enabled: item?.enabled !== false, sound: item?.sound !== false})),
+  changed: (toggles, segments) => segments
+    ? toggles.some((item, i) => item.enabled !== (segments[i]?.enabled !== false) || item.sound !== (segments[i]?.sound !== false))
+    : toggles.some(item => !item.enabled || !item.sound),
+  active: toggles => toggles.some(item => !item.enabled || !item.sound),
   /* Что делать плееру в момент ms: перейти к началу следующего отрезка «в ролике», остановиться (дальше всё убрано) или заглушить звук. */
   at(segments, toggles, ms) {
     const index = segments.findIndex(item => ms >= item.startMs && ms < item.endMs);
@@ -675,15 +679,15 @@ function create(el, ctx) {
     if (!fresh(reel)) return "";
     const live = liveFor(reel, version), head = `<h3>Живой монтаж · версия v${esc(version?.version ?? 1)}</h3>`;
     if (!live.segments.length) return `<section class="mt-live" data-live-box>${head}<p class="muted" data-live-empty>Отрезки появятся после разметки ролика.</p></section>`;
-    const changed = liveOps.changed(live.toggles);
+    const changed = liveOps.changed(live.toggles, live.segments);
     const row = (item, i) => {
       const t = live.toggles[i];
-      return `<li class="mt-live__row${t.enabled ? "" : " is-off"}" data-live-row="${i}"><span class="mt-live__name"><b>${i + 1}</b> ${item.label ? esc(item.label) + " " : ""}<span class="muted">${mmss(item.startMs)}–${mmss(item.endMs)}</span></span>
+      return `<li class="mt-live__row${t.enabled ? "" : " is-off"}" data-live-row="${i}"><button type="button" class="mt-live__name" data-live-seek="${i}" title="Показать эту фразу в плеере"><b>${i + 1}</b> ${item.label ? esc(item.label) + " " : ""}<span class="muted">${mmss(item.startMs)}–${mmss(item.endMs)}</span></button>
         ${canEdit ? `<span class="mt-live__switch"><button type="button" class="plain-button mt-live__btn" data-live-toggle="enabled:${i}" aria-pressed="${t.enabled}">${t.enabled ? "В ролике" : "Убран"}</button>
         <button type="button" class="plain-button mt-live__btn" data-live-toggle="sound:${i}" aria-pressed="${t.enabled && t.sound}"${t.enabled ? "" : " disabled"}>${t.sound ? "Со звуком" : "Без звука"}</button></span>` : ""}</li>`;
     };
     return `<section class="mt-live" data-live-box>${head}
-      <p class="muted mt-hint">${canEdit ? "Нажмите на отрезок, чтобы убрать его из ролика или оставить без звука (останутся только титры). Порядок отрезков не меняется. " : ""}При просмотре убранные отрезки пропускаются, а на отрезках без звука звук выключается.</p>
+      <p class="muted mt-hint">${canEdit ? "Ролик разбит на фразы. «В ролике» / «Убран» — убрать фразу или добавить ту, что сейчас не в ролике; «Со звуком» / «Без звука» — оставить картинку без голоса. Порядок отрезков не меняется. " : ""}При просмотре убранные отрезки пропускаются, а на отрезках без звука звук выключается.</p>
       <ol class="mt-live__list" data-live-list>${live.segments.map(row).join("")}</ol>
       ${canEdit ? `<div class="mt-actions"><button type="button" class="plain-button primary" data-live-save${changed ? "" : " disabled"}>Сохранить правку</button><button type="button" class="plain-button" data-live-reset${changed ? "" : " disabled"}>Вернуть как было</button></div>` : ""}
       <p class="mt-status" role="status" data-live-status></p></section>`;
@@ -701,14 +705,14 @@ function create(el, ctx) {
   }
   function previewTick(player) {
     const live = state.live;if (!live) return;
-    const step = live.segments.length && liveOps.changed(live.toggles) ? liveOps.at(live.segments, live.toggles, (Number(player.currentTime) || 0) * 1000) : {seekMs: null, stop: false, mute: false};
+    const step = live.segments.length && liveOps.active(live.toggles) ? liveOps.at(live.segments, live.toggles, (Number(player.currentTime) || 0) * 1000) : {seekMs: null, stop: false, mute: false};
     if (step.stop) {if (!player.paused) player.pause();return;}
     if (step.seekMs !== null) {player.currentTime = step.seekMs / 1000;return;}
     if (step.mute && !player.muted) {player.muted = true;live.muted = true;}
     else if (!step.mute && live.muted) {player.muted = false;live.muted = false;}
   }
   async function saveLive() {
-    const live = state.live;if (state.busy || !live || !liveOps.changed(live.toggles)) return;
+    const live = state.live;if (state.busy || !live || !liveOps.changed(live.toggles, live.segments)) return;
     if (!live.toggles.some(item => item.enabled)) {setText("[data-live-status]", "Оставьте в ролике хотя бы один отрезок.");return;}
     live.id = live.id || requestId();state.busy = true;setText("[data-live-status]", "Сохраняем правку…");
     try {
@@ -1041,6 +1045,11 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-requests-refresh")) void reloadOpen("Обновлено.");
     else if (target.dataset.liveToggle) toggleLive(target.dataset.liveToggle);
     else if (target.hasAttribute("data-live-save")) void saveLive();
+    else if (target.hasAttribute("data-live-seek")) {
+      /* specs/232: нажатие на фразу показывает её в плеере — так решают, убирать её или добавлять. */
+      const item = state.live?.segments[Number(target.getAttribute("data-live-seek"))], player = el.querySelector("[data-player]");
+      if (item && player) {player.currentTime = item.startMs / 1000;player.play?.()?.catch?.(() => {});}
+    }
     else if (target.hasAttribute("data-live-reset")) {if (state.live) {state.live.toggles = liveOps.initial(state.live.segments);state.live.id = null;renderLive();}}
   });
   el.addEventListener("submit", event => {

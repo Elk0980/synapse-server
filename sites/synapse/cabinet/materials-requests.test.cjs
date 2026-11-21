@@ -63,6 +63,14 @@ test('живой монтаж, расчёт предпросмотра: убра
   assert.equal(live.at(list, [toggles[0], toggles[1], {enabled: false, sound: true}], 4000).stop, true);
   assert.equal(live.at(list, toggles, 99000).index, -1);
   assert.equal(live.changed(live.initial(list)), false);assert.equal(live.changed(toggles), true);
+  /* specs/232: фраза размечена «не в ролике» — это исходное состояние, её можно добавить. */
+  const marked = [{startMs: 0, endMs: 3000, label: 'Беру'}, {startMs: 3000, endMs: 6000, label: 'Не вошло', enabled: false}, {startMs: 6000, endMs: 10000, sound: false}];
+  same(live.initial(marked), [{enabled: true, sound: true}, {enabled: false, sound: true}, {enabled: true, sound: false}]);
+  assert.equal(live.changed(live.initial(marked), marked), false, 'исходная разметка — не правка');
+  assert.equal(live.active(live.initial(marked)), true, 'но плеер уже пропускает фразу «не в ролике»');
+  const addedBack = live.initial(marked);addedBack[1].enabled = true;
+  assert.equal(live.changed(addedBack, marked), true, 'добавленная фраза — правка');
+  assert.equal(live.at(marked, live.initial(marked), 3500).seekMs, 6000);assert.equal(live.at(marked, addedBack, 3500).seekMs, null);
   same(live.body(list, toggles)[1], {startMs: 3000, endMs: 6000, enabled: false, sound: true}, 'границы и порядок — как у версии, без подписей');
   assert.equal(live.parseMmss('1:05'), 65000);assert.equal(live.parseMmss('12'), 12000);assert.equal(live.parseMmss('0:07,5'), 7500);assert.equal(live.parseMmss('скоро'), null);
   assert.equal(live.mmss(65400), '1:05');
