@@ -15,7 +15,7 @@ const settle = async (n = 6) => { for (let i = 0; i < n; i++) await tick(); };
 const asset = (n) => `https://cabinet.test/content/publishing-assets/alpha/${n.repeat(32)}.mp4`;
 const segments = () => [{startMs: 0, endMs: 3000, label: 'Вход'}, {startMs: 3000, endMs: 6000}, {startMs: 6000, endMs: 10000, label: 'Финал'}];
 const summary = (over = {}) => ({id: 4, key: 'reel:4', source: 'materials', companyCode: 'alpha', title: 'Ролик про мастера', releaseDate: '2026-11-20', platforms: ['instagram', 'vk'],
-  postId: null, currentVersion: {version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: segments()}, versionCount: 2, openEdits: 0,
+  postId: null, currentVersion: {version: 2, editId: 5, mediaUrl: asset('b'), durationMs: 10000, segments: segments()}, versionCount: 2, openEdits: 0,
   caption: '', decision: 'take', decisionLabel: 'берём', decisionComment: '', openRequests: 2, ...over});
 const requests = () => [
   {id: 1, reelId: 4, kind: 'redo', status: 'ready', text: 'Короче начало', version: 1, startMs: 1000, endMs: 2500, date: '', reply: 'Готова новая версия v2. Посмотрите и скажите, подходит ли.',
@@ -23,15 +23,16 @@ const requests = () => [
   {id: 2, reelId: 4, kind: 'publish', status: 'waiting_owner', text: '', version: 2, startMs: null, endMs: null, date: '', reply: 'Черновик публикации №7 создан, на площадки ничего не отправлено. Публикацию должен согласовать владелец.',
     authorName: 'Редактор', createdAt: '2026-11-20T04:00:00Z', events: []},
   {id: 3, reelId: 4, kind: 'reschedule', status: 'accepted', text: '', version: null, startMs: null, endMs: null, date: '2026-11-27', reply: '', authorName: 'Редактор', createdAt: '2026-11-20T05:00:00Z', events: []}];
-const full = (over = {}) => ({...summary(), versions: [{version: 1, mediaUrl: asset('a'), durationMs: 9000}, {version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: segments()}],
+const full = (over = {}) => ({...summary(), versions: [{version: 1, mediaUrl: asset('a'), durationMs: 9000}, {version: 2, editId: 5, mediaUrl: asset('b'), durationMs: 10000, segments: segments()}],
   edits: [], log: [], requests: requests(), openRequests: 2,
   history: [{id: 2, field: 'decision', fieldLabel: 'Решение', before: '', after: 'take', beforeLabel: 'без решения', afterLabel: 'берём', comment: 'Хороший дубль', authorName: 'Редактор', at: '2026-11-20T02:00:00Z'},
     {id: 1, field: 'caption', fieldLabel: 'Подпись', before: '', after: 'Первая подпись', comment: '', authorName: 'Редактор', at: '2026-11-20T01:00:00Z'}], ...over});
 
-function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel = full, list = () => [summary()], respond, user, draftStorage} = {}) {
+function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel = full, list = () => [summary()], respond, user, draftStorage, sessionValues} = {}) {
   const dom = new JSDOM('<main id="view"></main>', {url: 'https://cabinet.test/#content/materials', runScripts: 'outside-only'});
   const w = dom.window, el = w.document.getElementById('view'), calls = [];
   if(draftStorage)w.sessionStorage.setItem('mt-problems:alpha:7',draftStorage);
+  for(const [key,value] of sessionValues || []) w.sessionStorage.setItem(key,value);
   w.eval(kitSource);
   w.SynapseModulesQueue = [];
   w.eval(script);
@@ -54,6 +55,110 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel =
   return {w, el, calls, open, click, submit, live: w.SbCabinet.materialsLive};
 }
 const sent = (f, method, suffix) => f.calls.filter((call) => call.method === method && call.path.endsWith(suffix));
+
+const sourceSummary = () => summary({versionCount:1,openRequests:0,currentVersion:{version:1,mediaUrl:asset('a'),durationMs:10000,segments:segments()}});
+const sourceFull = (over={}) => full({...sourceSummary(),versions:[sourceSummary().currentVersion],requests:[],edits:[],history:[],...over});
+
+test('№290: исходник → шесть пожеланий → одна отправка; публикация скрыта, плеер сохраняется',async t=>{
+  const f=fixture({list:()=>[sourceSummary()],reel:sourceFull,respond:({method,path,body})=>{
+    if(method==='POST'&&path.endsWith('/live-edit')) {
+      const request={id:8,kind:'redo',status:'accepted',version:1,editId:11,notes:body.notes,clientRequestId:body.clientRequestId,createdAt:'2026-11-21T09:40:00Z'};
+      return {reel:sourceFull({openEdits:1,requests:[request],edits:[{id:11,baseVersion:1,status:'pending'}]}),request,edit:{id:11}};
+    }
+  }});t.after(()=>f.w.close());await f.open();
+  const player=f.el.querySelector('[data-player]');
+  assert.match(f.el.querySelector('.mt-detail__meta').textContent,/Выберите фразы/);
+  for(const selector of ['[data-publication]','[data-publish]','[data-review]','[data-download]','[data-ask]'])assert.equal(f.el.querySelector(selector),null,selector);
+  assert.ok(f.el.querySelector('[data-problem-card]'));assert.equal(f.el.querySelectorAll('[data-wish-type]').length,6);
+  assert.equal(f.el.querySelector('[data-live-save]').disabled,true);
+  for(const type of ['font','transition','volume','music','insert','other']) {
+    await f.click(`[data-wish-type="${type}"]`);
+    const layer=f.el.querySelector('[data-wish-layer]'),form=layer.querySelector('form');
+    assert.equal(layer.hidden,false);assert.equal(f.el.querySelector('[data-player]'),player);
+    assert.ok(form.querySelectorAll('[name="option"]').length>=1);
+    if(type==='insert')assert.match(layer.textContent,/голос выбранных фраз остаётся на фоне/);
+    form.elements.text.value=type==='insert'?'Вид с балкона, https://example.test/folder':'Пожелание '+type;
+    if(type==='transition'){form.elements.from.value='1';form.elements.to.value='2';}
+    if(type==='volume')form.elements.from.value='2';
+    await f.submit('[data-wish-form]');
+    assert.equal(layer.hidden,true);
+  }
+  assert.equal(f.el.querySelectorAll('[data-wish-remove]').length,6);
+  assert.match(f.el.querySelector('[data-wish-list]').textContent,/Фразы 1–2: Переход/);
+  assert.match(f.el.querySelector('[data-wish-list]').textContent,/Фраза 2: Громкость/);
+  await f.click('[data-live-toggle="enabled:1"]');assert.match(f.el.querySelector('[data-phrase-changes]').textContent,/Убрано фраз: 1/);
+  assert.equal(f.el.querySelector('[data-live-save]').textContent,'Отправить монтажёру');
+  await f.click('[data-live-save]');
+  const body=sent(f,'POST','/live-edit')[0].body;assert.equal(body.notes.length,6);assert.equal(body.baseVersion,1);
+  assert.equal(sent(f,'POST','/live-edit').length,1);assert.equal(f.el.querySelector('[data-live-save]'),null);
+  assert.match(f.el.querySelector('[data-live-status]').textContent,/Отправлено монтажёру.*Новая версия появится здесь/);
+  assert.match(f.el.querySelector('.mt-detail__meta').textContent,/У монтажёра/);
+  assert.equal(f.el.querySelectorAll('[data-request="8"]').length,1);assert.equal(f.el.querySelectorAll('.mt-request-notes li').length,6);
+  await f.click('[data-back]');assert.match(f.el.querySelector('[data-grid]').textContent,/У монтажёра/);
+});
+
+test('№290: шторка фразы привязывает пожелание; удалить, сбросить, закрыть и восстановить страницу',async t=>{
+  const f=fixture({list:()=>[sourceSummary()],reel:sourceFull});t.after(()=>f.w.close());await f.open();
+  await f.click('[data-live-seek="1"]');assert.equal(f.el.querySelector('#mt-wish-title').textContent,'Фраза 2');
+  await f.click('[data-phrase-wish="1"]');await f.click('[data-bound-wish="font"]');
+  await f.submit('[data-wish-form]');assert.match(f.el.querySelector('[data-wish-list]').textContent,/Фраза 2: Шрифт и титры/);
+  const sessionValues=Array.from({length:f.w.sessionStorage.length},(_,i)=>{const key=f.w.sessionStorage.key(i);return [key,f.w.sessionStorage.getItem(key)];});
+  const restored=fixture({list:()=>[sourceSummary()],reel:sourceFull,sessionValues});t.after(()=>restored.w.close());await restored.open();
+  assert.match(restored.el.querySelector('[data-wish-list]').textContent,/Фраза 2: Шрифт/);
+  await restored.click('[data-wish-remove="0"]');assert.equal(restored.el.querySelector('[data-live-save]').disabled,true);
+  await restored.click('[data-wish-type="other"]');const field=restored.el.querySelector('[data-wish-form] textarea');field.value='Ещё не добавленный текст';field.dispatchEvent(new restored.w.Event('input',{bubbles:true}));
+  await restored.click('[data-wish-close]');await restored.click('[data-wish-type="other"]');assert.equal(restored.el.querySelector('[data-wish-form] textarea').value,'Ещё не добавленный текст');await restored.click('[data-wish-close]');
+  await f.click('[data-back]');await f.click('[data-open="reel:4"]');assert.equal(f.el.querySelectorAll('[data-wish-remove]').length,1);
+  await f.click('[data-live-reset]');assert.equal(f.el.querySelectorAll('[data-wish-remove]').length,0);assert.equal(f.el.querySelector('[data-live-save]').disabled,true);
+});
+
+test('№290: неизвестная отправка замораживает черновик и повторяет тот же ключ/тело, обновление подтверждает результат',async t=>{
+  let tries=0,request;
+  const f=fixture({list:()=>[sourceSummary()],reel:()=>sourceFull(request?{requests:[request],openEdits:1}:{}),respond:({method,path,body})=>{
+    if(method==='POST'&&path.endsWith('/live-edit')) {
+      request={id:9,kind:'redo',status:'accepted',version:1,clientRequestId:body.clientRequestId,notes:body.notes,createdAt:'2026-11-21T10:00:00Z'};
+      if(++tries===1)throw Error('потерян ответ');
+      return {reel:sourceFull({requests:[request],openEdits:1}),request,duplicate:true};
+    }
+  }});t.after(()=>f.w.close());await f.open();
+  await f.click('[data-wish-type="other"]');const text=f.el.querySelector('[data-wish-form] [name="text"]');text.value='Сделать теплее';await f.submit('[data-wish-form]');
+  await f.click('[data-live-save]');assert.match(f.el.querySelector('[data-live-status]').textContent,/Черновик сохранён/);
+  assert.equal(f.el.querySelector('[data-live-reset]').disabled,true);assert.equal(f.el.querySelector('[data-wish-type]').disabled,true);
+  await f.click('[data-live-save]');same(sent(f,'POST','/live-edit')[0].body,JSON.parse(JSON.stringify(sent(f,'POST','/live-edit')[1].body)));
+  assert.equal(f.el.querySelector('[data-live-save]'),null);assert.equal(f.el.querySelectorAll('[data-wish-remove]').length,0);
+  await f.click('[data-requests-refresh]');assert.match(f.el.querySelector('[data-live-status]').textContent,/Отправлено монтажёру/);
+});
+
+test('№290: готовая версия раскрывает прежние действия одной строкой; просмотр без права правки',async t=>{
+  const request={id:8,kind:'redo',version:1,editId:11,status:'ready',notes:[{type:'font',option:'larger'}]};
+  const reel=()=>full({requests:[request],edits:[{id:11,status:'done',resultVersion:2}],versions:[sourceSummary().currentVersion,{version:2,editId:11,mediaUrl:asset('b'),segments:segments()}]});
+  const f=fixture({reel,permissions:['autoposting.view']});t.after(()=>f.w.close());await f.open();
+  assert.equal(f.el.querySelector('[data-publication]').open,false);assert.match(f.el.querySelector('[data-live-status]').textContent,/Версия v2 готова/);
+  assert.ok(f.el.querySelector('[data-download]'));assert.equal(f.el.querySelector('[data-wish-type]'),null);assert.equal(f.el.querySelector('[data-live-save]'),null);
+  await f.click('[data-live-seek="0"]');assert.equal(f.el.querySelector('[data-phrase-wish]'),null);
+});
+
+test('№290: обновление исходника ведёт от «В работе» к новой собранной версии, старые фразы доступны',async t=>{
+  let ready=false;
+  const request=()=>({id:8,kind:'redo',version:1,editId:11,status:ready?'ready':'in_progress',createdAt:'2026-11-21T09:00:00Z'});
+  const assembled={...summary().currentVersion,editId:11,segments:undefined};
+  const reel=()=>ready?full({currentVersion:assembled,requests:[request()],edits:[{id:11,baseVersion:1,status:'done',resultVersion:2}],versions:[sourceSummary().currentVersion,assembled],openEdits:0}):sourceFull({requests:[request()],edits:[{id:11,baseVersion:1,status:'in_progress'}],openEdits:1});
+  const f=fixture({reel,list:()=>[sourceSummary()]});t.after(()=>f.w.close());await f.open();assert.match(f.el.querySelector('[data-live-status]').textContent,/В работе/);
+  ready=true;await f.click('[data-requests-refresh]');assert.equal(f.el.querySelector('[data-version]').value,'2');assert.match(f.el.querySelector('[data-live-status]').textContent,/Версия v2 готова/);
+  assert.ok(f.el.querySelector('[data-publication]'));const select=f.el.querySelector('[data-version]');select.value='1';select.dispatchEvent(new f.w.Event('change',{bubbles:true}));await settle();
+  assert.equal(f.el.querySelector('[data-publication]'),null);assert.equal(f.el.querySelectorAll('[data-live-row]').length,3);
+});
+
+test('№290: старый исходник v3 без результата монтажа остаётся исходником; черновик подписи переживает просмотр исходника',async t=>{
+  const raw=sourceFull({currentVersion:{...sourceSummary().currentVersion,version:3},versions:[{...sourceSummary().currentVersion,version:3}]});
+  const f=fixture({reel:()=>raw,list:()=>[{...sourceSummary(),currentVersion:raw.currentVersion}]});t.after(()=>f.w.close());await f.open();
+  assert.equal(f.el.querySelector('[data-publication]'),null);assert.match(f.el.querySelector('.mt-detail__meta').textContent,/Выберите фразы/);
+  const g=fixture({reel:()=>full({versions:[sourceSummary().currentVersion,{...summary().currentVersion,editId:5}]})});t.after(()=>g.w.close());await g.open();
+  g.el.querySelector('[data-review] [name="caption"]').value='Несохранённая подпись';
+  const select=()=>g.el.querySelector('[data-version]');select().value='1';select().dispatchEvent(new g.w.Event('change',{bubbles:true}));await settle();
+  assert.equal(g.el.querySelector('[data-review]'),null);select().value='2';select().dispatchEvent(new g.w.Event('change',{bubbles:true}));await settle();
+  assert.equal(g.el.querySelector('[data-review] [name="caption"]').value,'Несохранённая подпись');
+});
 
 test('проблема: оба входа для читателя, номер в карточке, ошибка сохраняет текст и ключ повтора',async t=>{
   let count=0;
@@ -96,12 +201,12 @@ test('проблема: восстановление черновика посл
 
 test('нажатие показывает убранную фразу, затем обычный просмотр снова пропускает её без изменения монтажа', async t => {
   const marked = segments().map((s, i) => i === 1 ? {...s, enabled: false} : s);
-  const f = fixture({reel: () => full({versions: [{version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
+  const f = fixture({reel: () => full({versions: [{version: 2, editId: 5, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
   t.after(() => f.w.close());
   await f.open();
   const player = f.el.querySelector('[data-player]');
   player.play = () => {player.dispatchEvent(new f.w.Event('timeupdate'));return Promise.resolve();};
-  await f.click('[data-live-seek="1"]');
+  await f.click('[data-live-seek="1"]');await f.click('[data-phrase-preview="1"]');
   assert.equal(player.currentTime, 3, 'убранную фразу можно посмотреть перед добавлением');
   player.currentTime = 4;player.dispatchEvent(new f.w.Event('timeupdate'));
   assert.equal(player.currentTime, 4, 'просмотр выбранной фразы продолжается');
@@ -149,7 +254,7 @@ test('итоговое время и перемотка исключают уб�
 
 test('управление плеером: итоговый прогресс, пауза, с начала и подсветка без записи на сервер', async t => {
   const marked = segments().map((s, i) => i === 1 ? {...s, enabled: false} : s);
-  const f = fixture({reel: () => full({versions: [{version: 2, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
+  const f = fixture({reel: () => full({versions: [{version: 2, editId: 5, mediaUrl: asset('b'), durationMs: 10000, segments: marked}]})});
   t.after(() => f.w.close());await f.open();
   const player = f.el.querySelector('[data-player]');let paused = true;
   Object.defineProperty(player, 'paused', {get: () => paused});
@@ -264,7 +369,7 @@ test('живой монтаж: переключатели отрезков, со
     ? {reel: full({edits: [{id: 5, kind: 'edl', baseVersion: 2, status: 'pending', comment: 'Живой монтаж'}], openEdits: 1}), edit: {id: 5}, duplicate: false} : undefined});
   await f.open();
   const rows = () => [...f.el.querySelectorAll('[data-live-row]')];
-  assert.match(f.el.querySelector('[data-live-box] h3').textContent, /Живой монтаж · версия v2/);
+  assert.match(f.el.querySelector('[data-live-box] h3').textContent, /1\. Фразы/);
   same(rows().map((n) => n.querySelector('.mt-live__name').textContent.replace(/\s+/g, ' ').trim()), ['1 Вход 0:00–0:03', '2 0:03–0:06', '3 Финал 0:06–0:10']);
   assert.equal(f.el.querySelector('[data-live-save]').disabled, true);
   const player = f.el.querySelector('[data-player]');
@@ -292,7 +397,7 @@ test('живой монтаж: переключатели отрезков, со
   const body = sent(f, 'POST', '/live-edit')[0].body;
   assert.equal(body.baseVersion, 2);
   same(body.segments, [{startMs: 0, endMs: 3000, enabled: true, sound: true}, {startMs: 3000, endMs: 6000, enabled: false, sound: true}, {startMs: 6000, endMs: 10000, enabled: true, sound: true}]);
-  assert.match(f.el.querySelector('[data-live-status]').textContent, /Правка сохранена/);assert.equal(f.el.querySelector('[data-live-save]').disabled, true, 'после сохранения переключатели сброшены');
+  assert.match(f.el.querySelector('[data-live-status]').textContent, /Отправлено монтажёру/);assert.equal(f.el.querySelector('[data-live-save]').disabled, true, 'после сохранения переключатели сброшены');
 });
 
 test('живой монтаж: у версии без разметки экран честно говорит об этом и границ не придумывает', async () => {
