@@ -135,12 +135,62 @@ def prepare(number):
     return 0
 
 
+def verify(number):
+    manifest = json.loads((ROOT / ('pre' + number) / 'manifest.json').read_text())
+    if manifest.get('ok') is not True:
+        raise RuntimeError('trial not ready')
+    for path, row in manifest['files'].items():
+        _, service, name = path.split('/')
+        staged = ROOT / ('w' + number) / ('b-' + service) / name
+        if sha(staged.read_bytes()) != row['candidate'] or sha(livefile(path)) != row['candidate']:
+            print('VERIFY_FAIL', path)
+            raise RuntimeError('candidate mismatch')
+        print('VERIFY_OK', path)
+
+
+def queues():
+    # The existing service credential stays inside the content container.
+    # Only HTTP codes and aggregate counts leave that process.
+    program = r'''
+(async()=>{
+ const url=new URL(process.env.CRM_URL||'http://crm:8080');
+ if(url.protocol!=='http:'||!['crm','localhost','127.0.0.1'].includes(url.hostname)||url.username||url.password||url.search||url.hash)throw Error();
+ const key=process.env.CRM_API_KEY;if(!key)throw Error();
+ const now=Date.now(),out={executorConfigured:!!process.env.MONTAGE_EXECUTOR_URL},data={};
+ for(const [name,field] of [['requests','requests'],['queue','edits']]){
+  const r=await fetch(url.href.replace(/\/$/,'')+'/internal/reel-materials/'+name,{headers:{'x-api-key':key},redirect:'error',signal:AbortSignal.timeout(10000)});
+  if(!r.ok)throw Error();const body=await r.json(),rows=body[field];if(!Array.isArray(rows))throw Error();data[name]=rows;
+  const old=rows.filter(x=>now-Date.parse(x.createdAt)>=600000);
+  out[name]={http:r.status,total:rows.length,older10m:old.length,invalidDates:rows.filter(x=>!Number.isFinite(Date.parse(x.createdAt))).length,
+   statuses:Object.fromEntries([...new Set(rows.map(x=>x.status))].map(s=>[s,rows.filter(x=>x.status===s).length]))};
+ }
+ out.effectiveOld=data.requests.filter(x=>x.editId==null&&x.status==='accepted'&&now-Date.parse(x.createdAt)>=600000).length+data.queue.filter(x=>x.status==='pending'&&now-Date.parse(x.createdAt)>=600000).length;
+ const port=Number(process.env.PORT||8080);if(!Number.isSafeInteger(port)||port<1||port>65535)throw Error();
+ const h=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(10000)});out.contentHealth=h.status;if(!h.ok)throw Error();
+ console.log(JSON.stringify(out));
+})().catch(()=>{console.error('QUEUE_PREFLIGHT_ERROR');process.exitCode=1});
+'''
+    result = subprocess.run(['docker', 'exec', 'synapse-content-1', 'node', '-e', program], capture_output=True, timeout=45)
+    if result.returncode:
+        raise RuntimeError('queue request failed')
+    data = json.loads(result.stdout)
+    print('QUEUE_COUNTS', json.dumps(data, separators=(',', ':')))
+
+
 def main():
     if sys.argv[1:] == ['inspect']:
         inspect()
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == 'prepare' and sys.argv[2] in RELEASES:
         return prepare(sys.argv[2])
+    if sys.argv[1:] == ['after642']:
+        verify('642')
+        queues()
+        return 0
+    if sys.argv[1:] == ['after644']:
+        verify('644')
+        queues()
+        return 0
     print('usage: inspect | prepare 642|644', file=sys.stderr)
     return 2
 
