@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Ограниченный SSH-вход для существующего /root/claude-rel; без shell=True."""
 import base64
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -24,6 +25,16 @@ UNITS = {'synapse-sync.service', 'synapse-autosync.service'}
 
 class Denied(ValueError):
     pass
+
+
+def audit(kind, argv=None):
+    """В syslog — только проверенные аргументы; отказ не раскрывает ввод."""
+    import syslog
+    record = {'event': 'accepted' if argv is not None else 'denied'}
+    if argv is not None:
+        record.update(kind=kind, argv=argv)
+    syslog.openlog('synapse-release-key', syslog.LOG_PID, syslog.LOG_AUTHPRIV)
+    syslog.syslog(syslog.LOG_INFO, json.dumps(record, separators=(',', ':')))
 
 
 def all_match(pattern, values):
@@ -83,6 +94,7 @@ def run(command):
     kind, argv = plan(command)
     trusted(ROOT, directory=True)
     if kind == 'status':
+        audit(kind, argv)
         for item in ('docker ps', 'df -h /', 'journalctl -u synapse-autosync.service -n 8 --no-pager -o cat --utc'):
             code = run(item)
             if code:
@@ -96,12 +108,14 @@ def run(command):
             info = os.fstat(stream.fileno())
             if info.st_uid != 0 or info.st_mode & 0o077:
                 raise Denied()
+            audit(kind, argv)
             try:
                 fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 print('RELEASE_BUSY', file=sys.stderr)
                 return 75
             return subprocess.run(argv, cwd=ROOT, env=ENV, stdin=subprocess.DEVNULL, timeout=3600, check=False).returncode
+    audit(kind, argv)
     return subprocess.run(argv, cwd=ROOT, env=ENV, stdin=subprocess.DEVNULL, timeout=45, check=False).returncode
 
 
@@ -166,6 +180,7 @@ def main():
             raise Denied()
         return run(os.environ.get('SSH_ORIGINAL_COMMAND', ''))
     except (Denied, ValueError):
+        audit('denied')
         print('DENIED', file=sys.stderr)
         return 126
     except (OSError, subprocess.TimeoutExpired):

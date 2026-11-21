@@ -1,6 +1,11 @@
 import importlib.util
+import io
+import json
+import sys
+from contextlib import redirect_stderr
 from pathlib import Path
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('forced_command', Path(__file__).with_name('forced_command.py'))
 m = importlib.util.module_from_spec(spec)
@@ -51,6 +56,35 @@ class AllowlistTest(unittest.TestCase):
         self.assertEqual(kind, 'release')
         self.assertEqual(argv, ['/bin/bash', '/root/claude-rel/prgo.sh', '286', 'crm'])
         self.assertNotIn('SSH_ORIGINAL_COMMAND', m.ENV)
+
+
+class AuditTest(unittest.TestCase):
+    def setUp(self):
+        self.log = mock.Mock(LOG_PID=1, LOG_AUTHPRIV=80, LOG_INFO=6)
+        self.modules = mock.patch.dict(sys.modules, {'syslog': self.log})
+        self.modules.start()
+        self.addCleanup(self.modules.stop)
+
+    def records(self):
+        return [json.loads(call.args[1]) for call in self.log.syslog.call_args_list]
+
+    def test_allowed_read_logs_only_canonical_arguments(self):
+        with mock.patch.object(m, 'trusted'), mock.patch.object(m.subprocess, 'run', return_value=mock.Mock(returncode=0)):
+            self.assertEqual(m.run('docker "ps"'), 0)
+        self.assertEqual(self.records(), [{'event':'accepted', 'kind':'read', 'argv':[
+            '/usr/bin/docker', 'ps', '--format', '{{.ID}} {{.Names}} {{.Image}} {{.Status}}']}])
+        self.log.openlog.assert_called_with('synapse-release-key', 1, 80)
+
+    def test_denial_never_logs_original_input(self):
+        with mock.patch.object(sys, 'argv', ['wrapper']), mock.patch.dict(m.os.environ, {'SSH_ORIGINAL_COMMAND':'id DO_NOT_LOG_THIS_INPUT'}, clear=True), redirect_stderr(io.StringIO()):
+            self.assertEqual(m.main(), 126)
+        self.assertEqual(self.records(), [{'event':'denied'}])
+
+    def test_status_logs_request_and_all_fixed_reads(self):
+        with mock.patch.object(m, 'trusted'), mock.patch.object(m.subprocess, 'run', return_value=mock.Mock(returncode=0)):
+            self.assertEqual(m.run('status'), 0)
+        self.assertEqual([r['kind'] for r in self.records()], ['status','read','read','read'])
+        self.assertEqual(self.records()[0]['argv'], [])
 
 
 if __name__ == '__main__':
