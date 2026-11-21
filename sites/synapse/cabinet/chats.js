@@ -11,12 +11,26 @@
   const human = error => error?.status === 403 ? 'Нет доступа к этому чату.' : error?.status === 401 ? 'Сессия закончилась. Войдите снова.' : 'Связь не подтвердила результат. Повтор той же отправки безопасен.';
 
   // Один разговор: используется и в «Чатах», и в плавающей панели. Хью отвечает по обращению (сервер).
-  function conversation(host, ctx, { room, title, hint, task, onClearTask, placeholder }) {
+  function conversation(host, ctx, { room, title, hint, task, onClearTask, placeholder, onBack }) {
     const box = node('section', 'sbc-conv');
     const head = node('header', 'sbc-conv__head'), list = node('ol', 'sbc-messages'), notice = node('p', 'sbc-notice');
     const older = node('button', 'plain-button sbc-older', 'Ранние сообщения'); older.type = 'button'; older.hidden = true;
+    const olderSlot = node('li', 'sbc-older-slot');
+    if (onBack) {
+      const back = node('button', 'plain-button sbc-back', '←'); back.type = 'button'; back.setAttribute('aria-label', 'Назад к списку чатов'); back.onclick = onBack; head.append(back);
+    }
     head.append(node('h2', 'sbc-conv__title', title));
-    if (hint) head.append(node('p', 'sbc-conv__hint', hint));
+    if (hint) {
+      const description = node('p', 'sbc-conv__hint', hint);
+      if (onBack) {
+        description.id = `sbc-hint-${uid()}`;
+        const info = node('button', 'plain-button sbc-info', 'i'); info.type = 'button'; info.setAttribute('aria-label', 'Кто видит чат и как позвать помощника');
+        info.setAttribute('aria-controls', description.id); info.setAttribute('aria-expanded', 'false');
+        info.onclick = () => { const expanded = head.classList.toggle('sbc-conv__head--info'); info.setAttribute('aria-expanded', String(expanded)); };
+        head.append(info);
+      }
+      head.append(description);
+    }
     let taskBar = null, taskLabel = null;
     if (task) {
       taskBar = node('div', 'sbc-taskbar');
@@ -29,10 +43,38 @@
     const form = node('form', 'sbc-compose'), text = node('textarea'), send = node('button', 'sbc-send', '➤');
     text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Позвать: «Хью, …» или «Лео, …»';
     text.setAttribute('aria-label', 'Сообщение'); send.type = 'submit'; send.setAttribute('aria-label', 'Отправить');
-    form.append(text, send); box.append(head, older, list, notice, form); host.replaceChildren(box);
+    const latest = node('button', 'plain-button sbc-new', 'Новые сообщения ↓'); latest.type = 'button'; latest.hidden = true;
+    form.append(text, send); box.append(head, older, list, latest, notice, form); host.replaceChildren(box);
     const companyCode = ctx.companyCode, taskId = task?.id || null, initialViewer = ctx.user?.id;
     const messages = new Map(); let pending = null, busy = false, viewer = null, stopped = false;
     let identityEpoch = 0, loadEpoch = 0, prefill = '';
+    let followLatest = true, firstRender = true;
+    const mobile = () => Boolean(onBack && window.matchMedia?.('(max-width: 760px)').matches);
+    const placeOlder = () => {
+      if (mobile()) { olderSlot.hidden = older.hidden; olderSlot.append(older); list.prepend(olderSlot); }
+      else { if (older.parentElement !== box) box.insertBefore(older, list); olderSlot.remove(); }
+    };
+    const bottom = () => { list.scrollTop = list.scrollHeight; followLatest = true; latest.hidden = true; };
+    list.addEventListener('scroll', () => {
+      followLatest = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+      if (followLatest) latest.hidden = true;
+    });
+    latest.onclick = bottom;
+    // Рост поля и изменение visualViewport не должны отрывать читателя от последних сообщений.
+    function resize() {
+      const following = followLatest;
+      placeOlder();
+      text.rows = mobile() ? 1 : 2;
+      text.style.height = ''; text.style.overflowY = '';
+      if (mobile()) {
+        const style = getComputedStyle(text), line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.4;
+        const extra = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+        const limit = line * 5 + extra;
+        text.style.height = `${Math.min(text.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth), limit)}px`;
+        text.style.overflowY = text.scrollHeight > limit ? 'auto' : 'hidden';
+      }
+      if (following) bottom();
+    }
     const validViewer = id => Number.isSafeInteger(id) && id > 0;
     const draftKey = id => `sbc:v2:${id}:${companyCode}:${room}:${taskId || ''}`;
     const persist = (id, value) => { if (validViewer(id)) { try { sessionStorage.setItem(draftKey(id), JSON.stringify(value)); } catch {} } };
@@ -49,12 +91,12 @@
       && value.room === room && (value.taskId || null) === taskId;
     function changeViewer(id) {
       if (viewer === id) return false;
-      save(); identityEpoch++; viewer = id; messages.clear(); pending = null; text.value = '';
+      save(); identityEpoch++; viewer = id; messages.clear(); pending = null; text.value = ''; followLatest = true; firstRender = true; latest.hidden = true;
       if (validViewer(id)) {
         try { const saved = JSON.parse(sessionStorage.getItem(draftKey(id)) || 'null'); if (saved) { text.value = typeof saved.text === 'string' ? saved.text : ''; pending = saved.pending || null; } } catch {}
         if (prefill && id === initialViewer && !text.value && !pending) { text.value = prefill; prefill = ''; save(); }
       }
-      compose(); return true;
+      compose(); resize(); return true;
     }
     function suspend() { changeViewer(null); render(); }
     function confirmed(id, sent) {
@@ -64,9 +106,11 @@
       } catch {}
     }
     compose();
-    function render() {
-      const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+    function render({ prepend = false, added = false, hasMore } = {}) {
+      const atBottom = followLatest || firstRender, top = list.scrollTop, height = list.scrollHeight;
+      if (hasMore !== undefined) older.hidden = !hasMore;
       list.replaceChildren();
+      placeOlder();
       for (const m of [...messages.values()].sort((a, b) => a.id - b.id)) {
         const li = node('li', m.user_id === 0 ? 'sbc-msg sbc-msg--hugh' : m.user_id === viewer ? 'sbc-msg sbc-msg--own' : 'sbc-msg');
         if (m.kind === 'hugh-merge') li.classList.add('sbc-msg--merge');
@@ -80,7 +124,13 @@
         list.append(li);
       }
       if (!messages.size) list.append(node('li', 'sbc-empty', room.startsWith('hugh:') ? 'Здесь ваш личный чат с Хью: запросы, уточнения по задачам и ответы. Его видите только вы.' : 'Сообщений пока нет.'));
-      if (atBottom) list.scrollTop = list.scrollHeight;
+      if (atBottom && !prepend) bottom();
+      else {
+        list.scrollTop = top + (prepend ? list.scrollHeight - height : 0);
+        if (prepend) followLatest = false;
+        if (added && !prepend && mobile()) latest.hidden = false;
+      }
+      firstRender = false;
     }
     async function load(before) {
       const request = ++loadEpoch; let data;
@@ -92,9 +142,11 @@
       }
       const previous = viewer, changed = changeViewer(data.viewerId);
       if (changed && before) return load();
+      const lastId = Math.max(0, ...messages.keys());
+      const added = data.messages.some(m => m.id > lastId);
       for (const m of data.messages) messages.set(m.id, m);
-      if (before || messages.size <= data.messages.length) older.hidden = !data.hasMore;
-      render();
+      const hasMore = before || messages.size <= data.messages.length ? data.hasMore : undefined;
+      render({ prepend: Boolean(before), added, hasMore });
       notice.textContent = previous !== null && changed ? 'Аккаунт изменился. Проверьте черновик перед отправкой.'
         : pending ? 'Есть неподтверждённая отправка. Нажмите ➤, чтобы проверить её результат.' : '';
       return { viewerId: viewer, changed };
@@ -121,23 +173,23 @@
         if (data.message?.user_id !== owner) throw Object.assign(Error('Не подтверждён отправитель'), { status: 502 });
         confirmed(owner, sent);
         if (stopped || ctx.signal?.aborted || viewer !== owner || identityEpoch !== epoch) return;
-        pending = null; text.value = ''; save(); notice.textContent = '';
+        pending = null; text.value = ''; save(); resize(); notice.textContent = '';
         const loaded = await load();
-        if (loaded?.viewerId === owner) { messages.set(data.message.id, data.message); render(); list.scrollTop = list.scrollHeight; }
+        if (loaded?.viewerId === owner) { messages.set(data.message.id, data.message); render({ added: true }); if (!mobile()) bottom(); }
       } catch (error) {
         if (!stopped && !ctx.signal?.aborted) { if ([401, 403].includes(error?.status)) suspend(); notice.textContent = human(error); }
       } finally { busy = false; compose(); }
     };
-    text.oninput = save;
+    text.oninput = () => { save(); resize(); };
     text.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) form.requestSubmit(); };
     const timer = setInterval(() => { if (!document.hidden && !busy) load().catch(() => {}); }, 5000);
     const stop = () => { stopped = true; clearInterval(timer); save(); };
     ctx.signal?.addEventListener('abort', stop, { once: true });
     load().catch(e => { notice.textContent = e?.status === 403 ? 'Нет доступа к этому чату.' : 'Не удалось загрузить чат. Обновите экран.'; render(); });
-    return { stop, focus: () => text.focus(), prefill(value) {
+    return { stop, resize, focus: () => text.focus(), prefill(value) {
       prefill = value;
       if (viewer === initialViewer && validViewer(viewer) && !text.value && !pending) { text.value = value; prefill = ''; save(); }
-      text.focus();
+      resize(); text.focus();
     } };
   }
 
@@ -184,14 +236,33 @@
         ...rooms.people.map(p => ({ room: p.room, name: p.name, hint: 'Личный чат. Видите только вы двое. Хью отвечает по обращению «Хью, …», ответ видите только вы.' })),
         // Без доступа к задачам лога Хью нет (№127): сервер отдаёт hugh: null.
         ...(rooms.hugh ? [{ room: rooms.hugh, name: 'Хью · мой личный чат', hint: 'Видите только вы. Здесь ваши запросы и уточнения Хью.' }] : [])];
-      let current = null;
+      let current = null, locked = false, stopped = false, pageY = 0;
+      const media = window.matchMedia?.('(max-width: 760px)'), viewport = window.visualViewport;
+      const syncViewport = () => {
+        if (!stopped && !media?.matches && !current) { open(entries[0]); return; }
+        const active = !stopped && Boolean(media?.matches) && shell.classList.contains('sbc-chats--open');
+        if (active && !locked) { pageY = window.scrollY; document.body.style.setProperty('--sbc-page-top', `${-pageY}px`); }
+        document.body.classList.toggle('sbc-mobile-chat-open', active);
+        document.documentElement.classList.toggle('sbc-mobile-chat-open', active);
+        if (!active && locked) { document.body.style.removeProperty('--sbc-page-top'); window.scrollTo(0, pageY); }
+        locked = active;
+        // При pinch zoom оставляем браузеру масштабирование; клавиатура меняет viewport при scale=1.
+        if (active && viewport && viewport.scale === 1) {
+          shell.style.setProperty('--sbc-viewport-height', `${viewport.height}px`);
+          shell.style.setProperty('--sbc-viewport-top', `${viewport.offsetTop}px`);
+        } else {
+          shell.style.removeProperty('--sbc-viewport-height'); shell.style.removeProperty('--sbc-viewport-top');
+        }
+        current?.resize();
+      };
       const open = entry => {
         current?.stop(); shell.classList.add('sbc-chats--open');
         for (const b of nav.children) b.setAttribute('aria-current', String(b.dataset.room === entry.room));
-        const holder = node('div', 'sbc-holder'), back = node('button', 'plain-button sbc-back', '← Чаты'); back.type = 'button';
-        back.onclick = () => { shell.classList.remove('sbc-chats--open'); };
-        main.replaceChildren(back, holder);
-        current = conversation(holder, ctx, { room: entry.room, title: entry.name, hint: entry.hint });
+        const holder = node('div', 'sbc-holder');
+        main.replaceChildren(holder);
+        current = conversation(holder, ctx, { room: entry.room, title: entry.name, hint: entry.hint,
+          onBack: () => { main.querySelector('textarea')?.blur(); shell.classList.remove('sbc-chats--open'); syncViewport(); nav.querySelector('[aria-current="true"]')?.focus({ preventScroll: true }); } });
+        syncViewport();
       };
       for (const entry of entries) {
         const b = node('button', 'sbc-room'); b.type = 'button'; b.dataset.room = entry.room;
@@ -200,9 +271,17 @@
       }
       if (!rooms.people.length) nav.insertBefore(node('p', 'sbc-muted', 'Других сотрудников компании пока нет.'), nav.children[1]);
       const wanted = ctx.route?.params?.get('room');
-      open(entries.find(e => e.room === wanted) || entries[0]);
-      if (!wanted && window.matchMedia?.('(max-width: 720px)').matches) shell.classList.remove('sbc-chats--open');
-      el._sbc = { stop: () => current?.stop() };
+      // Без room телефон начинает со списка, без промежуточного захвата страницы.
+      if (!wanted && media?.matches) shell.classList.remove('sbc-chats--open');
+      else open(entries.find(e => e.room === wanted) || entries[0]);
+      window.addEventListener('resize', syncViewport); media?.addEventListener('change', syncViewport);
+      viewport?.addEventListener('resize', syncViewport); viewport?.addEventListener('scroll', syncViewport);
+      el._sbc = { stop: () => {
+        if (stopped) return; stopped = true; current?.stop(); syncViewport();
+        window.removeEventListener('resize', syncViewport); media?.removeEventListener('change', syncViewport);
+        viewport?.removeEventListener('resize', syncViewport); viewport?.removeEventListener('scroll', syncViewport);
+      } };
+      ctx.signal?.addEventListener('abort', el._sbc.stop, { once: true });
     },
     unmount(el) { el._sbc?.stop(); }
   };
