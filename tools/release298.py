@@ -239,6 +239,10 @@ def verify_crm():
  print('CRM_READY298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
  print('CRM_STATE298',json.dumps(current));save(PRE/'crm-ready.json',json.dumps({'image':current['image'],'at':time.time()}).encode());return 0
 def main():
+ if sys.argv[1:]==['rollback-recipe']:
+  text=(ROOT/'rel.sh').read_text();found=re.search(r'(?m)^\s*restore\)',text)
+  print('RESTORE_BRANCH',text[found.start():] if found else 'NO_RESTORE_BRANCH')
+  print('ROLLBACK_SCRIPT',(ROOT/'w658/rollback.sh').read_text());return 0
  if sys.argv[1:]==['stage-status']:
   for s in ['crm','content']:
    print('STATE',s,json.dumps(state(s)))
