@@ -204,6 +204,56 @@ def approved644():
     return 0
 
 
+def stage644():
+    """Use the existing prepared overlay recipe; never starts a service."""
+    approved = ROOT / 'pre644-approved'
+    manifest = json.loads((approved / 'manifest.json').read_text())
+    server = (approved / 'server.js').read_bytes()
+    bundle = (approved / 'montage-watcher-bundle.js').read_bytes()
+    if manifest.get('approvedComment') != 2026 or (manifest.get('added'), manifest.get('removed')) != (6, 0):
+        raise RuntimeError('approval receipt missing')
+    if sha(server) != manifest['server'] or sha(bundle) != manifest['bundle']:
+        raise RuntimeError('approved files changed')
+    if sha(livefile('ops/content/server.js')) != manifest['live'] or livefile('ops/content/montage-watcher-bundle.js') is not None:
+        raise RuntimeError('live changed')
+    work = ROOT / 'w644'
+    build = work / 'b-content'
+    dockerfile = build / 'Dockerfile'
+    recipe = dockerfile.read_text().splitlines()
+    if len(recipe) != 2 or not recipe[0].startswith('FROM ') or recipe[1] != 'COPY montage-watcher-bundle.js /app/montage-watcher-bundle.js':
+        raise RuntimeError('unexpected existing overlay recipe')
+    current = subprocess.check_output(['docker', 'inspect', '--format', '{{.Image}}', 'synapse-content-1'], timeout=30).decode().strip()
+    parent = subprocess.check_output(['docker', 'image', 'inspect', '--format', '{{.Id}}', recipe[0][5:]], timeout=30).decode().strip()
+    rollback = json.loads((work / 'rb-content.json').read_text())
+    candidate = json.loads((work / 'cand-content.json').read_text())
+    if parent != current or rollback != {'services': {'content': {'image': current}}}:
+        raise RuntimeError('parent/rollback mismatch')
+    if set(candidate) != {'services'} or set(candidate['services']) != {'content'} or set(candidate['services']['content']) != {'image'}:
+        raise RuntimeError('unexpected candidate structure')
+    if (build / 'montage-watcher-bundle.js').read_bytes() != bundle:
+        raise RuntimeError('prepared bundle mismatch')
+    private_file(build / 'server.js', server)
+    dockerfile.write_text('\n'.join(recipe + ['COPY server.js /app/server.js']) + '\n')
+    # Exactly the build/check commands from the existing prpatch.sh, same tag/directory.
+    image_id = subprocess.check_output(['docker', 'build', '-q', '-t', 'synapse-content:pr644-claude', str(build)], timeout=300).decode().strip().splitlines()[-1]
+    if not image_id.startswith('sha256:') or len(image_id) != 71:
+        raise RuntimeError('invalid built image ID')
+    for name in ['server.js', 'montage-watcher-bundle.js']:
+        subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--entrypoint', 'node', image_id, '--check', '/app/' + name], capture_output=True, timeout=30, check=True)
+    if sha(livefile('ops/content/server.js')) != manifest['live']:
+        raise RuntimeError('live changed during build')
+    candidate['services']['content']['image'] = image_id
+    for path, data in [(work / 'img-content.new', (image_id + '\n').encode()),
+                       (work / 'cand-content.json', json.dumps(candidate).encode()),
+                       (work / 'files-content.txt', b'montage-watcher-bundle.js\nserver.js\n')]:
+        temporary = path.with_name(path.name + '.approved')
+        private_file(temporary, data)
+        os.replace(temporary, path)
+    private_file(work / 'approved644.json', json.dumps({**manifest, 'image': image_id, 'rollbackImage': current}, indent=2).encode())
+    print('APPROVED644_PREP_OK', 'services=content files=2 static=0 checks=2 image=' + image_id)
+    return 0
+
+
 def queues():
     # The existing service credential stays inside the content container.
     # Only HTTP codes and aggregate counts leave that process.
@@ -234,6 +284,8 @@ def queues():
 
 
 def main():
+    if sys.argv[1:] == ['stage644']:
+        return stage644()
     if sys.argv[1:] == ['approved644']:
         return approved644()
     if sys.argv[1:] == ['inspect']:
