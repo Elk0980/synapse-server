@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import base64,zlib,json,hashlib,os,subprocess,sys,re,shutil
+import base64,zlib,json,hashlib,os,subprocess,sys,re,shutil,shlex,time
 from pathlib import Path
 ANCHORS=json.loads(zlib.decompress(base64.b64decode('eJzVV91u2zYUvi/Qd2CNwrIxRbbl3yhwCzfNmqDND+J0xVB3KUUexWxkUiOppK6T610M2B5iLzAUKzC0a/cKyhsNlJTESW0jxYoBu7Eh8vCc7/vOxyNocvsWQgWN1WHBQ+5yx06fI6yHBQ8VRKQqRHANXFcUyCOQzitVyGJwFElxBHQdMDWxrUYHB9QP6svtKm206lBrtGu03ahV2023RbC7XG24UK3lxyUEIIETeIAV9IfYbbZMFr9eD2rVht/GdQC/6dOm79fArwbQaNdaDbdZ79TrVUxgmdZwEzca2Pfr1K03/cCnuN25nn0PywPQl/mrxHVbLdpcJp1ao9NZrhKCg3Yn8Ottv+UHhAYkqLmBG9RdtwnV+jKBZquF3Tr109U8f8iO4DuQLGBgyAc4VJDtMK60jIlmgitTsBdF4RgJHo6RFggjEgoFFJkEiIhojCLGOVDkj5GIQGItJOqv91YQYDJEPgRCAoLXmOg0DQEb4UCDRNhXwPUKijkVaBQrjSQofRGdVeiv9xy0JVDIOCAej3yQqhLEb96MK4GQBBy0rYcgUSTZEdaA/LEGdZ5thBlHMSdDzA+AOjl1EQQm2+oQyKFhODGrxjOxHzKyZmpnohc8pGWcyWL2sxI9+goT4HrV2Oq13pGQGotei2b8CKSCNN21rZgfcnHMH8ZRyIjJyGkvlIDp2GjNgO7CKyD6IqU5dpphB8q0wfw8S5VDN+VMcC2vgFAh0930jwieigHhenwwfCIOuhJ+jJmEkuVUzPLSCGuQDIdqiQyxtsoOkYA17F4eKU2obxM5eipDb3V3c//p7hPz+BjG6WNvZ2P/8dr3p+WVAS9cYkjb/N9CsDPe/TEnXqncvTcSXOMD2BKaBUZrY2pHM3JYKqdoM2SzoqYh5vtLfDrgAuTmjNMpWhzrYd8Y+ga4Bxwh4NgPgXqRFASUcoAfOZvbW3u9R2v7W9t7G99urPb2Nra3+vtrW70HT9Yedrtdq2bZx1hyjwgK3XuGjwjBMUslK598nmWb3YxxIWtP5qfPHOTOclC2kEkVSeGHMErVAaWdEeihoAbIznZ/zyoWKz8MBhUcaxEJpRk/GAzSDqvBoDIY0G8Gg0qeQt2tOBqULhE52sF6OM88X7l66b53DuDkSj/TUEzLs2At1Kw+X7PcQzsgR0wpJngpR26fUykWGQWumR470UWUchgnYUxBlawpMs4Rg2OrfP/zNe/l3QkRowjz8aagcQinzt2JYbNtxvZ9ZKVRyEOWGSDW6UsbpY5YMbZD6HSR8v8fDvkPC0oLbFC6711p+0nuixt5oVi8M3Oi5De3PMmwsKB01aF3ul3r0dqeVQ4wC0uNasO2kt+St8m75I/kU/JX8iF5l3xM/jz7FSV/J5+S98nvKPmYvEPJ2+R98uHsl7OfTMDZz9Y5Wwk6lhwp4LQkQUWCK7DdatWenA+R7I2eC7oqKHixDB0FWJLhDpZ4pJwD0GZGXERYZZuImGuvaqdqec9fnNoTx3GIkMq2CCZDWDIzRYrQ8iwultLXtXWDudKYfUeyW20ghGCUfCaZBtRF1+RD3W4XWTtP9yxULKK8GdliZQSU4aURcC1k5VjIwyAUx1YZnZzMM3VW1PSbQFrw34yTWbaZMUHmU53CgU5Ovhrzhd1ozptYOchYSuAadRfd/SsXOL2RNrqBwxZN+S+oPqXaV5o+/4bPQrFbs8XO58gzrMkQpKM0lro0X5254RdbVyfSVL6F6NqLLmaeua9FFAHtfoZBRAsQf1EKNHUrL0hcO3Sd4Hn1hfyy78EZVsfHmF2Ht8Cbc8Ivt2Yhn0Jn/l7cvnV6+9Y/MbnJ4g==')))
 ROOT=Path('/root/claude-rel')
@@ -104,7 +104,78 @@ def preflight(anchored=False):
   receipt['files'].append(entry);print('CANDIDATE',json.dumps(entry))
  receipt['ok']=True;save(PRE/'receipt.json',json.dumps(receipt,indent=2).encode());print('PREFLIGHT298_OK',len(receipt['files']))
  return 0
+def replace_private(p,b):
+ t=p.with_name(p.name+'.checked298');save(t,b);os.replace(t,p)
+def backup(phase):
+ if phase not in ['before-build','before-up']:raise RuntimeError('backup phase')
+ receipt=json.loads((PRE/'receipt.json').read_text())
+ if not receipt.get('ok'):raise RuntimeError('preflight missing')
+ r=subprocess.run([str(ROOT/'rel.sh'),'snap','pr658-'+phase],cwd=ROOT,capture_output=True,timeout=180)
+ save(PRE/('backup-'+phase+'.log'),r.stdout+r.stderr);r.check_returncode()
+ result=re.findall(rb'BK=([^\s]+)',r.stdout)
+ if not result:raise RuntimeError('backup receipt missing')
+ directory=Path(result[-1].decode()).resolve()
+ if not directory.is_relative_to((ROOT/'bk').resolve()) or not directory.is_dir():raise RuntimeError('backup directory invalid')
+ save(PRE/('backup-'+phase+'.json'),json.dumps({'path':str(directory),'at':time.time()}).encode())
+ print('BACKUP298_OK',phase,str(directory))
+ # Existing backup tool prints aggregate integrity results only; never dump SQL.
+ for l in r.stdout.decode().splitlines():
+  if any(x in l.lower() for x in ['integrity','dbsnap','tables=']):print(l)
+ return 0
+def stage():
+ receipt=json.loads((PRE/'receipt.json').read_text());bk=json.loads((PRE/'backup-before-build.json').read_text())
+ if not receipt.get('ok') or time.time()-bk['at']>1800:raise RuntimeError('fresh backup/preflight required')
+ for name in ['prpatch.sh','prgo.sh','rel.sh']:
+  if (ROOT/name).read_bytes()!=(PRE/name).read_bytes():raise RuntimeError('release script changed')
+ work=ROOT/'w658'
+ if (work/'checked298.json').exists():raise RuntimeError('already staged; inspect instead')
+ for s in ['crm','content']:
+  if state(s)!=json.loads((PRE/(s+'.json')).read_text()):raise RuntimeError('service changed '+s)
+ for row in DATA['files']:
+  path=row['path'];n=path.replace('/','__');p=PRE/'before'/n
+  if path=='sites/synapse/cabinet.html' and live(row)==(PRE/'candidates'/n).read_bytes():continue
+  if live(row)!=(p.read_bytes() if p.exists() else None):raise RuntimeError('live file changed '+path)
+ prepared={}
+ for s in ['crm','content']:
+  old=json.loads((PRE/(s+'.json')).read_text());build=work/('b-'+s)
+  candidate=json.loads((work/('cand-'+s+'.json')).read_text());rb=json.loads((work/('rb-'+s+'.json')).read_text())
+  if set(candidate)!={'services'} or set(candidate['services'])!={s} or set(candidate['services'][s])!={'image'}:raise RuntimeError('candidate structure')
+  if rb!={'services':{s:{'image':old['image']}}}:raise RuntimeError('rollback parent changed')
+  parent=(build/'Dockerfile').read_text().splitlines()[0]
+  if not parent.startswith('FROM '):raise RuntimeError('overlay parent missing')
+  if run(['docker','image','inspect','--format','{{.Id}}',parent[5:]]).decode().strip()!=old['image']:raise RuntimeError('overlay wrong live parent')
+  chosen=[x for x in receipt['files'] if x['path'].startswith('ops/'+s+'/') and not x['skip']]
+  names=[]
+  for f in chosen:
+   name=f['path'].split('/')[-1];b=(PRE/'candidates'/f['path'].replace('/','__')).read_bytes()
+   if sha(b)!=f['sha']:raise RuntimeError('candidate bytes changed')
+   replace_private(build/name,b) if (build/name).exists() else save(build/name,b)
+   os.chmod(build/name,0o644);names.append(name)
+  recipe='FROM '+old['image']+'\n'+''.join('COPY '+n+' /app/'+n+'\n' for n in names)
+  replace_private(build/'Dockerfile',recipe.encode())
+  result=subprocess.run(['docker','build','-q','-t','synapse-'+s+':pr658-claude',str(build)],capture_output=True,timeout=300)
+  save(PRE/('build-'+s+'.log'),result.stdout+result.stderr);result.check_returncode();image=result.stdout.decode().strip().splitlines()[-1]
+  if not re.fullmatch(r'sha256:[0-9a-f]{64}',image):raise RuntimeError('image id')
+  for n in names:run(['docker','run','--rm','--network','none','--entrypoint','node',image,'--check','/app/'+n])
+  candidate['services'][s]={'image':image,'environment':{FLAG:'1'}}
+  rb['services'][s]['environment']={FLAG:old['flag']}
+  replace_private(work/('cand-'+s+'.json'),json.dumps(candidate).encode());replace_private(work/('rb-'+s+'.json'),json.dumps(rb).encode())
+  replace_private(work/('img-'+s+'.new'),(image+'\n').encode());replace_private(work/('files-'+s+'.txt'),('\n'.join(names)+'\n').encode())
+  # Render and compare supported compose arguments without exposing any environment.
+  base=['docker','compose','-p','synapse','--project-directory','/opt/synapse']
+  curargs=shlex.split((work/('args-'+s+'.cur')).read_text());newargs=shlex.split((work/('args-'+s+'.new')).read_text())
+  before=json.loads(run(base+curargs+['config','--format','json']));after=json.loads(run(base+newargs+['config','--format','json']))
+  if after['services'][s]['image']!=image or str(after['services'][s].get('environment',{}).get(FLAG))!='1':raise RuntimeError('activation override not effective')
+  before['services'][s].pop('image',None);after['services'][s].pop('image',None)
+  before['services'][s].setdefault('environment',{}).pop(FLAG,None);after['services'][s].setdefault('environment',{}).pop(FLAG,None)
+  if before!=after:raise RuntimeError('unexpected compose configuration difference')
+  prepared[s]={'image':image,'rollback':old['image'],'files':names,'flag':'1','composeDiffOnlyImageAndFlag':True}
+  print('STAGED298',s,json.dumps(prepared[s]))
+ save(work/'checked298.json',json.dumps(prepared,indent=2).encode());print('STAGE298_OK crm content')
+ return 0
 def main():
+ if sys.argv[1:] in [['backup-before-build'],['backup-before-up']]:return backup(sys.argv[1][7:])
+ if sys.argv[1:]==['stage']:return stage()
  if sys.argv[1:]==['pin']:
   h=sha(live(DATA['files'][0]));print('SERVER_SHA_CHUNKS',*[h[i:i+16] for i in range(0,64,16)]);return 0
  if sys.argv[1:]==['anchored-preflight']:return preflight(True)
