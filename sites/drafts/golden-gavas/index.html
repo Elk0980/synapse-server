@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Голден Гавас — бани в Иркутске</title>
+<meta name="description" content="Черновик нового сайта банного комплекса «Голден Гавас» в Иркутске: римская, русская, тропическая, финская и турецкая бани с бассейнами. Расчёт стоимости и бронь.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky film of real looping videos (one per bath) crossfading on scroll with glass passports; then gallery by bath, cost calculator and booking. Single dark "steam and gold" theme. */
+:root{
+  color-scheme:dark;
+  --bg:#0E0C0A; --bg2:#17130F; --fg:#F6EFE3; --fg2:#CDBFA8; --fg3:#8F826E;
+  --line:rgba(246,239,227,.14); --glass:rgba(16,13,10,.62);
+  --gold:#D9A85B; --steam:#9FC7C3;
+  --disp:"Marcellus",Georgia,serif; --body:"Golos Text",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img,video{display:block;max-width:100%}
+[hidden]{display:none!important}
+.bar{position:fixed;inset:0 0 auto 0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);background:linear-gradient(#0E0C0Ad8,#0E0C0A00)}
+.logo{font:400 20px var(--disp);letter-spacing:.14em;text-decoration:none;color:var(--fg);white-space:nowrap}
+.logo b{color:var(--gold);font-weight:400}
+.bar nav{display:flex;gap:22px;font-size:14px;color:var(--fg2)}
+.bar nav a{color:inherit;text-decoration:none}
+.bar nav a:hover{color:var(--fg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;font:600 15px var(--body);background:var(--gold);color:#1a1207;border:0;border-radius:999px;padding:12px 22px;cursor:pointer;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 30px #d9a85b40}
+.btn:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+.draft{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;font-size:12px;color:var(--fg3);background:#000b;border:1px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;white-space:nowrap}
+
+.story{position:relative}
+.film{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;background:#000}
+.film .fr{position:absolute;inset:0;opacity:0;will-change:opacity,transform}
+.film video{width:100%;height:100%;object-fit:cover}
+.film::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 40%,transparent 40%,#000b 100%),linear-gradient(transparent 50%,#0E0C0Ae6 100%);pointer-events:none}
+.chapters{position:relative;margin-top:-100vh;margin-top:-100svh}
+.ch{height:160vh;display:flex;align-items:flex-start;padding:0 clamp(16px,5vw,64px)}
+.ch>.card{position:sticky;top:calc(100vh - var(--h,380px) - 8vh);top:calc(100svh - var(--h,380px) - 8vh)}
+.ch:first-child{align-items:center;height:130vh}
+.ch:first-child>.card{position:relative;top:auto}
+.ch.right{justify-content:flex-end}
+.card{max-width:540px;background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:22px;padding:26px 28px;opacity:0;transform:translateY(30px);transition:opacity .6s,transform .6s}
+.ch.on .card{opacity:1;transform:none}
+.stage{font:500 12px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.card h2{font:400 clamp(34px,4.4vw,56px)/1.02 var(--disp);margin-bottom:10px}
+.card p{color:var(--fg2)}
+.pass{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.pass div{border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:#ffffff06}
+.pass small{display:block;font-size:11.5px;color:var(--fg3);letter-spacing:.04em}
+.pass b{font:500 15px var(--body);font-variant-numeric:tabular-nums}
+.price{margin-top:14px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.price b{font:400 34px/1 var(--disp);color:var(--gold)}
+.price span{color:var(--fg3);font-size:13px}
+.hero{max-width:760px}
+.hero h1{font:400 clamp(44px,8vw,112px)/.95 var(--disp);letter-spacing:.01em}
+.hero h1 span{color:var(--gold)}
+.hero p{font-size:clamp(17px,1.6vw,20px);margin:16px 0 22px;max-width:540px}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+.rail{position:fixed;right:clamp(10px,2vw,26px);top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:8px;transition:opacity .4s}
+.rail button{font:500 12px var(--body);color:var(--fg2);background:#000a;border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer;text-align:right}
+.rail button.on{color:#1a1207;background:var(--gold);border-color:var(--gold)}
+.rail.off{opacity:0;pointer-events:none}
+
+section.block{position:relative;padding:clamp(70px,10vw,130px) clamp(16px,5vw,64px)}
+.eyebrow{font:500 12px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.h2{font:400 clamp(36px,5.4vw,70px)/1.02 var(--disp);max-width:900px}
+.lead{color:var(--fg2);max-width:640px;margin-top:14px;font-size:18px}
+
+/* gallery */
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px}
+.tabs button{font:500 14px var(--body);color:var(--fg2);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer}
+.tabs button.on{color:#1a1207;background:var(--gold);border-color:var(--gold)}
+.gal{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:190px;gap:10px;margin-top:20px}
+.gal>*{position:relative;overflow:hidden;border-radius:16px;background:var(--bg2);border:0;padding:0;cursor:zoom-in}
+.gal img,.gal video{width:100%;height:100%;object-fit:cover;transition:transform .6s}
+.gal>*:hover img,.gal>*:hover video{transform:scale(1.04)}
+.gal .big{grid-column:span 2;grid-row:span 2}
+.gal .lbl{position:absolute;left:10px;bottom:10px;font-size:12px;background:#000a;border-radius:999px;padding:4px 10px;color:var(--fg)}
+.box{position:fixed;inset:0;z-index:60;background:#000e;display:grid;place-items:center;padding:24px}
+.box img{max-height:88vh;border-radius:12px}
+.box button{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:#000a;color:#fff;font-size:22px;cursor:pointer}
+
+/* calc */
+.calc{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;margin-top:36px}
+.panel{background:var(--bg2);border:1px solid var(--line);border-radius:22px;padding:26px;min-width:0}
+.field{margin-bottom:22px}
+.field label{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--fg2);margin-bottom:10px}
+.field label output{font:600 15px var(--body);color:var(--fg);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--gold)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:96px;font:500 14px var(--body);color:var(--fg2);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;cursor:pointer}
+.seg button.on{border-color:var(--gold);color:var(--fg)}
+.sum{font:400 clamp(44px,5.5vw,68px)/1 var(--disp);color:var(--gold);font-variant-numeric:tabular-nums;margin:6px 0}
+.lines{display:grid;gap:10px;margin-top:16px;font-size:15px}
+.lines div{display:flex;justify-content:space-between;gap:10px;color:var(--fg2);border-bottom:1px dashed var(--line);padding-bottom:8px}
+.lines span:last-child{color:var(--fg);font-variant-numeric:tabular-nums}
+.disc{color:var(--fg3);font-size:12.5px;margin-top:14px}
+
+.faq{max-width:860px;margin-top:30px}
+.faq details{border-bottom:1px solid var(--line);padding:18px 0}
+.faq summary{cursor:pointer;font:600 18px var(--body);list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::after{content:"+";color:var(--gold);font-size:24px;line-height:1}
+.faq details[open] summary::after{content:"–"}
+.faq p{color:var(--fg2);margin-top:10px}
+
+.final{overflow:hidden;min-height:86vh;display:flex;align-items:center}
+.final video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.55}
+.final::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#0E0C0Af2 0%,#0E0C0Ab0 50%,#0E0C0A30 100%);z-index:1}
+.final .inner{position:relative;z-index:2;max-width:520px}
+form{display:grid;gap:12px;margin-top:22px}
+input[type=text],input[type=tel],input[type=date],select{font:16px var(--body);color:var(--fg);background:#0E0C0Acc;border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:100%}
+input:focus,select:focus{outline:2px solid var(--gold);outline-offset:1px}
+.ok{background:#1f2a20;border:1px solid #4b7a55;color:#d4eedb;border-radius:14px;padding:14px 16px;font-size:15px}
+footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 30px;justify-content:space-between}
+
+@media (max-width:900px){
+  .bar nav{display:none}
+  .bar .btn{padding:10px 16px;font-size:14px}
+  .ch{height:140vh}
+  .ch.right{justify-content:flex-start}
+  .card{padding:20px}
+  .rail{display:none}
+  .gal{grid-template-columns:1fr 1fr;grid-auto-rows:150px}
+  .calc{grid-template-columns:1fr}
+  .draft{display:none}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="logo" href="#top">GOLDEN <b>GAVAS</b></a>
+  <nav><a href="#gallery">Бани</a><a href="#calc">Стоимость</a><a href="#faq">Правила</a></nav>
+  <a class="btn" href="#order">Забронировать</a>
+</header>
+
+<div class="story" id="top">
+  <div class="film" aria-hidden="true" id="film"></div>
+  <div class="chapters">
+    <div class="ch" data-i="0">
+      <div class="hero card">
+        <div class="stage">Банный комплекс · Иркутск</div>
+        <h1>Пять бань.<br><span>Пять миров.</span></h1>
+        <p>Римская, русская, тропическая, финская и турецкая. В каждой — своя парная, бассейн и комната отдыха для компании до 12 человек.</p>
+        <div class="row"><a class="btn" href="#calc">Рассчитать стоимость</a><a class="btn ghost" href="#gallery">Смотреть все помещения</a></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="1">
+      <div class="card">
+        <div class="stage">Римская баня</div>
+        <h2>Мрамор, колонны и звёздный купол</h2>
+        <p>Хамам с влажным паром, два бассейна — прохладный и тёплый с аэромассажем, фонтан «голова льва» и потолок, который меняет цвет.</p>
+        <div class="pass"><div><small>Пар</small><b>влажный до 60 °C</b></div><div><small>Бассейны</small><b>22 °C и 35 °C</b></div><div><small>Парная</small><b>до 5 человек</b></div><div><small>Отдых</small><b>до 8, TV, караоке</b></div></div>
+        <div class="price"><b>3 500 ₽/час</b><span>до 6 гостей, далее +585 ₽/час за каждого</span></div>
+      </div>
+    </div>
+    <div class="ch" data-i="2">
+      <div class="card">
+        <div class="stage">Русская баня</div>
+        <h2>Сухой жар и дубовый стол</h2>
+        <p>Парная с каменкой до 110 °C, трапезная со срубом и лавками, бассейн с гидромассажем, помывочный стол.</p>
+        <div class="pass"><div><small>Пар</small><b>сухой до 110 °C</b></div><div><small>Бассейн</small><b>28–29 °C</b></div><div><small>Парная</small><b>до 5 человек</b></div><div><small>Отдых</small><b>до 12, TV, караоке</b></div></div>
+        <div class="price"><b>3 500 ₽/час</b><span>до 6 гостей, далее +585 ₽/час за каждого</span></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="3">
+      <div class="card">
+        <div class="stage">Тропическая баня</div>
+        <h2>Скалы, грот и джунгли в два этажа</h2>
+        <p>Самая большая баня: две комнаты отдыха, купель-грот с водопадом, гидромассажная ванна, лестница-скала на второй уровень.</p>
+        <div class="pass"><div><small>Пар</small><b>сухой до 110 °C</b></div><div><small>Купель</small><b>прохладная, водопад</b></div><div><small>Парная</small><b>до 6 человек</b></div><div><small>Гостей</small><b>до 12</b></div></div>
+        <div class="price"><b>2 500 ₽/час</b><span>до 6 гостей, далее +420 ₽/час за каждого</span></div>
+      </div>
+    </div>
+    <div class="ch" data-i="4">
+      <div class="card">
+        <div class="stage">Финская сауна</div>
+        <h2>Тёплое дерево и синий бассейн</h2>
+        <p>Сауна с сухим паром, бассейн с аэромассажем и подсветкой, уютная комната отдыха с видом на воду.</p>
+        <div class="pass"><div><small>Пар</small><b>сухой до 110 °C</b></div><div><small>Бассейн</small><b>28–29 °C, аэромассаж</b></div><div><small>Парная</small><b>до 6 человек</b></div><div><small>Отдых</small><b>до 6, TV, караоке</b></div></div>
+        <div class="price"><b>2 500 ₽/час</b><span>до 6 гостей, далее +420 ₽/час за каждого</span></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="5">
+      <div class="card">
+        <div class="stage">Турецкая баня</div>
+        <h2>Хамам под куполом со звёздами</h2>
+        <p>Мраморный гёбек-ташы, изумрудные колонны, восьмигранный бассейн-джакузи со сменой подсветки и купол из чёрной мозаики.</p>
+        <div class="pass"><div><small>Пар</small><b>влажный до 60 °C</b></div><div><small>Бассейны</small><b>22 °C и 35 °C</b></div><div><small>Хамам</small><b>до 6 человек</b></div><div><small>Отдых</small><b>до 8, TV, караоке</b></div></div>
+        <div class="price"><b>2 500 ₽/час</b><span>до 6 гостей, далее +420 ₽/час за каждого</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<nav class="rail" id="rail" aria-label="Бани"></nav>
+
+<section class="block" id="gallery">
+  <div class="eyebrow">Все помещения</div>
+  <h2 class="h2">Посмотрите баню до того, как приедете</h2>
+  <p class="lead">Выберите баню: живые видео и фото парной, бассейна, комнаты отдыха и душевых.</p>
+  <div class="tabs" id="gtabs"></div>
+  <div class="gal" id="gal"></div>
+</section>
+
+<section class="block" id="calc" style="background:var(--bg2)">
+  <div class="eyebrow">Расчёт стоимости</div>
+  <h2 class="h2">Сколько стоит ваш вечер</h2>
+  <p class="lead">Выберите баню, длительность и число гостей. Цена считается по правилам комплекса: за час до 6 гостей и доплата за каждого следующего.</p>
+  <div class="calc">
+    <div class="panel" style="background:var(--bg)">
+      <div class="field"><label>Баня</label><div class="seg" id="cBath"></div></div>
+      <div class="field"><label for="hours">Длительность <output id="oHours"></output></label><input type="range" id="hours" min="2" max="8" step="1" value="3"></div>
+      <div class="field"><label for="guests">Гостей <output id="oGuests"></output></label><input type="range" id="guests" min="1" max="12" step="1" value="6"></div>
+    </div>
+    <div class="panel" style="background:var(--bg)">
+      <small style="color:var(--fg3)">Итого за аренду</small>
+      <div class="sum" id="sum">—</div>
+      <div class="lines" id="lines"></div>
+      <a class="btn" href="#order" style="margin-top:18px">Забронировать это время</a>
+      <p class="disc">Цены по данным действующего сайта комплекса на 07.11.2026. Перед публикацией сверить с прайсом владельца. Минимальное время аренды уточняется у администратора.</p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="faq">
+  <div class="eyebrow">Правила и вопросы</div>
+  <h2 class="h2">Что важно знать заранее</h2>
+  <div class="faq">
+    <details><summary>Что входит в аренду?</summary><p>Вся баня целиком: парная, бассейн, комната отдыха с TV и караоке, душевые и раздевалка. Полотенца и тапочки — уточните у администратора.</p></details>
+    <details><summary>Можно ли париться с веником?</summary><p>Да. В турецкой бане по правилам комплекса — только дубовыми вениками.</p></details>
+    <details><summary>Сколько гостей можно пригласить?</summary><p>Цена за час включает до 6 гостей, за каждого следующего — доплата. Максимум — 12 человек.</p></details>
+    <details><summary>Как забронировать?</summary><p>Оставьте заявку на сайте или позвоните администратору. Мы подтвердим свободное время и пришлём напоминание.</p></details>
+  </div>
+</section>
+
+<section class="block final" id="order">
+  <video src="m/v/rim-stars.mp4" poster="m/v/rim-stars.jpg" muted playsinline loop autoplay preload="none"></video>
+  <div class="inner">
+    <div class="eyebrow">Бронь</div>
+    <h2 class="h2">Выберите время — мы подготовим баню</h2>
+    <p class="lead" id="orderLead">Иркутск, ул. Красноказачья, 119а.</p>
+    <form id="form" novalidate>
+      <input type="text" id="fName" placeholder="Как к вам обращаться" autocomplete="name">
+      <input type="tel" id="fPhone" placeholder="Телефон" autocomplete="tel">
+      <select id="fBath"><option value="">Какая баня</option><option>Римская</option><option>Русская</option><option>Тропическая</option><option>Финская</option><option>Турецкая</option></select>
+      <input type="date" id="fDate" aria-label="Дата">
+      <button class="btn" type="submit">Отправить заявку</button>
+      <div class="ok" id="ok" hidden>Это черновик сайта: заявка не отправляется. В рабочей версии она придёт администратору и в CRM.</div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <span>Черновик нового сайта банного комплекса «Голден Гавас», Иркутск. Делает Synapse Business.</span>
+  <span>Фото и видео — материалы комплекса. Цены — с действующего сайта, требуют сверки.</span>
+</footer>
+<div class="draft">Черновик · не опубликован</div>
+
+<script>
+(()=>{
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+const BATHS = [
+  {id:'rim', n:'Римская', loop:'rim-stars', alt:['rim-lion','rim-pool'], price:3500, extra:585, photos:['hero','gal-1','gal-2','gal-4','gal-5','gal-6'], labels:['Зал с бассейном','Купол с росписью','Центральный зал','Фонтан «голова льва»','Капитель колонны','Массажная']},
+  {id:'rus', n:'Русская', loop:'rus-stove', alt:['rus-pool'], price:3500, extra:585, photos:['gal-1','gal-4','gal-8','gal-2','gal-5','gal-7','section'], labels:['Трапезная','Бассейн','Парная, каменка','Помывочный стол','Предбанник','Трапезная и бассейн','Шайка и шапка']},
+  {id:'tro', dir:'tropic', n:'Тропическая', loop:'tro-grot', alt:['tro-stairs'], price:2500, extra:420, photos:['gal-1','gal-4','gal-3','gal-2','gal-7','gal-6','gal-8'], labels:['Второй уровень','Грот-купель сверху','Комната отдыха','Ниша у скалы','Парная','Массажная','Массажная у скалы']},
+  {id:'fin', n:'Финская', loop:'fin-aero', alt:['fin-pool'], price:2500, extra:420, photos:['gal-3','gal-1','gal-4','gal-5','gal-2','gal-7'], labels:['Бассейн','Комната отдыха','Стол и TV','Аэромассаж','Парная','Каменка']},
+  {id:'tur', dir:'turk', n:'Турецкая', loop:'tur-pool', alt:['tur-dome'], price:2500, extra:420, photos:['gal-6','gal-2','gal-12','gal-4','gal-5','gal-3','gal-1'], labels:['Бассейн под арками','Колонны и михраб','Анфилада','Хамам','Хамам, мрамор','Михраб крупно','Раздевалка']},
+];
+
+/* film of looping videos: hero uses turkish pool, then one per bath */
+const film = $('film'), seq = ['tur-pool', 'rim-stars', 'rus-stove', 'tro-grot', 'fin-aero', 'tur-dome'];
+const layers = seq.map((v, k) => { const d = document.createElement('div'); d.className = 'fr'; const el = document.createElement('video'); el.muted = true; el.loop = true; el.playsInline = true; el.setAttribute('playsinline', ''); el.preload = k < 2 ? 'auto' : 'none'; el.poster = 'm/v/' + v + '.jpg'; el.src = 'm/v/' + v + '.mp4'; d.append(el); film.append(d); return {d, el}; });
+const N = seq.length, chapters = [...document.querySelectorAll('.ch')], rail = $('rail'), story = document.querySelector('.story');
+['Начало', ...BATHS.map(b => b.n)].forEach((n, i) => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => chapters[i].scrollIntoView({behavior: RM ? 'auto' : 'smooth'}); rail.append(b); });
+const railBtns = [...rail.children];
+function renderStory() {
+  const r = story.getBoundingClientRect(), vh = innerHeight;
+  const p = Math.min(Math.max(-r.top / (r.height - vh), 0), 1) * (N - 1);
+  const i = Math.floor(p), f = p - i, t = Math.min(Math.max((f - .6) / .4, 0), 1), e = t * t * (3 - 2 * t);
+  layers.forEach((L, k) => {
+    let o = 0, s = 1;
+    if (k === i) { o = 1; s = 1 + .05 * f; } else if (k === i + 1) { o = e; s = 1.08 - .08 * e; }
+    L.d.style.opacity = o; if (!RM) L.d.style.transform = `scale(${s.toFixed(4)})`;
+    const want = o > 0.01 && r.bottom > 0;
+    if (want && L.el.paused && !RM) { L.el.preload = 'auto'; L.el.play().catch(() => {}); }
+    if (!want && !L.el.paused) L.el.pause();
+  });
+  if (layers[i + 2]) layers[i + 2].el.preload = 'auto';
+  chapters.forEach((c, k) => { const cr = c.getBoundingClientRect(); c.classList.toggle('on', k === 0 ? cr.bottom > vh * .5 : (cr.top < vh * .6 && cr.bottom > vh * 1.02)); });
+  railBtns.forEach((b, k) => b.classList.toggle('on', k === Math.round(p)));
+  rail.classList.toggle('off', r.bottom < vh * .6);
+}
+let tk = false;
+addEventListener('scroll', () => { if (!tk) { tk = true; requestAnimationFrame(() => { renderStory(); tk = false; }); } }, {passive: true});
+const setH = () => document.querySelectorAll('.ch>.card').forEach(c => c.parentElement.style.setProperty('--h', c.offsetHeight + 'px'));
+addEventListener('resize', () => { setH(); renderStory(); });
+setH(); document.fonts && document.fonts.ready.then(setH); renderStory();
+
+/* gallery */
+let gi = 0;
+const gal = $('gal');
+BATHS.forEach((b, i) => { const t = document.createElement('button'); t.textContent = b.n; t.onclick = () => { gi = i; drawGal(); }; $('gtabs').append(t); });
+function drawGal() {
+  [...$('gtabs').children].forEach((t, k) => t.classList.toggle('on', k === gi));
+  const b = BATHS[gi], dir = b.dir || b.id; gal.innerHTML = '';
+  const vids = [b.loop, ...b.alt];
+  vids.forEach((v, k) => { const w = document.createElement('div'); w.className = k === 0 ? 'big' : ''; w.style.cursor = 'default'; const el = document.createElement('video'); el.src = 'm/v/' + v + '.mp4'; el.poster = 'm/v/' + v + '.jpg'; el.muted = true; el.loop = true; el.playsInline = true; el.setAttribute('playsinline', ''); if (!RM) el.autoplay = true; w.append(el); const l = document.createElement('span'); l.className = 'lbl'; l.textContent = 'Видео'; w.append(l); gal.append(w); });
+  b.photos.forEach((p, k) => { const w = document.createElement('button'); w.setAttribute('aria-label', 'Открыть фото: ' + b.labels[k]); const im = new Image(); im.loading = 'lazy'; im.src = `m/p/${dir}-${p}.jpg`; im.alt = b.n + ' баня: ' + b.labels[k]; w.append(im); const l = document.createElement('span'); l.className = 'lbl'; l.textContent = b.labels[k]; w.append(l); w.onclick = () => openBox(im.src, im.alt); gal.append(w); });
+}
+function openBox(src, alt) { const d = document.createElement('div'); d.className = 'box'; d.innerHTML = `<img src="${src}" alt="${alt}"><button aria-label="Закрыть">×</button>`; d.onclick = () => d.remove(); document.body.append(d); d.querySelector('button').focus(); addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { d.remove(); removeEventListener('keydown', esc); } }); }
+drawGal();
+
+/* calc */
+let cb = 0;
+BATHS.forEach((b, i) => { const t = document.createElement('button'); t.textContent = b.n; if (i === 0) t.className = 'on'; t.onclick = () => { cb = i; [...$('cBath').children].forEach((x, k) => x.classList.toggle('on', k === i)); calc(); }; $('cBath').append(t); });
+function plural(n, a, b, c) { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c); }
+function calc() {
+  const b = BATHS[cb], h = +$('hours').value, g = +$('guests').value, over = Math.max(0, g - 6);
+  const base = b.price * h, ext = b.extra * over * h, total = base + ext;
+  $('oHours').textContent = h + ' ' + plural(h, 'час', 'часа', 'часов');
+  $('oGuests').textContent = g + ' ' + plural(g, 'гость', 'гостя', 'гостей');
+  $('sum').textContent = fmt(total);
+  $('lines').innerHTML = [[b.n + ' баня, ' + h + ' ' + plural(h, 'час', 'часа', 'часов'), fmt(base)], ['Гости сверх 6: ' + over, fmt(ext)], ['На каждого гостя', fmt(total / g)]].map(([a, v]) => `<div><span>${a}</span><span>${v}</span></div>`).join('');
+  $('orderLead').textContent = `${b.n} баня, ${h} ${plural(h, 'час', 'часа', 'часов')}, ${g} ${plural(g, 'гость', 'гостя', 'гостей')} — ${fmt(total)}. Иркутск, ул. Красноказачья, 119а.`;
+  $('fBath').value = b.n;
+}
+$('hours').oninput = calc; $('guests').oninput = calc; calc();
+$('form').onsubmit = e => { e.preventDefault(); $('ok').hidden = false; };
+})();
+</script>
+</body>
+</html>

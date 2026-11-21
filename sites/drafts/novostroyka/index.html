@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Сосновый квартал</title>
+<meta name="description" content="Демо-сайт: жилой комплекс комфорт+ у соснового парка и реки — двор без машин, планировки, ипотечный расчёт-пример и запись на просмотр. Пример для Synapse Business.">
+<meta name="robots" content="noindex, nofollow">
+<meta property="og:title" content="Сосновый квартал — двор без машин, парк за окном">
+<meta property="og:description" content="Демо-сайт жилого комплекса от Synapse Business.">
+<meta property="og:image" content="poster.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500;700&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: fixed film of real frames scrubbed by scroll with glass chapter cards; then an isometric floor plan, mortgage calc and a booking form. Single warm-dusk theme. */
+:root{
+  color-scheme:dark;
+  --bg:#0F1613; --bg2:#16201C; --fg:#F5F1E8; --fg2:#C9C3B4; --fg3:#8D8A7E;
+  --line:rgba(245,241,232,.14); --glass:rgba(14,20,17,.6);
+  --gold:#E8B86A; --pine:#5E8B6C; --sold:#3A403C;
+  --disp:"Unbounded",system-ui,sans-serif; --body:"Golos Text",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{display:block;max-width:100%}
+[hidden]{display:none!important}
+.bar{position:fixed;inset:0 0 auto 0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);background:linear-gradient(#0F1613d0,#0F161300)}
+.logo{font:500 15px var(--disp);letter-spacing:.04em;text-decoration:none;color:var(--fg);display:flex;align-items:center;gap:10px;white-space:nowrap}
+.logo svg{width:22px;height:22px}
+.logo small{font:500 10px var(--body);letter-spacing:.1em;color:var(--fg3);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.bar nav{display:flex;gap:22px;font-size:14px;color:var(--fg2)}
+.bar nav a{text-decoration:none;color:inherit}
+.bar nav a:hover{color:var(--fg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;font:600 15px var(--body);background:var(--gold);color:#1B1408;border:0;border-radius:999px;padding:12px 22px;cursor:pointer;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 30px #e8b86a44}
+.btn:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.bar .short{display:none}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+
+/* story film */
+.story{position:relative}
+.film{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;background:#000}
+.film .fr{position:absolute;inset:0;opacity:0;will-change:opacity,transform}
+.film .fr img{width:100%;height:100%;object-fit:cover}
+.film .breath{position:absolute;inset:0;animation:breath 10s ease-in-out infinite alternate}
+@keyframes breath{from{transform:scale(1)}to{transform:scale(1.035)}}
+.film::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 40%,transparent 45%,#000a 100%),linear-gradient(transparent 55%,#0F1613e0 100%);pointer-events:none}
+.chapters{position:relative;margin-top:-100vh;margin-top:-100svh}
+.ch{height:150vh;display:flex;align-items:flex-start;padding:0 clamp(16px,5vw,64px)}
+.ch>.card{position:sticky;top:calc(100vh - var(--h,340px) - 9vh);top:calc(100svh - var(--h,340px) - 9vh)}
+.ch:first-child{align-items:center}
+.ch:first-child>.card{position:relative;top:auto}
+.ch.right{justify-content:flex-end}
+.card{max-width:540px;background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:24px;padding:26px 28px;opacity:0;transform:translateY(30px);transition:opacity .6s,transform .6s}
+.ch.on .card{opacity:1;transform:none}
+.stage{font:500 12px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
+.card h2{font:700 clamp(24px,3.2vw,40px)/1.1 var(--disp);text-wrap:balance;margin-bottom:12px}
+.card p{color:var(--fg2)}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.facts span{font-size:13.5px;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:#ffffff08}
+.pain{margin-top:14px;font-size:14px;color:var(--fg3);border-left:2px solid var(--gold);padding-left:12px}
+.pain em{font-style:normal;color:var(--fg)}
+.hero{max-width:880px}
+.hero h1{font:700 clamp(38px,7vw,96px)/.98 var(--disp);letter-spacing:-.01em;text-wrap:balance}
+.hero h1 span{color:var(--gold)}
+.hero p{font-size:clamp(17px,1.6vw,20px);max-width:560px;margin:18px 0 24px}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+.rail{position:fixed;right:clamp(10px,2vw,26px);top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:9px;transition:opacity .4s}
+.rail button{width:10px;height:10px;border-radius:50%;border:1px solid var(--fg2);background:transparent;cursor:pointer;padding:0}
+.rail button.on{background:var(--gold);border-color:var(--gold);transform:scale(1.3)}
+.rail.off{opacity:0;pointer-events:none}
+
+section.block{position:relative;padding:clamp(70px,10vw,130px) clamp(16px,5vw,64px)}
+.eyebrow{font:500 12px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
+.h2{font:700 clamp(28px,4.4vw,56px)/1.05 var(--disp);max-width:900px;text-wrap:balance}
+.lead{color:var(--fg2);max-width:640px;margin-top:16px;font-size:18px}
+
+/* plan */
+.planwrap{display:grid;grid-template-columns:1.35fr .65fr;gap:28px;margin-top:36px;align-items:start}
+.ctrl{display:flex;flex-wrap:wrap;gap:18px;margin-bottom:14px}
+.ctrl .grp{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--fg2)}
+.pill{font:500 14px var(--body);color:var(--fg2);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer}
+.pill.on{color:#1B1408;background:var(--gold);border-color:var(--gold)}
+.floorsel{display:flex;align-items:center;gap:8px}
+.floorsel output{font:700 20px var(--disp);min-width:40px;text-align:center}
+.floorsel button{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--bg2);color:var(--fg);font-size:18px;cursor:pointer}
+.stagebox{position:relative;background:radial-gradient(80% 70% at 50% 45%,#22302a,#121a16);border:1px solid var(--line);border-radius:24px;overflow:hidden;aspect-ratio:4/3;max-width:100%;perspective:1600px}
+.iso{position:absolute;left:50%;top:40%;width:min(74%,540px);aspect-ratio:1/1;transform:translate(-50%,-50%) rotateX(56deg) rotateZ(-38deg);transform-style:preserve-3d;transition:transform .8s}
+.slab{position:absolute;inset:-4%;background:#2b3631;border-radius:6px;box-shadow:0 0 0 1px #ffffff12;transform:translateZ(-2px)}
+.slab::after{content:"";position:absolute;inset:0;border-radius:6px;transform:translateZ(-18px);background:#1a221e}
+.apt{position:absolute;background:#E9E3D6;border:3px solid #9c9585;cursor:pointer;transform-style:preserve-3d;transition:transform .45s cubic-bezier(.2,.8,.2,1),background .3s,box-shadow .45s;box-shadow:0 0 0 #0000}
+.apt .lbl{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font:600 15px/1.2 var(--body);color:#2a2a24;transform:rotateZ(38deg);pointer-events:none}
+.apt .lbl small{display:block;font-weight:500;font-size:11px;color:#6b6656}
+.apt::before{content:"";position:absolute;inset:0;border:0 solid #9c9585;transform:translateZ(0);transition:transform .6s}
+.apt.sold{background:var(--sold);border-color:#2b302d;cursor:not-allowed}
+.apt.sold .lbl{color:#8d928e}
+.apt.sold .lbl small{color:#6e736f}
+.apt.free:hover,.apt.sel{transform:translateZ(26px);box-shadow:-14px 14px 26px #0008;background:#FFF6E0}
+.apt.sel{border-color:var(--gold)}
+.walls .apt{animation:grow .9s cubic-bezier(.2,.8,.2,1) backwards}
+@keyframes grow{from{transform:translateZ(-30px);opacity:0}}
+.core{position:absolute;background:#55605a;border:3px solid #3e4642;display:grid;place-items:center}
+.core span{transform:rotateZ(38deg);font:500 11px var(--body);color:#c8cfca}
+.legend{position:absolute;left:16px;bottom:14px;display:flex;gap:14px;font-size:12.5px;color:var(--fg2)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.side{background:var(--bg2);border:1px solid var(--line);border-radius:24px;padding:24px;display:grid;gap:14px;min-width:0}
+.side h3{font:700 26px/1.1 var(--disp)}
+.side .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.side .meta div{background:#ffffff06;border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.side .meta small{display:block;color:var(--fg3);font-size:12px}
+.side .meta b{font:600 17px var(--body);font-variant-numeric:tabular-nums}
+.side .price{font:700 32px/1 var(--disp);font-variant-numeric:tabular-nums}
+.side .hint{color:var(--fg3);font-size:13px}
+
+/* calc */
+.calc{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;margin-top:40px}
+.panel{background:var(--bg2);border:1px solid var(--line);border-radius:24px;padding:26px;min-width:0}
+.field{margin-bottom:22px}
+.field label{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--fg2);margin-bottom:10px}
+.field label output{font:600 15px var(--body);color:var(--fg);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--gold)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:110px;font:500 14px var(--body);color:var(--fg2);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;cursor:pointer}
+.seg button.on{border-color:var(--gold);color:var(--fg)}
+.board small{font:500 18px var(--body);color:var(--fg2);margin-left:6px}
+.board{white-space:nowrap;font:700 clamp(34px,4.4vw,56px)/1 var(--disp);font-variant-numeric:tabular-nums;margin:8px 0 6px}
+.lines{display:grid;gap:10px;margin-top:18px;font-size:15px}
+.lines div{display:flex;justify-content:space-between;gap:10px;color:var(--fg2);border-bottom:1px dashed var(--line);padding-bottom:8px}
+.lines span:last-child{color:var(--fg);font-variant-numeric:tabular-nums}
+.disc{color:var(--fg3);font-size:12.5px;margin-top:16px}
+
+/* near */
+.near{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:22px;overflow:hidden;margin-top:36px}
+.near div{background:var(--bg2);padding:22px 18px}
+.near b{display:block;font:700 34px/1 var(--disp);color:var(--gold)}
+.near b small{font-size:15px;color:var(--fg2);font-weight:500;margin-left:4px}
+.near p{color:var(--fg2);font-size:14.5px;margin-top:8px}
+
+.faq{max-width:860px;margin-top:30px}
+.faq details{border-bottom:1px solid var(--line);padding:18px 0}
+.faq summary{cursor:pointer;font:600 18px var(--body);list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::after{content:"+";color:var(--gold);font-size:24px;line-height:1}
+.faq details[open] summary::after{content:"–"}
+.faq p{color:var(--fg2);margin-top:10px}
+
+.final{overflow:hidden;min-height:90vh;display:flex;align-items:center}
+.final>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.6}
+.final::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#0F1613f2 0%,#0F1613b0 50%,#0F161330 100%);z-index:1}
+.final .inner{position:relative;z-index:2;max-width:520px}
+form{display:grid;gap:12px;margin-top:24px}
+input[type=text],input[type=tel],select{font:16px var(--body);color:var(--fg);background:#0F1613cc;border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:100%}
+input:focus,select:focus{outline:2px solid var(--gold);outline-offset:1px}
+.ok{background:#1d2e22;border:1px solid #4d7b5a;color:#d6efdc;border-radius:14px;padding:14px 16px;font-size:15px}
+footer{padding:30px clamp(16px,5vw,64px) 60px;color:var(--fg3);font-size:13px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 30px;justify-content:space-between}
+
+@media (max-width:900px){
+  .bar nav,.logo small,.bar .long{display:none}
+  .bar .short{display:inline}
+  .iso{top:44%}
+  .bar .btn{padding:10px 16px;font-size:14px}
+  .ch{height:130vh}
+  .ch.right{justify-content:flex-start}
+  .card{padding:20px}
+  .rail{display:none}
+  .planwrap,.calc{grid-template-columns:1fr}
+  .stagebox{aspect-ratio:1/1}
+  .iso{width:84%}
+  .near{grid-template-columns:1fr 1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  .film .breath,.walls .apt{animation:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="logo" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 5 12h4l-4 6h5v4h4v-4h5l-4-6h4z" fill="#5E8B6C"/></svg>СОСНОВЫЙ КВАРТАЛ<small>ДЕМО</small></a>
+  <nav><a href="#plan">Планировки</a><a href="#calc">Ипотека</a><a href="#near">Рядом</a><a href="#faq">Вопросы</a></nav>
+  <a class="btn" href="#order"><span class="long">Записаться на просмотр</span><span class="short">Просмотр</span></a>
+</header>
+
+<div class="story" id="top">
+  <div class="film" aria-hidden="true"><div class="breath" id="film"></div></div>
+  <div class="chapters">
+    <div class="ch" data-i="0">
+      <div class="hero card">
+        <div class="stage">Жилой комплекс комфорт+</div>
+        <h1>Двор без машин. <span>Парк за окном</span></h1>
+        <p>Три дома у соснового парка и реки. Сдача — IV квартал 2027 (пример). Выберите квартиру и сразу узнайте платёж.</p>
+        <div class="row"><a class="btn" href="#plan">Выбрать квартиру</a><a class="btn ghost" href="#calc">Рассчитать ипотеку</a></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="1">
+      <div class="card">
+        <div class="stage">Место</div>
+        <h2>Город рядом, шум — нет</h2>
+        <p>Квартал стоит между сосновым парком и набережной. До центра 15 минут на машине, остановка — у въезда.</p>
+        <div class="facts"><span>3 дома · 12–17 этажей</span><span>Сосновый парк 12 га</span><span>Набережная — 300 м</span></div>
+      </div>
+    </div>
+    <div class="ch" data-i="2">
+      <div class="card">
+        <div class="stage">Двор</div>
+        <h2>Машины — под землёй, двор — детям</h2>
+        <p>Во дворе только дорожки, площадки и деревья. Парковка в подземном паркинге, лифт довозит до этажа.</p>
+        <div class="facts"><span>Площадки для 3 возрастов</span><span>Кофейня и магазин внизу</span></div>
+      </div>
+    </div>
+    <div class="ch right" data-i="3">
+      <div class="card">
+        <div class="stage">Надёжность</div>
+        <h2>Стройка идёт по графику — смотрите сами</h2>
+        <p>Каждый месяц выкладываем фото и видео со стройки. Деньги дольщиков хранятся на эскроу-счёте в банке, застройщик получает их только после сдачи дома.</p>
+        <div class="pain">Главный страх покупателя новостройки — <em>недострой и перенос сроков</em>. Эскроу и открытый ход строительства этот страх снимают.</div>
+      </div>
+    </div>
+    <div class="ch" data-i="4">
+      <div class="card">
+        <div class="stage">Подъезд</div>
+        <h2>Лобби как в хорошем отеле</h2>
+        <p>Входная группа на уровне двора, без ступенек. Колясочная, зона ожидания, видеонаблюдение и консьерж.</p>
+      </div>
+    </div>
+    <div class="ch right" data-i="5">
+      <div class="card">
+        <div class="stage">Квартира</div>
+        <h2>Окна в пол и вид на сосны</h2>
+        <p>Сдаём в предчистовой отделке: стены выровнены, стяжка готова. Остаётся выбрать обои и мебель.</p>
+        <div class="facts"><span>Потолки 2,85 м</span><span>Кухня-гостиная от 17 м²</span></div>
+      </div>
+    </div>
+    <div class="ch" data-i="6">
+      <div class="card">
+        <div class="stage">Жизнь</div>
+        <h2>Вечер, который хочется повторять</h2>
+        <p>Кухня-гостиная собирает всю семью, спальни смотрят во двор или на парк. Планировки продуманы под шкафы и технику.</p>
+      </div>
+    </div>
+    <div class="ch right" data-i="7">
+      <div class="card">
+        <div class="stage">Рядом</div>
+        <h2>Парк и набережная — ваш маршрут на выходные</h2>
+        <p>Деревянный настил вдоль реки, велодорожки, места для пикника. Гулять с собакой и коляской — прямо от подъезда.</p>
+      </div>
+    </div>
+    <div class="ch" data-i="8">
+      <div class="card">
+        <div class="stage">Дети</div>
+        <h2>Школа и сад — 5 минут пешком</h2>
+        <p>Новая школа и детский сад стоят рядом с кварталом. Дорога к ним идёт через двор и не пересекает проезжую часть.</p>
+      </div>
+    </div>
+    <div class="ch right" data-i="9">
+      <div class="card">
+        <div class="stage">Решение</div>
+        <h2>Здесь хочется жить</h2>
+        <p>Выберите квартиру на интерактивном плане, посчитайте платёж и запишитесь на просмотр шоурума.</p>
+        <div class="row" style="margin-top:18px"><a class="btn" href="#plan">Открыть планировки</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+<nav class="rail" id="rail" aria-label="Главы"></nav>
+
+<section class="block" id="plan" style="background:var(--bg)">
+  <div class="eyebrow">Интерактивный план этажа</div>
+  <h2 class="h2">Выберите свою квартиру</h2>
+  <p class="lead">Переключайте дом и этаж. Нажмите на свободную квартиру — она поднимется, а справа появятся площадь и цена.</p>
+  <div class="planwrap">
+    <div>
+      <div class="ctrl">
+        <div class="grp" id="houses" role="group" aria-label="Дом"></div>
+        <div class="grp floorsel"><span>Этаж</span><button id="fDown" aria-label="Этаж ниже">−</button><output id="floor">7</output><button id="fUp" aria-label="Этаж выше">+</button></div>
+      </div>
+      <div class="stagebox">
+        <div class="iso" id="iso"><div class="slab"></div></div>
+        <div class="legend"><span><i style="background:#E9E3D6"></i>Свободна</span><span><i style="background:var(--sold)"></i>Продана</span></div>
+      </div>
+    </div>
+    <aside class="side" id="side" aria-live="polite">
+      <div class="eyebrow" id="sKind" style="margin:0">Квартира не выбрана</div>
+      <h3 id="sTitle">Нажмите на свободную квартиру на плане</h3>
+      <div class="meta">
+        <div><small>Площадь</small><b id="sArea">—</b></div>
+        <div><small>Этаж</small><b id="sFloor">—</b></div>
+        <div><small>Вид из окон</small><b id="sView">—</b></div>
+        <div><small>Отделка</small><b>Предчистовая</b></div>
+      </div>
+      <div><small style="color:var(--fg3)">Цена, пример</small><div class="price" id="sPrice">—</div></div>
+      <div class="row"><a class="btn" href="#order" id="want">Хочу эту</a><a class="btn ghost" href="#calc" id="toCalc">Платёж</a></div>
+      <p class="hint">Цены и наличие — пример для демонстрации.</p>
+    </aside>
+  </div>
+</section>
+
+<section class="block" id="calc" style="background:var(--bg2)">
+  <div class="eyebrow">Ипотека, расчёт-пример</div>
+  <h2 class="h2">Сколько платить в месяц</h2>
+  <p class="lead">Цена подставляется из выбранной квартиры. Двигайте взнос и срок — платёж пересчитается.</p>
+  <div class="calc">
+    <div class="panel" style="background:var(--bg)">
+      <div class="field"><label for="price">Стоимость квартиры <output id="oPrice"></output></label><input type="range" id="price" min="2500000" max="16000000" step="100000" value="7900000"></div>
+      <div class="field"><label for="down">Первоначальный взнос <output id="oDown"></output></label><input type="range" id="down" min="20" max="80" step="5" value="20"></div>
+      <div class="field"><label for="term">Срок <output id="oTerm"></output></label><input type="range" id="term" min="5" max="30" step="1" value="30"></div>
+      <div class="field"><label>Программа</label><div class="seg" id="prog"><button data-r="6" class="on">Семейная · 6%</button><button data-r="18">Рыночная · 18%</button><button data-r="0.1">Рассрочка</button></div></div>
+    </div>
+    <div class="panel" style="background:var(--bg)">
+      <small style="color:var(--fg3)">Ежемесячный платёж, пример</small>
+      <div class="board" id="pay">—</div>
+      <div class="lines" id="lines"></div>
+      <a class="btn" href="#order" style="margin-top:18px">Получить одобрение</a>
+      <p class="disc">Демонстрационный расчёт. Ставки условные, не являются офертой банка. Условия программ и одобрение зависят от банка и заёмщика.</p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="near">
+  <div class="eyebrow">Что рядом</div>
+  <h2 class="h2">Всё, что нужно семье, — пешком</h2>
+  <div class="near">
+    <div><b>5<small>мин</small></b><p>Школа и детский сад</p></div>
+    <div><b>3<small>мин</small></b><p>Сосновый парк</p></div>
+    <div><b>4<small>мин</small></b><p>Набережная реки</p></div>
+    <div><b>15<small>мин</small></b><p>До центра на машине</p></div>
+  </div>
+  <p class="disc">Время — пример для демонстрации.</p>
+</section>
+
+<section class="block" id="faq" style="background:var(--bg2)">
+  <div class="eyebrow">Частые вопросы</div>
+  <h2 class="h2">Отвечаем до того, как спросите</h2>
+  <div class="faq">
+    <details><summary>Что будет, если стройка задержится?</summary><p>Деньги покупателей хранятся на эскроу-счёте в банке и переходят застройщику только после ввода дома. Сроки и ответственность прописаны в договоре долевого участия.</p></details>
+    <details><summary>Можно ли посмотреть квартиру до сдачи?</summary><p>Да. В шоуруме собрана квартира в натуральную величину, а на стройку проводим экскурсии по записи.</p></details>
+    <details><summary>Какие ипотечные программы доступны?</summary><p>Работаем с несколькими банками, поможем подобрать программу и подать заявку. Ставка и одобрение зависят от банка и заёмщика.</p></details>
+    <details><summary>Где ставить машину?</summary><p>В подземном паркинге под домами. Места можно купить или арендовать, во дворе машин нет.</p></details>
+  </div>
+</section>
+
+<section class="block final" id="order">
+  <img src="m/story/10.jpg" alt="" loading="lazy">
+  <div class="inner">
+    <div class="eyebrow">Шоурум открыт ежедневно</div>
+    <h2 class="h2">Запишитесь на просмотр</h2>
+    <p class="lead" id="orderLead">Покажем шоурум, стройку и подберём квартиру под ваш бюджет.</p>
+    <form id="form" novalidate>
+      <input type="text" id="fName" name="name" placeholder="Как к вам обращаться" autocomplete="name">
+      <input type="tel" id="fPhone" name="phone" placeholder="Телефон" autocomplete="tel">
+      <select id="fRooms" name="rooms"><option value="">Сколько комнат ищете</option><option>Студия</option><option>1 комната</option><option>2 комнаты</option><option>3 комнаты</option></select>
+      <button class="btn" type="submit">Записаться</button>
+      <div class="ok" id="ok" hidden>Это демо-сайт Synapse Business: заявка не отправляется. На настоящем сайте она сразу попадёт в CRM и менеджеру отдела продаж.</div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <span>«Сосновый квартал» — вымышленный жилой комплекс. Демо-сайт Synapse Business.</span>
+  <span>Изображения сгенерированы. Цены, сроки и ставки — примеры.</span>
+</footer>
+
+<script>
+(()=>{
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+const $ = id => document.getElementById(id);
+
+/* story */
+const N = 10, film = $('film'), frames = [];
+for (let i = 1; i <= N; i++) {
+  const d = document.createElement('div'); d.className = 'fr';
+  const im = new Image(); im.src = 'm/story/' + i + '.jpg'; im.alt = ''; if (i > 2) im.loading = 'lazy';
+  d.append(im); film.append(d); frames.push(d);
+}
+const chapters = [...document.querySelectorAll('.ch')], rail = $('rail'), story = document.querySelector('.story');
+chapters.forEach((c, i) => { const b = document.createElement('button'); b.setAttribute('aria-label', 'Глава ' + (i + 1)); b.onclick = () => c.scrollIntoView({behavior: RM ? 'auto' : 'smooth'}); rail.append(b); });
+const railBtns = [...rail.children];
+function renderStory() {
+  const r = story.getBoundingClientRect(), vh = innerHeight;
+  const p = Math.min(Math.max(-r.top / (r.height - vh), 0), 1) * (N - 1);
+  const i = Math.floor(p), f = p - i;
+  const t = Math.min(Math.max((f - 0.55) / 0.45, 0), 1), e = t * t * (3 - 2 * t);
+  frames.forEach((fr, k) => {
+    let o = 0, s = 1, x = 0;
+    if (k === i) { o = 1; s = 1 + 0.06 * f + (RM ? 0 : 0.06 * e); x = -1 * f; }
+    else if (k === i + 1) { o = e; s = 1.1 - 0.1 * e; x = 1.5 * (1 - e); }
+    fr.style.opacity = o;
+    if (!RM) fr.style.transform = `scale(${s.toFixed(4)}) translateX(${x.toFixed(2)}%)`;
+  });
+  chapters.forEach((c, k) => { const cr = c.getBoundingClientRect(); c.classList.toggle('on', k === 0 ? cr.bottom > vh * .5 : (cr.top < vh * .6 && cr.bottom > vh * 1.02)); });
+  railBtns.forEach((b, k) => b.classList.toggle('on', k === Math.round(p)));
+  rail.classList.toggle('off', r.bottom < vh * .6);
+}
+let tick = false;
+addEventListener('scroll', () => { if (!tick) { tick = true; requestAnimationFrame(() => { renderStory(); tick = false; }); } }, {passive: true});
+const setH = () => document.querySelectorAll('.ch>.card').forEach(c => c.parentElement.style.setProperty('--h', c.offsetHeight + 'px'));
+addEventListener('resize', () => { setH(); renderStory(); });
+setH(); document.fonts && document.fonts.ready.then(setH); renderStory();
+
+/* floor plan: 10x10 grid units */
+const HOUSES = [{n: 'Дом 1', floors: 17, base: 128000}, {n: 'Дом 2', floors: 14, base: 134000}, {n: 'Дом 3', floors: 12, base: 141000}];
+const LAYOUT = [
+  {x:0,y:0,w:3.6,h:4.2,k:'2-комн.',a:58.4,v:'Парк'},
+  {x:3.6,y:0,w:2.6,h:4.2,k:'Студия',a:26.1,v:'Парк'},
+  {x:6.2,y:0,w:3.8,h:4.2,k:'3-комн.',a:78.9,v:'Парк и река'},
+  {x:0,y:5.8,w:3.2,h:4.2,k:'1-комн.',a:38.6,v:'Двор'},
+  {x:3.2,y:5.8,w:3.4,h:4.2,k:'2-комн.',a:55.2,v:'Двор'},
+  {x:6.6,y:5.8,w:3.4,h:4.2,k:'2-комн.',a:61.7,v:'Двор и река'},
+];
+let house = 0, floor = 7, selIdx = -1;
+const iso = $('iso');
+HOUSES.forEach((h, i) => { const b = document.createElement('button'); b.className = 'pill' + (i === 0 ? ' on' : ''); b.textContent = h.n; b.onclick = () => { house = i; floor = Math.min(floor, h.floors); [...$('houses').children].forEach((x, k) => x.classList.toggle('on', k === i)); draw(); }; $('houses').append(b); });
+function seeded(a) { const s = Math.sin(a * 99.13) * 43758.5; return s - Math.floor(s); }
+function priceOf(l) { const h = HOUSES[house]; return l.a * h.base * (1 + floor * 0.006) * (l.v.includes('река') ? 1.06 : 1); }
+function draw() {
+  $('floor').textContent = floor; selIdx = -1; showSel();
+  iso.querySelectorAll('.apt,.core').forEach(n => n.remove());
+  iso.classList.remove('walls'); void iso.offsetWidth; iso.classList.add('walls');
+  const core = document.createElement('div'); core.className = 'core';
+  Object.assign(core.style, {left: '0%', top: '42%', width: '100%', height: '16%'});
+  core.innerHTML = '<span>Холл · лифты · лестница</span>'; iso.append(core);
+  LAYOUT.forEach((l, i) => {
+    const sold = seeded(house * 100 + floor * 7 + i) < 0.38;
+    const d = document.createElement('button');
+    d.className = 'apt ' + (sold ? 'sold' : 'free');
+    d.style.cssText = `left:${l.x * 10}%;top:${l.y * 10}%;width:${l.w * 10}%;height:${l.h * 10}%;animation-delay:${i * 70}ms`;
+    d.setAttribute('aria-label', `${l.k}, ${l.a} м², ${sold ? 'продана' : 'свободна'}`);
+    d.innerHTML = `<span class="lbl">${l.k}<small>${l.a.toLocaleString('ru-RU')} м²${sold ? ' · продана' : ''}</small></span>`;
+    if (!sold) d.onclick = () => { selIdx = i; [...iso.querySelectorAll('.apt')].forEach((x, k) => x.classList.toggle('sel', k === i)); showSel(); };
+    else d.disabled = true;
+    iso.append(d);
+  });
+}
+function showSel() {
+  if (selIdx < 0) { $('sKind').textContent = 'Квартира не выбрана'; $('sTitle').textContent = 'Нажмите на свободную квартиру на плане'; ['sArea','sFloor','sView','sPrice'].forEach(id => $(id).textContent = '—'); return; }
+  const l = LAYOUT[selIdx], h = HOUSES[house], p = priceOf(l);
+  $('sKind').textContent = h.n + ' · секция ' + (selIdx < 3 ? 'А' : 'Б');
+  $('sTitle').textContent = l.k + ' квартира';
+  $('sArea').textContent = l.a.toLocaleString('ru-RU') + ' м²';
+  $('sFloor').textContent = floor + ' из ' + h.floors;
+  $('sView').textContent = l.v;
+  $('sPrice').textContent = fmt(p);
+  $('price').value = Math.round(p / 100000) * 100000; calc();
+  $('orderLead').textContent = `Вы выбрали: ${l.k}, ${l.a.toLocaleString('ru-RU')} м², ${h.n}, ${floor} этаж. Покажем её в шоуруме и на стройке.`;
+}
+$('fUp').onclick = () => { if (floor < HOUSES[house].floors) { floor++; draw(); } };
+$('fDown').onclick = () => { if (floor > 2) { floor--; draw(); } };
+draw();
+
+/* mortgage */
+let rate = 6, shown = 0, anim;
+$('prog').querySelectorAll('button').forEach(b => b.onclick = () => { $('prog').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); rate = +b.dataset.r; if (rate < 1) $('term').value = Math.min(+$('term').value, 5); calc(); });
+function calc() {
+  const price = +$('price').value, dp = +$('down').value, years = +$('term').value;
+  const loan = price * (1 - dp / 100), n = years * 12, r = rate / 1200;
+  const pay = r > 0.0001 ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
+  $('oPrice').textContent = fmt(price); $('oDown').textContent = dp + '% · ' + fmt(price * dp / 100); $('oTerm').textContent = years + ' ' + (years % 10 === 1 && years !== 11 ? 'год' : (years % 10 >= 2 && years % 10 <= 4 && (years < 12 || years > 14) ? 'года' : 'лет'));
+  const rows = [['Сумма кредита', fmt(loan)], ['Ставка', rate < 1 ? 'без %, пример' : rate + '%, пример'], ['Переплата за срок', fmt(Math.max(pay * n - loan, 0))]];
+  $('lines').innerHTML = rows.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join('');
+  cancelAnimationFrame(anim);
+  if (RM) { $('pay').textContent = fmt(shown = pay); return; }
+  const from = shown, t0 = performance.now();
+  const step = t => { const k = Math.min((t - t0) / 600, 1); shown = from + (pay - from) * (1 - Math.pow(1 - k, 3)); $('pay').innerHTML = fmt(shown) + '<small>/мес</small>'; if (k < 1) anim = requestAnimationFrame(step); };
+  anim = requestAnimationFrame(step);
+}
+['price', 'down', 'term'].forEach(id => $(id).oninput = calc); calc();
+
+$('form').onsubmit = e => { e.preventDefault(); $('ok').hidden = false; };
+})();
+</script>
+</body>
+</html>
