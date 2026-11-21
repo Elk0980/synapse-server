@@ -86,6 +86,12 @@ def preflight():
  receipt['ok']=True;save(PRE/'receipt.json',json.dumps(receipt,indent=2).encode());print('PREFLIGHT298_OK',len(receipt['files']))
  return 0
 def main():
+ if sys.argv[1:] in [['context3'],['context5']]:
+  b=live(DATA['files'][0]);lines=b.decode().splitlines();anchor='  let forwardIdentity = identity;' if sys.argv[1]=='context3' else 'function shutdownContent() {'
+  found=[i for i,l in enumerate(lines) if l==anchor]
+  if len(found)!=1:raise RuntimeError('context anchor count')
+  start=max(0,found[0]-(3 if sys.argv[1]=='context3' else 0));end=found[0]+(21 if sys.argv[1]=='context3' else 27)
+  print('SERVER_SHA',sha(b));print('\n'.join(lines[start:end]));return 0
  if sys.argv[1:]==['diagnose']:
   row=DATA['files'][0];b=live(row);print('SERVER_SHA',sha(b))
   for s in ['crm','content']:print('STATE',s,json.dumps(state(s)))
