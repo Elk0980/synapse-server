@@ -227,6 +227,9 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
+// №285: отдельная очередь монтажа; используются действующие providers/budget, без нового процесса модели.
+const montageWatcher = require('./montage-watcher-bundle').createContentWatcher({db,fallback:projectChat.fallback,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,
+  log:({code,count})=>console.log('montage-watcher',code,count)});
 const contentPlanRunner = require('./content-plan-runner').createContentPlanRunner({crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback,
   alerts:require('./hugh-owner-alerts').createHughOwnerAlerts({db}),reviewDelayNotifications:true,
   onReviewDelayError:()=>console.warn('content: проверка просроченных согласований не выполнена; повтор при следующей проверке')});
@@ -1536,6 +1539,7 @@ server.listen(PORT, () => {
   projectChat.startWorker();
   peopleService.start();
   taskDispatchWorker.start();
+  montageWatcher.start();
   if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
   economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
@@ -1545,10 +1549,12 @@ function shutdownContent() {
   clearInterval(economyTimer);
   projectChat.stopWorker();
   taskDispatchWorker.stop();
+  const montageStopped=montageWatcher.stop();
   const contentPlanStopped=contentPlanRunner.stop();
   const peopleStopped=peopleService.stop();
   server.close(async () => {
     await contentPlanStopped;
+    await montageStopped;
     await peopleStopped;
     db.close();
     process.exit(0);
