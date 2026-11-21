@@ -41,7 +41,8 @@
     }
     list.setAttribute('role', 'log'); list.setAttribute('aria-live', 'polite'); notice.setAttribute('role', 'status');
     const form = node('form', 'sbc-compose'), text = node('textarea'), send = node('button', 'sbc-send', '➤');
-    text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = placeholder || 'Сообщение. Позвать: «Хью, …» или «Лео, …»';
+    const fullPlaceholder = placeholder || 'Сообщение. Позвать: «Хью, …» или «Лео, …»';
+    text.rows = 2; text.maxLength = 8000; text.required = true; text.placeholder = fullPlaceholder;
     text.setAttribute('aria-label', 'Сообщение'); send.type = 'submit'; send.setAttribute('aria-label', 'Отправить');
     const latest = node('button', 'plain-button sbc-new', 'Новые сообщения ↓'); latest.type = 'button'; latest.hidden = true;
     form.append(text, send); box.append(head, older, list, latest, notice, form); host.replaceChildren(box);
@@ -65,6 +66,7 @@
       const following = followLatest;
       placeOlder();
       text.rows = mobile() ? 1 : 2;
+      text.placeholder = mobile() ? 'Сообщение' : fullPlaceholder;
       text.style.height = ''; text.style.overflowY = '';
       if (mobile()) {
         const style = getComputedStyle(text), line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.4;
@@ -175,7 +177,7 @@
         if (stopped || ctx.signal?.aborted || viewer !== owner || identityEpoch !== epoch) return;
         pending = null; text.value = ''; save(); resize(); notice.textContent = '';
         const loaded = await load();
-        if (loaded?.viewerId === owner) { messages.set(data.message.id, data.message); render({ added: true }); if (!mobile()) bottom(); }
+        if (loaded?.viewerId === owner) { messages.set(data.message.id, data.message); render(); bottom(); }
       } catch (error) {
         if (!stopped && !ctx.signal?.aborted) { if ([401, 403].includes(error?.status)) suspend(); notice.textContent = human(error); }
       } finally { busy = false; compose(); }
