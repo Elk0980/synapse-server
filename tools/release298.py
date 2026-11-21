@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import base64,zlib,json,hashlib,os,subprocess,sys,re,shutil
 from pathlib import Path
+ANCHORS=json.loads(zlib.decompress(base64.b64decode('eJzVV91u2zYUvi/Qd2CNwrIxRbbl3yhwCzfNmqDND+J0xVB3KUUexWxkUiOppK6T610M2B5iLzAUKzC0a/cKyhsNlJTESW0jxYoBu7Eh8vCc7/vOxyNocvsWQgWN1WHBQ+5yx06fI6yHBQ8VRKQqRHANXFcUyCOQzitVyGJwFElxBHQdMDWxrUYHB9QP6svtKm206lBrtGu03ahV2023RbC7XG24UK3lxyUEIIETeIAV9IfYbbZMFr9eD2rVht/GdQC/6dOm79fArwbQaNdaDbdZ79TrVUxgmdZwEzca2Pfr1K03/cCnuN25nn0PywPQl/mrxHVbLdpcJp1ao9NZrhKCg3Yn8Ottv+UHhAYkqLmBG9RdtwnV+jKBZquF3Tr109U8f8iO4DuQLGBgyAc4VJDtMK60jIlmgitTsBdF4RgJHo6RFggjEgoFFJkEiIhojCLGOVDkj5GIQGItJOqv91YQYDJEPgRCAoLXmOg0DQEb4UCDRNhXwPUKijkVaBQrjSQofRGdVeiv9xy0JVDIOCAej3yQqhLEb96MK4GQBBy0rYcgUSTZEdaA/LEGdZ5thBlHMSdDzA+AOjl1EQQm2+oQyKFhODGrxjOxHzKyZmpnohc8pGWcyWL2sxI9+goT4HrV2Oq13pGQGotei2b8CKSCNN21rZgfcnHMH8ZRyIjJyGkvlIDp2GjNgO7CKyD6IqU5dpphB8q0wfw8S5VDN+VMcC2vgFAh0930jwieigHhenwwfCIOuhJ+jJmEkuVUzPLSCGuQDIdqiQyxtsoOkYA17F4eKU2obxM5eipDb3V3c//p7hPz+BjG6WNvZ2P/8dr3p+WVAS9cYkjb/N9CsDPe/TEnXqncvTcSXOMD2BKaBUZrY2pHM3JYKqdoM2SzoqYh5vtLfDrgAuTmjNMpWhzrYd8Y+ga4Bxwh4NgPgXqRFASUcoAfOZvbW3u9R2v7W9t7G99urPb2Nra3+vtrW70HT9Yedrtdq2bZx1hyjwgK3XuGjwjBMUslK598nmWb3YxxIWtP5qfPHOTOclC2kEkVSeGHMErVAaWdEeihoAbIznZ/zyoWKz8MBhUcaxEJpRk/GAzSDqvBoDIY0G8Gg0qeQt2tOBqULhE52sF6OM88X7l66b53DuDkSj/TUEzLs2At1Kw+X7PcQzsgR0wpJngpR26fUykWGQWumR470UWUchgnYUxBlawpMs4Rg2OrfP/zNe/l3QkRowjz8aagcQinzt2JYbNtxvZ9ZKVRyEOWGSDW6UsbpY5YMbZD6HSR8v8fDvkPC0oLbFC6711p+0nuixt5oVi8M3Oi5De3PMmwsKB01aF3ul3r0dqeVQ4wC0uNasO2kt+St8m75I/kU/JX8iF5l3xM/jz7FSV/J5+S98nvKPmYvEPJ2+R98uHsl7OfTMDZz9Y5Wwk6lhwp4LQkQUWCK7DdatWenA+R7I2eC7oqKHixDB0FWJLhDpZ4pJwD0GZGXERYZZuImGuvaqdqec9fnNoTx3GIkMq2CCZDWDIzRYrQ8iwultLXtXWDudKYfUeyW20ghGCUfCaZBtRF1+RD3W4XWTtP9yxULKK8GdliZQSU4aURcC1k5VjIwyAUx1YZnZzMM3VW1PSbQFrw34yTWbaZMUHmU53CgU5Ovhrzhd1ozptYOchYSuAadRfd/SsXOL2RNrqBwxZN+S+oPqXaV5o+/4bPQrFbs8XO58gzrMkQpKM0lro0X5254RdbVyfSVL6F6NqLLmaeua9FFAHtfoZBRAsQf1EKNHUrL0hcO3Sd4Hn1hfyy78EZVsfHmF2Ht8Cbc8Ivt2Yhn0Jn/l7cvnV6+9Y/MbnJ4g==')))
 ROOT=Path('/root/claude-rel')
 PRE=ROOT/'pre298-live'
 FLAG='MONTAGE_NOTIFICATIONS_ENABLED'
@@ -47,7 +48,21 @@ for(const n of ['reel_notification_settings','reel_notification_events','reel_no
  r=subprocess.run(['docker','exec','-i','synapse-crm-1','node'],input=program.encode(),capture_output=True,timeout=15)
  print('NOTIFICATION_TABLES',r.stdout.decode().strip() if r.returncode==0 else 'READ_UNAVAILABLE')
  return 0
-def preflight():
+def anchored_server(original,edits):
+ result=original
+ for e in edits:
+  before=e['before'].encode();after=e['after'].encode()
+  counts=(result.count(before),result.count(after));print('ANCHOR',e['id'],*counts)
+  if counts!=(1,0):raise RuntimeError('anchor count '+str(e['id']))
+  result=result.replace(before,after,1)
+ undo=result
+ for e in reversed(edits):
+  before=e['before'].encode();after=e['after'].encode()
+  if undo.count(after)!=1:raise RuntimeError('inverse anchor count')
+  undo=undo.replace(after,before,1)
+ if undo!=original:raise RuntimeError('inverse differs')
+ return result
+def preflight(anchored=False):
  receipt={'files':[],'ok':False}
  for s in ['crm','content']:
   if state(s)!=json.loads((PRE/(s+'.json')).read_text()):raise RuntimeError('live service changed '+s)
@@ -60,7 +75,11 @@ def preflight():
   target=PRE/'candidates'/name
   patch=base64.b64decode(row['patchData'])
   if sha(patch)!=row['patchSha256']:raise RuntimeError('package patch changed')
-  if row['new']:
+  if anchored and path=='ops/content/server.js':
+   if sha(original)!='71f16423043efa49a3db708be7e9e0cd00e8bcf74400d1cafad366769e4082':raise RuntimeError('unpinned server source')
+   result=anchored_server(original,ANCHORS['edits']);save(target,result)
+   if original.count(b'salonCompanyApp.close()')!=result.count(b'salonCompanyApp.close()'):raise RuntimeError('private shutdown changed')
+  elif row['new']:
    if original is not None:raise RuntimeError('unknown existing new file '+path)
    result=base64.b64decode(row['newData'])
    if sha(result)!=row['targetSha256']:raise RuntimeError('new target changed')
@@ -86,6 +105,7 @@ def preflight():
  receipt['ok']=True;save(PRE/'receipt.json',json.dumps(receipt,indent=2).encode());print('PREFLIGHT298_OK',len(receipt['files']))
  return 0
 def main():
+ if sys.argv[1:]==['anchored-preflight']:return preflight(True)
  if sys.argv[1:] in [['context3'],['context5']]:
   b=live(DATA['files'][0]);lines=b.decode().splitlines();anchor='  let forwardIdentity = identity;' if sys.argv[1]=='context3' else 'function shutdownContent() {'
   found=[i for i,l in enumerate(lines) if l==anchor]
