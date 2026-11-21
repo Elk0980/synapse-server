@@ -268,7 +268,7 @@ test('№308: список → common/dm/hugh → назад; одна шапк�
     assert.equal(d.getElementById(info.getAttribute('aria-controls')).className,'sbc-conv__hint');
     info.click();assert.equal(info.getAttribute('aria-expanded'),'true');assert.ok(head.classList.contains('sbc-conv__head--info'));
     assert.equal(f.host.querySelector('.sbc-conv').lastElementChild.className,'sbc-compose');
-    assert.equal(f.host.querySelector('textarea').rows,1);assert.match(f.host.querySelector('textarea').placeholder,/Хью, ….*Лео, …/);
+    assert.equal(f.host.querySelector('textarea').rows,1);assert.equal(f.host.querySelector('textarea').placeholder,'Сообщение');
     writeDraft(f,f.host,'Неотправленный черновик '+room);head.querySelector('.sbc-back').click();
     assert.equal(d.body.classList.contains('sbc-mobile-chat-open'),false);assert.equal(d.body.style.getPropertyValue('--sbc-page-top'),'');
   }
@@ -282,6 +282,7 @@ test('№308: прямая ссылка, visualViewport resize/offset/scale, с�
   p.viewport.scale=2;p.resize(240);assert.equal(shell.style.getPropertyValue('--sbc-viewport-height'),'');
   p.viewport.scale=1;p.media.matches=false;p.media.dispatchEvent(new f.w.Event('change'));
   assert.equal(f.w.document.body.classList.contains('sbc-mobile-chat-open'),false);assert.equal(f.host.querySelector('textarea').rows,2);
+  assert.match(f.host.querySelector('textarea').placeholder,/Хью, ….*Лео, …/);
   p.media.matches=true;p.media.dispatchEvent(new f.w.Event('change'));assert.ok(f.w.document.body.classList.contains('sbc-mobile-chat-open'));
   f.context(f.host).signal.dispatchEvent(new f.w.Event('abort'));assert.equal(p.listeners.size,0);assert.equal(f.intervals.size,0);
   assert.equal(f.w.document.documentElement.classList.contains('sbc-mobile-chat-open'),false);assert.equal(shell.style.getPropertyValue('--sbc-viewport-height'),'');
@@ -319,4 +320,16 @@ test('№308: расширение окна из начального списк
   assert.ok(f.host.querySelector('.sbc-conv'));assert.equal(f.host.querySelector('textarea').rows,2);
   assert.equal(f.host.querySelector('[data-room="common"]').getAttribute('aria-current'),'true');assert.equal(f.w.document.body.classList.contains('sbc-mobile-chat-open'),false);
   f.unmount(f.host);assert.equal(p.listeners.size,0);assert.equal(f.intervals.size,0);assert.equal(sends(f).length,0);
+});
+test('№308/2111: своя подтверждённая отправка из истории всегда открывает конец, чужие не отрывают от чтения',async t=>{
+  const f=load();t.after(()=>f.w.close());phone(f);
+  f.state.messages=Array.from({length:10},(_,i)=>({id:i+1,user_id:3,author_name:'Марина',text:'Переписка '+i,created_at:'2026-11-21T10:00:00Z'}));
+  f.mount(f.host,'chats',{room:'common'});await flush();const list=f.host.querySelector('.sbc-messages');let top=0;
+  Object.defineProperties(list,{clientHeight:{get:()=>300},scrollHeight:{get:()=>list.querySelectorAll('.sbc-msg').length*200},scrollTop:{get:()=>top,set:v=>{top=Math.max(0,Math.min(v,list.scrollHeight-list.clientHeight));}}});
+  await f.poll();list.scrollTop=200;list.dispatchEvent(new f.w.Event('scroll'));
+  f.state.messages.push({id:11,user_id:3,author_name:'Марина',text:'Новое от коллеги',created_at:'2026-11-21T10:01:00Z'});
+  await f.poll();assert.equal(top,200);assert.equal(f.host.querySelector('.sbc-new').hidden,false);
+  writeDraft(f,f.host,'Мой ответ');await submit(f,f.host);
+  assert.equal(sends(f).length,1);assert.equal(top,list.scrollHeight-list.clientHeight);assert.equal(f.host.querySelector('.sbc-new').hidden,true);assert.equal(f.host.querySelector('textarea').value,'');
+  f.mount(f.dock,'hugh-chat');await flush();assert.match(f.dock.querySelector('textarea').placeholder,/Спросите или поручите/);
 });
