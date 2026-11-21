@@ -30,7 +30,7 @@ function load(options={}) {
   function unmount(host){const prior=mounted.get(host);if(prior){defs.get(prior.id).unmount?.(prior.el);prior.controller.abort();mounted.delete(host);}}
   function mount(host,id,opts={}){unmount(host);const el=w.document.createElement('div'),controller=new w.AbortController(),context=ctx(id,{...opts,controller});host.replaceChildren(el);mounted.set(host,{el,id,controller,context});defs.get(id).mount(el,context);return el;}
   for(const file of ['chats.js','my-tasks.js'])w.eval(fs.readFileSync(path.join(__dirname,file),'utf8'));
-  return {w,defs,calls,state,mount,unmount,storageAccess,context:host=>mounted.get(host)?.context,host:w.document.getElementById('host'),dock:w.document.getElementById('dock'),
+  return {w,defs,calls,state,mount,unmount,storageAccess,intervals,context:host=>mounted.get(host)?.context,host:w.document.getElementById('host'),dock:w.document.getElementById('dock'),
     reload(){for(const host of [...mounted.keys()])unmount(host);w.eval(fs.readFileSync(path.join(__dirname,'chats.js'),'utf8'));},
     async poll(){for(const fn of [...intervals.values()])fn();await flush();},
     seed(key,value){raw.setItem.call(storage,key,typeof value==='string'?value:JSON.stringify(value));},
@@ -240,4 +240,83 @@ test('specs/228: «Лео · Claude» — ответ ассистента с и�
   assert.equal(items[2].dataset.persona,'leo');assert.ok(!items[3].classList.contains('sbc-msg--leo'));
   assert.equal(items[1].querySelector('small').textContent,'Ответ ниже');assert.equal(items[4].querySelector('small').textContent,'Передано на проверку');
   assert.match(f.host.querySelector('textarea').placeholder,/Лео, …/);
+});
+
+// №308: DOM-состояния и жизненный цикл; геометрия дополнительно проверяется в настоящем браузере.
+function phone(f) {
+  const w=f.w,media=new w.EventTarget(),viewport=new w.EventTarget(),listeners=new Map(),scrolls=[];
+  media.matches=true;Object.assign(viewport,{height:844,offsetTop:0,scale:1});
+  for(const [name,target] of [['media',media],['viewport',viewport]]){
+    const add=target.addEventListener.bind(target),remove=target.removeEventListener.bind(target);
+    target.addEventListener=(type,fn,...rest)=>{listeners.set(`${name}:${type}`,fn);add(type,fn,...rest);};
+    target.removeEventListener=(type,fn,...rest)=>{if(listeners.get(`${name}:${type}`)===fn)listeners.delete(`${name}:${type}`);remove(type,fn,...rest);};
+  }
+  w.matchMedia=query=>{assert.equal(query,'(max-width: 760px)');return media;};
+  Object.defineProperty(w,'visualViewport',{value:viewport});Object.defineProperty(w,'scrollY',{value:215});
+  w.scrollTo=(x,y)=>scrolls.push([x,y]);
+  return{media,viewport,listeners,scrolls,resize(height,top=0){viewport.height=height;viewport.offsetTop=top;viewport.dispatchEvent(new w.Event('resize'));}};
+}
+test('№308: список → common/dm/hugh → назад; одна шапка, i, composer последний, черновик сохранён',async t=>{
+  const f=load();t.after(()=>f.w.close());const p=phone(f);f.mount(f.host,'chats');await flush();
+  const d=f.w.document;assert.equal(d.body.classList.contains('sbc-mobile-chat-open'),false);
+  assert.equal(f.host.querySelector('.sbc-conv'),null);assert.equal(f.calls.filter(c=>c[1]==='people/team-chat').length,0);
+  for(const room of ['common','dm:2-3','hugh:2']){
+    f.host.querySelector(`[data-room="${room}"]`).click();await flush();
+    assert.equal(d.body.classList.contains('sbc-mobile-chat-open'),true);assert.equal(d.documentElement.classList.contains('sbc-mobile-chat-open'),true);
+    const head=f.host.querySelector('.sbc-conv__head'),info=head.querySelector('.sbc-info');
+    assert.ok(head.querySelector('.sbc-back'));assert.equal(info.getAttribute('aria-expanded'),'false');
+    assert.equal(d.getElementById(info.getAttribute('aria-controls')).className,'sbc-conv__hint');
+    info.click();assert.equal(info.getAttribute('aria-expanded'),'true');assert.ok(head.classList.contains('sbc-conv__head--info'));
+    assert.equal(f.host.querySelector('.sbc-conv').lastElementChild.className,'sbc-compose');
+    assert.equal(f.host.querySelector('textarea').rows,1);assert.match(f.host.querySelector('textarea').placeholder,/Хью, ….*Лео, …/);
+    writeDraft(f,f.host,'Неотправленный черновик '+room);head.querySelector('.sbc-back').click();
+    assert.equal(d.body.classList.contains('sbc-mobile-chat-open'),false);assert.equal(d.body.style.getPropertyValue('--sbc-page-top'),'');
+  }
+  f.host.querySelector('[data-room="common"]').click();await flush();assert.equal(f.host.querySelector('textarea').value,'Неотправленный черновик common');
+  assert.deepEqual(p.scrolls,[[0,215],[0,215],[0,215]]);assert.equal(sends(f).length,0);
+});
+test('№308: прямая ссылка, visualViewport resize/offset/scale, смена ширины, abort снимает блокировку и слушателей',async t=>{
+  const f=load();t.after(()=>f.w.close());const p=phone(f);f.mount(f.host,'chats',{room:'dm:2-3'});await flush();
+  const shell=f.host.querySelector('.sbc-chats');assert.equal(p.listeners.size,3);assert.equal(f.intervals.size,1);
+  p.resize(480,24);assert.equal(shell.style.getPropertyValue('--sbc-viewport-height'),'480px');assert.equal(shell.style.getPropertyValue('--sbc-viewport-top'),'24px');
+  p.viewport.scale=2;p.resize(240);assert.equal(shell.style.getPropertyValue('--sbc-viewport-height'),'');
+  p.viewport.scale=1;p.media.matches=false;p.media.dispatchEvent(new f.w.Event('change'));
+  assert.equal(f.w.document.body.classList.contains('sbc-mobile-chat-open'),false);assert.equal(f.host.querySelector('textarea').rows,2);
+  p.media.matches=true;p.media.dispatchEvent(new f.w.Event('change'));assert.ok(f.w.document.body.classList.contains('sbc-mobile-chat-open'));
+  f.context(f.host).signal.dispatchEvent(new f.w.Event('abort'));assert.equal(p.listeners.size,0);assert.equal(f.intervals.size,0);
+  assert.equal(f.w.document.documentElement.classList.contains('sbc-mobile-chat-open'),false);assert.equal(shell.style.getPropertyValue('--sbc-viewport-height'),'');
+  f.unmount(f.host);assert.equal(p.listeners.size,0);assert.equal(sends(f).length,0);
+});
+test('№308: последние сообщения при открытии; чтение истории не прыгает, новые — по кнопке, ранние сохраняют место',async t=>{
+  const f=load();t.after(()=>f.w.close());phone(f);
+  const msg=id=>({id,user_id:3,author_name:'Марина',text:'Сообщение '+id,created_at:'2026-11-21T10:00:00Z'});
+  f.state.messages=Array.from({length:10},(_,i)=>msg(i+11));
+  f.state.chatGet=params=>({viewerId:2,room:params.room,messages:params.before?Array.from({length:10},(_,i)=>msg(i+1)):f.state.messages,hasMore:!params.before});
+  f.mount(f.host,'chats',{room:'common'});await flush();const list=f.host.querySelector('.sbc-messages');let top=0;
+  Object.defineProperties(list,{clientHeight:{get:()=>300},scrollHeight:{get:()=>list.querySelectorAll('.sbc-msg').length*200},scrollTop:{get:()=>top,set:v=>{top=Math.max(0,Math.min(v,list.scrollHeight-list.clientHeight));}}});
+  const scroll=v=>{list.scrollTop=v;list.dispatchEvent(new f.w.Event('scroll'));};
+  await f.poll();assert.equal(top,1700);scroll(400);f.state.messages.push(msg(21));await f.poll();assert.equal(top,400);
+  const latest=f.host.querySelector('.sbc-new');assert.equal(latest.hidden,false);
+  await f.poll();assert.equal(top,400);latest.click();assert.equal(top,1900);assert.equal(latest.hidden,true);
+  scroll(0);f.host.querySelector('.sbc-older').click();await flush();assert.equal(top,2000);assert.equal(f.host.querySelector('.sbc-older').hidden,true);
+  await f.poll();assert.equal(top,2000);assert.equal(sends(f).length,0);
+});
+test('№308: поле растёт до пяти строк, длинный текст прокручивается внутри; восстановление ширины не меняет текст',async t=>{
+  const f=load();t.after(()=>f.w.close());const p=phone(f);f.mount(f.host,'chats',{room:'common'});await flush();
+  const style=f.w.document.createElement('style');style.textContent='.sbc-compose textarea {font-size:16px;line-height:22px;padding:10px;border:1px solid;}';f.w.document.head.append(style);
+  const text=f.host.querySelector('textarea');Object.defineProperty(text,'scrollHeight',{get:()=>text.value.split('\n').length*22+20});
+  writeDraft(f,f.host,'Одна строка');const first=parseFloat(text.style.height);
+  writeDraft(f,f.host,'1\n2\n3');assert.ok(parseFloat(text.style.height)>first);
+  const long='1\n2\n3\n4\n5\n6\n7';writeDraft(f,f.host,long);assert.equal(text.style.height,'132px');assert.equal(text.style.overflowY,'auto');
+  p.resize(480);assert.equal(text.value,long);assert.equal(text.style.height,'132px');
+  p.media.matches=false;p.media.dispatchEvent(new f.w.Event('change'));assert.equal(text.value,long);assert.equal(text.rows,2);assert.equal(text.style.height,'');
+  assert.equal(f.saved(draftKey(2)).text,long);assert.equal(sends(f).length,0);
+});
+test('№308: расширение окна из начального списка открывает привычный компьютерный общий чат',async t=>{
+  const f=load();t.after(()=>f.w.close());const p=phone(f);f.mount(f.host,'chats');await flush();
+  assert.equal(f.host.querySelector('.sbc-conv'),null);
+  p.media.matches=false;p.media.dispatchEvent(new f.w.Event('change'));await flush();
+  assert.ok(f.host.querySelector('.sbc-conv'));assert.equal(f.host.querySelector('textarea').rows,2);
+  assert.equal(f.host.querySelector('[data-room="common"]').getAttribute('aria-current'),'true');assert.equal(f.w.document.body.classList.contains('sbc-mobile-chat-open'),false);
+  f.unmount(f.host);assert.equal(p.listeners.size,0);assert.equal(f.intervals.size,0);assert.equal(sends(f).length,0);
 });

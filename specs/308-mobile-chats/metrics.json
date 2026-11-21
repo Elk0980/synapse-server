@@ -1,0 +1,224 @@
+[
+  {
+    "name": "before-long",
+    "pageHeight": 944,
+    "viewport": 844,
+    "scrollY": 0,
+    "head": {
+      "top": 153,
+      "bottom": 269.5,
+      "height": 116.5,
+      "width": 360,
+      "display": "block"
+    },
+    "list": {
+      "top": 329.5,
+      "bottom": 694,
+      "height": 364.5,
+      "width": 360,
+      "display": "flex"
+    },
+    "compose": {
+      "top": 712,
+      "bottom": 803,
+      "height": 91,
+      "width": 360,
+      "display": "flex"
+    },
+    "nav": {
+      "top": 783,
+      "bottom": 844,
+      "height": 61,
+      "width": 390,
+      "display": "flex"
+    },
+    "font": "16px",
+    "textFont": "16px",
+    "bottom": 0
+  },
+  {
+    "name": "before-keyboard",
+    "pageHeight": 944,
+    "viewport": 844,
+    "scrollY": 0,
+    "head": {
+      "top": 153,
+      "bottom": 269.5,
+      "height": 116.5,
+      "width": 360,
+      "display": "block"
+    },
+    "list": {
+      "top": 329.5,
+      "bottom": 694,
+      "height": 364.5,
+      "width": 360,
+      "display": "flex"
+    },
+    "compose": {
+      "top": 712,
+      "bottom": 803,
+      "height": 91,
+      "width": 360,
+      "display": "flex"
+    },
+    "nav": {
+      "top": 783,
+      "bottom": 844,
+      "height": 61,
+      "width": 390,
+      "display": "flex"
+    },
+    "font": "16px",
+    "textFont": "16px",
+    "bottom": 0
+  },
+  {
+    "name": "after-long",
+    "pageHeight": 844,
+    "viewport": 844,
+    "scrollY": 0,
+    "head": {
+      "top": 0,
+      "bottom": 53,
+      "height": 53,
+      "width": 390,
+      "display": "grid"
+    },
+    "list": {
+      "top": 53,
+      "bottom": 756,
+      "height": 703,
+      "width": 390,
+      "display": "flex"
+    },
+    "compose": {
+      "top": 756,
+      "bottom": 844,
+      "height": 88,
+      "width": 390,
+      "display": "flex"
+    },
+    "nav": {
+      "top": 0,
+      "bottom": 0,
+      "height": 0,
+      "width": 0,
+      "display": "none"
+    },
+    "font": "16px",
+    "textFont": "16px",
+    "bottom": 0
+  },
+  {
+    "name": "after-keyboard",
+    "pageHeight": 844,
+    "viewport": 844,
+    "scrollY": 0,
+    "head": {
+      "top": 0,
+      "bottom": 53,
+      "height": 53,
+      "width": 390,
+      "display": "grid"
+    },
+    "list": {
+      "top": 53,
+      "bottom": 392,
+      "height": 339,
+      "width": 390,
+      "display": "flex"
+    },
+    "compose": {
+      "top": 392,
+      "bottom": 480,
+      "height": 88,
+      "width": 390,
+      "display": "flex"
+    },
+    "nav": {
+      "top": 0,
+      "bottom": 0,
+      "height": 0,
+      "width": 0,
+      "display": "none"
+    },
+    "font": "16px",
+    "textFont": "16px",
+    "bottom": 0
+  },
+  {
+    "name": "before-desktop",
+    "pageHeight": 1000,
+    "viewport": 1000,
+    "scrollY": 0,
+    "head": {
+      "top": 67,
+      "bottom": 144.5,
+      "height": 77.5,
+      "width": 834,
+      "display": "block"
+    },
+    "list": {
+      "top": 204.5,
+      "bottom": 736,
+      "height": 531.5,
+      "width": 834,
+      "display": "flex"
+    },
+    "compose": {
+      "top": 754,
+      "bottom": 845,
+      "height": 91,
+      "width": 834,
+      "display": "flex"
+    },
+    "nav": {
+      "top": 0,
+      "bottom": 0,
+      "height": 0,
+      "width": 0,
+      "display": "none"
+    },
+    "font": "16px",
+    "textFont": "16px",
+    "bottom": 0
+  },
+  {
+    "name": "after-desktop",
+    "pageHeight": 1000,
+    "viewport": 1000,
+    "scrollY": 0,
+    "head": {
+      "top": 67,
+      "bottom": 144.5,
+      "height": 77.5,
+      "width": 834,
+      "display": "block"
+    },
+    "list": {
+      "top": 204.5,
+      "bottom": 736,
+      "height": 531.5,
+      "width": 834,
+      "display": "flex"
+    },
+    "compose": {
+      "top": 754,
+      "bottom": 845,
+      "height": 91,
+      "width": 834,
+      "display": "flex"
+    },
+    "nav": {
+      "top": 0,
+      "bottom": 0,
+      "height": 0,
+      "width": 0,
+      "display": "none"
+    },
+    "font": "16px",
+    "textFont": "16px",
+    "bottom": 0
+  }
+]
