@@ -311,6 +311,40 @@ def queues():
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == 'submit7-ascii':
+        # №283/2066: one authorized repeat, guarded by queue and a private marker.
+        try:
+            data = zlib.decompress(base64.b64decode(sys.argv[2],validate=True))
+            body = json.loads(data)
+            if len(data)>4096 or set(body)!={'mediaUrl','sha256','durationMs','editId'} or body['editId']!=7 or body['durationMs']!=59900:
+                raise ValueError()
+            if not data.isascii() or not re.fullmatch(r'https://synapse\.synapsebusiness\.ru/content/publishing-assets/taisabai/[a-f0-9]{32}\.mp4',body['mediaUrl']) or not re.fullmatch(r'[a-f0-9]{64}',body['sha256']):
+                raise ValueError()
+            private_file(ROOT/'edit7-ascii-attempt.started',b'Authorized by comment2066; do not repeat.\n')
+            program = r'''
+let queueHttp=0,queueEditStatus=null;
+(async()=>{
+ const key=process.env.CRM_API_KEY;if(!key)throw Error();
+ const data=require('fs').readFileSync(0,'utf8');
+ const headers={'x-api-key':key,'x-agent-name':'Claude'};
+ const q=await fetch('http://crm:8080/internal/reel-materials/queue?companyCode=taisabai',{headers,redirect:'error',signal:AbortSignal.timeout(8000)});
+ queueHttp=q.status;if(!q.ok)throw Error();
+ const edits=(await q.json()).edits;const edit=Array.isArray(edits)?edits.find(e=>e.id===7):null;
+ queueEditStatus=edit?.status??null;if(queueEditStatus!=='in_progress')throw Error();
+ const r=await fetch('http://crm:8080/internal/reel-materials/reels/21/versions?companyCode=taisabai',{
+  method:'POST',headers:{...headers,'content-type':'application/json'},body:data,redirect:'error',signal:AbortSignal.timeout(15000)});
+ let body={};try{body=await r.json()}catch{}
+ console.log(JSON.stringify({http:r.status,version:Number.isSafeInteger(body.version?.version)?body.version.version:null,queueHttp,queueEditStatus}));
+})().catch(()=>{console.log(JSON.stringify({http:0,version:null,queueHttp,queueEditStatus}));process.exitCode=1});
+'''
+            result=subprocess.run(['docker','exec','-i','synapse-content-1','node','-e',program],input=data,capture_output=True,timeout=40)
+            answer=json.loads(result.stdout)
+            private_file(ROOT/'edit7-ascii-attempt-result.json',json.dumps(answer).encode())
+            print(json.dumps({'http':answer['http'],'version':answer['version']},separators=(',',':')))
+            return result.returncode
+        except Exception:
+            print('{"http":0,"version":null}')
+            return 1
     if sys.argv[1:] == ['inspect7']:
         # Read-only DB verification; no HTTP, service key or live data writes.
         program = r'''
