@@ -86,6 +86,18 @@ def preflight():
  receipt['ok']=True;save(PRE/'receipt.json',json.dumps(receipt,indent=2).encode());print('PREFLIGHT298_OK',len(receipt['files']))
  return 0
 def main():
+ if sys.argv[1:]==['diagnose']:
+  row=DATA['files'][0];b=live(row);print('SERVER_SHA',sha(b))
+  for s in ['crm','content']:print('STATE',s,json.dumps(state(s)))
+  patch=base64.b64decode(row['patchData'])
+  for i,h in enumerate(re.split(rb'(?m)^@@[^\n]*\n',patch)[1:],1):
+   oldlines=[l[1:] for l in h.splitlines(keepends=True) if l.startswith((b' ',b'-'))];old=b''.join(oldlines)
+   print('HUNK',i,'EXACT_OCCURRENCES',b.count(old))
+   if b.count(old)!=1:
+    for line in oldlines:
+     if line.strip() and line not in b:print('MISSING_PUBLIC_LINE',line.decode().strip())
+  print('RECIPE\n'+'\n'.join((ROOT/'prpatch.sh').read_text().splitlines()[18:]))
+  return 0
  if sys.argv[1:]==['inspect']:return inspect()
  if sys.argv[1:]==['preflight']:return preflight()
  raise RuntimeError('unknown mode')
