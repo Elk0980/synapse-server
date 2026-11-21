@@ -196,8 +196,8 @@ def verify():
  program=r'''
 (async()=>{
  const key=process.env.CRM_API_KEY;if(!key)throw Error();const out={contentFlag:process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1'};
- for(const [name,url] of [['crmHealth','http://crm:8080/health'],['contentHealth','http://127.0.0.1:'+(process.env.PORT||8080)+'/health'],['feed','http://crm:8080/internal/reel-materials/notifications?after=0&limit=100']]){
-  const r=await fetch(url,{headers:name==='feed'?{'x-api-key':key}:{},redirect:'error',signal:AbortSignal.timeout(8000)});out[name]=r.status;if(!r.ok)throw Error();
+ for(const [name,url] of [['crmReady','http://crm:8080/internal/reel-materials/queue?companyCode=taisabai'],['contentHealth','http://127.0.0.1:'+(process.env.PORT||8080)+'/health'],['feed','http://crm:8080/internal/reel-materials/notifications?after=0&limit=100']]){
+  const r=await fetch(url,{headers:name==='contentHealth'?{}:{'x-api-key':key},redirect:'error',signal:AbortSignal.timeout(8000)});out[name]=r.status;if(!r.ok)throw Error();
   if(name==='feed'){const b=await r.json();out.feedEnabled=b.enabled===true;out.feedCount=Array.isArray(b.events)?b.events.length:null;if(!out.feedEnabled)throw Error();}
  }console.log(JSON.stringify(out));
 })().catch(()=>{console.log('HEALTH298_FAILED');process.exitCode=1});
