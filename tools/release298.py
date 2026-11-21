@@ -117,13 +117,22 @@ def backup(phase):
  directory=Path(result[-1].decode()).resolve()
  if not directory.is_relative_to((ROOT/'bk').resolve()) or not directory.is_dir():raise RuntimeError('backup directory invalid')
  save(PRE/('backup-'+phase+'.json'),json.dumps({'path':str(directory),'at':time.time()}).encode())
- print('BACKUP298_OK',phase,str(directory))
+ print('FILE_SNAPSHOT298_OK',phase,str(directory))
  # Existing backup tool prints aggregate integrity results only; never dump SQL.
  for l in r.stdout.decode().splitlines():
   if any(x in l.lower() for x in ['integrity','dbsnap','tables=']):print(l)
- return 0
+ return dbsnap(phase)
+def dbsnap(phase):
+ bk=json.loads((PRE/('backup-'+phase+'.json')).read_text());directory=Path(bk['path'])
+ if not directory.resolve().is_relative_to((ROOT/'bk').resolve()):raise RuntimeError('backup outside managed directory')
+ for s in ['crm','content']:
+  r=subprocess.run([str(ROOT/'rel.sh'),'dbsnap',str(directory),s+'_data:'+s+'.sqlite'],cwd=ROOT,capture_output=True,timeout=180)
+  save(PRE/('db-'+phase+'-'+s+'.log'),r.stdout+r.stderr);r.check_returncode()
+  print('DBSNAP298',s,r.stdout.decode().strip())
+ save(PRE/('databases-'+phase+'.json'),json.dumps({'path':str(directory),'at':time.time(),'services':['crm','content']}).encode())
+ print('DATABASES298_OK',phase,str(directory));return 0
 def stage():
- receipt=json.loads((PRE/'receipt.json').read_text());bk=json.loads((PRE/'backup-before-build.json').read_text())
+ receipt=json.loads((PRE/'receipt.json').read_text());bk=json.loads((PRE/'databases-before-build.json').read_text())
  if not receipt.get('ok') or time.time()-bk['at']>1800:raise RuntimeError('fresh backup/preflight required')
  for name in ['prpatch.sh','prgo.sh','rel.sh']:
   if (ROOT/name).read_bytes()!=(PRE/name).read_bytes():raise RuntimeError('release script changed')
@@ -206,6 +215,7 @@ db.close();if(!enabled||!edits||!requests||process.env.MONTAGE_NOTIFICATIONS_ENA
  save(PRE/'verified.json',json.dumps({'at':time.time(),'bothFlags':True,'health':True,'settings':True}).encode());print('VERIFIED298_OK')
  return 0
 def main():
+ if sys.argv[1:]==['db-before-build']:return dbsnap('before-build')
  if sys.argv[1:]==['verify']:return verify()
  if sys.argv[1:] in [['backup-before-build'],['backup-before-up']]:return backup(sys.argv[1][7:])
  if sys.argv[1:]==['stage']:return stage()
