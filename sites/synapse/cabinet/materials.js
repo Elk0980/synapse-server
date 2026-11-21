@@ -734,14 +734,25 @@ function create(el, ctx) {
     finally {state.busy = false;}
   }
   function requestSummary(request) {
+    if (request.kind !== 'redo') return request.text || '';
     const edit = (state.open?.edits || []).find(e=>e.id===request.editId);
     const segments = edit?.kind === 'edl' ? edit.edl?.live?.segments : null;
-    if (request.kind === 'redo' && Array.isArray(segments)) return `Убрано фраз: ${segments.filter(s=>s.enabled===false).length}, без звука: ${segments.filter(s=>s.enabled!==false&&s.sound===false).length}`;
-    // Прежний DTO может не содержать EDL: используем только известный формат сохранённой сводки.
-    if (request.kind === 'redo' && request.editId && /^Живой монтаж(?:[;.\s]|$)/.test(request.text || '')) {
-      const count = label => {const list=new RegExp(label+':\\s*(\\d+(?:\\s*,\\s*\\d+)*)').exec(request.text)?.[1];return list?list.split(',').length:0;};
-      return `Убрано фраз: ${count('выключены отрезки')}, без звука: ${count('без звука')}`;
+    const base = (state.open?.versions || []).find(v=>v.version===edit?.baseVersion)?.segments;
+    // EDL хранит полное состояние: сравниваем с разметкой именно базовой версии, а не текущей.
+    if (Array.isArray(segments) && segments.length && Array.isArray(base) && base.length===segments.length
+      && segments.every((s,i)=>s.inMs===base[i].startMs && s.outMs===base[i].endMs)) {
+      const returned = segments.filter((s,i)=>s.enabled!==false && base[i].enabled===false).length;
+      const removed = segments.filter((s,i)=>s.enabled===false && base[i].enabled!==false).length;
+      const silent = segments.filter((s,i)=>s.enabled!==false && s.sound===false && base[i].sound!==false).length;
+      return [returned ? `Возвращено фраз: ${returned}` : '', removed ? `Убрано фраз: ${removed}` : '', silent ? `Без звука: ${silent}` : ''].filter(Boolean).join(' · ');
     }
+    // Старый текст содержит полные списки выключенных/тихих фраз. Без базы это не числа изменений.
+    if (request.editId && /^Живой монтаж(?:[;.\s]|$)/.test(request.text || '')) {
+      const added = /добавлены отрезки:\s*(\d+(?:\s*,\s*\d+)*)/.exec(request.text)?.[1];
+      return [added ? `Возвращено фраз: ${added.split(',').length}` : '',
+        Array.isArray(segments) || /(?:выключены отрезки|без звука):\s*\d/.test(request.text) ? 'Изменён набор фраз' : ''].filter(Boolean).join(' · ');
+    }
+    if (Array.isArray(segments) && segments.length) return 'Изменён набор фраз';
     return request.text || '';
   }
   function requestHtml(request) {

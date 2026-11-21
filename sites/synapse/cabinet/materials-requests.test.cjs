@@ -84,10 +84,58 @@ test('№290/2025: прежняя EDL-просьба показывает чел
   assert.equal(card(10).querySelector('.mt-request__status').textContent,'отменено');
   assert.equal(card(11).querySelector('.mt-request__status').textContent,'отклонено');assert.equal(card(11).querySelector('.mt-request__text').textContent,'Сохранённое пожелание');
   for(const id of [10,12]) {
-    assert.equal(card(id).querySelector('.mt-request__text').textContent,'Убрано фраз: 3, без звука: 1');
+    assert.equal(card(id).querySelector('.mt-request__text').textContent,'Изменён набор фраз');
     assert.equal(card(id).textContent.match(/Теплее цвет/g).length,1);assert.doesNotMatch(card(id).textContent,/Живой монтаж|выключены отрезки/);
   }
   assert.equal(f.calls.some(c=>c.method!=='GET'),false);
+});
+
+test('№290/2190: 23 выключенных фразы в базе, возврат одной — только «Возвращено фраз: 1» и после обновления истории',async t=>{
+  const base=Array.from({length:52},(_,i)=>({startMs:i*1000,endMs:(i+1)*1000,enabled:i>=23,sound:true}));
+  const changed=base.map((s,i)=>({inMs:s.startMs,outMs:s.endMs,enabled:i===0 || s.enabled,sound:s.sound}));
+  const request={id:10,kind:'redo',editId:11,status:'rejected',reply:'Отменено автором.',text:'Живой монтаж; добавлены отрезки: 1; выключены отрезки: 2, 3'};
+  const f=fixture({reel:()=>full({versions:[{version:1,segments:base},{version:2,segments:segments()}],
+    edits:[{id:11,kind:'edl',baseVersion:1,edl:{live:{segments:changed}}}],requests:[request]})});
+  t.after(()=>f.w.close());await f.open();
+  const line=()=>f.el.querySelector('[data-request="10"] .mt-request__text').textContent;
+  assert.equal(line(),'Возвращено фраз: 1');
+  await f.click('[data-requests-refresh]');assert.equal(line(),'Возвращено фраз: 1');
+  assert.equal(f.calls.some(c=>c.method!=='GET'),false,'сводка старой просьбы не записывает данные');
+});
+
+test('№290/2190: возвращённые, убранные и новые без звука считаются от нужной базы; нули/строка только пожеланий скрыты',async t=>{
+  const base=Array.from({length:6},(_,i)=>({startMs:i*1000,endMs:(i+1)*1000,enabled:i!==0,sound:i!==4}));
+  const live=base.map(s=>({inMs:s.startMs,outMs:s.endMs,enabled:s.enabled,sound:s.sound}));
+  const mixed=live.map((s,i)=>({...s,enabled:i===0?true:i===1?false:s.enabled,sound:i===2 || i===1?false:s.sound}));
+  const notes=[{type:'font',option:'larger'}];
+  const f=fixture({reel:()=>full({versions:[{version:1,segments:base},{version:2,segments:segments()}],
+    requests:[10,11,12,13].map(id=>({id,kind:'redo',editId:id,status:'ready',notes,text:'Живой монтаж; выключены отрезки: 1; без звука: 5'})),
+    edits:[{id:10,kind:'edl',baseVersion:1,edl:{live:{segments:mixed}}},
+      {id:11,kind:'edl',baseVersion:1,edl:{live:{segments:live}}},
+      {id:12,kind:'edl',baseVersion:1,edl:{live:{segments:live.map((s,i)=>i===3?{...s,enabled:false}:s)}}},
+      {id:13,kind:'edl',baseVersion:1,edl:{live:{segments:live.map((s,i)=>i===3?{...s,sound:false}:s)}}}]})});
+  t.after(()=>f.w.close());await f.open();
+  const card=id=>f.el.querySelector(`[data-request="${id}"]`);
+  assert.equal(card(10).querySelector('.mt-request__text').textContent,'Возвращено фраз: 1 · Убрано фраз: 1 · Без звука: 1');
+  assert.equal(card(11).querySelector('.mt-request__text'),null);
+  assert.equal(card(11).querySelectorAll('.mt-request-notes li').length,1);
+  assert.equal(card(12).querySelector('.mt-request__text').textContent,'Убрано фраз: 1');
+  assert.equal(card(13).querySelector('.mt-request__text').textContent,'Без звука: 1');
+});
+
+test('№290/2190: без базы/с другой разметкой нет выдуманного числа удалений; прежние добавленные — возвращённые',async t=>{
+  const texts=['Живой монтаж; выключены отрезки: 1, 4, 6; без звука: 2',
+    'Живой монтаж; добавлены отрезки: 2, 3; выключены отрезки: 1',
+    'Живой монтаж; добавлены отрезки: 2', 'Живой монтаж. Шрифт и титры — Крупнее'];
+  const f=fixture({reel:()=>full({requests:[...texts.map((text,i)=>({id:i+10,editId:i+10,kind:'redo',status:'ready',text})),
+    {id:14,editId:14,kind:'redo',status:'ready',text:''}],
+    edits:[{id:14,kind:'edl',baseVersion:2,edl:{live:{segments:[{inMs:0,outMs:9000,enabled:false,sound:true}]}}}]})});
+  t.after(()=>f.w.close());await f.open();
+  const line=id=>f.el.querySelector(`[data-request="${id}"] .mt-request__text`)?.textContent;
+  assert.equal(line(10),'Изменён набор фраз');
+  assert.equal(line(11),'Возвращено фраз: 2 · Изменён набор фраз');
+  assert.equal(line(12),'Возвращено фраз: 1');assert.equal(line(13),undefined);
+  assert.equal(line(14),'Изменён набор фраз');
 });
 
 test('№290/2025: подтверждение отмены в карточке, отказ от отмены без API, ошибка видна и черновик/плеер сохранены',async t=>{
