@@ -101,7 +101,8 @@ function edl(value,durationMs){
   return out;
 }
 
-function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,mediaOrigins=process.env.PUBLISHING_ASSET_ORIGINS||DEFAULT_MEDIA_ORIGINS}={}){
+function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,mediaOrigins=process.env.PUBLISHING_ASSET_ORIGINS||DEFAULT_MEDIA_ORIGINS,
+  notificationsEnabled=process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1'}={}){
   const allowedOrigins=mediaOriginsOf(mediaOrigins);
   /* specs/231: подпись, отметка, история, просьбы агенту и отрезки версий — в reel-requests.js; создаётся ниже, после таблиц. */
   let ext=null;
@@ -155,6 +156,7 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const where=withTitle?`«${title}» — `:'';
     const ask=e.kind==='request'?`${where}Хью, измени (v${e.baseVersion}, ${seconds(e.startMs)}–${seconds(e.endMs)} с): ${e.comment}`:`${where}Правки монтажа к v${e.baseVersion}${e.comment?': '+e.comment:''}`;
     return [{key:`reel-edit:${e.id}:request`,at:e.createdAt,from:'user',authorName:e.authorName,editId:e.id,text:ask},
+      ...(notificationsEnabled&&e.status==='in_progress'?[{key:`reel-edit:${e.id}:in_progress`,at:e.updatedAt,from:'hugh',editId:e.id,text:`${withTitle?`«${title}» — `:''}правку взяли в работу.`}]:[]),
       ...(e.status==='done'?[{key:`reel-edit:${e.id}:done`,at:e.updatedAt,from:'hugh',editId:e.id,text:`Исправлено: ${withTitle?`«${title}» — `:''}готова v${e.resultVersion}`}]:[]),
       ...(e.status==='cancelled'?[{key:`reel-edit:${e.id}:cancelled`,at:e.updatedAt,from:'hugh',editId:e.id,text:`Правка №${e.id}${withTitle?` к «${title}»`:''} отменена`}]:[])];
   }
@@ -482,11 +484,13 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
     const owner=company(db,code),author=String(authorId??'');if(!/^[1-9]\d{0,15}$/.test(author))fail(400,'Нужен автор правок');
     const rows=db.prepare(`SELECT e.*,r.title FROM reel_edits e JOIN reel_materials r ON r.id=e.reel_id AND r.company_id=e.company_id
       WHERE e.company_id=? AND e.author_id=? ORDER BY e.id DESC LIMIT 200`).all(owner.id,author).reverse();
-    return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:[...rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id}))),
-      ...ext.hughEntries(owner,author)]};
+    const entries=[...rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id}))),...ext.hughEntries(owner,author)];
+    return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:entries.map(entry=>notificationsEnabled&&entry.from==='hugh'?
+      {...entry,text:entry.text.slice(0,3800)+`\n/cabinet.html#content/materials/reel/${entry.reelId}?company=${encodeURIComponent(owner.code.toLowerCase())}`}:entry)};
   }
   ext=createReelRequests(db,{autoposting,maxMs:MAX_MS,maxClips:MAX_CLIPS,executor:MONTAGE_EXECUTOR,
     core:{rowFor,liveVersion,transaction,requestEdit,cancelEdit,createPublication,full:(owner,id)=>reelDto(rowAny(owner,id),owner,true)}});
-  return {list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog,...ext.api};
+  const notifications=require('./reel-notifications').createReelNotifications(db,{enabled:notificationsEnabled});
+  return {list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog,...ext.api,...notifications};
 }
 module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR,DEFAULT_MEDIA_ORIGINS};

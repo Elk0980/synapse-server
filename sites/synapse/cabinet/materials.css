@@ -301,3 +301,4 @@ body.mt-modal-open { overflow:hidden; }
 .mt-problem-card{font-size:13px;margin-top:16px}
 .mt-view .mt-problem-card button{font-size:13px;min-height:44px;padding:6px 8px}
 @media(max-width:899px){.mt-version{order:-2}.mt-live{order:-1}.mt-publication{order:1}.mt-requests-box{order:2}.mt-problem-card{order:3}}
+.mt-card__notice{display:inline-block;align-self:flex-start;justify-self:start;max-width:100%;margin-top:4px;padding:2px 8px;border-radius:12px;background:#dcf8c5;color:#214611;font-size:13px;font-weight:700}

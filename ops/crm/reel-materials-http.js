@@ -14,6 +14,21 @@ const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
     const headers={'cache-control':'no-store'};
+    if(url.pathname==='/internal/reel-materials/notifications'){
+      if(!trustedService(request))fail(403,'Только служебный обработчик');
+      if(request.method!=='GET')fail(405,'Метод не поддерживается');
+      send(response,200,materials.notificationFeed(Number(url.searchParams.get('after')||0),Number(url.searchParams.get('limit')||100)),headers);return true;
+    }
+    const notice=/^\/autoposting\/reels\/(?:notifications|(\d+)\/notifications\/read)$/.exec(url.pathname);
+    if(notice){
+      if(request.method!==(notice[1]?'POST':'GET'))fail(405,'Метод не поддерживается');
+      const access=()=>{try{return companyModuleContext(request,url.searchParams.get('companyCode'),'autoposting.view');}
+        catch(error){if(error.status!==403)throw error;return companyModuleContext(request,url.searchParams.get('companyCode'),'autoposting.edit');}};
+      let context=access();const body=notice[1]?await readJson(request):null;
+      context=access();
+      const result=notice[1]?materials.readNotifications(context.company.code,Number(notice[1]),body,context.identity):materials.unreadNotifications(context.company.code,context.identity);
+      send(response,200,result,headers);return true;
+    }
     const problem=/^\/autoposting\/reels\/(\d+)\/problems$/.exec(url.pathname);
     if(problem){
       if(request.method!=='POST')fail(405,'Метод не поддерживается');
