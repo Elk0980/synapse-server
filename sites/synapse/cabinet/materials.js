@@ -715,7 +715,7 @@ function create(el, ctx) {
   function requestHtml(request) {
     const where = request.kind === "redo" && request.startMs != null ? ` · отрезок ${mmss(request.startMs)}–${mmss(request.endMs)}` : "";
     const date = request.date ? ` · на ${esc(dateRu(request.date))}` : "";
-    const label = ASKS.find(item => item.kind === request.kind)?.label || request.kindLabel || "Просьба";
+    const label = request.kind === "redo" && Number.isSafeInteger(request.editId) && request.editId > 0 ? "Правка монтажа" : ASKS.find(item => item.kind === request.kind)?.label || request.kindLabel || "Просьба";
     return `<li class="mt-request" data-request="${esc(request.id)}" data-request-status="${esc(request.status)}">
       <p class="mt-request__head"><strong>${esc(label)}</strong><span class="mt-request__status">${esc(REQUEST_STATUS[request.status] || request.statusLabel || request.status)}</span></p>
       <p class="muted mt-request__meta">${esc(timeIn(request.createdAt, state.timeZone))}${request.authorName ? " · " + esc(request.authorName) : ""}${request.version ? " · версия v" + esc(request.version) : ""}${where}${date}</p>

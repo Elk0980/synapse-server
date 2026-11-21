@@ -56,6 +56,19 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel =
 }
 const sent = (f, method, suffix) => f.calls.filter((call) => call.method === method && call.path.endsWith(suffix));
 
+test('№290: связанная правка в прежних и новых просьбах — «Правка монтажа»; остальные названия сохраняются',async t=>{
+  const f=fixture({reel:()=>full({requests:[
+    ...requests().map(r=>r.kind==='redo'?{...r,editId:5}:r),
+    {id:7,kind:'redo',editId:9,status:'accepted',version:2,text:'Новая правка'},
+    {id:8,kind:'redo',status:'accepted',version:2,text:'Прежний ответ без связи'}
+  ]})});t.after(()=>f.w.close());await f.open();
+  const label=id=>f.el.querySelector(`[data-request="${id}"] .mt-request__head strong`).textContent;
+  assert.equal(label(1),'Правка монтажа');assert.equal(label(7),'Правка монтажа');
+  assert.equal(label(8),'Переделать');assert.equal(label(2),'Опубликовать');
+  assert.equal(f.el.querySelector('[data-ask="redo"]').textContent,'Переделать');
+  assert.equal(f.calls.some(c=>c.method!=='GET'),false,'название меняется без записи в API');
+});
+
 const sourceSummary = () => summary({versionCount:1,openRequests:0,currentVersion:{version:1,mediaUrl:asset('a'),durationMs:10000,segments:segments()}});
 const sourceFull = (over={}) => full({...sourceSummary(),versions:[sourceSummary().currentVersion],requests:[],edits:[],history:[],...over});
 
