@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0f">
+<title>Владислав и его сайты — Synapse Business</title>
+<meta name="description" content="Владислав, пять проектов и один контур: от контента и рекламы до сайта, диалогов, CRM и выручки. История Synapse Business.">
+<meta property="og:title" content="Владислав и его сайты — Synapse Business">
+<meta property="og:image" content="brand/sapphire-approved.webp">
+<meta property="og:type" content="website">
+<style>
+:root{color-scheme:dark;font-family:"Segoe UI",Arial,sans-serif;background:#0b0b0f;color:#f4f0eb}
+*{box-sizing:border-box}body{margin:0;display:grid;place-items:center;overflow:hidden}button,a{-webkit-tap-highlight-color:transparent;font:inherit}button{cursor:pointer}a{color:inherit}button:focus-visible,a:focus-visible{outline:3px solid #9fd4ff;outline-offset:4px}button:disabled{cursor:default;opacity:.35}
+.reel{position:relative;width:min(430px,calc(100vh * 9 / 16));height:100vh;container-type:size;isolation:isolate;overflow:hidden;background:#101119}
+.frames{height:100%;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;touch-action:pinch-zoom}.frames::-webkit-scrollbar{display:none}
+.frame{position:relative;height:100%;min-height:100%;scroll-snap-align:start;scroll-snap-stop:always;overflow:hidden;padding:clamp(65px,10cqh,104px) 7cqw clamp(70px,10cqh,108px);display:flex;flex-direction:column;justify-content:center;gap:2.2cqh;background:radial-gradient(ellipse at 100% 20%,#183456 0,transparent 58%),#0e1018}
+.frame::before{content:"";position:absolute;z-index:-1;width:100cqw;height:100cqw;border:1px solid currentColor;border-radius:50%;opacity:.09;right:0;top:10%;pointer-events:none}
+h1,h2,p{margin:0}h1,h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:-.045em}h1{font-size:clamp(26px,9cqw,43px);line-height:1.15}.line{display:block;margin-bottom:4cqh}.line:last-child{color:#9fd4ff;margin-bottom:0}.word{display:inline-block}
+.eyebrow{font-size:clamp(10px,2.7cqw,13px);letter-spacing:.2em;text-transform:uppercase;opacity:.72}.chapter{display:flex;justify-content:space-between;align-items:center}.chapter span:last-child{font-family:Georgia,serif;font-size:5cqw;letter-spacing:0}
+.signature{position:absolute;bottom:11cqh;left:7cqw;font-size:2.8cqw;letter-spacing:.22em;text-transform:uppercase;color:#aaaebd}.intro .eyebrow{margin-bottom:3cqh}.intro h1{position:relative;z-index:1}
+.chrome{position:absolute;z-index:10;top:max(14px,env(safe-area-inset-top));left:4cqw;right:4cqw}.progress{display:flex;gap:5px;margin-bottom:12px}.progress-step{position:relative;flex:1;min-width:0;padding:5px 0}.progress-jump{position:absolute;inset:0;width:100%;border:0;background:transparent}.rail{display:block;height:3px;background:#90939b66;border-radius:4px;overflow:hidden}.fill{display:block;height:100%;background:#fff;transform:scaleX(0);transform-origin:left}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;color:white;text-shadow:0 1px 6px #000}.toolbar a{text-decoration:none;font-size:10px;letter-spacing:.16em}.pause{border:1px solid #ffffff45;background:#1011196b;color:white;border-radius:30px;padding:7px 12px;min-height:34px;font-size:11px}
+.controls{position:absolute;z-index:10;bottom:max(12px,env(safe-area-inset-bottom));left:4cqw;right:4cqw;display:flex;align-items:center;justify-content:space-between;color:#fff}.controls button{border:1px solid #ffffff40;border-radius:50%;width:36px;height:36px;background:#101119a6;color:white}.hint{font-size:10px;color:#fff;text-shadow:0 1px 6px #000;text-align:center;line-height:1.5}.recording .pause,.recording .controls,.recording .progress-jump,.recording .toolbar>a,.recording .open,.recording .telegram{display:none}.recording-brand{display:none;font-size:10px;letter-spacing:.16em}.recording .recording-brand{display:block}.counter{font-variant-numeric:tabular-nums;font-size:11px;letter-spacing:.12em}
+.project{justify-content:space-between;gap:1.8cqh}.alvi{color:#32291d;background:radial-gradient(ellipse at 20% 15%,#fff9e9,transparent 65%),linear-gradient(155deg,#e8d8ba,#b79762)}.avokado{color:#eff4dc;background:radial-gradient(ellipse at 90% 10%,#587341,transparent 65%),linear-gradient(160deg,#193d2b,#0c211a)}.palitra{color:#3b2939;background:radial-gradient(ellipse at 0 20%,#ffdfc3,transparent 65%),radial-gradient(ellipse at 100% 70%,#bbcbe9,transparent 65%),linear-gradient(155deg,#e7c5dc,#f6d8cc)}.nebo{color:#17384d;background:radial-gradient(ellipse at 20% 20%,#fff,transparent 65%),linear-gradient(160deg,#bee8fc,#73bfe4)}.peptides{color:#f2f8f7;background:radial-gradient(ellipse at 90% 20%,#21626a,transparent 60%),linear-gradient(160deg,#0c2a2f,#07171a)}
+.phone{position:relative;flex:0 1 auto;align-self:center;width:calc(49cqh * .54);max-width:74cqw;height:49cqh;min-height:0;border:6px solid #1b1c22;border-radius:30px;background:#f5f1e9;box-shadow:0 25px 45px #0003;overflow:hidden;transform-origin:center top;color:#28241c;display:flex;flex-direction:column}
+.phone::after{content:"";position:absolute;top:7px;left:50%;transform:translateX(-50%);width:30%;height:10px;background:#1b1c22;border-radius:10px;pointer-events:none}.browser-bar{font-size:9px;text-align:center;flex:0 0 34px;padding:20px 4px 3px;background:#eee9df;color:#48443e}.phone-screen{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(145deg,#f6eddb,#c7b087);overflow:hidden}.phone-screen img,.phone-screen video{width:100%;height:100%;object-fit:cover;object-position:top;position:relative;z-index:1}.phone-screen.logo img{width:70%;height:auto;max-height:55%;object-fit:contain;border-radius:16px}.phone-screen.logo{gap:16px;padding:15px}.avokado .phone-screen.logo{background:#183629;color:#f2f6e7}.palitra .phone-screen.logo{background:linear-gradient(160deg,#f7e8e1,#e7c8d9)}.mini-name{font:22px Georgia,serif;letter-spacing:.04em}.mini-label{font-size:10px;text-align:center;line-height:1.5}.fallback{position:absolute;inset:0;display:grid;place-content:center;gap:10px;text-align:center;background:linear-gradient(160deg,#fff,#c6eafa);color:#234c66}.fallback strong{font:32px Georgia,serif}.fallback span{font-size:11px}.phone-screen img.broken{opacity:0}.phone-screen .poster{position:absolute;inset:0}.phone-screen video{opacity:0}.phone-screen video.is-playing{opacity:1}.phone-screen video{pointer-events:none}
+.project-copy h2{font-size:clamp(28px,10cqw,45px);line-height:1;margin-bottom:1cqh}.niche{font-size:clamp(11px,3cqw,14px);opacity:.8;line-height:1.35}.done{font-size:clamp(12px,3.4cqw,16px);line-height:1.4;margin-top:1.1cqh;max-width:34ch}.open{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:11px 17px;border:1px solid currentColor;border-radius:30px;text-decoration:none;font-size:13px;margin-top:1.7cqh;background:#ffffff12}.open span{font-size:19px;line-height:1}
+.process h2{font-size:clamp(29px,10cqw,46px);line-height:1.04}.steps{list-style:none;margin:1cqh 0;padding:0;display:grid;gap:1cqh}.steps li{display:flex;align-items:center;gap:15px;border:1px solid #9fd4ff35;border-radius:15px;padding:1.7cqh 4cqw;background:linear-gradient(120deg,#9fd4ff16,#ffffff03);font-size:clamp(14px,4.3cqw,20px)}.steps small{font-size:10px;letter-spacing:.1em;color:#9fd4ff}.steps .arrow{margin-left:auto;color:#9fd4ff}.process-note{font-size:clamp(14px,4cqw,18px);line-height:1.5;color:#b7c4d4;max-width:28ch}
+.cta h2{font-size:clamp(48px,17cqw,78px);line-height:.98;max-width:6ch}.cta h2 span{color:#9fd4ff}.cta .lead{font-size:clamp(19px,5.7cqw,27px);line-height:1.35;max-width:20ch}.telegram{margin-top:3cqh;display:flex;align-items:center;justify-content:space-between;gap:15px;border-radius:99px;padding:17px 22px;background:#9fd4ff;color:#0b1f36;text-decoration:none;font-weight:600}.telegram svg{width:22px;height:22px;flex:none}.cta .eyebrow{margin-bottom:2cqh}.cta .fine{font-size:11px;color:#99a9bb;letter-spacing:.08em;margin-top:1cqh}
+@keyframes word-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes phone-in{0%{opacity:0;transform:translateY(-70px) scale(.96)}72%{opacity:1;transform:translateY(9px) scale(1.01)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes card-in{from{opacity:0;transform:translateY(25px)}to{opacity:1;transform:translateY(0)}}
+.js .is-active .word{animation:word-in .45s both;animation-delay:calc(var(--i) * 70ms)}.js .is-active .phone{animation:phone-in .75s both}.js .is-active .steps li{animation:card-in .5s both;animation-delay:calc(var(--i) * 120ms)}.js .is-active .project-copy,.js .is-active.cta .lead,.js .is-active.cta .telegram{animation:card-in .6s .22s both}.paused .frame *{animation-play-state:paused!important}
+.automation-note{font-size:clamp(12px,3.3cqw,16px);line-height:1.45;color:#b7c4d4;max-width:36ch}.js .is-active .automation-note{animation:card-in .4s .96s both}.cta .automation-cta{font-size:clamp(16px,4.4cqw,22px);line-height:1.4;color:#b7c4d4;max-width:27ch}.js .is-active .automation-cta{animation:card-in .4s .55s both}
+.reel[data-theme="light"] .toolbar{color:#253342;text-shadow:none}.reel[data-theme="light"] .rail{background:#25334235}.reel[data-theme="light"] .fill{background:#253342}.reel[data-theme="light"] .pause{background:#ffffff88;border-color:#25334255;color:#253342}.frame[data-theme="light"] .chapter{color:#253342;opacity:1}
+.full-viewport .recording-brand{font-size:2.3cqw}.full-viewport .automation-note{font-size:3.3cqw}.full-viewport .automation-cta{font-size:4.4cqw}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:600px){.reel{width:100vw;height:100vh;height:100dvh}}
+.full-viewport .reel{width:100vw;height:100vh;height:100dvh}
+/* Scale the capture layout with its canvas, including a native 1080×1920 recording. */
+.full-viewport h1{font-size:9cqw}.full-viewport .cta h2{font-size:17cqw}.full-viewport .cta .lead{font-size:5.7cqw}.full-viewport .project-copy h2,.full-viewport .process h2{font-size:10cqw}.full-viewport .niche{font-size:3cqw}.full-viewport .done{font-size:3.4cqw}.full-viewport .steps li{font-size:4.3cqw}.full-viewport .process-note{font-size:4cqw}.full-viewport .eyebrow{font-size:2.7cqw}.full-viewport .phone{border-width:1.4cqw;border-radius:7cqw}.full-viewport .open{font-size:3cqw;min-height:10cqw;padding:2.5cqw 4cqw}.full-viewport .telegram{font-size:3.7cqw;padding:4cqw 5cqw}.full-viewport .chrome{top:max(3.3cqw,env(safe-area-inset-top))}.full-viewport .toolbar a{font-size:2.3cqw}.full-viewport .pause{font-size:2.5cqw;padding:1.6cqw 2.8cqw}.full-viewport .browser-bar{font-size:2.1cqw;flex-basis:8cqw;padding:4.6cqw 1cqw .7cqw}.full-viewport .mini-name{font-size:5cqw}.full-viewport .mini-label{font-size:2.3cqw}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main class="reel" aria-label="История Владислава и его сайтов">
+<header class="chrome">
+<nav class="progress" aria-label="Кадры истории"></nav>
+<div class="toolbar"><a href="index.html">SYNAPSE BUSINESS</a><span class="recording-brand">SYNAPSE BUSINESS</span><button class="pause" type="button" aria-pressed="false" aria-label="Приостановить историю">Пауза Ⅱ</button></div>
+</header>
+<div class="frames" tabindex="0" aria-label="История: стрелки переключают кадр, пробел ставит на паузу">
+<section class="frame intro is-active" data-frame="1" aria-labelledby="hook-title">
+<p class="eyebrow">От идеи — к системе</p>
+<h1 id="hook-title"><span class="line">Меня зовут Владислав.</span><span class="line">Я делаю сайты, которые видно целиком:</span><span class="line">от рекламы до выручки.</span></h1>
+<p class="signature">Synapse Business</p>
+</section>
+<section class="frame project alvi" data-theme="light" data-frame="2" aria-labelledby="alvi-title">
+<p class="eyebrow chapter">Проекты <span>01 / 05</span></p>
+<div class="phone" aria-label="ALVI в мобильном мокапе"><div class="browser-bar">alvi.synapsebusiness.ru</div><div class="phone-screen"><div class="fallback"><strong>Alvi</strong><span>Живой сайт</span></div><img class="poster" src="brand/project-alvi-poster.webp" alt="Первый кадр сайта Alvi" width="540" height="1170"><video muted loop playsinline preload="metadata" poster="brand/project-alvi-poster.webp" data-src="video/project-alvi.mp4" aria-label="Проезд по живому сайту Alvi"></video></div></div>
+<div class="project-copy"><h2 id="alvi-title">Alvi</h2><p class="niche">SPA-салон · Иркутск</p><p class="done">Сайт спа-салона.</p><a class="open" href="https://alvi.synapsebusiness.ru/" target="_blank" rel="noopener noreferrer">Открыть сайт <span aria-hidden="true">↗</span></a></div>
+</section>
+<section class="frame project avokado" data-frame="3" aria-labelledby="avokado-title">
+<p class="eyebrow chapter">Проекты <span>02 / 05</span></p>
+<div class="phone" aria-label="Avokado в мобильном мокапе"><div class="browser-bar">avokado38.ru</div><div class="phone-screen"><div class="fallback"><strong>Avokado</strong><span>Живой сайт</span></div><img class="poster" src="brand/project-avokado-poster.webp" alt="Первый кадр сайта Avokado" width="540" height="1170"><video muted loop playsinline preload="metadata" poster="brand/project-avokado-poster.webp" data-src="video/project-avokado.mp4" aria-label="Проезд по живому сайту Avokado"></video></div></div>
+<div class="project-copy"><h2 id="avokado-title">Avokado</h2><p class="niche">Студия дизайна тела · Иркутск</p><p class="done">Сайт студии.</p><a class="open" href="https://avokado38.ru/" target="_blank" rel="noopener noreferrer">Открыть сайт <span aria-hidden="true">↗</span></a></div>
+</section>
+<section class="frame project palitra" data-theme="light" data-frame="4" aria-labelledby="palitra-title">
+<p class="eyebrow chapter">Проекты <span>03 / 05</span></p>
+<div class="phone" aria-label="Палитра в мобильном мокапе"><div class="browser-bar">palitra-love.ru</div><div class="phone-screen"><div class="fallback"><strong>Палитра</strong><span>Живой сайт</span></div><img class="poster" src="brand/project-palitra-poster.webp" alt="Первый кадр сайта Палитра" width="540" height="1170"><video muted loop playsinline preload="metadata" poster="brand/project-palitra-poster.webp" data-src="video/project-palitra.mp4" aria-label="Проезд по живому сайту Палитра"></video></div></div>
+<div class="project-copy"><h2 id="palitra-title">Палитра</h2><p class="niche">Шары и оформление · Подольск, Москва</p><p class="done">Сайт с каталогом и доставкой.</p><a class="open" href="https://palitra-love.ru/" target="_blank" rel="noopener noreferrer">Открыть сайт <span aria-hidden="true">↗</span></a></div>
+</section>
+<section class="frame project nebo" data-theme="light" data-frame="5" aria-labelledby="nebo-title">
+<p class="eyebrow chapter">Проекты <span>04 / 05</span></p>
+<div class="phone" aria-label="Мобильная версия Небо"><div class="browser-bar">nebo-draft-1.synapsebusiness.ru</div><div class="phone-screen"><div class="fallback"><strong>Небо</strong><span>Живой сайт</span></div><img class="poster" src="brand/project-nebo-poster.webp" alt="Первый кадр сайта Небо" width="540" height="1170"><video muted loop playsinline preload="metadata" poster="brand/project-nebo-poster.webp" data-src="video/project-nebo.mp4" aria-label="Проезд по живому сайту Небо"></video></div></div>
+<div class="project-copy"><h2 id="nebo-title">Небо</h2><p class="niche">Стоматология · Маркова</p><p class="done">Черновик сайта.</p><a class="open" href="https://nebo-draft-1.synapsebusiness.ru/" target="_blank" rel="noopener noreferrer">Открыть сайт <span aria-hidden="true">↗</span></a></div>
+</section>
+<section class="frame project peptides" data-frame="6" aria-labelledby="peptides-title">
+<p class="eyebrow chapter">Проекты <span>05 / 05</span></p>
+<div class="phone" aria-label="Мобильная версия Пептидов"><div class="browser-bar">drafts.synapsebusiness.ru/peptides/</div><div class="phone-screen"><div class="fallback"><strong>Пептиды</strong><span>Живой сайт</span></div><img class="poster" src="brand/project-peptides-poster.webp" alt="Первый кадр сайта Пептиды" width="540" height="1170"><video muted loop playsinline preload="metadata" poster="brand/project-peptides-poster.webp" data-src="video/project-peptides.mp4" aria-label="Проезд по живому сайту Пептиды"></video></div></div>
+<div class="project-copy"><h2 id="peptides-title">Пептиды</h2><p class="niche">Пептидная терапия для клиник · Россия</p><p class="done">Черновик сайта CELL LAB.</p><a class="open" href="https://drafts.synapsebusiness.ru/peptides/" target="_blank" rel="noopener noreferrer">Открыть сайт <span aria-hidden="true">↗</span></a></div>
+</section>
+<section class="frame process" data-frame="7" aria-labelledby="process-title">
+<p class="eyebrow">Как это работает</p><h2 id="process-title">Всё связано.</h2>
+<ol class="steps"><li style="--i:0"><small>01</small>Контент и реклама <span class="arrow" aria-hidden="true">↓</span></li><li style="--i:1"><small>02</small>Сайт <span class="arrow" aria-hidden="true">↓</span></li><li style="--i:2"><small>03</small>Диалоги <span class="arrow" aria-hidden="true">↓</span></li><li style="--i:3"><small>04</small>CRM <span class="arrow" aria-hidden="true">↓</span></li><li style="--i:4"><small>05</small>Выручка <span class="arrow" aria-hidden="true">↗</span></li></ol>
+<p class="process-note">Один контур — видно, откуда пришёл каждый рубль.</p><p class="automation-note">Отдельно — автоматизация любых бизнес-процессов: от заявок до отчётов.</p>
+</section>
+<section class="frame cta" data-frame="8" aria-labelledby="cta-title">
+<p class="eyebrow">Твой проект — следующий</p><h2 id="cta-title">Пиши <span>САЙТ</span></h2><p class="lead">— и я покажу, как это будет работать у тебя</p><p class="automation-cta">…или опиши задачу — автоматизирую.</p>
+<a class="telegram" href="https://t.me/TaiSabai_community" target="_blank" rel="noopener noreferrer">Написать в Telegram <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 3-4 18-6-5-4 3v-6L21 3ZM7 13l10-6-6 9" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></a><p class="fine">Synapse Business</p>
+</section>
+</div>
+<footer class="controls"><button type="button" class="prev" aria-label="Предыдущий кадр">←</button><p class="hint">Тап слева / справа · свайп<br>Пробел — пауза</p><span class="counter" aria-hidden="true">01 / 08</span><button type="button" class="next" aria-label="Следующий кадр">→</button></footer>
+<p class="sr-only" role="status" aria-live="polite" id="status"></p>
+</main>
+<script>
+(function () {
+'use strict';
+document.documentElement.classList.add('js');
+const params = new URLSearchParams(location.search);
+const motion = matchMedia('(prefers-reduced-motion: reduce)');
+const requested = Number(params.get('t'));
+// A custom duration belongs to recording mode; invalid / non-positive values use the default.
+const duration = params.get('auto') === '1' && Number.isFinite(requested) && requested > 0 ? Math.min(requested, 3600000) : 4500;
+const recording = params.get('auto') === '1' || params.get('nochrome') === '1';
+if (recording) document.body.classList.add('recording');
+if (params.get('nochrome') === '1') document.body.classList.add('full-viewport');
+const reel = document.querySelector('.reel');
+const scroller = document.querySelector('.frames');
+const frames = Array.from(document.querySelectorAll('.frame'));
+const progress = document.querySelector('.progress');
+const pauseButton = document.querySelector('.pause');
+const previous = document.querySelector('.prev');
+const next = document.querySelector('.next');
+const counter = document.querySelector('.counter');
+const status = document.querySelector('#status');
+let index = 0, elapsed = 0, last = performance.now(), raf = 0;
+let userPaused = false, finished = false, gesture = null, wheelLocked = false, wheelRelease;
+const fills = frames.map((frame, i) => {
+  const step = document.createElement('span');
+  step.className = 'progress-step';
+  step.innerHTML = '<span class="rail"><span class="fill"></span></span><button class="progress-jump" type="button"></button>';
+  const button = step.querySelector('button');
+  button.setAttribute('aria-label', 'Кадр ' + (i + 1) + ': ' + frame.querySelector('h1,h2').textContent);
+  button.addEventListener('click', () => activate(i));
+  progress.appendChild(step);
+  return step.querySelector('.fill');
+});
+const videos = Array.from(document.querySelectorAll('.phone video'));
+// Only the active project and the next project have a source. The next is metadata-only.
+function syncMedia() {
+  const active = frames[index].querySelector('video');
+  const upcoming = frames.slice(index + 1).map(frame => frame.querySelector('video')).find(Boolean);
+  videos.forEach(video => {
+    if (video !== active) {
+      video.pause(); video.classList.remove('is-playing');
+      try { video.currentTime = 0; } catch (_) {}
+    }
+    const keep = !motion.matches && (video === active || video === upcoming);
+    if (!keep) {
+      if (video.hasAttribute('src')) { video.removeAttribute('src'); video.load(); }
+      video.preload = 'none'; return;
+    }
+    video.preload = video === active ? 'auto' : 'metadata';
+    if (!video.hasAttribute('src')) { video.src = video.dataset.src; video.load(); }
+    if (video === active && !paused() && !finished) {
+      video.muted = true;
+      const attempt = video.play();
+      if (attempt) attempt.catch(() => video.classList.remove('is-playing'));
+    } else video.pause();
+  });
+}
+videos.forEach(video => {
+  video.addEventListener('playing', () => {
+    if (!video.closest('.frame').classList.contains('is-active') || paused() || finished) {
+      video.pause(); return;
+    }
+    video.classList.add('is-playing');
+  });
+  video.addEventListener('error', () => video.classList.remove('is-playing'));
+});
+let wordIndex = 0;
+document.querySelectorAll('.intro .line').forEach(line => {
+  const text = line.textContent;
+  line.setAttribute('aria-label', text);
+  line.textContent = '';
+  text.split(/\s+/).forEach((word, i) => {
+    if (i) line.appendChild(document.createTextNode(' '));
+    const span = document.createElement('span');
+    span.className = 'word'; span.textContent = word;
+    span.setAttribute('aria-hidden', 'true');
+    span.style.setProperty('--i', wordIndex++);
+    line.appendChild(span);
+  });
+});
+document.querySelectorAll('.phone img').forEach(img => {
+  function fallback() { img.classList.add('broken'); }
+  img.addEventListener('error', fallback);
+  if (img.complete && !img.naturalWidth) fallback();
+});
+function paused() { return userPaused || motion.matches || document.hidden; }
+function paint() {
+  fills.forEach((fill, i) => {
+    const value = i < index ? 1 : i === index ? elapsed / duration : 0;
+    fill.style.transform = 'scaleX(' + Math.min(1, value) + ')';
+    const button = fill.parentElement.parentElement.querySelector('button');
+    if (i === index) button.setAttribute('aria-current', 'step');
+    else button.removeAttribute('aria-current');
+  });
+}
+function syncControls() {
+  const stopped = paused();
+  reel.classList.toggle('paused', stopped);
+  pauseButton.disabled = motion.matches || finished;
+  pauseButton.setAttribute('aria-pressed', String(stopped));
+  pauseButton.textContent = motion.matches ? 'Без движения' : finished ? 'Конец ✓' : stopped ? 'Продолжить ▶' : 'Пауза Ⅱ';
+  pauseButton.setAttribute('aria-label', stopped ? 'Продолжить историю' : 'Приостановить историю');
+  syncMedia();
+  previous.disabled = index === 0; next.disabled = index === frames.length - 1;
+}
+function schedule() {
+  cancelAnimationFrame(raf); raf = 0; last = performance.now();
+  syncControls();
+  if (!paused() && !finished) raf = requestAnimationFrame(tick);
+}
+function tick(now) {
+  raf = 0;
+  if (paused() || finished) return;
+  elapsed = Math.min(duration, elapsed + now - last); last = now;
+  paint();
+  if (elapsed >= duration) {
+    if (index < frames.length - 1) { activate(index + 1); return; }
+    finished = true; syncControls(); return;
+  }
+  raf = requestAnimationFrame(tick);
+}
+function activate(target, scroll = true) {
+  const focusInside = frames[index].contains(document.activeElement);
+  index = Math.max(0, Math.min(frames.length - 1, target));
+  elapsed = 0; finished = false;
+  frames.forEach((frame, i) => {
+    frame.classList.remove('is-active');
+    frame.inert = i !== index;
+    frame.setAttribute('aria-hidden', String(i !== index));
+  });
+  // Restart entry animations, including a deliberate re-selection of this frame.
+  void frames[index].offsetWidth;
+  frames[index].classList.add('is-active');
+  reel.dataset.theme = frames[index].dataset.theme || 'dark';
+  const media = frames[index].querySelector('video');
+  if (media) { try { media.currentTime = 0; } catch (_) {} }
+  if (scroll) scroller.scrollTo({ top: index * scroller.clientHeight, behavior: 'instant' });
+  counter.textContent = String(index + 1).padStart(2, '0') + ' / 08';
+  status.textContent = 'Кадр ' + (index + 1) + ' из 8: ' + frames[index].querySelector('h1,h2').textContent;
+  if (focusInside) scroller.focus({ preventScroll: true });
+  paint(); schedule();
+}
+function move(delta) { activate(index + delta); }
+function togglePause() {
+  if (motion.matches || finished) return;
+  // Account for the fraction since the last rendered animation frame.
+  if (!paused()) elapsed = Math.min(duration, elapsed + performance.now() - last);
+  userPaused = !userPaused; paint(); schedule();
+}
+pauseButton.addEventListener('click', togglePause);
+previous.addEventListener('click', () => move(-1));
+next.addEventListener('click', () => move(1));
+reel.addEventListener('click', event => {
+  if (recording || event.target.closest('a,button') || gesture?.swiped) return;
+  const rect = reel.getBoundingClientRect();
+  move(event.clientX - rect.left < rect.width / 2 ? -1 : 1);
+});
+reel.addEventListener('pointerdown', event => {
+  if (recording || event.target.closest('a,button') || !event.isPrimary) return;
+  gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, swiped: false };
+});
+reel.addEventListener('pointerup', event => {
+  if (!gesture || gesture.id !== event.pointerId) return;
+  const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) > 40) {
+    gesture.swiped = true;
+    move((Math.abs(dy) >= Math.abs(dx) ? dy : dx) < 0 ? 1 : -1);
+  }
+});
+reel.addEventListener('pointercancel', () => { gesture = null; });
+reel.addEventListener('wheel', event => {
+  if (recording) { event.preventDefault(); return; }
+  if (event.ctrlKey || Math.abs(event.deltaY) < 4) return;
+  event.preventDefault();
+  clearTimeout(wheelRelease);
+  wheelRelease = setTimeout(() => { wheelLocked = false; }, 180);
+  if (wheelLocked) return;
+  wheelLocked = true; move(event.deltaY > 0 ? 1 : -1);
+}, { passive: false });
+document.addEventListener('keydown', event => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest('input,textarea,select')) return;
+  if (event.code === 'Space' && !event.target.closest('a,button')) { event.preventDefault(); togglePause(); }
+  else if (['ArrowRight','ArrowDown','PageDown'].includes(event.key)) { event.preventDefault(); move(1); }
+  else if (['ArrowLeft','ArrowUp','PageUp'].includes(event.key)) { event.preventDefault(); move(-1); }
+  else if (event.key === 'Home') { event.preventDefault(); activate(0); }
+  else if (event.key === 'End') { event.preventDefault(); activate(7); }
+});
+// Keep native scrollbar / assistive scrolling aligned with the story state.
+scroller.addEventListener('scroll', () => {
+  const target = Math.round(scroller.scrollTop / scroller.clientHeight);
+  if (target !== index) activate(target, false);
+}, { passive: true });
+new ResizeObserver(() => { scroller.scrollTop = index * scroller.clientHeight; }).observe(scroller);
+document.addEventListener('visibilitychange', schedule);
+motion.addEventListener('change', schedule);
+const initial = Number(params.get('frame'));
+activate(Number.isInteger(initial) && initial >= 1 && initial <= 8 ? initial - 1 : 0);
+})();
+</script>
+<script defer src="track.js" data-company="synapse"></script>
+</body>
+</html>
