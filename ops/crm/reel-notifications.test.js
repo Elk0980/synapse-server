@@ -48,3 +48,11 @@ test('OFF не записывает переходы и не рассылает 
  enabled.addVersion('alpha',f.reel.id,{mediaUrl:asset('b'),durationMs:4000,editId:f.edit});
  assert.deepEqual(enabled.notificationFeed().events.map(e=>e.kind),['done']);
 });
+test('архив не оставляет недоступный счётчик; восстановление возвращает прежнее непрочитанное без потери событий',t=>{
+ const f=fixture(t);f.materials.claim('alpha',f.edit);
+ f.materials.addVersion('alpha',f.reel.id,{mediaUrl:asset('b'),durationMs:4000,editId:f.edit});
+ assert.equal(f.materials.unreadNotifications('alpha',user).count,2);
+ f.materials.archive('alpha',f.reel.id,{reason:'SAMPLE архив'},user);
+ assert.equal(f.materials.unreadNotifications('alpha',user).count,0);assert.equal(f.materials.notificationFeed().events.length,2);
+ f.materials.restore('alpha',f.reel.id,{},user);assert.equal(f.materials.unreadNotifications('alpha',user).count,2);
+});

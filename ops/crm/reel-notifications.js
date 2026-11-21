@@ -46,7 +46,8 @@ function createReelNotifications(db,{enabled=false}={}){
     if(!active)return {enabled:false,companyCode:owner.code.toLowerCase(),count:0,reels:[]};
     const rows=db.prepare(`SELECT e.reel_id reelId,COUNT(*) count,MAX(e.id) throughId,
       MAX(CASE WHEN e.kind IN ('done','ready') THEN 1 ELSE 0 END) newVersion
-      FROM reel_notification_events e LEFT JOIN reel_notification_reads r
+      FROM reel_notification_events e JOIN reel_materials m ON m.id=e.reel_id AND m.company_id=e.company_id AND m.archived_at IS NULL
+      LEFT JOIN reel_notification_reads r
       ON r.company_id=e.company_id AND r.author_id=e.author_id AND r.reel_id=e.reel_id
       WHERE e.company_id=? AND e.author_id=? AND e.id>COALESCE(r.through_id,0) GROUP BY e.reel_id`).all(owner.id,author);
     return {enabled:true,companyCode:owner.code.toLowerCase(),count:rows.reduce((n,r)=>n+r.count,0),reels:rows};
