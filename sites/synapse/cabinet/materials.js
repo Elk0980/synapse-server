@@ -179,7 +179,7 @@ function create(el, ctx) {
   const sameCompany = data => data && (!data.companyCode || String(data.companyCode).toLowerCase() === String(ctx.companyCode).toLowerCase());
   const state = {reels: [], mentor: null, posts: [], shooting: {}, settings: null, info: null, items: [], sort: "date", open: null, item: null,
     platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null,
-    live: null, ask: null, reviewDrafts: new Map()};
+    live: null, ask: null, cancelRequest: null, reviewDrafts: new Map()};
   const api = {
     list: () => ctx.api.get("crm/autoposting/reels"),
     get: id => ctx.api.get("crm/autoposting/reels/" + id),
@@ -440,7 +440,7 @@ function create(el, ctx) {
     const key=state.open?.key,scroll=$("[data-grid]").scrollTop;
     const review=reviewDraft();if(review&&key)state.reviewDrafts.set(key,review);
     if (state.open?.id) syncReelSummary(state.open);
-    storeLive();closeWish();state.open = null;state.item = null;state.live = null;state.ask = null;$("[data-detail]").hidden = true;modal("detail", false);
+    storeLive();closeWish();state.open = null;state.item = null;state.live = null;state.ask = null;state.cancelRequest = null;$("[data-detail]").hidden = true;modal("detail", false);
     build();renderGrid();$("[data-grid]").scrollTop=scroll;
     const opener = $("[data-upload-open]");if (opener) opener.hidden = false;
     const focus=returnFocus?.isConnected?returnFocus:[...el.querySelectorAll('[data-open]')].find(n=>n.dataset.open===key);
@@ -712,17 +712,30 @@ function create(el, ctx) {
     } catch (error) {setText("[data-review-status]", "Не удалось сохранить: " + (error?.message || "ошибка сети"));}
     finally {state.busy = false;}
   }
+  function requestSummary(request) {
+    const edit = (state.open?.edits || []).find(e=>e.id===request.editId);
+    const segments = edit?.kind === 'edl' ? edit.edl?.live?.segments : null;
+    if (request.kind === 'redo' && Array.isArray(segments)) return `Убрано фраз: ${segments.filter(s=>s.enabled===false).length}, без звука: ${segments.filter(s=>s.enabled!==false&&s.sound===false).length}`;
+    // Прежний DTO может не содержать EDL: используем только известный формат сохранённой сводки.
+    if (request.kind === 'redo' && request.editId && /^Живой монтаж(?:[;.\s]|$)/.test(request.text || '')) {
+      const count = label => {const list=new RegExp(label+':\\s*(\\d+(?:\\s*,\\s*\\d+)*)').exec(request.text)?.[1];return list?list.split(',').length:0;};
+      return `Убрано фраз: ${count('выключены отрезки')}, без звука: ${count('без звука')}`;
+    }
+    return request.text || '';
+  }
   function requestHtml(request) {
     const where = request.kind === "redo" && request.startMs != null ? ` · отрезок ${mmss(request.startMs)}–${mmss(request.endMs)}` : "";
     const date = request.date ? ` · на ${esc(dateRu(request.date))}` : "";
     const label = request.kind === "redo" && Number.isSafeInteger(request.editId) && request.editId > 0 ? "Правка монтажа" : ASKS.find(item => item.kind === request.kind)?.label || request.kindLabel || "Просьба";
+    const statusLabel = request.status === 'rejected' && request.reply === 'Отменено автором.' ? 'отменено' : REQUEST_STATUS[request.status] || request.statusLabel || request.status;
+    const summary = requestSummary(request);
     return `<li class="mt-request" data-request="${esc(request.id)}" data-request-status="${esc(request.status)}">
-      <p class="mt-request__head"><strong>${esc(label)}</strong><span class="mt-request__status">${esc(REQUEST_STATUS[request.status] || request.statusLabel || request.status)}</span></p>
+      <p class="mt-request__head"><strong>${esc(label)}</strong><span class="mt-request__status">${esc(statusLabel)}</span></p>
       <p class="muted mt-request__meta">${esc(timeIn(request.createdAt, state.timeZone))}${request.authorName ? " · " + esc(request.authorName) : ""}${request.version ? " · версия v" + esc(request.version) : ""}${where}${date}</p>
-      ${request.text ? `<p class="mt-request__text">${esc(request.text)}</p>` : ""}
+      ${summary ? `<p class="mt-request__text">${esc(summary)}</p>` : ""}
       ${(request.notes || []).length ? `<ul class="mt-request-notes">${request.notes.map(n => `<li>${esc(wishLine(n))}</li>`).join("")}</ul>` : ""}
       ${request.reply ? `<p class="mt-request__reply" data-request-reply><b>Ответ:</b> ${esc(request.reply)}</p>` : `<p class="muted mt-request__reply">Ответа пока нет.</p>`}
-      ${canEdit && request.status === "accepted" ? `<button type="button" class="plain-button" data-request-cancel="${esc(request.id)}">Отменить просьбу</button>` : ""}</li>`;
+      ${canEdit && request.status === "accepted" ? state.cancelRequest === request.id ? `<div class="mt-request-cancel" role="group" aria-labelledby="mt-cancel-${esc(request.id)}"><p id="mt-cancel-${esc(request.id)}">Отменить эту просьбу?</p><div class="mt-actions"><button type="button" class="plain-button" data-request-cancel-confirm="${esc(request.id)}"${state.busy?' disabled':''}>Да, отменить</button><button type="button" class="plain-button" data-request-cancel-no="${esc(request.id)}"${state.busy?' disabled':''}>Оставить просьбу</button></div></div>` : `<button type="button" class="plain-button" data-request-cancel="${esc(request.id)}">Отменить просьбу</button>` : ""}</li>`;
   }
   function askHtml(reel) {
     if (!fresh(reel)) return "";
@@ -791,10 +804,19 @@ function create(el, ctx) {
     finally {state.busy = false;}
   }
   async function cancelAsk(id) {
-    if (state.busy) return;state.busy = true;
-    try {const reel = await api.cancelAsk(state.open.id, id);if (ctx.signal.aborted || !state.open) return;state.open = keepPost(reel);renderDetail();setText("[data-ask-status]", "Просьба отменена.");}
-    catch (error) {setText("[data-ask-status]", "Не удалось отменить: " + (error?.message || "ошибка сети"));}
-    finally {state.busy = false;}
+    if (!canEdit || state.busy || state.cancelRequest!==id || !state.open?.requests?.some(r=>r.id===id&&r.status==='accepted')) return;
+    const key=state.open.key;state.busy = true;paintCancelRequest();
+    try {const reel = await api.cancelAsk(state.open.id, id);if (ctx.signal.aborted || state.open?.key!==key) return;state.open = keepPost(reel);state.cancelRequest=null;state.busy=false;renderDetail();setText("[data-ask-status]", "Просьба отменена.");setText("[data-requests-status]", "Просьба отменена.");}
+    catch (error) {if(state.open?.key===key)setText("[data-requests-status]", "Не удалось отменить: " + (error?.message || "ошибка сети"));}
+    finally {state.busy = false;if(state.open?.key===key)paintCancelRequest();}
+  }
+  function paintCancelRequest() {
+    const list=el.querySelector('[data-requests]');if(list&&state.open)list.innerHTML=[...state.open.requests].reverse().map(requestHtml).join('');
+  }
+  function confirmCancelRequest(id, show) {
+    if(!canEdit||state.busy||!state.open?.requests?.some(r=>r.id===id&&r.status==='accepted'))return;
+    state.cancelRequest=show?id:null;paintCancelRequest();
+    el.querySelector(show?`[data-request-cancel-confirm="${id}"]`:`[data-request-cancel="${id}"]`)?.focus({preventScroll:true});
   }
   /* Переключатели «живого монтажа» живут, пока открыта эта версия ролика. Границы отрезков — только с сервера. */
   const montageDraftKey = key => `mt-wishes:${ctx.companyCode}:${ctx.user?.id || ctx.user?.login || "session"}:${key}`;
@@ -858,9 +880,10 @@ function create(el, ctx) {
   }
   const mobilePlayback = window.matchMedia?.("(max-width:899px)");
   function placeLiveActions() {
-    const actions = el.querySelector("[data-live-actions]"), host = el.querySelector("[data-detail]");
+    const actions = el.querySelector("[data-live-actions]"), host = el.querySelector(mobilePlayback?.matches ? "[data-detail]" : ".mt-side");
     if (actions && host) host.append(actions);
   }
+  mobilePlayback?.addEventListener("change",placeLiveActions,{signal:ctx.signal});
   function paintPlayback(player) {
     const live = state.live;if (!live || !player) return;
     const ms = (Number(player.currentTime) || 0) * 1000, timeline = liveOps.timeline(live.segments, live.toggles, ms);
@@ -1315,7 +1338,9 @@ function create(el, ctx) {
     else if (target.dataset.ask) openAsk(target.dataset.ask);
     else if (target.hasAttribute("data-ask-cancel")) closeAsk();
     else if (target.dataset.askNow) askNow(target.dataset.askNow);
-    else if (target.dataset.requestCancel) void cancelAsk(Number(target.dataset.requestCancel));
+    else if (target.dataset.requestCancel) confirmCancelRequest(Number(target.dataset.requestCancel),true);
+    else if (target.dataset.requestCancelConfirm) void cancelAsk(Number(target.dataset.requestCancelConfirm));
+    else if (target.dataset.requestCancelNo) confirmCancelRequest(Number(target.dataset.requestCancelNo),false);
     else if (target.hasAttribute("data-requests-refresh")) void reloadOpen("Обновлено.");
     else if (target.dataset.liveToggle) toggleLive(target.dataset.liveToggle);
     else if (target.hasAttribute("data-live-save")) void saveLive();
