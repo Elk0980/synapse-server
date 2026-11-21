@@ -498,7 +498,7 @@ function create(el, ctx) {
       <div class="mt-layout">
         <div class="mt-phone">
           <fieldset class="mt-platforms" aria-label="Маска площадки">${switcher.map(id => `<label title="${esc(platformOf(id).label)}"><input type="radio" name="mt-platform" value="${id}"${id === state.platform ? " checked" : ""}><span>${esc(platformOf(id).short)}</span></label>`).join("")}</fieldset>
-          <div class="mt-screen">${media ? `<video controls playsinline preload="metadata" src="${esc(media)}" data-player></video>` : "<p>Файл не найден</p>"}${maskHtml(state.platform)}</div>
+          <div class="mt-stick"><div class="mt-screen">${media ? `<video controls playsinline preload="metadata" src="${esc(media)}" data-player></video>` : "<p>Файл не найден</p>"}${maskHtml(state.platform)}</div></div>
           <label class="mt-toggle"><input type="checkbox" data-mask-toggle checked> Маска площадки</label>
           <p class="muted mt-note">Тёмные зоны — где лягут шапка, подпись и кнопки ${esc(platformOf(state.platform).label)}. Зоны ориентировочные.</p>
         </div>
