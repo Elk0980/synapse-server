@@ -1,7 +1,7 @@
 [
   {
     "width": 390,
-    "tappable": 33,
+    "tappable": 36,
     "scrollWidth": 390,
     "files": [
       "montage-list-390.png",
@@ -11,7 +11,7 @@
   },
   {
     "width": 1366,
-    "tappable": 33,
+    "tappable": 38,
     "scrollWidth": 1366,
     "files": [
       "montage-list-1366.png",

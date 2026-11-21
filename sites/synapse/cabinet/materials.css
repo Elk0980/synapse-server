@@ -73,6 +73,26 @@ body.mt-modal-open { overflow:hidden; }
 .mt-layout { display:grid; gap:18px; margin-top:10px; grid-template-columns:minmax(0,1fr); }
 @media (min-width:900px) { .mt-layout { grid-template-columns:minmax(260px,320px) minmax(0,1fr); align-items:start; } }
 .mt-phone { width:100%; max-width:320px; justify-self:center; min-width:0; }
+/* На телефоне кадр и управление заполняют закреплённую полосу; на ПК закреплена колонка. */
+.mt-transport { display:none; }
+@media (min-width:900px) { .mt-phone { position:sticky; top:56px; } }
+@media (max-width:899px) {
+  .mt-layout { display:flex; flex-direction:column; gap:0; }
+  .mt-phone, .mt-side { display:contents; }
+  .mt-stick { order:-3; }
+  .mt-live { order:-2; }
+  .mt-modal__head h2 { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+  .mt-stick { position:sticky; top:58px; z-index:1; display:flex; align-items:stretch; gap:8px; margin:0 -16px 0; padding:6px 8px; background:var(--bg,#0f141d); }
+  .mt-stick .mt-screen { flex:none; width:auto; height:40vh; min-height:40vh; max-width:none; border-radius:12px; border-width:4px; }
+  .mt-transport { display:flex; flex:1; flex-direction:column; justify-content:space-between; gap:4px; min-width:0; font-size:14px; }
+  .mt-view .mt-transport button { box-sizing:border-box; width:100%; min-width:0; min-height:44px; padding:6px 4px; font-size:14px; white-space:normal; line-height:1.2; }
+  .mt-transport p { margin:0; overflow-wrap:anywhere; }
+  .mt-transport input[type=range] { box-sizing:border-box; width:100%; min-width:0; min-height:44px; margin:0; }
+  .mt-transport .mt-actions { display:grid; gap:4px; margin:0; }
+  .mt-transport .mt-status { margin:4px 0 0; font-size:13px; line-height:1.25; }
+  .mt-platforms { margin-top:10px; }
+  .mt-platforms label, .mt-toggle { min-height:44px; }
+}
 .mt-screen { position:relative; width:100%; aspect-ratio:9/16; border-radius:24px; overflow:hidden; background:#000; border:6px solid #222; box-shadow:0 10px 30px #0006; box-sizing:border-box; }
 .mt-screen video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .mt-platforms { display:flex; gap:4px; margin:0 0 8px; padding:3px; border:1px solid var(--line,#283143); border-radius:10px; min-width:0; }
@@ -199,15 +219,34 @@ body.mt-modal-open { overflow:hidden; }
 .mt-request__meta { font-size:13px; }
 .mt-request__reply { padding:8px 10px; border-radius:9px; background:rgba(163,172,187,.07); }
 .mt-view .mt-request button { min-height:44px; }
-.mt-live__list { list-style:none; margin:8px 0; padding:0; display:grid; gap:8px; }
-.mt-live__row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid var(--line,#283143); border-radius:10px; }
-.mt-live__row.is-off { opacity:.6; border-style:dashed; }
-.mt-live__name { min-width:0; flex:1 1 220px; overflow-wrap:anywhere; font:inherit; font-size:15px; line-height:1.35; text-align:left; color:inherit; background:none; border:0; padding:4px 0; cursor:pointer; }
-.mt-live__row.is-off .mt-live__name { text-decoration:line-through; text-decoration-color:var(--line,#283143); }
-.mt-live__switch { display:flex; flex-wrap:wrap; gap:8px; }
-.mt-view .mt-live__btn { min-height:44px; min-width:112px; }
-.mt-live__btn[aria-pressed="true"] { border-color:var(--accent,#9fb3ff); }
-.mt-live__btn[aria-pressed="false"] { opacity:.85; }
+/* Компактный список фраз (решение владельца 21.11): одна строка — фраза, звук, убрать/вернуть. Текст кнопок остаётся в разметке для чтения с экрана, на вид — значки. */
+.mt-live__list { list-style:none; margin:6px 0; padding:0; display:grid; gap:4px; }
+.mt-live__row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 4px 0 8px; border:1px solid var(--line,#283143); border-left:4px solid #3fae6a; border-radius:8px; }
+.mt-live__row.is-off { border-left-color:var(--line,#283143); background:transparent; }
+.mt-live__row.is-current { border-color:var(--accent,#9fb3ff); background:rgba(159,179,255,.16); }
+.mt-live { position:relative; }
+.mt-live > h3 { padding-right:44px; }
+.mt-live__help { position:absolute; top:0; right:0; }
+.mt-live__help summary { display:grid; place-items:center; min-width:44px; min-height:44px; cursor:pointer; }
+.mt-live__help[open] { position:static; }
+.mt-live__btn[data-live-toggle^="sound"] { order:-1; }
+.view-panel .mt-view button.mt-live__name, .mt-live__name { min-width:0; min-height:44px; overflow-wrap:anywhere; font:inherit; font-size:14px; line-height:1.25; text-align:left; color:inherit; background:none; border:0; border-radius:0; padding:4px 0; cursor:pointer; box-shadow:none; }
+.mt-live__name .muted { font-size:12px; white-space:nowrap; }
+.mt-live__row.is-off .mt-live__name { color:var(--muted,#8c97ab); text-decoration:line-through; text-decoration-color:var(--line,#283143); }
+.mt-live__switch { display:flex; gap:4px; }
+.view-panel .mt-view button.mt-live__btn, .mt-view .mt-live__btn { box-sizing:border-box; width:44px; min-width:44px; height:44px; min-height:44px; padding:0; font-size:0; border-radius:8px; }
+.mt-live__btn::before { font-size:20px; line-height:1; font-weight:700; }
+.mt-live__btn[data-live-toggle^="sound"]::before { content:"🔊"; font-size:17px; }
+.mt-live__btn[data-live-toggle^="sound"][aria-pressed="false"]::before { content:"🔇"; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="true"] { border-color:rgba(240,121,108,.55); color:#f0796c; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="true"]::before { content:"−"; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="false"] { border-color:rgba(88,201,135,.6); color:#58c987; }
+.mt-live__btn[data-live-toggle^="enabled"][aria-pressed="false"]::before { content:"+"; }
+.mt-live__btn:disabled { opacity:.35; }
+.mt-live { margin:8px 0 14px; padding:8px 10px; }
+.mt-live .mt-hint { margin:2px 0 4px; font-size:12px; line-height:1.35; }
+.mt-live .mt-actions { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
+.mt-live .mt-actions > * { flex:1 1 140px; font-size:14px; }
 .mt-history { margin:12px 0; }
 .mt-history > summary { cursor:pointer; min-height:44px; padding:10px 0; color:var(--muted,#8c97ab); font-weight:600; }
 .mt-history ul { margin:0; padding-left:18px; }
