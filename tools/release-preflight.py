@@ -311,6 +311,25 @@ def queues():
 
 
 def main():
+    if sys.argv[1:] == ['inspect7-queue']:
+        # Read only after an indeterminate transport; never resubmit.
+        print('ASCII_ATTEMPT_MARKER', (ROOT/'edit7-ascii-attempt.started').exists())
+        program = r'''
+(async()=>{
+ const key=process.env.CRM_API_KEY;if(!key)throw Error();
+ const r=await fetch('http://crm:8080/internal/reel-materials/queue?companyCode=taisabai',{headers:{'x-api-key':key,'x-agent-name':'Claude'},redirect:'error',signal:AbortSignal.timeout(8000)});
+ let data={};try{data=await r.json()}catch{}
+ const edit=Array.isArray(data.edits)?data.edits.find(e=>e.id===7):null;
+ console.log(JSON.stringify({queueHttp:r.status,editStatus:edit?.status??null}));
+})().catch(()=>{console.log(JSON.stringify({queueHttp:0,editStatus:null}));process.exitCode=1});
+'''
+        result = subprocess.run(['docker','exec','-i','synapse-content-1','node'], input=program.encode(),capture_output=True,timeout=15)
+        try:
+            data=json.loads(result.stdout)
+            print(json.dumps(data,separators=(',',':')))
+        except Exception:
+            print('QUEUE_READ_UNAVAILABLE')
+        return result.returncode
     if len(sys.argv) == 3 and sys.argv[1] == 'submit7-ascii':
         # №283/2066: one authorized repeat, guarded by queue and a private marker.
         try:
