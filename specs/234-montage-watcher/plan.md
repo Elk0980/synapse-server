@@ -11,3 +11,5 @@
 В рабочем content используется createBudgetedClassifier существующего fallback (available/priceFor/reply, те же финансовые брони). В альтернативном CLI модель выбирается по /status фактически настроенного Hugh: совпадение model, authenticated/connected/replyEnabled. При одном доступном runtime нет альтернатив для сравнения; при нескольких нужны явные тарифы, цена не угадывается. Ни один runtime не создаётся этим кодом. При встраивании возможно передать готовый fallback — его budget.priceFor/available/reply, второй ledger не создаётся.
 
 Тесты: unit, локальный HTTP с настоящим CRM, сбои/перезапуск/без утечки; gate check и converge. Живой статус отмечать только после реально проверенного выпуска.
+
+Дополнительная тестовая область после полного прогона: по одной переменной MONTAGE_WATCHER_ENABLED=0 в company-links-reader/crm-proxy-path/email-unsubscribe/people-http/view-as-http.test.js. Их mock-CRM проверяет свой сценарий и не реализует background queue; проверки прав/сети не ослабляются. Production включение не меняется.

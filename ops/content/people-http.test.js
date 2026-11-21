@@ -26,7 +26,7 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   });
   crm.listen(0,'127.0.0.1');await once(crm,'listening');
   const reserve=http.createServer();reserve.listen(0,'127.0.0.1');await once(reserve,'listening');const port=reserve.address().port;await new Promise(r=>reserve.close(r));
-  const env={PATH:process.env.PATH,SystemRoot:process.env.SystemRoot,TEMP:os.tmpdir(),TMP:os.tmpdir(),PORT:String(port),DATABASE_PATH:path.join(dir,'db.sqlite'),ASSETS_DIR:path.join(dir,'assets'),AUTH_USERS:`root:owner:${hashPassword(password)}`,SESSION_SECRET:crypto.randomBytes(32).toString('hex'),API_KEY:'',CRM_API_KEY:'synthetic-crm-key',CRM_URL:`http://127.0.0.1:${crm.address().port}`,PEOPLE_NOTIFICATIONS_ENABLED:'0',PEOPLE_NOTIFICATIONS_TEXT_APPROVED:'0'};
+  const env={MONTAGE_WATCHER_ENABLED:'0',PATH:process.env.PATH,SystemRoot:process.env.SystemRoot,TEMP:os.tmpdir(),TMP:os.tmpdir(),PORT:String(port),DATABASE_PATH:path.join(dir,'db.sqlite'),ASSETS_DIR:path.join(dir,'assets'),AUTH_USERS:`root:owner:${hashPassword(password)}`,SESSION_SECRET:crypto.randomBytes(32).toString('hex'),API_KEY:'',CRM_API_KEY:'synthetic-crm-key',CRM_URL:`http://127.0.0.1:${crm.address().port}`,PEOPLE_NOTIFICATIONS_ENABLED:'0',PEOPLE_NOTIFICATIONS_TEXT_APPROVED:'0'};
   const child=spawn(process.execPath,[path.join(__dirname,'server.js')],{env,stdio:'ignore'});
   t.after(async()=>{
     if(child.exitCode===null){const closed=once(child,'exit');child.kill();await closed;}

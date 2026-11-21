@@ -105,7 +105,7 @@ async function fixture(t) {
   const upstreamUrl = `http://127.0.0.1:${upstream.address().port}`;
   const port = await freePort();
   const child = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: { ...process.env, PORT: String(port), DATABASE_PATH: path.join(directory, 'content.sqlite'),
+    env: { ...process.env, MONTAGE_WATCHER_ENABLED:'0', PORT: String(port), DATABASE_PATH: path.join(directory, 'content.sqlite'),
       ASSETS_DIR: path.join(directory, 'assets'), SEED_DIR: directory, API_KEY: '',
       AUTH_USERS: `owner:owner:${hashPassword(randomBytes(24).toString('hex'))}`,
       SESSION_SECRET: randomBytes(32).toString('hex'), CRM_URL: upstreamUrl, CRM_API_KEY: apiKey },
