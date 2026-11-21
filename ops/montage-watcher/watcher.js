@@ -54,7 +54,7 @@ function createWatcher({store,crm,classify,executor,now=Date.now,log=()=>{},inte
     if(was)return;
     if(!store.claim(key,item))return;
     try{
-      const decision=item.type==='edit'?{action:'montage'}:await classify(item);
+      const decision=item.type==='edit'||item.kind!=='message'?{action:'montage'}:await classify(item);
       if(decision.action==='reply'&&item.type==='request'&&item.kind==='message'){
         // Сначала сохраняем результат; после неизвестного HTTP-исхода повторный reply не отправляем.
         store.save(key,'replying',{replyHash:replyHash(decision.reply),status:decision.status});
@@ -78,8 +78,8 @@ function createWatcher({store,crm,classify,executor,now=Date.now,log=()=>{},inte
     try{
       let items;
       try{const [requests,edits]=await Promise.all([crm.requests(),crm.queue()]);items=snapshot(requests,edits);}
-      catch{emit('QUEUE_UNAVAILABLE');await escalate({companyCode:'synapse-business',type:'system',id:1,reelId:null},'QUEUE_UNAVAILABLE');return;}
-      store.healthy();const tickStarted=now();
+      catch{emit('QUEUE_UNAVAILABLE');await escalate({companyCode:'synapse-business',type:'system',id:store.queueIncident(),reelId:null},'QUEUE_UNAVAILABLE');return;}
+      store.queueRecovered();store.healthy();const tickStarted=now();
       const byKey=new Map(items.map(item=>[keyOf(item),item]));
       for(const row of store.unfinished()){
         if(stopping)break;store.renew();if(byKey.has(row.key))continue;
