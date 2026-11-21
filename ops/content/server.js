@@ -246,6 +246,8 @@ const peopleService=require('./people-service').createPeopleService({db,authStor
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send,contentSettings,shootingFacts:shooting.factsHeader});
 // Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
 const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
+const montageNotifications=require('./montage-notifications').createMontageNotifications({db,authStore,crmUrl:CRM_URL,crmKey:CRM_API_KEY,
+  enabled:process.env.MONTAGE_NOTIFICATIONS_ENABLED==='1',warn:code=>console.warn('content:',code)});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
   requireSession,requireCsrf,readJson,sendJson:send,publishingOrigin:PUBLISHING_ASSET_ORIGIN,
   maxImageBytes:MAX_PUBLISHING_ASSET,maxVideoBytes:MAX_PUBLISHING_VIDEO,ready:()=>Boolean(CRM_API_KEY),
@@ -673,9 +675,13 @@ async function proxyCrm(request, response, url, cors) {
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
     if (identity.role !== 'owner') {
       // specs/235: сообщить о сбое может также читатель монтажа; CSRF ниже остаётся обязательным.
-      const problem=request.method==='POST'&&/^\/autoposting\/reels\/\d+\/problems$/.test(crmPath);
+      const problem=request.method==='POST'&&/^\/autoposting\/reels\/\d+\/(?:problems|notifications\/read)$/.test(crmPath);
       requirePermission(request, problem&&identity.permissions.includes('autoposting.view')?'autoposting.view':`${companyModule}.${readOnly ? 'view' : 'edit'}`, code);
     }
+  }
+  if(/^\/autoposting\/reels\/(?:notifications|\d+\/notifications\/read)$/.test(crmPath)&&!montageNotifications.enabled){
+    if(request.method!=='GET')fail(404,'Уведомления пока не включены');
+    return send(response,200,{enabled:false,companyCode:url.searchParams.get('companyCode'),count:0,reels:[]},{...cors,'cache-control':'no-store'});
   }
   // Внедрение Медиа-наставника: этапы ведёт администратор Synapse, клиент читает их
   // и отвечает на опрос ЛК по уже выданному праву раздела публикаций своей компании.
@@ -826,12 +832,13 @@ async function proxyCrm(request, response, url, cors) {
     }
   }
   let forwardIdentity = identity;
-  const completionWrite = (request.method === 'PUT' && crmPath === '/media-mentor/workflow') ||
+  const noticeWrite=request.method==='POST'&&/^\/autoposting\/reels\/\d+\/notifications\/read$/.test(crmPath);
+  const completionWrite = noticeWrite || (request.method === 'PUT' && crmPath === '/media-mentor/workflow') ||
     (request.method === 'POST' && /^\/autoposting\/posts\/\d+\/variants$/.test(crmPath)) ||
     (request.method === 'POST' && /^\/media-mentor\/plan\/variants\/(?:decision|transfer)$/.test(crmPath));
   if (completionWrite) {
     requestBody = await readRequestBody(request);
-    const current = requirePermission(request, 'autoposting.edit', url.searchParams.get('companyCode'));
+    const current = requirePermission(request, noticeWrite&&identity.permissions.includes('autoposting.view')?'autoposting.view':'autoposting.edit', url.searchParams.get('companyCode'));
     requireCsrf(request, current);
     if (current.user.id !== initialSession.user.id) fail(403, 'Доступ изменился во время подготовки');
     if (crmPath === '/media-mentor/plan/variants/decision' && current.user.role !== 'owner') {
@@ -1540,6 +1547,7 @@ server.listen(PORT, () => {
   peopleService.start();
   taskDispatchWorker.start();
   montageWatcher.start();
+  montageNotifications.start();
   if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
   economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
@@ -1550,11 +1558,13 @@ function shutdownContent() {
   projectChat.stopWorker();
   taskDispatchWorker.stop();
   const montageStopped=montageWatcher.stop();
+  const notificationsStopped=montageNotifications.stop();
   const contentPlanStopped=contentPlanRunner.stop();
   const peopleStopped=peopleService.stop();
   server.close(async () => {
     await contentPlanStopped;
     await montageStopped;
+    await notificationsStopped;
     await peopleStopped;
     db.close();
     process.exit(0);

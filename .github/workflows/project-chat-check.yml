@@ -20,6 +20,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/reel-materials*'
+      - 'ops/crm/reel-notifications*'
       - 'ops/crm/autoposting*'
       - 'ops/crm/server.js'
       - 'ops/crm/task-coordination*'
@@ -54,6 +56,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/reel-materials*'
+      - 'ops/crm/reel-notifications*'
       - 'ops/crm/autoposting*'
       - 'ops/crm/server.js'
       - 'ops/crm/task-coordination*'
@@ -150,6 +154,10 @@ jobs:
       - name: Тесты Финансы→ИИ
         timeout-minutes: 10
         run: node --test ops/crm/finance-ai.test.js ops/crm/commercial.test.js ops/crm/crm-permissions.test.js
+
+      - name: Тесты монтажа и авторских уведомлений
+        timeout-minutes: 5
+        run: node --test ops/crm/reel-materials*.test.js ops/crm/reel-requests*.test.js ops/crm/reel-notifications*.test.js
 
       - name: Тесты доски координации проектов
         timeout-minutes: 10
