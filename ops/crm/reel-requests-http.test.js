@@ -26,6 +26,17 @@ test('Материалы 231 через настоящий CRM: подпись �
   assert.equal(reel.status,201,JSON.stringify(reel.body));
   const base=`/autoposting/reels/${reel.body.id}`;
 
+  const problemBody={clientRequestId:'problem-http',text:'SAMPLE сбой плеера',version:1};
+  const report=await request('POST',`${base}/problems?companyCode=alpha`,{identity:viewer,body:problemBody});
+  assert.equal(report.status,201,JSON.stringify(report.body));assert.ok(report.body.taskId>0);
+  const repeatProblem=await request('POST',`${base}/problems?companyCode=alpha`,{identity:viewer,body:problemBody});
+  assert.equal(repeatProblem.status,200);assert.equal(repeatProblem.body.taskId,report.body.taskId);
+  assert.equal((await request('POST',`${base}/problems?companyCode=alpha`,{identity:encode({companyCodes:['alpha']}),body:problemBody})).status,403);
+  assert.equal((await request('POST',`${base}/problems?companyCode=beta`,{identity:owner,body:problemBody})).status,404);
+  assert.equal((await request('POST',`${base}/problems?companyCode=beta`,{identity:viewer,body:problemBody})).status,403);
+  assert.equal((await request('POST',`${base}/problems?companyCode=alpha`,{identity:viewer,body:{...problemBody,clientRequestId:'too-long',text:'x'.repeat(1501)}})).status,400);
+  assert.equal((await request('GET',`${base}?companyCode=alpha`)).body.problemReports[0].taskId,report.body.taskId);
+
   /* Подпись, отметка, история; права и чужая компания. */
   const patched=await request('PATCH',`${base}?companyCode=alpha`,{body:{caption:'Подпись к ролику',decision:'take',decisionComment:'Хороший дубль'}});
   assert.equal(patched.status,200,JSON.stringify(patched.body));

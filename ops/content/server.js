@@ -669,7 +669,9 @@ async function proxyCrm(request, response, url, cors) {
     const code = url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
     if (identity.role !== 'owner') {
-      requirePermission(request, `${companyModule}.${readOnly ? 'view' : 'edit'}`, code);
+      // specs/235: сообщить о сбое может также читатель монтажа; CSRF ниже остаётся обязательным.
+      const problem=request.method==='POST'&&/^\/autoposting\/reels\/\d+\/problems$/.test(crmPath);
+      requirePermission(request, problem&&identity.permissions.includes('autoposting.view')?'autoposting.view':`${companyModule}.${readOnly ? 'view' : 'edit'}`, code);
     }
   }
   // Внедрение Медиа-наставника: этапы ведёт администратор Synapse, клиент читает их

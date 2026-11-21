@@ -28,9 +28,10 @@ const full = (over = {}) => ({...summary(), versions: [{version: 1, mediaUrl: as
   history: [{id: 2, field: 'decision', fieldLabel: 'Решение', before: '', after: 'take', beforeLabel: 'без решения', afterLabel: 'берём', comment: 'Хороший дубль', authorName: 'Редактор', at: '2026-11-20T02:00:00Z'},
     {id: 1, field: 'caption', fieldLabel: 'Подпись', before: '', after: 'Первая подпись', comment: '', authorName: 'Редактор', at: '2026-11-20T01:00:00Z'}], ...over});
 
-function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel = full, list = () => [summary()], respond} = {}) {
+function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel = full, list = () => [summary()], respond, user, draftStorage} = {}) {
   const dom = new JSDOM('<main id="view"></main>', {url: 'https://cabinet.test/#content/materials', runScripts: 'outside-only'});
   const w = dom.window, el = w.document.getElementById('view'), calls = [];
+  if(draftStorage)w.sessionStorage.setItem('mt-problems:alpha:7',draftStorage);
   w.eval(kitSource);
   w.SynapseModulesQueue = [];
   w.eval(script);
@@ -44,7 +45,7 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel =
     if (route === 'crm/autoposting/reels/4' && method === 'PATCH') return reel({caption: body.caption, decision: body.decision, decisionComment: body.decisionComment});
     throw Object.assign(new Error('unexpected ' + route), {status: 500});
   };
-  const ctx = {moduleId: 'content-materials', companyCode: 'alpha', can: (p) => permissions.includes(p), signal: new w.AbortController().signal, route: {path: ''},
+  const ctx = {moduleId: 'content-materials', companyCode: 'alpha', user, can: (p) => permissions.includes(p), signal: new w.AbortController().signal, route: {path: ''},
     settings: {content: {get: async () => ({settings: {}})}},
     api: {get: (route) => answer('GET', route), post: (route, body) => answer('POST', route, body), patch: (route, body) => answer('PATCH', route, body)}, navigate: () => {}};
   const open = async () => {await definition.mount(el, ctx);await settle(2);el.querySelector('[data-open="reel:4"]').click();await settle();};
@@ -53,6 +54,45 @@ function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel =
   return {w, el, calls, open, click, submit, live: w.SbCabinet.materialsLive};
 }
 const sent = (f, method, suffix) => f.calls.filter((call) => call.method === method && call.path.endsWith(suffix));
+
+test('проблема: оба входа для читателя, номер в карточке, ошибка сохраняет текст и ключ повтора',async t=>{
+  let count=0;
+  const f=fixture({permissions:['autoposting.view'],respond:({path})=>{
+    if(path.endsWith('/problems')) {if(++count===1)throw Error('SAMPLE потерян ответ');return {taskId:91,duplicate:true};}
+  }});t.after(()=>f.w.close());await f.open();
+  assert.ok(f.el.querySelector('[data-problem-open]'));assert.ok(f.el.querySelector('[data-problem-card]'));
+  await f.click('[data-problem-card]');f.el.querySelector('[data-problem-text]').value='Плеер не запускается';
+  await f.submit('[data-problem-form]');assert.match(f.el.querySelector('[data-problem-status]').textContent,/Текст сохранён/);
+  assert.equal(f.el.querySelector('[data-problem-text]').value,'Плеер не запускается');
+  await f.click('[data-problem-close]');await f.click('[data-problem-card]');await f.submit('[data-problem-form]');
+  const calls=sent(f,'POST','/problems');assert.equal(calls.length,2);assert.equal(JSON.stringify(calls[0].body),JSON.stringify(calls[1].body));
+  assert.equal(f.el.querySelector('[data-problem-result]').textContent,'Отправлено, задача №91');
+  await f.submit('[data-problem-form]');assert.equal(sent(f,'POST','/problems').length,2);
+  await f.click('[data-problem-close]');await f.click('[data-problem-open]');assert.ok(!f.el.querySelector('[data-problem-modal]').hidden);
+});
+
+test('проблема: номер из API, один запрос во время отправки, черновик карточки сохраняется',async t=>{
+  let finish;
+  const f=fixture({reel:()=>full({problemReports:[{taskId:52,version:2}]}),respond:({path})=>path.endsWith('/problems')?new Promise(resolve=>{finish=resolve;}):undefined});
+  t.after(()=>f.w.close());await f.open();assert.match(f.el.querySelector('[data-problem-result]').textContent,/№52/);
+  const caption=f.el.querySelector('[name="caption"]');assert.ok(caption);caption.value='Черновик';
+  await f.click('[data-problem-card]');f.el.querySelector('[data-problem-text]').value='Сбой';
+  await f.submit('[data-problem-form]');await f.submit('[data-problem-form]');
+  assert.equal(sent(f,'POST','/problems').length,1);assert.ok(f.el.querySelector('[data-problem-send]').disabled);
+  finish({taskId:92});await settle();assert.equal(caption.value,'Черновик');
+});
+
+test('проблема: восстановление черновика после перезагрузки и отдельное новое обращение',async t=>{
+  const f=fixture({user:{id:7},respond:({path})=>{if(path.endsWith('/problems'))throw Error('SAMPLE сеть');}});t.after(()=>f.w.close());
+  await f.open();await f.click('[data-problem-card]');const text=f.el.querySelector('[data-problem-text]');text.value='Черновик проблемы';
+  text.dispatchEvent(new f.w.Event('input',{bubbles:true}));await f.submit('[data-problem-form]');
+  const g=fixture({user:{id:7},draftStorage:f.w.sessionStorage.getItem('mt-problems:alpha:7'),respond:({path})=>path.endsWith('/problems')?{taskId:93}:undefined});t.after(()=>g.w.close());
+  await g.open();await g.click('[data-problem-card]');assert.equal(g.el.querySelector('[data-problem-text]').value,'Черновик проблемы');
+  await g.submit('[data-problem-form]');assert.equal(sent(f,'POST','/problems')[0].body.clientRequestId,sent(g,'POST','/problems')[0].body.clientRequestId);
+  await g.click('[data-problem-new]');assert.equal(g.el.querySelector('[data-problem-text]').value,'');
+  g.el.querySelector('[data-problem-text]').value='Другая проблема';await g.submit('[data-problem-form]');
+  assert.notEqual(sent(g,'POST','/problems')[0].body.clientRequestId,sent(g,'POST','/problems')[1].body.clientRequestId);
+});
 
 test('нажатие показывает убранную фразу, затем обычный просмотр снова пропускает её без изменения монтажа', async t => {
   const marked = segments().map((s, i) => i === 1 ? {...s, enabled: false} : s);

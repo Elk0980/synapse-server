@@ -27,6 +27,11 @@ function fixture({rooms=true,body}={}){
 }
 const rows=db=>db.prepare('SELECT user_id,author_name,text,client_id,room,kind,audience_id FROM team_chat_messages ORDER BY id').all().map(r=>({...r}));
 
+test('сообщение о проблеме не запускает доставку в личный чат',async()=>{
+  const f=fixture();await f.log.afterProxy('/autoposting/reels/3/problems','POST',201,'avokado',lena);
+  assert.equal(f.calls.length,0);assert.deepEqual(rows(f.db),[]);f.db.close();
+});
+
 test('Лог правок попадает в личную комнату hugh:<id>: запрос от пользователя, «Исправлено» от Хью; повтор без дублей',async()=>{
   const f=fixture();
   assert.deepEqual(await f.log.sync('avokado',lena,{force:true}),{written:2});
