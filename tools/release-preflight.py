@@ -4,6 +4,7 @@ import difflib
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -254,6 +255,30 @@ def stage644():
     return 0
 
 
+def after_approved644():
+    receipt = json.loads((ROOT / 'w644/approved644.json').read_text())
+    for name, key in [('server.js', 'server'), ('montage-watcher-bundle.js', 'bundle')]:
+        if sha(livefile('ops/content/' + name)) != receipt[key]:
+            raise RuntimeError('deployed source mismatch')
+        print('VERIFY_APPROVED_OK', name, receipt[key])
+    current = subprocess.check_output(['docker', 'inspect', '--format', '{{.Image}}', 'synapse-content-1'], timeout=30).decode().strip()
+    if current != receipt['image']:
+        raise RuntimeError('deployed image mismatch')
+    state = json.loads(subprocess.check_output(['docker', 'inspect', '--format', '{{json .State}}', 'synapse-content-1'], timeout=30))
+    if not state['Running'] or state['ExitCode'] != 0:
+        raise RuntimeError('service not running')
+    queues()
+    log = subprocess.run(['docker', 'logs', '--timestamps', '--since', state['StartedAt'], 'synapse-content-1'], capture_output=True, timeout=30, check=True)
+    events = []
+    for line in (log.stdout + log.stderr).decode(errors='replace').splitlines():
+        event = re.fullmatch(r'(\S+) montage-watcher ([A-Z_]+) ([0-9]+)', line.strip())
+        if event:
+            events.append({'at': event[1], 'code': event[2], 'count': int(event[3])})
+    print('WATCHER_STARTUP_EVENTS', json.dumps(events, separators=(',', ':')))
+    print('WATCHER_ESCALATED_TOTAL', sum(e['count'] for e in events if e['code'] == 'ESCALATED'))
+    return 0
+
+
 def queues():
     # The existing service credential stays inside the content container.
     # Only HTTP codes and aggregate counts leave that process.
@@ -284,6 +309,8 @@ def queues():
 
 
 def main():
+    if sys.argv[1:] == ['after-approved644']:
+        return after_approved644()
     if sys.argv[1:] == ['stage644']:
         return stage644()
     if sys.argv[1:] == ['approved644']:
