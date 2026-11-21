@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Site kit — демо деталей</title>
+<link rel="stylesheet" href="fields.css">
+<link rel="stylesheet" href="select.css">
+<script src="select.js" defer></script>
+<style>
+  :root { --bg: #f6f3ee; --surface: #fff; --text: #2b2924; --muted: #6f6a60; --accent: #8f9a63; --font: Georgia, serif; }
+  [data-theme="dark"] { --bg: #16181d; --surface: #22252c; --text: #eef0f3; --muted: #8a909c; --accent: #6fa8ff; --font: system-ui, sans-serif; }
+  [data-theme="spa"] { --bg: #fbf7f4; --surface: #fff; --text: #3b2f2a; --muted: #a38f84; --accent: #c4876b; --font: 'Trebuchet MS', sans-serif; }
+  :root, [data-theme] {
+    --kit-bg: var(--surface); --kit-fg: var(--text); --kit-muted: var(--muted); --kit-border: var(--muted);
+    --kit-accent: var(--accent); --kit-arrow: var(--text); --kit-radius: 10px; --kit-font: var(--font);
+  }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text); font-family: var(--font); }
+  main { max-width: 560px; margin: auto; }
+  form { display: grid; gap: 14px; padding: 24px; background: var(--surface); border: 1px solid var(--muted); border-radius: 12px; }
+  label { display: grid; gap: 6px; font-weight: 700; }
+  input:not([type=checkbox]), textarea { width: 100%; padding: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+  .themes { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Детали сайтов</h1>
+  <p>Демо общего набора <code>sites/_kit</code>. Страница не публикуется: ни один домен не раздаёт <code>sites/_kit</code>, а <code>noindex</code> закрывает её на случай ошибки.</p>
+  <div class="themes" role="group" aria-label="Палитра сайта">
+    <button type="button" data-set="">Палитра</button>
+    <button type="button" data-set="spa">Спа</button>
+    <button type="button" data-set="dark">Тёмная</button>
+  </div>
+  <form onsubmit="event.preventDefault(); this.querySelector('output').value = JSON.stringify(Object.fromEntries(new FormData(this)));">
+    <label>Имя<input name="name" autocomplete="name" placeholder="Как к вам обращаться" required></label>
+    <label>Как с вами связаться<select name="contactChannel" required>
+      <option value="phone">Позвонить</option><option value="telegram">Telegram</option>
+      <option value="whatsapp" disabled>WhatsApp (недоступно)</option><option value="max">MAX</option>
+    </select></label>
+    <label>Повод<select name="occasion">
+      <optgroup label="Праздники"><option>День рождения</option><option>Выписка</option><option>Девичник</option></optgroup>
+      <optgroup label="Другое"><option>Без повода</option><option>Другое</option></optgroup>
+    </select></label>
+    <label>Комментарий<textarea name="comment" placeholder="Пожелания"></textarea></label>
+    <label class="row"><input type="checkbox" name="consent" required> Согласен на обработку данных</label>
+    <button type="submit">Проверить отправку</button>
+    <output aria-live="polite"></output>
+  </form>
+</main>
+<script>
+  for (const b of document.querySelectorAll('[data-set]')) b.addEventListener('click', () => {
+    if (b.dataset.set) document.documentElement.dataset.theme = b.dataset.set; else delete document.documentElement.dataset.theme;
+  });
+</script>
+</body>
+</html>

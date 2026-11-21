@@ -1,0 +1,49 @@
+name: site-kit
+# Общий набор деталей сайтов (specs/097-site-kit). Права только на чтение: workflow ничего
+# не публикует и не коммитит. Скриншоты — артефакт для ревью человеком.
+on:
+  pull_request:
+    paths: ['sites/_kit/**', 'sites/*/assets/kit/**', 'sites/site-kit.test.cjs', 'tools/site-kit/**', 'sites/**/*.html', '.github/workflows/site-kit.yml']
+  push:
+    branches: [main]
+    paths: ['sites/_kit/**', 'sites/*/assets/kit/**', 'tools/site-kit/**']
+permissions:
+  contents: read
+concurrency:
+  group: site-kit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      # Зависимости ставятся во временный каталог: файлы проекта не меняются.
+      - name: jsdom и Playwright во временный каталог
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kitdeps"
+          npm install --prefix "$RUNNER_TEMP/kitdeps" --no-audit --no-fund --loglevel=error jsdom@26.1.0 playwright@1.63.0
+          echo "NODE_PATH=$RUNNER_TEMP/kitdeps/node_modules" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/kitdeps/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Копии kit синхронны с источником
+        run: node tools/site-kit/sync.js --check
+      - name: Тесты kit и соседние тесты сайтов
+        run: node --test sites/site-kit.test.cjs sites/no-nested-site-copies.test.cjs
+      - name: Поведение в Chromium
+        run: node tools/site-kit/browser-check.js --site palitra-love --page /
+      - name: Скриншоты сайтов (1280 и 390)
+        run: node tools/site-kit/screenshots.js --out "$RUNNER_TEMP/site-kit-shots" --all-sites
+      - name: Проверить, что файлы проекта не изменились
+        run: git diff --exit-code --stat
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: site-kit-screenshots
+          path: ${{ runner.temp }}/site-kit-shots
+          retention-days: 14

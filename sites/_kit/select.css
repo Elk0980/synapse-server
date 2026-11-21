@@ -1,0 +1,103 @@
+/* Site kit: оформленный выпадающий список. Источник — sites/_kit/select.css.
+   Копии в sites/<сайт>/assets/kit/ создаёт tools/site-kit/sync.js: правьте только источник.
+   Цвета и форма берутся из переменных сайта (--kit-*), у каждой есть запасное значение. */
+
+/* 1. Сам контрол — без JS и на телефоне. Нативный список остаётся, системная стрелка
+      убрана, своя стрелка нарисована градиентами в цвете --kit-arrow. Селектор специфичнее
+      обычного `select{background:...}` сайта, поэтому shorthand сайта не стирает стрелку. */
+select:not([multiple]):not([size]),
+.kit-select .kit-select__button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--kit-control-height, 44px);
+  margin: 0;
+  padding-block: var(--kit-pad-y, 10px);
+  padding-inline: var(--kit-pad-x, 12px) calc(var(--kit-pad-x, 12px) + 28px);
+  border: var(--kit-border-width, 1px) solid var(--kit-border, currentColor);
+  border-radius: var(--kit-radius, 8px);
+  background-color: var(--kit-bg, #fff);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--kit-arrow, var(--kit-accent, currentColor)) 50%),
+    linear-gradient(135deg, var(--kit-arrow, var(--kit-accent, currentColor)) 50%, transparent 50%);
+  background-position:
+    calc(100% - var(--kit-pad-x, 12px) - 10px) 50%,
+    calc(100% - var(--kit-pad-x, 12px) - 5px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--kit-fg, inherit);
+  font-family: var(--kit-font, inherit);
+  font-size: inherit;
+  font-weight: var(--kit-control-weight, 400);
+  line-height: 1.3;
+  text-align: start;
+  cursor: pointer;
+  box-shadow: none;
+}
+select:not([multiple]):not([size])::-ms-expand { display: none; }
+select:not([multiple]):not([size]):hover,
+.kit-select .kit-select__button:hover {
+  border-color: var(--kit-accent, currentColor);
+  box-shadow: none;
+}
+select:not([multiple]):not([size]):disabled,
+.kit-select .kit-select__button:disabled { opacity: .6; cursor: not-allowed; }
+select:not([multiple]):not([size]) option { color: var(--kit-fg, inherit); background-color: var(--kit-bg, #fff); }
+
+/* Фокус: правило сайта (например :focus-visible{outline:...}) важнее — здесь только запас. */
+:where(select, .kit-select__button):focus-visible {
+  outline: 2px solid var(--kit-accent, currentColor);
+  outline-offset: 2px;
+}
+
+/* 2. Список в стиле сайта — его строит select.js на устройствах с мышью. Нативный
+      <select> остаётся в DOM (имя, значение, required, отправка формы), но скрыт. */
+.kit-select { position: relative; display: block; min-width: 0; font-weight: 400; }
+.kit-select__native {
+  position: absolute !important;
+  inset: auto auto 0 0;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.kit-select__value { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kit-select__button[aria-invalid="true"] { border-color: var(--kit-danger, #b3261e); }
+.kit-select__list {
+  position: absolute;
+  z-index: var(--kit-z, 40);
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: var(--kit-border-width, 1px) solid var(--kit-border, currentColor);
+  border-radius: var(--kit-radius, 8px);
+  background: var(--kit-bg, #fff);
+  color: var(--kit-fg, inherit);
+  font-family: var(--kit-font, inherit);
+  box-shadow: 0 12px 28px var(--kit-shadow, rgba(0, 0, 0, .14));
+}
+.kit-select__list[hidden] { display: none; }
+.kit-select--up .kit-select__list { top: auto; bottom: calc(100% + 4px); }
+.kit-select__option {
+  padding: 10px 12px;
+  border-radius: calc(var(--kit-radius, 8px) - 2px);
+  cursor: pointer;
+  line-height: 1.3;
+}
+.kit-select__option[aria-selected="true"] { font-weight: 700; }
+.kit-select__option.is-active { background: var(--kit-accent-soft, color-mix(in srgb, var(--kit-accent, #555) 18%, transparent)); }
+.kit-select__option[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.kit-select__group { padding: 8px 12px 4px; font-size: .85em; font-weight: 700; color: var(--kit-muted, inherit); }
+@media (forced-colors: active) {
+  .kit-select__option.is-active { outline: 2px solid Highlight; }
+}
