@@ -14,6 +14,15 @@ const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
     const headers={'cache-control':'no-store'};
+    const problem=/^\/autoposting\/reels\/(\d+)\/problems$/.exec(url.pathname);
+    if(problem){
+      if(request.method!=='POST')fail(405,'Метод не поддерживается');
+      let context;
+      try{context=companyModuleContext(request,url.searchParams.get('companyCode'),'autoposting.view');}
+      catch(error){if(error.status!==403)throw error;context=companyModuleContext(request,url.searchParams.get('companyCode'),'autoposting.edit');}
+      const result=materials.reportProblem(context.company.code,Number(problem[1]),await readJson(request),context.identity);
+      send(response,result.duplicate?200:201,result,headers);return true;
+    }
     const agent=INTERNAL_REQUESTS.exec(url.pathname);
     if(agent){
       if(!trustedService(request))fail(403,'Только служебный обработчик');

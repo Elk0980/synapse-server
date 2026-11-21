@@ -47,6 +47,7 @@ function createReelHughLog({db,crmUrl,crmKey,fetchImpl=globalThis.fetch,timeoutM
   const quiet=promise=>promise.catch(error=>{warn('content: лог правок «Материалов» не перенесён в чат с Хью; повтор при следующем обращении',error?.status||'');return {written:0,skipped:'ERROR'};});
   /* После ответа CRM на /autoposting/reels…: запрос правки переносится сразу, чтения — не чаще minIntervalMs. */
   function afterProxy(crmPath,method,status,code,identity) {
+    if(/^\/autoposting\/reels\/\d+\/problems$/.test(crmPath))return Promise.resolve(null);
     if(!/^\/autoposting\/reels(?:\/|$)/.test(crmPath)||status<200||status>=300)return Promise.resolve(null);
     return quiet(sync(code,identity,{force:method!=='GET'}));
   }

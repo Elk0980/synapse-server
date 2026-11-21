@@ -254,3 +254,14 @@ body.mt-modal-open { overflow:hidden; }
 .mt-decision-note[data-decision="take"] { color:#7fd6a4; }
 .mt-decision-note[data-decision="skip"] { color:#e99a9a; }
 .mt-decision-note[data-decision="redo"] { color:#f0c46a; }
+/* specs/235: форма сбоя поверх карточки, без замены плеера и несохранённых правок. */
+.mt-modal--problem{z-index:1600}
+.mt-problem{width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box}
+.mt-problem label{display:grid;gap:6px;margin:12px 0}
+.mt-problem textarea,.mt-problem select{width:100%;min-width:0;box-sizing:border-box;font:inherit}
+.mt-problem textarea{resize:vertical;min-height:120px}
+.mt-problem .plain-button,.mt-problem-open{min-height:44px;white-space:normal}
+.mt-problem-card{margin:8px 0;overflow-wrap:anywhere}
+.mt-view .cfk-head-row{flex-wrap:wrap}
+.mt-view .cfk-head-row .mt-problem-open{order:4}
+@media(max-width:760px){.mt-view .cfk-head-row .mt-problem-open{flex-basis:100%;margin-top:4px}}

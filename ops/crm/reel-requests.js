@@ -27,6 +27,7 @@ const day=value=>{if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)
 const seconds=ms=>(ms/1000).toFixed(1);
 
 function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
+  const problems=require('./reel-problems').createReelProblems(db,{core});
   const addColumns=(table,columns)=>{const have=new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
     for(const [name,type] of columns)if(!have.has(name))db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);};
   addColumns('reel_materials',[['caption',"TEXT NOT NULL DEFAULT ''"],['decision',"TEXT NOT NULL DEFAULT ''"],['decision_comment',"TEXT NOT NULL DEFAULT ''"]]);
@@ -304,9 +305,9 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
       openRequests:db.prepare("SELECT COUNT(*) n FROM reel_requests WHERE company_id=? AND reel_id=? AND status NOT IN ('published','rejected')").get(owner.id,row.id).n};
     if(!full)return {...out,...extra};
     const requests=requestsOf(owner,row);
-    return {...out,...extra,openRequests:requests.filter(item=>!FINAL.includes(item.status)).length,requests,history:historyOf(owner,row)};
+    return {...out,...extra,openRequests:requests.filter(item=>!FINAL.includes(item.status)).length,requests,history:historyOf(owner,row),problemReports:problems.list(owner,row.id)};
   }
   return {REVIEW_FIELDS,reviewOf,saveReview,ownText,segmentsOf,decorate,hughEntries,
-    api:{createRequest,cancelRequest,requestQueue,replyRequest:reply,setSegments,liveEdit}};
+    api:{createRequest,cancelRequest,requestQueue,replyRequest:reply,setSegments,liveEdit,reportProblem:problems.report}};
 }
 module.exports={createReelRequests,REQUEST_KINDS:KINDS,REQUEST_STATUSES:STATUSES,DECISIONS};

@@ -150,6 +150,14 @@ sb.materialsLive = {...liveOps, mmss, parseMmss};
 
 function create(el, ctx) {
   const canEdit = ctx.can("autoposting.edit");
+  const canReport = canEdit || ctx.can("autoposting.view");
+  const problemDrafts = new Map();
+  const problemStorage = ctx.user?.id != null ? `mt-problems:${ctx.companyCode}:${ctx.user.id}` : null;
+  try {if (problemStorage) for (const [key, draft] of JSON.parse(sessionStorage.getItem(problemStorage) || "[]")) {
+    if (typeof key === "string" && draft && typeof draft.id === "string" && typeof draft.text === "string") problemDrafts.set(key, {...draft, sending: false});
+  }} catch (_) { /* Закрытое хранилище не мешает сообщить о проблеме. */ }
+  const storeProblems = () => {try {if (problemStorage) sessionStorage.setItem(problemStorage, JSON.stringify([...problemDrafts]));} catch (_) {}};
+  let problem = null, problemOpener = null;
   const sameCompany = data => data && (!data.companyCode || String(data.companyCode).toLowerCase() === String(ctx.companyCode).toLowerCase());
   const state = {reels: [], mentor: null, posts: [], shooting: {}, settings: null, info: null, items: [], sort: "date", open: null, item: null,
     platform: "", version: null, busy: false, epoch: 0, uploadIdea: null, archiveMode: false, archived: null, archiveError: "", confirm: null,
@@ -169,7 +177,8 @@ function create(el, ctx) {
     review: (id, body) => ctx.api.patch("crm/autoposting/reels/" + id, body),
     ask: (id, body) => ctx.api.post(`crm/autoposting/reels/${id}/requests`, body),
     cancelAsk: (id, request) => ctx.api.post(`crm/autoposting/reels/${id}/requests/${request}/cancel`, {}),
-    liveEdit: (id, body) => ctx.api.post(`crm/autoposting/reels/${id}/live-edit`, body)
+    liveEdit: (id, body) => ctx.api.post(`crm/autoposting/reels/${id}/live-edit`, body),
+    problem: (id, body) => ctx.api.post(`crm/autoposting/reels/${id}/problems`, body)
   };
   /* Дополнительные данные необязательны: без плана или публикаций экран показывает ролики как есть. */
   const optional = promise => Promise.resolve().then(() => promise()).catch(() => null);
@@ -206,7 +215,8 @@ function create(el, ctx) {
 
   /* ---------- Шапка: «Монтаж», «Загрузить ролик», календарь ▦ ⇅ в одну строку ---------- */
   let head = null, strip = null;
-  const uploadButton = (canEdit ? `<button type="button" class="plain-button primary mt-upload-open" data-upload-open>Загрузить ролик</button>` : "")
+  const uploadButton = (canReport ? `<button type="button" class="plain-button mt-problem-open" data-problem-open>Сообщить о проблеме</button>` : "")
+    + (canEdit ? `<button type="button" class="plain-button primary mt-upload-open" data-upload-open>Загрузить ролик</button>` : "")
     + `<button type="button" class="plain-button mt-archive-toggle" data-archive-toggle aria-pressed="false" aria-controls="mt-archive-title">Архив</button>`;
   function renderHead() {
     const K = kit(), top = $("[data-top]");
@@ -505,6 +515,7 @@ function create(el, ctx) {
     const unsaved = reviewDraft();
     node.innerHTML = `<header class="mt-modal__head"><h2 id="mt-detail-title" tabindex="-1" data-title>${esc(title)}</h2><button type="button" class="mt-x" data-back aria-label="Закрыть">✕</button></header>
       <p class="mt-detail__meta"><span class="muted">${esc(item?.date ? dateShort(item.date) : dateRu(reel.releaseDate))} · версия v${esc(version?.version ?? 1)}${version?.note ? " · " + esc(version.note) : ""}</span> ${chip(stage)}</p>
+      ${canReport && reel.id ? `<div class="mt-problem-card"><button type="button" class="plain-button" data-problem-card>Сообщить о проблеме</button><p role="status" data-problem-result>${(reel.problemReports || []).map(r => `Отправлено, задача №${esc(r.taskId)}`).join(" · ")}</p></div>` : ""}
       <div class="mt-layout">
         <div class="mt-phone">
           <fieldset class="mt-platforms" aria-label="Маска площадки">${switcher.map(id => `<label title="${esc(platformOf(id).label)}"><input type="radio" name="mt-platform" value="${id}"${id === state.platform ? " checked" : ""}><span>${esc(platformOf(id).short)}</span></label>`).join("")}</fieldset>
@@ -546,6 +557,71 @@ function create(el, ctx) {
 
   /* ---------- specs/231: решение, подпись, просьбы агенту, «живой монтаж», история ---------- */
   const fresh = reel => Boolean(reel?.id) && Array.isArray(reel.requests);
+  // Отдельная форма: её открытие и отправка сохраняют плеер, черновики подписи и живого монтажа.
+  function problemForm() {
+    let wrap = $("[data-problem-modal]");
+    if (!wrap) {
+      wrap = document.createElement("div");wrap.className = "mt-modal mt-modal--problem";wrap.dataset.problemModal = "";wrap.hidden = true;
+      wrap.innerHTML = `<form class="mt-modal__box mt-problem" data-problem-form role="dialog" aria-modal="true" aria-labelledby="mt-problem-title" novalidate>
+        <h2 id="mt-problem-title">Сообщить о проблеме</h2><label>Ролик<select name="reel" data-problem-reel></select></label>
+        <p class="muted" data-problem-version></p><label>Что не работает?<textarea name="text" maxlength="1500" rows="5" required data-problem-text></textarea></label>
+        <p role="status" class="mt-status" data-problem-status></p><div class="mt-actions"><button type="submit" class="plain-button primary" data-problem-send>Отправить</button><button type="button" class="plain-button" data-problem-new hidden>Другая проблема</button>
+        <button type="button" class="plain-button" data-problem-close>Закрыть</button></div></form>`;
+      el.append(wrap);
+    }
+    return wrap.querySelector("form");
+  }
+  function selectProblem(id, version) {
+    const reel = [state.open, ...state.reels].find(r => r?.id === Number(id));
+    if (!reel) {problem = null;return;}
+    const v = version ?? reel.currentVersion?.version ?? null, key = `${reel.id}:${v}`;
+    if (!problemDrafts.has(key)) problemDrafts.set(key, {reelId: reel.id, version: v, id: requestId(), text: "", sending: false, taskId: null});
+    problem = problemDrafts.get(key);
+    $("[data-problem-text]").value = problem.text;
+    $("[data-problem-text]").disabled = Boolean(problem.taskId);
+    $("[data-problem-version]").textContent = v ? `Версия v${v}` : "Без версии";
+    $("[data-problem-send]").disabled = Boolean(problem.taskId || problem.sending);
+    $("[data-problem-new]").hidden = !problem.taskId;
+    $("[data-problem-status]").textContent = problem.taskId ? `Отправлено, задача №${problem.taskId}` : "";
+  }
+  function openProblem(card) {
+    if (!canReport) return;
+    const form = problemForm(), reels = state.reels.filter(r => r.id);
+    if (state.open?.id && !reels.some(r => r.id === state.open.id)) reels.unshift(state.open);
+    if (!reels.length) {status("Откройте или загрузите ролик, по которому хотите сообщить о проблеме.");return;}
+    problemOpener = document.activeElement;
+    const select = form.elements.reel;
+    select.innerHTML = reels.map(r => `<option value="${r.id}">${esc(r.title)}</option>`).join("");
+    select.value = String(card && state.open?.id || reels[0].id);select.disabled = card;
+    selectProblem(select.value, card ? state.version : undefined);
+    modal("problem", true);form.elements.text.focus();
+  }
+  function closeProblem() {
+    if (problem?.sending) return;
+    if (problem) problem.text = $("[data-problem-text]").value;
+    storeProblems();
+    modal("problem", false);problemOpener?.focus?.();
+  }
+  async function sendProblem(form) {
+    const draft = problem;if (!draft || draft.sending || draft.taskId) return;
+    draft.text = form.elements.text.value;
+    storeProblems();
+    const say = text => {if (!ctx.signal.aborted && problem === draft) $("[data-problem-status]").textContent = text;};
+    if (!draft.text.trim() || draft.text.length > 1500) {say("Опишите проблему: от 1 до 1500 знаков.");return;}
+    draft.sending = true;form.elements.reel.disabled = true;form.elements.text.disabled = true;$("[data-problem-send]").disabled = true;say("Отправляем…");
+    try {
+      const result = await api.problem(draft.reelId, {clientRequestId: draft.id, text: draft.text, ...(draft.version === null ? {} : {version: draft.version})});
+      if (ctx.signal.aborted) return;
+      if (!Number.isSafeInteger(result.taskId) || result.taskId < 1) throw Error("Не получен номер задачи. Повторите отправку.");
+      draft.taskId = result.taskId;$("[data-problem-new]").hidden = false;say(`Отправлено, задача №${result.taskId}`);
+      if (state.open?.id === draft.reelId) {
+        const reports = state.open.problemReports = state.open.problemReports || [];
+        if (!reports.some(r => r.taskId === result.taskId)) reports.push({taskId: result.taskId, version: draft.version});
+        const output = $("[data-problem-result]");if (output) output.textContent = reports.map(r => `Отправлено, задача №${r.taskId}`).join(" · ");
+      }
+    } catch (error) {say("Не удалось подтвердить отправку: " + (error?.message || "ошибка сети") + " Текст сохранён; повторите отправку.");}
+    finally {draft.sending = false;storeProblems();if (!ctx.signal.aborted) {form.elements.text.disabled = Boolean(draft.taskId);$("[data-problem-send]").disabled = Boolean(draft.taskId);}}
+  }
   const setText = (selector, text) => {const target = el.querySelector(selector);if (target) target.textContent = text || "";};
   const keepPost = reel => ({...reel, lastPostId: state.open?.lastPostId || null});
   function reviewHtml(reel) {
@@ -1068,10 +1144,15 @@ function create(el, ctx) {
     });
   }
   el.addEventListener("click", event => {
+    if (event.target.matches?.("[data-problem-modal]")) {closeProblem();return;}
     if (event.target.matches?.(".mt-modal")) {if (event.target.hasAttribute("data-confirm-modal")) {if (!state.busy) closeConfirm();}
       else if (event.target.hasAttribute("data-detail-modal")) close();else if (!state.busy) toggleUpload(false);return;}
     const target = event.target.closest("button,a");if (!target || !el.contains(target)) return;
-    if (target.dataset.open) void open(target.dataset.open);
+    if (target.hasAttribute("data-problem-open")) openProblem(false);
+    else if (target.hasAttribute("data-problem-card")) openProblem(true);
+    else if (target.hasAttribute("data-problem-close")) closeProblem();
+    else if (target.hasAttribute("data-problem-new") && problem?.taskId) {const {reelId,version} = problem;problemDrafts.delete(`${reelId}:${version}`);selectProblem(reelId,version);storeProblems();$("[data-problem-text]").focus();}
+    else if (target.dataset.open) void open(target.dataset.open);
     else if (target.dataset.uploadFor) toggleUpload(true, target.dataset.uploadFor);
     else if (target.hasAttribute("data-upload-open")) toggleUpload(true);
     else if (target.hasAttribute("data-upload-cancel")) {if (!state.busy) toggleUpload(false);}
@@ -1110,16 +1191,20 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-live-reset")) {if (state.live) {state.live.toggles = liveOps.initial(state.live.segments);state.live.inspect = null;state.live.id = null;renderLive();}}
   });
   el.addEventListener("submit", event => {
-    if (event.target.matches?.("[data-review]")) {event.preventDefault();void saveReview(event.target);}
+    if (event.target.matches?.("[data-problem-form]")) {event.preventDefault();void sendProblem(event.target);}
+    else if (event.target.matches?.("[data-review]")) {event.preventDefault();void saveReview(event.target);}
     else if (event.target.matches?.("[data-ask-form]")) {event.preventDefault();void sendAsk(event.target);}
   });
   el.addEventListener("keydown", event => {
     if (event.key !== "Escape" || event.target.closest?.(".re-editor")) return;
+    if ($("[data-problem-modal]") && !$("[data-problem-modal]").hidden) {closeProblem();return;}
     const confirmBox = el.querySelector("[data-confirm-modal]");
     if (confirmBox && !confirmBox.hidden) {if (!state.busy) closeConfirm();return;}
     if (!$("[data-detail-modal]").hidden) close();else if (uploadForm && !uploadForm.hidden && !state.busy) toggleUpload(false);
   });
+  el.addEventListener("input", event => {if (event.target.matches?.("[data-problem-text]") && problem) {problem.text = event.target.value;storeProblems();}});
   el.addEventListener("change", event => {
+    if (event.target.matches?.("[data-problem-reel]")) {if (problem) problem.text = $("[data-problem-text]").value;selectProblem(event.target.value);return;}
     if (event.target.hasAttribute("data-live-progress") && state.live) {
       const player = el.querySelector("[data-player]"), live = state.live;
       live.inspect = null;
@@ -1144,7 +1229,11 @@ function create(el, ctx) {
     const done = () => {window.removeEventListener("cfkit:ready", done);clearTimeout(timer);resolve();};
     const timer = setTimeout(done, 1500);window.addEventListener("cfkit:ready", done);
   });
-  return kitReady().then(load).then(() => {if (initial) void open(initial[1] + ":" + initial[2]);});
+  return kitReady().then(load).then(() => {
+    const targetCompany = ctx.route?.params?.get("company") || new URLSearchParams(location.search).get("companyCode");
+    if (initial && targetCompany && targetCompany.toLowerCase() !== ctx.companyCode.toLowerCase()) {status(`Ролик относится к компании «${targetCompany}». Выберите её в списке проектов и откройте ссылку ещё раз.`);return;}
+    if (initial) void open(initial[1] + ":" + initial[2]);
+  });
 }
 
 const definition = {title: "Монтаж", mount: (el, ctx) => create(el, ctx), unmount: el => {el.classList.remove("mt-view");document.body.classList.remove("mt-modal-open");}};
