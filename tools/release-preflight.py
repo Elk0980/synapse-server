@@ -63,8 +63,8 @@ def inspect():
     print('BASE', sha(base));print('LIVE', sha(live))
     d = difference(base, live)
     print('DIFF added=%d removed=%d total=%d hunks=%d' % (d['added'], d['removed'], d['added'] + d['removed'], len(d['hunks'])))
-    for h in d['hunks']:
-        print(h)
+    for start in range(0, len(d['hunks']), 3):
+        print(' | '.join(d['hunks'][start:start + 3]))
     labels = json.loads(subprocess.check_output(['docker', 'inspect', '--format', '{{json .Config.Labels}}', 'synapse-content-1'], timeout=30))
     work = labels.get('com.docker.compose.project.working_dir')
     candidates = {Path('/opt/synapse/ops/content/server.js')}
