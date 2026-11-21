@@ -8,7 +8,8 @@ const REEL=/^\/autoposting\/reels(?:\/(\d+)(?:\/(edits|publication|archive|resto
    очередь просьб, ответ со статусом, отрезки версии. Права те же: чтение — autoposting.view, изменение — autoposting.edit. */
 const INTERNAL_REQUESTS=/^\/internal\/reel-materials\/(?:(requests)|requests\/(\d+)\/(reply)|reels\/(\d+)\/versions\/(\d+)\/(segments))$/;
 /* specs/224-content-archive: убрать/вернуть ролик и отдельную версию. Право — правка контента компании (autoposting.edit). */
-const VERSION_ARCHIVE=/^\/autoposting\/reels\/(\d+)\/versions\/(\d+)\/(archive|restore)$/;
+/* specs/233: разметка версии по фразам (segments) из кабинета — то же право autoposting.edit и та же проверка компании. */
+const VERSION_ARCHIVE=/^\/autoposting\/reels\/(\d+)\/versions\/(\d+)\/(archive|restore|segments)$/;
 const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(claim)|reels\/(\d+)\/(versions))$/;
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
@@ -42,7 +43,8 @@ function createReelMaterialsHandler({materials,companyModuleContext,readJson,sen
       if(request.method!=='POST')fail(405,'Метод не поддерживается');
       const {identity,company}=companyModuleContext(request,url.searchParams.get('companyCode'),'autoposting.edit');
       const body=await readJson(request),[,reel,version,action]=versionArchive;
-      const result=materials[action==='archive'?'archiveVersion':'restoreVersion'](company.code,Number(reel),Number(version),body,identity);
+      const result=action==='segments'?materials.setSegments(company.code,Number(reel),Number(version),body)
+        :materials[action==='archive'?'archiveVersion':'restoreVersion'](company.code,Number(reel),Number(version),body,identity);
       send(response,200,result,headers);return true;
     }
     const match=REEL.exec(url.pathname);if(!match)return false;
