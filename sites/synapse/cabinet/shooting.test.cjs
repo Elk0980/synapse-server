@@ -84,9 +84,11 @@ test('«Сценарий по секундам»: строки таблицы, �
   assert.equal(script.onShoot(reel('draft'), '2026-11-07'), true, 'без признака публикации рилс остаётся');
 });
 
-function page({companyCode = 'avokado', path: route = '', canEdit = true, kit = true, settings = {deadlineDays: 3, shootingWeekdays: [2, 4]}} = {}) {
+function page({companyCode = 'avokado', path: route = '', canEdit = true, kit = true, now = '2026-11-05T00:00:00Z', settings = {deadlineDays: 3, shootingWeekdays: [2, 4]}} = {}) {
   const dom = new JSDOM('<main id="m"></main>', {url: 'https://cabinet.test/cabinet.html', runScripts: 'outside-only', pretendToBeVisual: true});
   const w = dom.window, registered = {}, calls = [], navigations = [];
+  // Синтетический план ноября: время задаёт сценарий теста, а не календарь запуска CI.
+  w.Date.now = () => Date.parse(now);
   w.SynapseModules = {register: (id, def) => { registered[id] = def; }};
   w.HTMLElement.prototype.scrollIntoView = function () { w.__scrolled = this; };
   for (const file of [...(kit ? ['cf-kit.js'] : []), 'shooting-script.js', 'shooting-upload.js', 'shooting-prompter.js', 'shooting-board.js', 'shooting.js']) w.eval(read(file));
@@ -101,6 +103,17 @@ function page({companyCode = 'avokado', path: route = '', canEdit = true, kit = 
   return {w, d: w.document, registered, ctx, calls, navigations};
 }
 const card = (root, ideaId) => root.querySelector(`.shoot-row[data-idea="${ideaId}"]`);
+
+test('дедлайн в карточке: день дедлайна по Бангкоку и следующий день проверяются явно', async t => {
+  for (const [now, late] of [['2026-11-09T16:59:59Z', false], ['2026-11-09T17:00:00Z', true]]) {
+    const p = page({now});t.after(() => p.w.close());
+    const root = p.d.getElementById('m');await p.registered['content-shooting'].mount(root, p.ctx);
+    const row = card(root, 'r-first'), meta = row.querySelector('.shoot-row__meta');
+    assert.equal(row.classList.contains('shoot-row--late'), late);
+    assert.equal(meta.textContent, 'Чт 05.11' + (late ? ' · дедлайн прошёл, материалов нет' : ''));
+    assert.equal(meta.title.includes('дедлайн прошёл'), late);
+  }
+});
 
 test('№121: Съёмка показывает все видео-позиции плана с номером строки плана, даже если Хью поставил post/story', async () => {
   // Как на боевом 05.11: площадка только «Instagram / Reels», Хью проставил форматы post/reel/story/post/story.
