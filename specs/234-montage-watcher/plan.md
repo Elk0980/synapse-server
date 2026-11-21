@@ -1,0 +1,15 @@
+# План
+
+Ветка codex/montage-watcher-285 от main5c29cb4d. Один автор Codex. Новая область: ops/montage-watcher и specs/234-montage-watcher; обязательная узкая связка ops/content/server.js + воспроизводимый montage-watcher-bundle.js (285/1953). Существующие Hugh/CRM не переписываются.
+
+Изучены ops/hugh-runtime (изолированный text-only /reply, постоянный jobId), ops/local-hugh (только reply/login, узкий transport и outbox) и task-dispatch-worker. Нельзя выдавать agent_launch code_only за запуск монтажёра. В checkout отсутствует tools/reels-check и ffmpeg-исполнитель. Запрос фактического программного входа отправлен Claude в285/1943; без подтверждённого входа передача заканчивается честной эскалацией, а не ложным in_progress.
+
+Модули: store.js — только координация SQLite; watcher.js — poll/dedup/reconcile/escalate; transport.js — фиксированные CRM/runtime/executor методы с ограничением ответа/таймаута и без redirect; classifier.js — переиспользование Hugh и бюджетного fallback; main.js — единственный таймер, сигналы, безопасный журнал. Рабочее подключение — в действующий content с projectChat.fallback и той же БД/бюджетом. build-content-bundle.js воспроизводимо упаковывает новое ядро и существующую проверку payload, потому что Docker content имеет COPY *.js и старый prpatch работает с ops/content. Нет нового service/compose/ключей. server.js только создаёт, запускает и останавливает watcher. CLI main.js — альтернативный режим, одновременно с content его не запускать. Конфигурацию/план выпуска проверить с Claude и текущим владельцем production; новый файл не означает подключённую службу.
+
+Монтажный контракт: POST явно настроенному trusted endpoint, Idempotency-Key + companyCode + editId/requestId, ответ accepted с теми же companyCode/id. Исполнитель сам делает CRM claim и addVersion; сторож не имитирует фактическое принятие. Неизвестная отправка не повторяется; стабильно создаётся задача Claude.
+
+В рабочем content используется createBudgetedClassifier существующего fallback (available/priceFor/reply, те же финансовые брони). В альтернативном CLI модель выбирается по /status фактически настроенного Hugh: совпадение model, authenticated/connected/replyEnabled. При одном доступном runtime нет альтернатив для сравнения; при нескольких нужны явные тарифы, цена не угадывается. Ни один runtime не создаётся этим кодом. При встраивании возможно передать готовый fallback — его budget.priceFor/available/reply, второй ledger не создаётся.
+
+Тесты: unit, локальный HTTP с настоящим CRM, сбои/перезапуск/без утечки; gate check и converge. Живой статус отмечать только после реально проверенного выпуска.
+
+Дополнительная тестовая область после полного прогона: по одной переменной MONTAGE_WATCHER_ENABLED=0 в company-links-reader/crm-proxy-path/email-unsubscribe/people-http/view-as-http.test.js. Их mock-CRM проверяет свой сценарий и не реализует background queue; проверки прав/сети не ослабляются. Production включение не меняется.

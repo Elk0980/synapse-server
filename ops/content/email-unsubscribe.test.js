@@ -118,7 +118,7 @@ async function fixture(t, {crmConfigured = true} = {}) {
   upstream.listen(0, '127.0.0.1');await once(upstream, 'listening');
   const upstreamUrl = `http://127.0.0.1:${upstream.address().port}`, port = await freePort();
   const child = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env:{...process.env, PORT:String(port), DATABASE_PATH:databasePath, SEED_DIR:directory,
+    env:{...process.env, MONTAGE_WATCHER_ENABLED:'0', PORT:String(port), DATABASE_PATH:databasePath, SEED_DIR:directory,
       ASSETS_DIR:path.join(directory,'assets'), API_KEY:'', AUTH_USERS:'', SESSION_SECRET:randomBytes(32).toString('hex'),
       CRM_URL:upstreamUrl, CRM_API_KEY:crmConfigured ? apiKey : ''}, stdio:['ignore','ignore','pipe'], windowsHide:true,
   });

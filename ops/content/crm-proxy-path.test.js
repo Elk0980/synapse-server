@@ -79,7 +79,7 @@ test('прокси /content/crm: служебные пути закрыты, о�
   const contentBase = `http://127.0.0.1:${contentPort}`;
   let errors = '';
   const child = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: { ...process.env, PORT: String(contentPort), DATABASE_PATH: contentDb, AUTH_USERS: '', API_KEY: '',
+    env: { ...process.env, MONTAGE_WATCHER_ENABLED:'0', PORT: String(contentPort), DATABASE_PATH: contentDb, AUTH_USERS: '', API_KEY: '',
       CRM_URL: crmBase, CRM_API_KEY: randomBytes(32).toString('hex'), SEED_DIR: directory,
       ASSETS_DIR: path.join(directory, 'assets'), SESSION_SECRET: randomBytes(32).toString('hex'),
       HUGH_RUNNER_URL: '', CHAT_URL: '', CHAT_API_KEY: '' },
