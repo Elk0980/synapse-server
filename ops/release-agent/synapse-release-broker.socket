@@ -1,0 +1,13 @@
+[Unit]
+Description=Synapse restricted local release broker
+
+[Socket]
+ListenStream=/run/synapse-release/broker.sock
+SocketUser=root
+SocketGroup=synapse-release
+SocketMode=0660
+DirectoryMode=0750
+Accept=yes
+
+[Install]
+WantedBy=sockets.target

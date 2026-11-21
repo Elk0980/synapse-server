@@ -1,0 +1,16 @@
+[Unit]
+Description=Synapse typed release operation
+
+[Service]
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/synapse-release-agent/broker.py
+StandardInput=socket
+StandardOutput=socket
+StandardError=null
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyPaths=/opt/synapse-release-agent
+ReadWritePaths=/var/lib/synapse-release-broker /etc/synapse/release-agent
+TimeoutStartSec=6min

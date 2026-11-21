@@ -1,0 +1,28 @@
+name: release-agent
+on:
+  pull_request:
+    paths: ['ops/release-agent/**', '.github/workflows/release-agent.yml']
+  push:
+    branches: [main, codex/release-agent-20261103]
+    paths: ['ops/release-agent/**', '.github/workflows/release-agent.yml']
+permissions:
+  contents: read
+jobs:
+  release-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s ops/release-agent -v
+      - name: Real disposable Docker image rollback and SQLite preservation
+        run: sudo env RELEASE_DOCKER_TEST=1 python3 -m unittest discover -s ops/release-agent -p test_docker.py -v
+      - name: Real unprivileged worker against local broker on a copy
+        run: sudo env RELEASE_DOCKER_TEST=1 python3 -m unittest discover -s ops/release-agent -p test_privilege.py -v
+      - name: Verify inert installation on a copy
+        run: |
+          python ops/release-agent/install.py --root "$RUNNER_TEMP/release-copy"
+          test -f "$RUNNER_TEMP/release-copy/opt/synapse-release-agent/agent.py"
+          test ! -e "$RUNNER_TEMP/release-copy/etc/systemd/system/timers.target.wants/synapse-release-agent.timer"
+          systemd-analyze verify ops/release-agent/synapse-release-agent.timer
