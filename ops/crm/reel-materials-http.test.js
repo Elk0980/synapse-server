@@ -78,4 +78,14 @@ test('Материалы через настоящий CRM: ролик → пр�
   assert.equal(requests.body.requests[0].editId,sent.body.edit.id);
   const afterTasks=await request('GET','/tasks?companyCode=avokado');
   assert.equal(afterTasks.body.tasks.filter(t=>t.title.startsWith('Монтаж:')).length,2,'одна задача на новую правку');
+  // Actor приходит из доверенной сессии, поля JSON не могут превратить свою отмену в чужую.
+  const beforeCancel=(await request('GET','/internal/reel-materials/notifications',{identity:null})).body.events.length;
+  assert.equal((await request('POST',`${base}/edits/${sent.body.edit.id}/cancel${query}`,{identity:smm,body:{userId:6}})).status,200);
+  const ownMessage=(await request('POST',`${base}/requests${query}`,{identity:smm,body:{clientRequestId:'self-message-http',kind:'message',text:'SAMPLE'}})).body.request;
+  assert.equal((await request('POST',`${base}/requests/${ownMessage.id}/cancel${query}`,{identity:smm,body:{actor:{userId:6}}})).status,200);
+  assert.equal((await request('GET','/internal/reel-materials/notifications',{identity:null})).body.events.length,beforeCancel);
+  assert.equal((await request('GET',notices,{identity:smm})).body.count,0);
+  const externalMessage=(await request('POST',`${base}/requests${query}`,{identity:smm,body:{clientRequestId:'other-message-http',kind:'message',text:'SAMPLE'}})).body.request;
+  assert.equal((await request('POST',`${base}/requests/${externalMessage.id}/cancel${query}`,{identity:encode({role:'owner',userId:6})})).status,200);
+  assert.equal((await request('GET',notices,{identity:smm})).body.count,1);
 });

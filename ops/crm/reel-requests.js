@@ -52,6 +52,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
       id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL REFERENCES reel_requests(id), company_id INTEGER NOT NULL REFERENCES companies(id),
       status TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', actor TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);`);
   addColumns('reel_requests',[['notes',"TEXT NOT NULL DEFAULT '[]'"]]);
+  addColumns('reel_request_events',[['actor_id',"TEXT NOT NULL DEFAULT ''"]]);
   const who=actor=>({id:String(actor?.userId??''),name:String(actor?.userName||'')});
   const hasTasks=()=>db.prepare('PRAGMA table_info(tasks)').all().some(column=>column.name==='company_code');
 
@@ -197,9 +198,9 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
   const requestDto=r=>({id:r.id,reelId:r.reel_id,clientRequestId:r.client_request_id,kind:r.kind,kindLabel:KINDS[r.kind]||r.kind,status:r.status,statusLabel:STATUSES[r.status]||r.status,text:r.text,
     version:r.version,notes:parse(r.notes,[]),startMs:r.start_ms,endMs:r.end_ms,date:r.target_date||'',platformIds:parse(r.platform_ids,[]),reply:r.reply,repliedAt:r.replied_at||null,repliedBy:r.replied_by||'',
     editId:r.edit_id,postId:r.post_id,taskId:r.task_id,authorName:r.author_name,createdAt:r.created_at,updatedAt:r.updated_at,events:eventsOf(r.id)});
-  function setStatus(r,status,reply,actor,at=iso()){
+  function setStatus(r,status,reply,actor,at=iso(),actorId=''){
     db.prepare('UPDATE reel_requests SET status=?,reply=?,replied_at=?,replied_by=?,updated_at=? WHERE id=? AND company_id=?').run(status,reply,at,actor,at,r.id,r.company_id);
-    db.prepare('INSERT INTO reel_request_events(request_id,company_id,status,text,actor,created_at) VALUES(?,?,?,?,?,?)').run(r.id,r.company_id,status,reply,actor,at);
+    db.prepare('INSERT INTO reel_request_events(request_id,company_id,status,text,actor,created_at,actor_id) VALUES(?,?,?,?,?,?,?)').run(r.id,r.company_id,status,reply,actor,at,actorId);
     return db.prepare('SELECT * FROM reel_requests WHERE id=?').get(r.id);
   }
   const requestFor=(owner,id)=>{const r=Number.isSafeInteger(id)&&db.prepare('SELECT * FROM reel_requests WHERE id=? AND company_id=?').get(id,owner.id);if(!r)fail(404,'Просьба не найдена','NOT_FOUND');return r;};
@@ -212,11 +213,11 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
   function refresh(owner,r){
     if(FINAL.includes(r.status))return r;
     if(r.edit_id){
-      const edit=db.prepare('SELECT status,result_version FROM reel_edits WHERE id=? AND company_id=?').get(r.edit_id,owner.id);
+      const edit=db.prepare('SELECT status,result_version,status_actor_id FROM reel_edits WHERE id=? AND company_id=?').get(r.edit_id,owner.id);
       if(edit?.status==='in_progress'&&r.status==='accepted')return setStatus(r,'in_progress','Агент монтажа взял ролик в работу.','Материалы');
       // Один раз: если после «готово» агент снова взял просьбу в работу, чтение карточки её не перещёлкивает.
       if(edit?.status==='done'&&r.status!=='ready'&&!db.prepare("SELECT 1 FROM reel_request_events WHERE request_id=? AND status='ready' AND actor='Материалы'").get(r.id))return setStatus(r,'ready',`Готова новая версия v${edit.result_version}. Посмотрите и скажите, подходит ли.`,'Материалы');
-      if(edit?.status==='cancelled'&&r.status!=='ready')return setStatus(r,'rejected','Правка монтажа отменена.','Материалы');
+      if(edit?.status==='cancelled'&&r.status!=='ready')return setStatus(r,'rejected','Правка монтажа отменена.','Материалы',iso(),edit.status_actor_id);
       return r;
     }
     if(r.post_id&&autoposting?.get){
@@ -309,8 +310,8 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     if(actor?.role!=='owner'&&String(actor?.userId??'')!==r.author_id)fail(403,'Отменить просьбу может её автор','FORBIDDEN');
     if(r.status!=='accepted')fail(409,'Просьбу уже взяли в работу или закрыли','REQUEST_STATE');
     /* Сначала закрывается просьба, затем правка: иначе чтение карточки внутри cancelEdit записало бы второе отклонение. */
-    setStatus(r,'rejected','Отменено автором.',who(actor).name);
-    if(r.edit_id)core.cancelEdit(owner.code,row.id,r.edit_id);else taskStatus(owner,r,'rejected');
+    setStatus(r,'rejected','Отменено автором.',who(actor).name,iso(),who(actor).id);
+    if(r.edit_id)core.cancelEdit(owner.code,row.id,r.edit_id,actor);else taskStatus(owner,r,'rejected');
     return core.full(owner,row.id);
   }
   /* --- Служебный API агента (ключ сервиса) --- */
@@ -332,7 +333,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     return requestDto(core.transaction(()=>{
       if(body.status==='rejected'&&r.edit_id){
         const edit=db.prepare("SELECT * FROM reel_edits WHERE id=? AND company_id=? AND status IN ('pending','in_progress')").get(r.edit_id,owner.id);
-        if(edit){db.prepare("UPDATE reel_edits SET status='cancelled',updated_at=? WHERE id=?").run(iso(),edit.id);
+        if(edit){db.prepare("UPDATE reel_edits SET status='cancelled',status_actor_id='',updated_at=? WHERE id=?").run(iso(),edit.id);
           if(edit.task_id&&hasTasks())db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND company_code=? COLLATE NOCASE").run(iso(),edit.task_id,owner.code);}
       }else if(!r.edit_id)taskStatus(owner,r,body.status);
       return setStatus(r,body.status,answer,text(String(agent||executor),200));
@@ -344,7 +345,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
       WHERE r.company_id=? AND r.author_id=? AND r.edit_id IS NULL ORDER BY r.id DESC LIMIT 100`).all(owner.id,author).reverse();
     return rows.flatMap(r=>[{key:`reel-request:${r.id}:request`,at:r.created_at,from:'user',authorName:r.author_name,requestId:r.id,reelId:r.reel_id,
         text:`«${r.title}» — ${KINDS[r.kind]||r.kind}${r.target_date?' на '+r.target_date:''}${r.text?': '+r.text:''}`},
-      ...db.prepare("SELECT id,status,text,created_at FROM reel_request_events WHERE request_id=? AND text<>'' ORDER BY id").all(r.id)
+      ...db.prepare("SELECT id,status,text,created_at FROM reel_request_events WHERE request_id=? AND text<>'' AND actor_id<>? ORDER BY id").all(r.id,r.author_id)
         .map(e=>({key:`reel-request:${r.id}:reply:${e.id}`,at:e.created_at,from:'hugh',requestId:r.id,reelId:r.reel_id,text:`«${r.title}» — ${STATUSES[e.status]||e.status}: ${e.text}`}))]);
   }
   /* Добавка к карточке ролика. В списке — только то, что нужно ленте; в полной карточке — просьбы и история. */

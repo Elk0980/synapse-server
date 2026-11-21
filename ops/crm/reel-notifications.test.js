@@ -56,3 +56,39 @@ test('архив не оставляет недоступный счётчик; 
  assert.equal(f.materials.unreadNotifications('alpha',user).count,0);assert.equal(f.materials.notificationFeed().events.length,2);
  f.materials.restore('alpha',f.reel.id,{},user);assert.equal(f.materials.unreadNotifications('alpha',user).count,2);
 });
+test('собственная отмена правки не создаёт уведомления или ответ Хью, история карточки сохраняется',t=>{
+ const f=fixture(t),card=f.materials.cancelEdit('alpha',f.reel.id,f.edit,user);
+ assert.equal(card.edits[0].status,'cancelled');assert.ok(card.log.some(e=>e.key===`reel-edit:${f.edit}:cancelled`));
+ assert.equal(f.materials.notificationFeed().events.length,0);assert.equal(f.materials.unreadNotifications('alpha',user).count,0);
+ assert.ok(!f.materials.hughLog('alpha',7).entries.some(e=>e.from==='hugh'));
+});
+test('собственная отмена простой и связанной просьбы сохраняет историю без отметки самому себе',t=>{
+ const f=fixture(t),message=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'self-message',kind:'message',text:'SAMPLE вопрос'},user).request;
+ f.materials.cancelRequest('alpha',f.reel.id,message.id,user);
+ const linked=f.db.prepare('SELECT id FROM reel_requests WHERE edit_id=?').get(f.edit);
+ const card=f.materials.cancelRequest('alpha',f.reel.id,linked.id,user);
+ assert.ok(card.requests.every(r=>r.status==='rejected'&&r.events.at(-1).text==='Отменено автором.'));
+ assert.equal(f.materials.notificationFeed().events.length,0);assert.equal(f.materials.unreadNotifications('alpha',user).count,0);
+ assert.ok(!f.materials.hughLog('alpha',7).entries.some(e=>e.from==='hugh'));
+});
+test('совпадающие имена не скрывают отмену другим человеком или ответ агента',t=>{
+ const f=fixture(t);f.materials.cancelEdit('alpha',f.reel.id,f.edit,other);
+ assert.equal(f.materials.unreadNotifications('alpha',user).count,1);assert.equal(f.materials.unreadNotifications('alpha',other).count,0);
+ assert.ok(f.materials.hughLog('alpha',7).entries.some(e=>e.from==='hugh'&&e.key.endsWith(':cancelled')));
+ const message=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'other-cancel',kind:'message',text:'SAMPLE'},user).request;
+ f.materials.cancelRequest('alpha',f.reel.id,message.id,{...other,role:'owner'});
+ const another=f.materials.createRequest('alpha',f.reel.id,{clientRequestId:'agent-reply',kind:'message',text:'SAMPLE'},user).request;
+ f.materials.replyRequest('alpha',another.id,{status:'rejected',reply:'Отменено автором.'},user.userName);
+ assert.equal(f.materials.unreadNotifications('alpha',user).count,3,'идентичное имя/текст не являются идентификатором действующего лица');
+});
+test('обновление установленных триггеров сохраняет прежние события/курсор, после restart собственные действия подавлены',t=>{
+ const f=fixture(t);f.materials.claim('alpha',f.edit);const event=f.materials.notificationFeed().events[0];
+ f.materials.readNotifications('alpha',f.reel.id,{throughId:event.id},user);
+ f.db.exec("DROP TRIGGER reel_notification_edit; DROP TRIGGER reel_notification_request; ALTER TABLE reel_edits DROP COLUMN status_actor_id; ALTER TABLE reel_request_events DROP COLUMN actor_id; CREATE TRIGGER reel_notification_edit AFTER UPDATE OF status ON reel_edits BEGIN SELECT 1;END");
+ const upgraded=createReelMaterials(f.db,{notificationsEnabled:true});
+ assert.equal(upgraded.notificationFeed().events[0].id,event.id);assert.equal(upgraded.unreadNotifications('alpha',user).count,0);
+ const next=upgraded.createRequest('alpha',f.reel.id,{clientRequestId:'after-upgrade',kind:'message',text:'SAMPLE'},user).request;
+ upgraded.cancelRequest('alpha',f.reel.id,next.id,user);assert.equal(upgraded.notificationFeed().events.length,1);
+ const edit=upgraded.requestEdit('alpha',f.reel.id,{clientRequestId:'after-upgrade-edit',kind:'request',baseVersion:1,comment:'SAMPLE',startMs:0,endMs:1000},user).edit;
+ upgraded.cancelEdit('alpha',f.reel.id,edit.id,user);assert.equal(upgraded.notificationFeed().events.length,1);
+});
