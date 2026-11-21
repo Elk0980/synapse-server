@@ -214,7 +214,21 @@ db.close();if(!enabled||!edits||!requests||process.env.MONTAGE_NOTIFICATIONS_ENA
  print('SETTINGS298',run(['docker','exec','-i','synapse-crm-1','node'],input=dbprogram.encode()).decode().strip())
  save(PRE/'verified.json',json.dumps({'at':time.time(),'bothFlags':True,'health':True,'settings':True}).encode());print('VERIFIED298_OK')
  return 0
+def verify_crm():
+ prepared=json.loads((ROOT/'w658/checked298.json').read_text());current=state('crm')
+ if current['image']!=prepared['crm']['image'] or current['status']!='running' or current['restarts']!=0 or current['flag']!='1':raise RuntimeError('CRM state not ready')
+ receipt=json.loads((PRE/'receipt.json').read_text())
+ for f in receipt['files']:
+  if not f['path'].startswith('ops/crm/'):continue
+  row=next(r for r in DATA['files'] if r['path']==f['path'])
+  if sha(live(row))!=f['sha']:raise RuntimeError('CRM source differs')
+ program=r'''
+(async()=>{const r=await fetch('http://crm:8080/internal/reel-materials/notifications?after=0&limit=1',{headers:{'x-api-key':process.env.CRM_API_KEY},signal:AbortSignal.timeout(8000),redirect:'error'});const b=await r.json();console.log(JSON.stringify({crmFeed:r.status,enabled:b.enabled===true}));if(r.status!==200||b.enabled!==true)process.exitCode=1})().catch(()=>{console.log('CRM_NOT_READY');process.exitCode=1});
+'''
+ print('CRM_READY298',run(['docker','exec','-i','synapse-content-1','node'],input=program.encode()).decode().strip())
+ print('CRM_STATE298',json.dumps(current));save(PRE/'crm-ready.json',json.dumps({'image':current['image'],'at':time.time()}).encode());return 0
 def main():
+ if sys.argv[1:]==['verify-crm']:return verify_crm()
  if sys.argv[1:]==['db-before-build']:return dbsnap('before-build')
  if sys.argv[1:]==['verify']:return verify()
  if sys.argv[1:] in [['backup-before-build'],['backup-before-up']]:return backup(sys.argv[1][7:])
