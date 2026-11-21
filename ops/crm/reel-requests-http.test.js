@@ -75,6 +75,15 @@ test('Материалы 231 через настоящий CRM: подпись �
   /* Отрезки версии и «живой монтаж». */
   assert.equal((await request('POST',`/internal/reel-materials/reels/${reel.body.id}/versions/1/segments?companyCode=alpha`,{body:{segments:[{startMs:0,endMs:9000}]}})).status,403);
   assert.equal((await request('POST',`/internal/reel-materials/reels/${reel.body.id}/versions/1/segments?companyCode=alpha`,{identity:null,body:{segments:[{startMs:0,endMs:4000},{startMs:4000,endMs:9000}]}})).status,200);
+  /* specs/233: разметка версии из кабинета — только с правом правки и только в своей компании. */
+  const marks={segments:[{startMs:0,endMs:4000,label:'Беру'},{startMs:4000,endMs:9000,label:'Не вошло',enabled:false}]};
+  assert.equal((await request('POST',`${base}/versions/1/segments?companyCode=alpha`,{identity:viewer,body:marks})).status,403,'просмотр не размечает');
+  assert.notEqual((await request('POST',`${base}/versions/1/segments?companyCode=beta`,{body:marks})).status,200,'чужая компания не размечает');
+  assert.equal((await request('POST',`${base}/versions/9/segments?companyCode=alpha`,{body:marks})).status,404);
+  assert.equal((await request('POST',`${base}/versions/1/segments?companyCode=alpha`,{body:{segments:[{startMs:500,endMs:4000}]}})).status,400,'отрезки с пропуском отклоняются');
+  const marked=await request('POST',`${base}/versions/1/segments?companyCode=alpha`,{body:marks});
+  assert.equal(marked.status,200,JSON.stringify(marked.body));
+  assert.deepEqual(marked.body.versions[0].segments,marks.segments);
   const toggles=[{startMs:0,endMs:3000,enabled:false,sound:true},{startMs:3000,endMs:8000,enabled:true,sound:false}];
   assert.equal((await request('POST',`${base}/live-edit?companyCode=alpha`,{identity:viewer,body:{clientRequestId:'l1',baseVersion:2,segments:toggles}})).status,403);
   assert.equal((await request('POST',`${base}/live-edit?companyCode=alpha`,{body:{clientRequestId:'l0',baseVersion:2,segments:[toggles[1],toggles[0]]}})).status,400,'перестановка отрезков отклоняется');
