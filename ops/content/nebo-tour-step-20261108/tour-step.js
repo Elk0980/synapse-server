@@ -31,7 +31,7 @@
   // Перемотка по кадрам на этом файле медленная и рваная, поэтому на шаг вниз мы ПРОИГРЫВАЕМ видео
   // обычным воспроизведением, а прокрутку ведём за ним. Перемотку сайта на это время глушим,
   // после остановки всё возвращается сайту как было.
-  var SPEED = 1.25;                       // видео идёт чуть быстрее обычного
+  var SPEED = 1.6;                        // видео идёт быстрее обычного (Влад 08.11: «скорость увеличить немного»)
   var CT = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'currentTime');
   function video() { return document.querySelector('#tour-film video') || document.querySelector('.clinic-tour video') || document.querySelector('video'); }
   function filmTop() { var f = film(); return f ? f.getBoundingClientRect().top + window.scrollY : 0; }
@@ -74,11 +74,15 @@
     v.playbackRate = SPEED;
     var p; try { p = v.play(); } catch (e) { p = null; }
     if (p && p.catch) p.catch(function () { if (anim === a) { unlock(v); anim = null; glideTo(to); } });
-    var guard = performance.now() + 30000;
+    // Защита от зависания: только если видео реально стоит 4 с — тогда дальше плавной прокруткой.
+    // Никаких прыжков по таймеру: видео всегда проигрывается целиком до блока.
+    var lastT = -1, lastMove = performance.now();
     (function frame(now) {
       if (anim !== a) return;
       var t = CT.get.call(v), stopT = timeOfY(a.to, v), y = yOfTime(t, v);
-      if (t >= stopT - .03 || v.ended || now > guard) return finish(a, v);
+      if (t > lastT + .001) { lastT = t; lastMove = now; }
+      if (t >= stopT - .03 || v.ended) return finish(a, v);
+      if (now - lastMove > 4000) { var to2 = a.to; try { v.pause(); } catch (e) {} v.playbackRate = 1; unlock(v); anim = null; return glideTo(to2); }
       setY(Math.min(y, a.to));
       a.raf = requestAnimationFrame(frame);
     })(performance.now());
@@ -117,6 +121,32 @@
     scrollToY(target, dir);
   }
 
+  // ── Загрузка и автостарт (Влад 08.11 16:35) ──────────────────────────────────────
+  // Пока сайт грузится — поверх идёт бесконечный цикл облаков (#nebo-loader из index.html).
+  // Как только видео экскурсии готово — облака плавно растворяются и видео само идёт
+  // до первого блока, без касаний. Дальше — свайпами, как обычно.
+  var userActed = false;
+  ['wheel', 'touchstart', 'keydown'].forEach(function (t) {
+    window.addEventListener(t, function () { userActed = true; }, { capture: true, passive: true });
+  });
+  function hideLoader() {
+    var l = document.getElementById('nebo-loader'); if (!l || l.__gone) return; l.__gone = true;
+    l.style.opacity = '0';
+    setTimeout(function () { l.remove(); }, 900);
+  }
+  function autostart() {
+    hideLoader();
+    if (reduce || userActed || window.scrollY > 10 || anim) return;
+    setTimeout(function () { if (!userActed && window.scrollY <= 10 && !anim) step(1); }, 700);
+  }
+  (function waitReady(t0) {
+    var v = video(), f = film();
+    var ready = v && f && v.readyState >= 3 && isFinite(v.duration) && v.duration > 0 && document.readyState !== 'loading';
+    if (ready) return autostart();
+    if (performance.now() - t0 > 25000) return hideLoader();   // сеть совсем плохая — убираем облака без автостарта
+    setTimeout(function () { waitReady(t0); }, 150);
+  })(performance.now());
+
   // Колесо и тачпад: один жест = один шаг. Инерция тачпада гасится паузой между событиями.
   window.addEventListener('wheel', function (e) {
     var y = anim ? anim.to : window.scrollY;
@@ -125,7 +155,7 @@
     if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     var now = performance.now(), idle = now - wheelIdleAt; wheelIdleAt = now;
-    if (idle < 220 && now - lastGesture < 2500) return; // хвост того же жеста
+    if (idle < 300) return; // тот же жест (инерция тачпада/колеса) — новый жест только после паузы
     if (Math.abs(e.deltaY) < 4) return;
     lastGesture = now; step(down ? 1 : -1);
   }, { capture: true, passive: false });
