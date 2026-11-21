@@ -311,6 +311,23 @@ def queues():
 
 
 def main():
+    if sys.argv[1:] == ['inspect7']:
+        # Read-only DB verification; no HTTP, service key or live data writes.
+        program = r'''
+const db=new(require('better-sqlite3'))('/data/crm.sqlite',{readonly:true,fileMustExist:true});
+const row=db.prepare('SELECT v.version FROM reel_versions v JOIN reel_materials r ON r.id=v.reel_id JOIN companies c ON c.id=r.company_id WHERE r.id=21 AND v.edit_id=7 AND lower(c.code)=? ORDER BY v.version DESC LIMIT 1').get('taisabai');
+console.log(JSON.stringify({version:row?.version??null}));db.close();
+'''
+        result = subprocess.run(['docker','exec','synapse-crm-1','node','-e',program], capture_output=True,timeout=15)
+        if result.returncode:
+            print('READONLY_VERSION_UNAVAILABLE')
+        else:
+            print(result.stdout.decode().strip())
+        # Offline stdin probe with a fixture credential and no fetch at all.
+        probe = "try{require('fs').readFileSync(0,'utf8');console.log('STDIN_OK')}catch(e){console.log('STDIN_'+e.code)}"
+        checked = subprocess.run(['docker','exec','-i','-e','CRM_API_KEY=FIXTURE','synapse-content-1','node','-e',probe],input=b'fixture',capture_output=True,timeout=15)
+        print(checked.stdout.decode().strip() if checked.returncode==0 else 'STDIN_PROBE_UNAVAILABLE')
+        return 0
     if len(sys.argv) == 3 and sys.argv[1] == 'submit7':
         # №283/2054,2059: body travels privately via stdin; exactly one POST.
         try:
