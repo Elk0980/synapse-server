@@ -76,7 +76,7 @@ def preflight(anchored=False):
   patch=base64.b64decode(row['patchData'])
   if sha(patch)!=row['patchSha256']:raise RuntimeError('package patch changed')
   if anchored and path=='ops/content/server.js':
-   if sha(original)!='71f16423043efa49a3db708be7e9e0cd00e8bcf74400d1cafad366769e4082':raise RuntimeError('unpinned server source')
+   if original!=(PRE/'before'/name).read_bytes():raise RuntimeError('unpinned server source')
    result=anchored_server(original,ANCHORS['edits']);save(target,result)
    if original.count(b'salonCompanyApp.close()')!=result.count(b'salonCompanyApp.close()'):raise RuntimeError('private shutdown changed')
   elif row['new']:
@@ -105,6 +105,8 @@ def preflight(anchored=False):
  receipt['ok']=True;save(PRE/'receipt.json',json.dumps(receipt,indent=2).encode());print('PREFLIGHT298_OK',len(receipt['files']))
  return 0
 def main():
+ if sys.argv[1:]==['pin']:
+  h=sha(live(DATA['files'][0]));print('SERVER_SHA_CHUNKS',*[h[i:i+16] for i in range(0,64,16)]);return 0
  if sys.argv[1:]==['anchored-preflight']:return preflight(True)
  if sys.argv[1:] in [['context3'],['context5']]:
   b=live(DATA['files'][0]);lines=b.decode().splitlines();anchor='  let forwardIdentity = identity;' if sys.argv[1]=='context3' else 'function shutdownContent() {'
