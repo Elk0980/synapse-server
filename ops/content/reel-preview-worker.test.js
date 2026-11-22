@@ -4,6 +4,11 @@ const {createReelPreviewWorker}=require('./reel-preview-worker'),{createReelPrev
 const item=(cursor)=>({cursor,companyCode:'alpha',fileName:cursor.toString(16).padStart(32,'0')+'.mp4'});
 const response=items=>({ok:true,json:async()=>({items})});
 const settle=()=>new Promise(r=>setImmediate(r));
+test('пустое хранилище не опрашивает CRM; первый сохранённый файл включает фоновое чтение',async()=>{
+ let present=false,reads=0;const worker=createReelPreviewWorker({crmUrl:'http://crm.test',apiKey:'SAMPLE',hasSources:()=>present,
+  previews:{inspect:()=>assert.fail()},fetchImpl:async()=>{reads++;return response([]);}});
+ await worker.tick();assert.equal(reads,0);present=true;await worker.tick();assert.equal(reads,1);worker.close();
+});
 test('сохранённые версии до первого просмотра: 10 файлов/очередь8, повтор после busy, восстановление после рестарта',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'preview-feed-')),sourceDir=path.join(root,'publishing','alpha');fs.mkdirSync(sourceDir,{recursive:true});
  for(let i=1;i<=10;i++)fs.writeFileSync(path.join(sourceDir,item(i).fileName),'SAMPLE original '+i);

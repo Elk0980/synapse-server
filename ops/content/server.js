@@ -67,7 +67,7 @@ const SESSION_SECRET = resolveSessionSecret({
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
 const reelPreviewWorker=require('./reel-preview-worker').createReelPreviewWorker({crmUrl:CRM_URL,apiKey:CRM_API_KEY,
-  previews:reelPreviews,allowedCompany:code=>Object.hasOwn(COMPANIES,code)});
+  previews:reelPreviews,allowedCompany:code=>Object.hasOwn(COMPANIES,code),hasSources:()=>fs.existsSync(path.join(ASSETS_DIR,'publishing'))});
 const readCompanyLinks = createCompanyLinksReader({crmUrl: CRM_URL, apiKey: CRM_API_KEY, companies: CONTENT_COMPANIES});
 const publicEmailUnsubscribe = createEmailUnsubscribeProxy({crmUrl: CRM_URL, apiKey: CRM_API_KEY});
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');

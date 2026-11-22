@@ -1,9 +1,9 @@
 'use strict';
 // specs/238: сохранённая версия запускает подготовку без первого зрителя. БД — восстанавливаемый источник работ.
-function createReelPreviewWorker({crmUrl,apiKey,previews,allowedCompany=()=>true,fetchImpl=fetch,intervalMs=2000}={}){
+function createReelPreviewWorker({crmUrl,apiKey,previews,allowedCompany=()=>true,hasSources=()=>true,fetchImpl=fetch,intervalMs=2000}={}){
  let cursor=0,timer=null,inflight=null,closed=false,running=false;
  async function tick(){
-  if(closed||running||!apiKey)return;running=true;inflight=new AbortController();
+  if(closed||running||!apiKey||!hasSources())return;running=true;inflight=new AbortController();
   const timeout=setTimeout(()=>inflight?.abort(),5000);
   try{
    const response=await fetchImpl(crmUrl.replace(/\/$/,'')+'/internal/reel-materials/previews?after='+cursor,
