@@ -243,8 +243,8 @@
     const legacy = state.tab === 'plan' && legacyDays.length ? `<details class="cp-card" data-cp-legacy${state.legacyOpen ? ' open' : ''}>
       <summary>Старые темы без номера (${legacyDays.length})</summary>
       <p class="cp-note">Эти темы созданы до обновления плана; изменить их нельзя</p>
-      <ol class="cp-archive-list">${legacyDays.map(idea => `<li class="cp-arow"><div class="cp-arow-main"><span class="cp-date">${esc(day(idea.date))}</span>
-        <b class="cp-arow-topic">${esc(idea.topic || 'Без темы')}</b><span class="cp-note">${esc(platforms(idea))}</span></div></li>`).join('')}</ol></details>` : '';
+      <ol class="cp-archive-list">${legacyDays.map(idea => `<li class="cp-arow"><div class="cp-arow-main"><span class="cp-note">${esc(day(idea.date))} · ${esc(platforms(idea))}</span>
+        <b class="cp-arow-topic">${esc(idea.topic || 'Без темы')}</b></div></li>`).join('')}</ol></details>` : '';
     const keepScroll = container.querySelector('.cp-list')?.scrollTop || 0;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
       ${plan}${approve}${legacy}
