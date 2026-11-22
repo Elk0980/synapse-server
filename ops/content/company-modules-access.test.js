@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const {spawn}=require('node:child_process'),{once}=require('node:events'),{randomBytes}=require('node:crypto');
-const {mkdtemp,rm,writeFile,readdir}=require('node:fs/promises'),{existsSync}=require('node:fs');
+const {mkdtemp,rm,writeFile,readdir,mkdir}=require('node:fs/promises'),{existsSync}=require('node:fs');
 const {tmpdir}=require('node:os'),path=require('node:path'),net=require('node:net');
 const {DatabaseSync}=require('node:sqlite');
 const {createAuthStore}=require('./auth-store'),{hashPassword}=require('./passwords');
@@ -54,6 +54,21 @@ async function fixture(t){
   const sessions={};for(const name of ['owner','editor','viewer','none','information_editor','posting_editor'])sessions[name]=await login(name);
   return {base,request,sessions,marker,assetsDir:path.join(directory,'assets'),crm:(method,url,body,session,headers)=>request(method,'/content/crm'+url,body,session,headers)};
 }
+
+test('№320 HTTP: копия просмотра использует собственный размер/Range; статус без private пути, исходник неизменён',async t=>{
+ const f=await fixture(t),name='a'.repeat(32)+'.mp4',url='/content/publishing-assets/alvi/'+name;
+ const sourceDir=path.join(f.assetsDir,'publishing','alvi'),previewDir=path.join(f.assetsDir,'publishing-previews','mobile-v1','alvi');
+ await mkdir(sourceDir,{recursive:true});await mkdir(previewDir,{recursive:true});
+ const original=Buffer.from('SAMPLE original full video bytes'),copy=Buffer.from('SAMPLE light');
+ await writeFile(path.join(sourceDir,name),original);await writeFile(path.join(previewDir,name),copy);
+ const ready=await f.request('GET',url+'?preview=mobile-v1&status=1');assert.equal(ready.status,200);assert.deepEqual(ready.body,{state:'ready'});assert.equal(ready.headers.get('cache-control'),'no-store');
+ const response=await fetch(f.base+url+'?preview=mobile-v1',{headers:{range:'bytes=0-1'}});
+ assert.equal(response.status,206);assert.equal(response.headers.get('content-range'),`bytes 0-1/${copy.length}`);assert.equal(response.headers.get('content-type'),'video/mp4');assert.equal(response.headers.get('accept-ranges'),'bytes');assert.deepEqual(Buffer.from(await response.arrayBuffer()),copy.subarray(0,2));
+ const head=await f.request('HEAD',url+'?preview=mobile-v1');assert.equal(head.status,200);assert.equal(Number(head.headers.get('content-length')),copy.length);
+ const full=await fetch(f.base+url);assert.deepEqual(Buffer.from(await full.arrayBuffer()),original);
+ assert.equal((await f.request('GET',url.replace('/alvi/','/avokado/')+'?preview=mobile-v1&status=1')).status,404);
+ assert.equal(existsSync(f.marker),false,'сервер не скачивает внешний файл для копии');
+});
 
 test('real content-to-CRM modules enforce assigned company permissions, trusted role and CSRF',async t=>{
   const f=await fixture(t),{owner,editor,viewer,none}=f.sessions;

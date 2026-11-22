@@ -1,6 +1,6 @@
 FROM node:24-alpine
 
-RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-rus tesseract-ocr-data-eng poppler-utils
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-rus tesseract-ocr-data-eng poppler-utils ffmpeg
 
 WORKDIR /app
 COPY package.json package-lock.json ./

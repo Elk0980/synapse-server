@@ -88,7 +88,7 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   root.innerHTML = `<header class="re-head"><h2 id="re-title" tabindex="-1" data-title></h2><button type="button" class="re-x" data-close aria-label="Закрыть редактор">✕</button></header>
     <div class="re-body">
       <div class="re-stage"><div class="re-screen"><video playsinline preload="metadata" data-player></video>
-        <span class="re-time" data-clock>0:00</span><button type="button" class="re-play" data-play aria-label="Смотреть">▶</button></div></div>
+        <span class="re-time" data-clock>0:00</span><button type="button" class="re-play" data-play aria-label="Смотреть">▶</button></div><p class="re-status" role="status" data-playback-status></p><button type="button" class="plain-button" data-playback-retry hidden>Повторить подготовку</button></div>
       <div class="re-side">
         <div class="re-row re-srcbar"><button type="button" class="plain-button" data-sources aria-expanded="false">Исходники ▾</button><span class="muted re-hint">дорожки с отснятыми дублями</span></div>
         <div class="re-tl" data-tl>
@@ -122,6 +122,16 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   host.append(root);
   const $ = selector => root.querySelector(selector), player = $("[data-player]");
   const status = text => {$("[data-status]").textContent = text;};
+  const playbackStatus = (text,canRetry=true) => {
+    const preview=sb.reelPlayback?.get(player);if(!text&&preview?.fallback){preview.hint();return;}
+    $("[data-playback-status]").textContent = text;$("[data-playback-retry]").hidden=!text||!canRetry;
+  };
+  const play = () => {
+    const preview=sb.reelPlayback?.get(player);if(preview&&!preview.ready){preview.hint();return;}
+    const source=player.getAttribute('src');
+    try {player.play()?.catch?.(()=>{if(root.isConnected&&!ctx.signal.aborted&&source===player.getAttribute('src'))playbackStatus("Не удалось запустить видео. Нажмите «Смотреть» ещё раз.");});}
+    catch(_){playbackStatus("Видео не загрузилось. Нажмите «Смотреть» ещё раз.");}
+  };
   const nextVersion = () => Math.max(0, ...(current.versions || []).map(v => v.version), current.currentVersion?.version || 0) + 1;
   const title = () => `Редактировать · ${number ? "№" + number : current.title || "ролик"} · v${base.version}`;
 
@@ -133,8 +143,11 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   }
   function loadVersion() {
     const media = safeUrl(base.mediaUrl);
+    sb.reelPlayback?.get(player)?.destroy();
     duration = base.durationMs || 0;
-    if (media) player.src = media;else player.removeAttribute("src");
+    playbackStatus("");
+    if (media&&!sb.reelPlayback?.previewUrl(media)) player.src = media;else player.removeAttribute("src");
+    if(media)sb.reelPlayback?.attach(player,media,{signal:ctx.signal,onStatus:playbackStatus});
     $("[data-play]").hidden = !media;
     if (!media) status("Файл этой версии не найден.");
   }
@@ -373,7 +386,8 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   root.addEventListener("click", event => {
     const button = event.target.closest("button");if (!button || !root.contains(button)) return;
     if (button.hasAttribute("data-close")) return close();
-    if (button.hasAttribute("data-play") || button === player) {if (player.paused) void player.play()?.catch?.(() => {});else player.pause();return;}
+    if (button.hasAttribute("data-playback-retry")) {const preview=sb.reelPlayback?.get(player);if(preview)preview.retry();else{player.load();play();}return;}
+    if (button.hasAttribute("data-play")) {if (player.paused) {const preview=sb.reelPlayback?.get(player);if(preview&&!preview.ready)preview.retry();else{if(player.error)player.load();play();}}else player.pause();return;}
     if (button.hasAttribute("data-sources")) return toggleSources();
     if (button.hasAttribute("data-manual")) return toggleManual();
     if (button.dataset.op) return op(button.dataset.op);
@@ -418,7 +432,9 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
     selected = {track: dragged.track, index: to};dragged = null;update({...edl, [selected.track]: list});
   });
   root.addEventListener("dragend", () => {dragged = null;});
-  player.addEventListener("click", () => {if (player.paused) void player.play()?.catch?.(() => {});else player.pause();});
+  player.addEventListener("click", () => {if (player.paused) {if(player.error)player.load();play();}else player.pause();});
+  player.addEventListener("error",()=>{playbackStatus("Видео не загрузилось. Нажмите «Смотреть» ещё раз.");$("[data-play]").hidden=false;});
+  player.addEventListener("playing",()=>playbackStatus(""));
   player.addEventListener("play", () => {$("[data-play]").hidden = true;});
   player.addEventListener("pause", () => {$("[data-play]").hidden = !safeUrl(base.mediaUrl);});
   player.addEventListener("loadedmetadata", () => {
@@ -427,7 +443,7 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   player.addEventListener("timeupdate", renderMarks);
   root.addEventListener("keydown", event => {if (event.key === "Escape") {event.stopPropagation();close();}});
   ctx.signal.addEventListener("abort", () => {player.pause?.();root.remove();}, {once: true});
-  function close() {player.pause?.();root.remove();host.querySelector("[data-edit]")?.focus();}
+  function close() {sb.reelPlayback?.get(player)?.destroy();player.pause?.();root.remove();host.querySelector("[data-edit]")?.focus();}
   loadVersion();loadEdl();renderHead();renderTracks();renderEdl();
   $("#re-title").focus({preventScroll: true});
   return {root, close, get mark() {return {...mark};}, get take() {return take ? {...take} : null;}, get version() {return base.version;}, get edl() {return edl;}, get selected() {return {...selected};}};

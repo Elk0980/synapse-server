@@ -22,23 +22,50 @@ const uploads = [
   {id: 15, ideaId: 'idea-7', frame: 2, kind: 'take', status: 'uploading', name: 'd.mov', fileUrl: null},
   {id: 16, ideaId: 'idea-7', frame: 2, kind: 'draft', status: 'stored', name: 'cut.mp4', fileUrl: '/content/shooting/files/16?companyCode=avokado'}];
 
-function fixture({withIdea = true, number = 2, uploadsOf = () => uploads, post} = {}) {
+function fixture({withIdea = true, number = 2, uploadsOf = () => uploads, post,playback,material=reel} = {}) {
   const dom = new JSDOM('<main id="host"><button data-edit>Редактировать</button></main>', {url: 'https://cabinet.test/#content/materials', runScripts: 'outside-only', pretendToBeVisual: true});
   const w = dom.window, host = w.document.getElementById('host'), posts = [], gets = [], chat = [], changes = [];
   w.HTMLMediaElement.prototype.pause = () => {};
   w.HTMLMediaElement.prototype.play = () => Promise.resolve();
   w.addEventListener('synapse:hugh-chat', (event) => chat.push(plain(event.detail)));
   w.eval(shootingScript);
+  if(playback){w.fetch=playback;w.eval(fs.readFileSync(require.resolve('./reel-playback.js'),'utf8'));}
   w.eval(script);
   const ctx = {companyCode: 'avokado', signal: new w.AbortController().signal, can: () => true, csrfToken: 't',
     api: {get: async (url) => {gets.push(url);return {companyCode: 'avokado', uploads: uploadsOf()};},
       post: post || (async (url, body) => {posts.push({url, body: plain(body)});return {edit: {id: 30 + posts.length, taskId: 90 + posts.length},
         reel: {...reel, versions: reel.versions, edits: [{id: 31}]}};})}};
-  const editor = w.SbCabinet.reelEditor.open(host, {ctx, reel, version: 2, number, idea: withIdea ? idea : null, onChange: (next) => changes.push(next)});
+  const editor = w.SbCabinet.reelEditor.open(host, {ctx, reel:material, version: 2, number, idea: withIdea ? idea : null, onChange: (next) => changes.push(next)});
   const $ = (s) => editor.root.querySelector(s);
   const change = (node, value) => {node.value = value;node.dispatchEvent(new w.Event('change', {bubbles: true}));};
   return {w, host, editor, $, change, posts, gets, chat, changes, api: w.SbCabinet.reelEditor};
 }
+
+test('№320: play остаётся в пользовательском клике, отказ виден; повтор и ошибка файла не стирают текст',async t=>{
+ const f=fixture();t.after(()=>f.w.close());const player=f.$('[data-player]');let plays=0,reloads=0;
+ f.$('[data-ask]').value='Сохранённый текст';
+ player.play=()=>{plays++;return Promise.reject(new Error('NotAllowedError'));};
+ f.$('[data-play]').click();assert.equal(plays,1,'play вызван сразу в обработчике жеста');await tick();
+ assert.match(f.$('[data-playback-status]').textContent,/Не удалось запустить/);
+ Object.defineProperty(player,'error',{get:()=>({code:3})});player.load=()=>{reloads++;};player.play=()=>{plays++;return Promise.resolve();};
+ player.dispatchEvent(new f.w.Event('error'));assert.equal(f.$('[data-play]').hidden,false);
+ f.$('[data-play]').click();assert.equal(reloads,1);assert.equal(plays,2);assert.equal(f.$('[data-ask]').value,'Сохранённый текст');
+ f.$('[data-status]').textContent='Отправка не подтверждена';
+ player.dispatchEvent(new f.w.Event('playing'));assert.equal(f.$('[data-playback-status]').textContent,'');assert.equal(f.$('[data-status]').textContent,'Отправка не подтверждена');assert.equal(f.posts.length,0);
+});
+
+test('2318: редактор показывает оригинал при failed, сохраняет подпись и текст, повтор готовит копию',async t=>{
+ const url='https://cabinet.test/content/publishing-assets/avokado/'+'a'.repeat(32)+'.mp4';let state='failed',plays=0;
+ const material={...reel,versions:reel.versions.map(v=>({...v,mediaUrl:url}))};
+ const f=fixture({material,playback:async()=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({state})})});t.after(()=>f.w.close());await tick();
+ const player=f.$('[data-player]');player.play=()=>{plays++;player.dispatchEvent(new f.w.Event('playing'));return Promise.resolve();};
+ f.$('[data-ask]').value='Сохранённая правка';f.$('[data-status]').textContent='Отправка не подтверждена';
+ assert.equal(player.src,url);assert.equal(f.$('[data-playback-status]').textContent,'Показываем полный файл — может грузиться дольше');assert.equal(f.$('[data-playback-retry]').hidden,false);
+ f.$('[data-play]').click();assert.equal(plays,1);assert.match(f.$('[data-playback-status]').textContent,/Показываем полный файл/);assert.equal(f.$('[data-status]').textContent,'Отправка не подтверждена');
+ state='ready';f.$('[data-playback-retry]').click();await tick();
+ assert.equal(player.src,url+'?preview=mobile-v1');assert.equal(f.$('[data-playback-status]').textContent,'');assert.equal(f.$('[data-playback-retry]').hidden,true);
+ assert.equal(f.$('[data-ask]').value,'Сохранённая правка');assert.equal(f.posts.length,0);
+});
 
 test('Время и сцены: m:ss, разбор полей, клипы по «Сценарию по секундам»', () => {
   const {api} = fixture();

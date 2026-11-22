@@ -14,6 +14,18 @@ const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
     const headers={'cache-control':'no-store'};
+    // specs/238: только конкретная разметка через существующий Owner MCP; project scope проверяем и для owner.
+    if(['/coordination/mcp/reel_segments_get','/coordination/mcp/reel_segments_set'].includes(url.pathname)){
+      if(request.method!=='POST')fail(405,'Метод не поддерживается');
+      const body=await readJson(request),write=url.pathname.endsWith('_set');
+      require('./reel-segments-mcp').validate(body,write);
+      const {identity,company}=companyModuleContext(request,body.project,'autoposting.edit');
+      if(identity.role!=='owner')fail(403,'Инструмент доступен владельцу');
+      if(!identity.companyCodes.has(company.code.toLowerCase()))fail(404,'Проект не найден');
+      const result=write?materials.setSegments(company.code,body.reel_id,body.version,{segments:body.segments,expectedRevision:body.expected_revision},{summaryOnly:true})
+        :materials.getSegments(company.code,body.reel_id,body.version);
+      send(response,200,result,headers);return true;
+    }
     if(url.pathname==='/internal/reel-materials/notifications'){
       if(!trustedService(request))fail(403,'Только служебный обработчик');
       if(request.method!=='GET')fail(405,'Метод не поддерживается');
