@@ -36,6 +36,7 @@ const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
 const API_KEY = (process.env.API_KEY || '').trim();            // ключ владельца (Влад)
 const ASSETS_DIR = process.env.ASSETS_DIR || path.join(path.dirname(DATABASE_PATH), 'assets');
+const reelPreviews = require('./reel-previews').createReelPreviews({assetsDir:ASSETS_DIR});
 const MAX_ASSET = 8 * 1024 * 1024;
 const MAX_PUBLISHING_ASSET = 10 * 1024 * 1024;
 // Видео для очереди контента: вертикальные ролики до 60 МБ. Проверяется контейнер по сигнатуре, не по расширению.
@@ -1177,14 +1178,22 @@ const server = http.createServer(async (request, response) => {
       fs.writeFileSync(path.join(directory,name),bytes,{flag:'wx'});
       // Хеш нужен, чтобы сверить загруженный ролик с пакетом материалов, а не принять заглушку за готовое видео.
       const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      if(type==='video/mp4')try{reelPreviews.inspect(code,name);}catch{/* Подготовка просмотра не ломает сохранение оригинала. */}
       return reply(201,{url:`${PUBLISHING_ASSET_ORIGIN}/content/publishing-assets/${code}/${name}`,size:bytes.length,type,sha256});
     }
     if (url.pathname.startsWith('/content/publishing-assets/')) {
       if (!['GET','HEAD'].includes(request.method)) fail(405, 'Метод не поддерживается');
       const match = /^\/content\/publishing-assets\/([a-z0-9_-]{1,64})\/([a-f0-9]{32}\.(jpg|png|webp|mp4|webm))$/.exec(url.pathname);
       if (!match || !Object.hasOwn(COMPANIES,match[1])) fail(404,'Материал не найден');
-      const file = path.join(ASSETS_DIR,'publishing',match[1],match[2]);
+      let file = path.join(ASSETS_DIR,'publishing',match[1],match[2]);
       if (!fs.existsSync(file)) fail(404,'Материал не найден');
+      if(url.searchParams.get('preview')===reelPreviews.profile){
+        if(match[3]!=='mp4')fail(400,'Копия просмотра доступна для MP4');
+        const preview=reelPreviews.inspect(match[1],match[2],{start:request.method==='GET'&&url.searchParams.get('cached')!=='1'});
+        if(url.searchParams.get('status')==='1')return reply(200,{state:preview.state},{'cache-control':'no-store'});
+        if(preview.state!=='ready')return reply(503,{error:'Копия просмотра ещё не готова'},{'cache-control':'no-store','retry-after':'2'});
+        file=preview.file;
+      }
       const size = fs.statSync(file).size;
       // При прямом открытии ссылки браузер строит собственную страницу с <video>, и она подчиняется CSP этого ответа.
       // Без media-src ролик блокируется правилом default-src 'none' (readyState 0). Разрешаем только загрузку медиа
@@ -1554,6 +1563,7 @@ server.listen(PORT, () => {
 });
 
 function shutdownContent() {
+  const previewsStopped=reelPreviews.close();
   clearInterval(economyTimer);
   projectChat.stopWorker();
   taskDispatchWorker.stop();
@@ -1562,6 +1572,7 @@ function shutdownContent() {
   const contentPlanStopped=contentPlanRunner.stop();
   const peopleStopped=peopleService.stop();
   server.close(async () => {
+    await previewsStopped;
     await contentPlanStopped;
     await montageStopped;
     await notificationsStopped;

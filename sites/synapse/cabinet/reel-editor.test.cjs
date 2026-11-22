@@ -40,6 +40,19 @@ function fixture({withIdea = true, number = 2, uploadsOf = () => uploads, post} 
   return {w, host, editor, $, change, posts, gets, chat, changes, api: w.SbCabinet.reelEditor};
 }
 
+test('№320: play остаётся в пользовательском клике, отказ виден; повтор и ошибка файла не стирают текст',async t=>{
+ const f=fixture();t.after(()=>f.w.close());const player=f.$('[data-player]');let plays=0,reloads=0;
+ f.$('[data-ask]').value='Сохранённый текст';
+ player.play=()=>{plays++;return Promise.reject(new Error('NotAllowedError'));};
+ f.$('[data-play]').click();assert.equal(plays,1,'play вызван сразу в обработчике жеста');await tick();
+ assert.match(f.$('[data-playback-status]').textContent,/Не удалось запустить/);
+ Object.defineProperty(player,'error',{get:()=>({code:3})});player.load=()=>{reloads++;};player.play=()=>{plays++;return Promise.resolve();};
+ player.dispatchEvent(new f.w.Event('error'));assert.equal(f.$('[data-play]').hidden,false);
+ f.$('[data-play]').click();assert.equal(reloads,1);assert.equal(plays,2);assert.equal(f.$('[data-ask]').value,'Сохранённый текст');
+ f.$('[data-status]').textContent='Отправка не подтверждена';
+ player.dispatchEvent(new f.w.Event('playing'));assert.equal(f.$('[data-playback-status]').textContent,'');assert.equal(f.$('[data-status]').textContent,'Отправка не подтверждена');assert.equal(f.posts.length,0);
+});
+
 test('Время и сцены: m:ss, разбор полей, клипы по «Сценарию по секундам»', () => {
   const {api} = fixture();
   assert.equal(api.clock(12000), '0:12'); assert.equal(api.clock(72500), '1:12,5');

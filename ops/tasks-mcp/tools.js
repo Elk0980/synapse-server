@@ -27,6 +27,13 @@ const archiveLinks = z.array(z.strictObject({
 })).max(50);
 
 const TOOLS = [
+  ['reel_segments_get', 'Прочитать отрезки конкретной версии ролика в разрешённом проекте. Перед записью сохраните revision; файл и статусы не изменяются.', {
+    project,reel_id:id,version:id
+  }],
+  ['reel_segments_set', 'Сохранить отрезки существующей версии без повторной загрузки файла. expected_revision из reel_segments_get обязателен; конфликт409 требует перечитать. Повтор одинаковой разметки безопасен. Отрезки идут подряд от0 до конца; ничего не публикуется.', {
+    project,reel_id:id,version:id,expected_revision:z.string().regex(/^[a-f0-9]{64}$/),
+    segments:z.array(z.strictObject({startMs:z.number().int().min(0),endMs:z.number().int().positive(),label:z.string().max(200).optional(),enabled:z.boolean().optional(),sound:z.boolean().optional()})).min(1).max(100)
+  }],
   ['tasks_list', 'Показать задачи разрешённых проектов с фильтрами; план дня рассчитывается по Asia/Bangkok.', {
     project:project.optional(), status:statuses.optional(), executor:short.optional(), parent_id:id.nullable().optional(),
     today:z.boolean().optional(), overview:z.boolean().optional(), search:z.string().max(200).optional(), limit:z.number().int().min(1).max(100).optional(),

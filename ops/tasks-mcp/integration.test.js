@@ -36,6 +36,7 @@ test('MCP → настоящий кабинет/CSRF → MCP: одна запи�
   const tools = await f.rpc('tools/list');
   assert.deepEqual(tools.result.tools.map(tool => tool.name).sort(), [
     'tasks_list', 'task_get', 'task_create', 'task_update', 'task_comment',
+    'reel_segments_get', 'reel_segments_set',
     'agents_list', 'agent_report', 'session_start', 'doc_read', 'session_end',
     'archive_list', 'archive_read', 'archive_write',
     'agent_launch', 'agent_status', 'agent_message', 'agent_stop', 'agent_worker_claim', 'agent_worker_update'
@@ -92,7 +93,7 @@ test('отсутствующая папка канона не мешает MCP/C
   t.after(f.stop);
   await assert.rejects(fs.stat(f.docs), error => error.code === 'ENOENT');
   assert.equal((await fetch(f.mcpUrl + '/health')).status, 200);
-  assert.equal((await f.rpc('tools/list')).result.tools.length, 19);
+  assert.equal((await f.rpc('tools/list')).result.tools.length, 21);
   assert.equal((await f.call('tasks_list', {})).isError, false);
   const created = await f.call('task_create', {client_ref:'absent-map-1', title:'SAMPLE без карты',
     project:'palitra-love', executor:'SAMPLE Codex', reviewer:'SAMPLE Owner', source:'manual'});

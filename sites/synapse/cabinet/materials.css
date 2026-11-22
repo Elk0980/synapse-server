@@ -74,7 +74,9 @@ body.mt-modal-open { overflow:hidden; }
 @media (min-width:900px) { .mt-layout { grid-template-columns:minmax(260px,320px) minmax(0,1fr); align-items:start; } }
 .mt-phone { width:100%; max-width:320px; justify-self:center; min-width:0; }
 /* На телефоне кадр и управление заполняют закреплённую полосу; на ПК закреплена колонка. */
-.mt-transport { display:none; }
+.mt-transport { display:grid; gap:6px; margin-top:8px; min-width:0; }
+.mt-transport button { min-height:44px; }
+.mt-transport p:empty { display:none; }
 @media (min-width:900px) { .mt-phone { position:sticky; top:56px; } }
 @media (max-width:899px) {
   .mt-layout { display:flex; flex-direction:column; gap:0; }

@@ -100,7 +100,7 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
   function segmentsOf(value,durationMs){
     if(!Array.isArray(value)||!value.length||value.length>maxClips)fail(400,`Отрезки: от 1 до ${maxClips}`);
     const limit=durationMs||maxMs;let cursor=0;
-    return value.map(item=>{
+    const result=value.map(item=>{
       object(item,['startMs','endMs','label','enabled','sound']);
       const startMs=int(item.startMs,0,limit,'Начало отрезка'),endMs=int(item.endMs,0,limit,'Конец отрезка');
       if(startMs!==cursor)fail(400,'Отрезки идут подряд от начала ролика, без пропусков и наложений');
@@ -111,6 +111,8 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
       for(const key of ['enabled','sound'])if(item[key]!==undefined&&typeof item[key]!=='boolean')fail(400,'«Включён» и «звук» у отрезка — true или false');
       return {startMs,endMs,...(label?{label}:{}),...(item.enabled===false?{enabled:false}:{}),...(item.sound===false?{sound:false}:{})};
     });
+    if(durationMs&&cursor!==durationMs)fail(400,'Отрезки должны покрывать весь ролик до конца');
+    return result;
   }
   const storedSegments=version=>{const list=version?.segments?parse(version.segments,null):null;return Array.isArray(list)&&list.length?list:null;};
   function notesOf(value,version){
@@ -131,12 +133,28 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     if(notes.reduce((n,note)=>n+(note.text||'').length,0)>5000)fail(400,'Общий текст пожеланий: не больше 5000 символов');
     return notes;
   }
-  function setSegments(code,id,versionNumber,body){
-    const owner=company(db,code),row=core.rowFor(owner,id);object(body,['segments']);
+  const segmentRevision=version=>require('node:crypto').createHash('sha256').update(JSON.stringify([
+    version.version,version.media_url,version.sha256,version.duration_ms,storedSegments(version)||[]])).digest('hex');
+  function getSegments(code,id,versionNumber){
+    const owner=company(db,code),row=core.rowFor(owner,id),version=core.liveVersion(row.id,versionNumber);
+    if(!version)fail(404,'Версия ролика не найдена','NOT_FOUND');
+    return {companyCode:owner.code,reelId:row.id,version:version.version,durationMs:version.duration_ms,
+      mediaSha256:version.sha256||'',revision:segmentRevision(version),segments:storedSegments(version)||[]};
+  }
+  function setSegments(code,id,versionNumber,body,{summaryOnly=false}={}){
+    const owner=company(db,code),row=core.rowFor(owner,id);object(body,['segments','expectedRevision']);
     const version=core.liveVersion(row.id,versionNumber);if(!version)fail(404,'Версия ролика не найдена','NOT_FOUND');
     const list=segmentsOf(body.segments,version.duration_ms);
-    db.prepare('UPDATE reel_versions SET segments=? WHERE reel_id=? AND version=?').run(JSON.stringify(list),row.id,version.version);
-    return core.full(owner,row.id);
+    if(body.expectedRevision!==undefined&&(typeof body.expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(body.expectedRevision)))fail(400,'Некорректная ревизия отрезков');
+    return core.transaction(()=>{
+      core.rowFor(owner,id);
+      const current=core.liveVersion(row.id,versionNumber);
+      if(!current)fail(404,'Версия ролика не найдена','NOT_FOUND');
+      const same=JSON.stringify(storedSegments(current))===JSON.stringify(list);
+      if(!same&&body.expectedRevision!==undefined&&body.expectedRevision!==segmentRevision(current))fail(409,'Разметка уже изменилась. Прочитайте версию заново.','SEGMENTS_CONFLICT');
+      if(!same)db.prepare('UPDATE reel_versions SET segments=? WHERE reel_id=? AND version=?').run(JSON.stringify(list),row.id,version.version);
+      return summaryOnly?getSegments(code,id,versionNumber):core.full(owner,row.id);
+    });
   }
   /* «Живой монтаж»: переключатели по отрезкам → EDL v1. Видео и звук строит сервер из включённых отрезков в исходном
      порядке, поэтому перестановка и подрезка невозможны. Рендера нет: правку забирает агент монтажа. */
@@ -357,6 +375,6 @@ function createReelRequests(db,{core,autoposting,maxMs,maxClips,executor}){
     return {...out,...extra,openRequests:requests.filter(item=>!FINAL.includes(item.status)).length,requests,history:historyOf(owner,row),problemReports:problems.list(owner,row.id)};
   }
   return {REVIEW_FIELDS,reviewOf,saveReview,ownText,segmentsOf,decorate,hughEntries,
-    api:{createRequest,cancelRequest,requestQueue,replyRequest:reply,setSegments,liveEdit,reportProblem:problems.report}};
+    api:{createRequest,cancelRequest,requestQueue,replyRequest:reply,getSegments,setSegments,liveEdit,reportProblem:problems.report}};
 }
 module.exports={createReelRequests,REQUEST_KINDS:KINDS,REQUEST_STATUSES:STATUSES,DECISIONS};

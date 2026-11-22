@@ -28,12 +28,13 @@ const full = (over = {}) => ({...summary(), versions: [{version: 1, mediaUrl: as
   history: [{id: 2, field: 'decision', fieldLabel: 'Решение', before: '', after: 'take', beforeLabel: 'без решения', afterLabel: 'берём', comment: 'Хороший дубль', authorName: 'Редактор', at: '2026-11-20T02:00:00Z'},
     {id: 1, field: 'caption', fieldLabel: 'Подпись', before: '', after: 'Первая подпись', comment: '', authorName: 'Редактор', at: '2026-11-20T01:00:00Z'}], ...over});
 
-function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel = full, list = () => [summary()], respond, user, draftStorage, sessionValues} = {}) {
+function fixture({permissions = ['autoposting.view', 'autoposting.edit'], reel = full, list = () => [summary()], respond, user, draftStorage, sessionValues,playback} = {}) {
   const dom = new JSDOM('<main id="view"></main>', {url: 'https://cabinet.test/#content/materials', runScripts: 'outside-only'});
   const w = dom.window, el = w.document.getElementById('view'), calls = [];
   if(draftStorage)w.sessionStorage.setItem('mt-problems:alpha:7',draftStorage);
   for(const [key,value] of sessionValues || []) w.sessionStorage.setItem(key,value);
   w.eval(kitSource);
+  if(playback){w.fetch=playback;w.eval(fs.readFileSync(require.resolve('./reel-playback.js'),'utf8'));}
   w.SynapseModulesQueue = [];
   w.eval(script);
   const [, definition] = w.SynapseModulesQueue[0];
@@ -505,6 +506,42 @@ test('живой монтаж: у версии без разметки экра�
   await f.open();
   assert.equal(f.el.querySelector('[data-live-empty]').textContent, 'Отрезки появятся после разметки ролика.');
   assert.equal(f.el.querySelector('[data-live-row]'), null);assert.equal(f.el.querySelector('[data-live-save]'), null);
+});
+
+test('№320: новая версия без фраз имеет просмотр/перемотку; отказ и повтор сохраняют плеер и черновик',async t=>{
+ const unmarked={version:2,editId:5,mediaUrl:asset('b'),durationMs:10000};
+ const f=fixture({reel:()=>full({currentVersion:unmarked,versions:[unmarked]})});t.after(()=>f.w.close());await f.open();
+ const player=f.el.querySelector('[data-player]'),button=f.el.querySelector('[data-live-play]');
+ assert.ok(button);assert.equal(button.disabled,false);assert.equal(f.el.querySelector('[data-live-time]').textContent,'0:00 / 0:10');
+ let plays=0,reloads=0;player.play=()=>{plays++;return Promise.reject(new Error('NotAllowedError'));};player.load=()=>{reloads++;};
+ const caption=f.el.querySelector('[data-review] textarea');if(caption)caption.value='Сохранённый черновик';
+ await f.click('[data-live-play]');assert.equal(plays,1);assert.match(f.el.querySelector('[data-playback-status]').textContent,/Не удалось запустить/);
+ assert.equal(f.el.querySelector('[data-playback-retry]').hidden,false);
+ player.play=()=>{plays++;player.dispatchEvent(new f.w.Event('playing'));return Promise.resolve();};
+ await f.click('[data-playback-retry]');assert.equal(reloads,1);assert.equal(plays,2);assert.equal(f.el.querySelector('[data-player]'),player);
+ if(caption)assert.equal(caption.value,'Сохранённый черновик');
+ const progress=f.el.querySelector('[data-live-progress]');progress.value=500;progress.dispatchEvent(new f.w.Event('change',{bubbles:true}));assert.equal(player.currentTime,5);
+ player.dispatchEvent(new f.w.Event('timeupdate'));assert.equal(f.el.querySelector('[data-live-time]').textContent,'0:05 / 0:10');
+ player.dispatchEvent(new f.w.Event('error'));assert.equal(f.el.querySelector('[data-playback-retry]').hidden,false);
+ assert.equal(f.el.querySelector('[data-live-save]'),null);assert.equal(f.calls.filter(c=>c.method!=='GET').length,0);
+});
+
+test('№320: неизвестная длительность не блокирует пользовательский play, старый сервер тоже имеет управление',async t=>{
+ const unmarked={version:1,mediaUrl:asset('a'),durationMs:null};
+ const f=fixture({reel:()=>{const r=full({currentVersion:unmarked,versions:[unmarked]});delete r.requests;return r;}});t.after(()=>f.w.close());await f.open();
+ const player=f.el.querySelector('[data-player]');let plays=0;player.play=()=>{plays++;return Promise.resolve();};
+ assert.equal(f.el.querySelector('[data-live-play]').disabled,false);await f.click('[data-live-play]');assert.equal(plays,1);
+ Object.defineProperty(player,'duration',{value:12});player.dispatchEvent(new f.w.Event('loadedmetadata'));
+ assert.equal(f.el.querySelector('[data-live-time]').textContent,'0:00 / 0:12');
+});
+
+test('№320: карточка не назначает тяжёлый src до готовности серверной копии; черновик и плеер сохранены',async t=>{
+ let done;const unmarked={version:2,mediaUrl:asset('b'),durationMs:10000};
+ const f=fixture({reel:()=>full({currentVersion:unmarked,versions:[unmarked]}),playback:()=>new Promise(r=>done=r)});t.after(()=>f.w.close());
+ await f.open();const player=f.el.querySelector('[data-player]');assert.equal(player.hasAttribute('src'),false);assert.match(f.el.querySelector('[data-playback-status]').textContent,/Готовим видео/);
+ let plays=0;player.play=()=>{plays++;return Promise.resolve();};await f.click('[data-live-play]');assert.equal(plays,0,'подготовка не превращается в отложенный autoplay');
+ done({ok:true,headers:{get:()=> 'application/json'},json:async()=>({state:'ready'})});await settle();
+ assert.equal(player.src,asset('b')+'?preview=mobile-v1');await f.click('[data-live-play]');assert.equal(plays,1);assert.equal(f.el.querySelector('[data-player]'),player);
 });
 
 test('только просмотр: решение, подпись, просьбы и отрезки видны, кнопок изменения нет', async () => {

@@ -402,7 +402,8 @@ function create(el, ctx) {
   }
   function cardHtml(item) {
     const media = hasCut(item) ? safeUrl(item.reel.currentVersion.mediaUrl) : "";
-    const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata" src="${esc(media)}#t=0.5"></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
+    const preview=media&&sb.reelPlayback?.previewUrl(media);
+    const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata" src="${esc(preview?preview+'&cached=1':media)}#t=0.5"></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
     const version = item.reel?.currentVersion ? ` · v${esc(item.reel.currentVersion.version ?? 1)}` : "";
     const when = item.date ? `${esc(dateShort(item.date))}${version}` : `${item.number ? "дата — по плану" : "без даты"}${version}`;
     const note = item.retired ? "" : AT_EDITOR.has(item.stage) ? "Идёт монтаж" : item.group === "ahead" ? "Материалы не загружены" : "";
@@ -458,6 +459,7 @@ function create(el, ctx) {
     }
   }
   function close() {
+    const player=el.querySelector('[data-player]');sb.reelPlayback?.get(player)?.destroy();player?.pause();
     const key=state.open?.key,scroll=$("[data-grid]").scrollTop;
     const review=reviewDraft();if(review&&key)state.reviewDrafts.set(key,review);
     if (state.open?.id) syncReelSummary(state.open);
@@ -547,6 +549,8 @@ function create(el, ctx) {
   }
   function renderDetail() {
     const reel = state.open, item = state.item, version = currentVersion(), media = safeUrl(version?.mediaUrl), node = $("[data-detail]");
+    const previous=node.querySelector('[data-player]');sb.reelPlayback?.get(previous)?.destroy();previous?.pause();
+    const playerSource=sb.reelPlayback?.previewUrl(media)?'':media;
     node.hidden = false;modal("detail", true);
     if (!state.busy) toggleUpload(false);const opener = $("[data-upload-open]");if (opener) opener.hidden = true;
     const versions = reel.versions || [];
@@ -565,7 +569,7 @@ function create(el, ctx) {
       <div class="mt-layout">
         <div class="mt-phone">
           <fieldset class="mt-platforms" aria-label="Маска площадки">${switcher.map(id => `<label title="${esc(platformOf(id).label)}"><input type="radio" name="mt-platform" value="${id}"${id === state.platform ? " checked" : ""}><span>${esc(platformOf(id).short)}</span></label>`).join("")}</fieldset>
-          <div class="mt-stick"><div class="mt-screen">${media ? `<video controls playsinline preload="metadata" src="${esc(media)}" data-player></video>` : "<p>Файл не найден</p>"}${maskHtml(state.platform)}</div>${fresh(reel) && liveFor(reel, version).segments.length ? `<div class="mt-transport" data-live-transport><button type="button" class="plain-button" data-live-play>▶ Смотреть</button><button type="button" class="plain-button" data-live-start>⏮ С начала</button><input type="range" min="0" max="1000" value="0" aria-label="Прогресс итогового ролика" data-live-progress><p data-live-time></p><p data-live-count></p><div data-live-mobile-actions></div></div>` : ""}</div>
+          <div class="mt-stick"><div class="mt-screen">${media ? `<video controls playsinline preload="metadata"${playerSource?` src="${esc(playerSource)}"`:""} data-player></video>` : "<p>Файл не найден</p>"}${maskHtml(state.platform)}</div>${media ? `<div class="mt-transport" data-live-transport><button type="button" class="plain-button" data-live-play>▶ Смотреть</button><button type="button" class="plain-button" data-live-start>⏮ С начала</button><input type="range" min="0" max="1000" value="0" aria-label="Прогресс итогового ролика" data-live-progress><p data-live-time></p><p data-live-count></p><p role="status" data-playback-status></p><button type="button" class="plain-button" data-playback-retry hidden>Повторить загрузку</button><div data-live-mobile-actions></div></div>` : ""}</div>
           <label class="mt-toggle"><input type="checkbox" data-mask-toggle checked> Маска площадки</label>
           <p class="muted mt-note">Тёмные зоны — где лягут шапка, подпись и кнопки ${esc(platformOf(state.platform).label)}. Зоны ориентировочные.</p>
         </div>
@@ -601,6 +605,9 @@ function create(el, ctx) {
     if (player) {
       player.addEventListener("timeupdate", () => previewTick(player));
       for (const event of ["play", "pause", "ended", "loadedmetadata"]) player.addEventListener(event, () => paintPlayback(player));
+      player.addEventListener("error", () => playbackError());
+      player.addEventListener("playing", () => playbackError(""));
+      sb.reelPlayback?.attach(player,media,{signal:ctx.signal,onStatus:playbackError});
     }
     placeLiveActions();paintPlayback(player);
   }
@@ -916,15 +923,32 @@ function create(el, ctx) {
     if (actions && host) host.append(actions);
   }
   mobilePlayback?.addEventListener("change",placeLiveActions,{signal:ctx.signal});
+  // Просмотр не зависит от разметки: у загруженной/новой версии фразы могут появиться позднее.
+  function playbackTimeline(player) {
+    const live=state.live;
+    if(live?.segments.length)return liveOps.timeline(live.segments,live.toggles,(Number(player.currentTime)||0)*1000);
+    const total=Number.isFinite(player.duration)&&player.duration>0?player.duration*1000:currentVersion()?.durationMs||0;
+    return {total,elapsed:Math.min(total,(Number(player.currentTime)||0)*1000),count:0};
+  }
+  function playbackError(message="Видео не загрузилось. Проверьте соединение и повторите загрузку.",canRetry=true) {
+    setText("[data-playback-status]",message);
+    const retry=el.querySelector('[data-playback-retry]');if(retry)retry.hidden=!message||!canRetry;
+  }
+  function playVideo(player) {
+    const preview=sb.reelPlayback?.get(player);if(preview&&!preview.ready){preview.hint();return;}
+    playbackError("");
+    try {player.play()?.catch?.(()=>{if(player.isConnected&&!ctx.signal.aborted)playbackError("Не удалось запустить видео. Нажмите «Повторить загрузку».");});}
+    catch(_){playbackError();}
+  }
   function paintPlayback(player) {
-    const live = state.live;if (!live || !player) return;
-    const ms = (Number(player.currentTime) || 0) * 1000, timeline = liveOps.timeline(live.segments, live.toggles, ms);
+    const live = state.live;if (!player) return;
+    const ms = (Number(player.currentTime) || 0) * 1000, timeline = playbackTimeline(player);
     setText("[data-live-time]", `${mmss(timeline.elapsed)} / ${mmss(timeline.total)}`);
-    setText("[data-live-count]", `В ролике ${timeline.count} из ${live.segments.length} фраз`);
+    setText("[data-live-count]", live?.segments.length ? `В ролике ${timeline.count} из ${live.segments.length} фраз` : "");
     setText("[data-live-play]", player.paused ? "▶ Смотреть" : "Ⅱ Пауза");
-    for (const button of el.querySelectorAll("[data-live-play],[data-live-start]")) button.disabled = !timeline.total;
+    for (const button of el.querySelectorAll("[data-live-play],[data-live-start]")) button.disabled = Boolean(live?.segments.length&&!timeline.total);
     const progress = el.querySelector("[data-live-progress]");if (progress) {progress.value = timeline.total ? Math.round(timeline.elapsed / timeline.total * 1000) : 0;progress.disabled = !timeline.total;}
-    const index = live.segments.findIndex(s => ms >= s.startMs && ms < s.endMs);
+    const index = live?.segments.findIndex(s => ms >= s.startMs && ms < s.endMs) ?? -1;
     for (const row of el.querySelectorAll("[data-live-row]")) {
       const active = Number(row.dataset.liveRow) === index, was = row.classList.contains("is-current");
       row.classList.toggle("is-current", active);
@@ -1004,7 +1028,7 @@ function create(el, ctx) {
   }
   function previewPhrase(index) {
     const item=state.live?.segments[index],player=el.querySelector('[data-player]');
-    if (item&&player) {state.live.inspect=index;player.currentTime=item.startMs/1000;player.play?.()?.catch?.(()=>{});}
+    if (item&&player) {state.live.inspect=index;player.currentTime=item.startMs/1000;playVideo(player);}
   }
   function toggleLive(value) {
     const [field, index] = String(value).split(":"), toggle = state.live?.toggles[Number(index)];
@@ -1013,7 +1037,7 @@ function create(el, ctx) {
     el.querySelector(`[data-live-toggle="${field}:${Number(index)}"]`)?.focus({preventScroll: true});
   }
   function previewTick(player) {
-    const live = state.live;if (!live) return;
+    const live = state.live;if (!live?.segments.length) {paintPlayback(player);return;}
     const ms = (Number(player.currentTime) || 0) * 1000, inspected = live.segments[live.inspect];
     // По нажатию можно посмотреть и убранную фразу. За её границами снова действует монтаж.
     const inspecting = Number.isInteger(live.inspect) && inspected && ms >= inspected.startMs && ms < inspected.endMs;
@@ -1376,14 +1400,19 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-requests-refresh")) void reloadOpen("Обновлено.");
     else if (target.dataset.liveToggle) toggleLive(target.dataset.liveToggle);
     else if (target.hasAttribute("data-live-save")) void saveLive();
+    else if (target.hasAttribute("data-playback-retry")) {
+      const player=el.querySelector('[data-player]'),preview=sb.reelPlayback?.get(player);
+      if(preview&&!preview.ready)preview.retry();else if(player){player.load();playVideo(player);}
+    }
     else if (target.hasAttribute("data-live-play") || target.hasAttribute("data-live-start")) {
-      const player = el.querySelector("[data-player]"), live = state.live;if (!player || !live) return;
-      if (target.hasAttribute("data-live-start")) {live.inspect = null;player.currentTime = liveOps.sourceAt(live.segments, live.toggles, 0) / 1000;}
+      const player = el.querySelector("[data-player]"), live = state.live;if (!player) return;
+      const sourceAt=elapsed=>live?.segments.length?liveOps.sourceAt(live.segments,live.toggles,elapsed):elapsed;
+      if (target.hasAttribute("data-live-start")) {if(live)live.inspect = null;player.currentTime = sourceAt(0) / 1000;}
       else if (!player.paused) {player.pause();paintPlayback(player);return;}
-      const timeline = liveOps.timeline(live.segments, live.toggles, player.currentTime * 1000);
-      if (!timeline.total) return;
-      if (player.ended || timeline.elapsed >= timeline.total) {live.inspect = null;player.currentTime = liveOps.sourceAt(live.segments, live.toggles, 0) / 1000;}
-      previewTick(player);player.play?.()?.catch?.(() => {});
+      const timeline = playbackTimeline(player);
+      if (live?.segments.length&&!timeline.total) return;
+      if (player.ended || timeline.total&&timeline.elapsed >= timeline.total) {if(live)live.inspect = null;player.currentTime = sourceAt(0) / 1000;}
+      previewTick(player);playVideo(player);
     }
     else if (target.hasAttribute("data-live-seek")) openPhrase(Number(target.dataset.liveSeek));
     else if (target.hasAttribute("data-phrase-preview")) {const index=Number(target.dataset.phrasePreview);closeWish();previewPhrase(index);}
@@ -1417,10 +1446,11 @@ function create(el, ctx) {
   el.addEventListener("input", event => {if (event.target.closest?.("[data-wish-form]")) readWishDraft(event.target.closest("form"));if (event.target.matches?.("[data-problem-text]") && problem) {problem.text = event.target.value;storeProblems();}});
   el.addEventListener("change", event => {
     if (event.target.matches?.("[data-problem-reel]")) {if (problem) problem.text = $("[data-problem-text]").value;selectProblem(event.target.value);return;}
-    if (event.target.hasAttribute("data-live-progress") && state.live) {
+    if (event.target.hasAttribute("data-live-progress")) {
       const player = el.querySelector("[data-player]"), live = state.live;
-      live.inspect = null;
-      if (player) {player.currentTime = liveOps.sourceAt(live.segments, live.toggles, liveOps.timeline(live.segments, live.toggles, 0).total * Number(event.target.value) / 1000) / 1000;previewTick(player);}
+      if(live)live.inspect = null;
+      if (player) {const at=playbackTimeline(player).total*Number(event.target.value)/1000;
+        player.currentTime = (live?.segments.length?liveOps.sourceAt(live.segments,live.toggles,at):at)/1000;previewTick(player);}
       return;
     }
     if (event.target.name === "mt-platform") {

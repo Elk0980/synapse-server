@@ -88,7 +88,7 @@ async function startFixture({installDocuments = true, installArchive = false,wat
       role: 'owner', permissions: ['crm.edit'], companyCodes: ['synapse-business', 'palitra-love'] })).toString('base64url');
     async function crm(route, method = 'GET', body, identity = owner) {
       const response = await fetch(crmUrl + route, { method,
-        headers: { 'x-api-key': key, 'x-synapse-crm-identity': identity, 'content-type': 'application/json' },
+        headers: { 'x-api-key': key, ...(identity ? {'x-synapse-crm-identity':identity} : {}), 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body) });
       return { status: response.status, body: await response.json(), headers: response.headers };
     }
