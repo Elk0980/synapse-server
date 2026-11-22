@@ -113,7 +113,7 @@ test('№289/2257: только7 старых тем — пустой основ
     assert.equal(a.calls.some(c=>c.method!=='GET'),false);assert.equal(JSON.stringify(plan),before);
     await a.mount();assert.equal(a.root.querySelector('[data-cp-legacy]').open,false,'после восстановления экрана блок свёрнут');
     block.dispatchEvent(new a.window.Event('toggle')); // запоздавшее событие прежнего экрана не открывает новый
-    a.root.querySelector('[data-cp-sort-toggle]').click();
+    a.root.querySelector('[data-cp-tab="plan"]').click();
     assert.equal(a.root.querySelector('[data-cp-legacy]').open,false);
   }
 });
