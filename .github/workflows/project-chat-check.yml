@@ -135,7 +135,7 @@ jobs:
       # Только node --test, без сети, публикаций и обращений к моделям.
       - name: Тесты Медиа-наставника
         timeout-minutes: 10
-        run: node --test ops/crm/media-mentor.test.js ops/crm/media-mentor-rollout.test.js ops/crm/media-mentor-http.test.js ops/crm/media-mentor-transfer.test.js ops/crm/media-mentor-pilot.test.js ops/crm/reel-plan*.test.js
+        run: node --test ops/crm/media-mentor.test.js ops/crm/media-mentor-rollout.test.js ops/crm/media-mentor-http.test.js ops/crm/media-mentor-transfer.test.js ops/crm/media-mentor-pilot.test.js ops/crm/media-mentor-legacy-ids.test.js ops/crm/reel-plan*.test.js
 
       - name: Тесты исходной статистики до запуска
         timeout-minutes: 10
