@@ -155,6 +155,7 @@
     const owner = ctx.identity?.role === 'owner' || ctx.user?.role === 'owner';
     const vocab = mentor.vocabulary || {platforms: []}, platformLabel = (id) => vocab.platforms.find((p) => p.id === id)?.label || id;
     const allDays = mentor.plan?.days || [], states = mentor.variants || [];
+    const currentDays = allDays.filter(hasIdeaId), legacyDays = allDays.filter(idea => !hasIdeaId(idea));
     const statusOf = (idea) => { const list = states.filter((v) => v.ideaId === idea.ideaId);
       return list.find((v) => v.status === 'rejected')?.status || list.find((v) => v.status === 'pending')?.status
         || list.find((v) => v.status === 'approved')?.status || list[0]?.status || 'empty'; };
@@ -169,11 +170,11 @@
       return `<span class="cp-st" data-status="${esc(prod || st)}">${esc(prod ? PROD[prod] : (VSTATUS[st] || st))}</span>`; };
     /* №141: есть план (хоть одна строка) — сразу краткий вид плана, анкета свёрнута в одну строку внизу.
        Плана нет — порядок прежний: анкета сверху и открыта, пока не заполнена. */
-    const number = new Map(allDays.map((idea, index) => [idea.ideaId, index])); state.numbers = number;
+    const number = new Map(currentDays.map((idea, index) => [idea.ideaId, index])); state.numbers = number;
     /* specs/224-content-archive: «Убрать» доступно, когда сервер отдаёт архив идей (archivedIdeas); старый сервер — без кнопок. */
     const archiving = edit && Array.isArray(mentor.archivedIdeas), archivedIdeas = Array.isArray(mentor.archivedIdeas) ? mentor.archivedIdeas : [];
     if (state.tab === 'archive' && !Array.isArray(mentor.archivedIdeas)) state.tab = 'plan';
-    const days = state.tab === 'archive' ? [] : allDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
+    const days = state.tab === 'archive' ? [] : currentDays.filter(idea => state.tab === 'drafts' ? idea.productionStatus === 'draft' : idea.productionStatus !== 'draft').slice().sort((a,b) => {
       const primary = state.sort === 'platform' ? platforms(a).localeCompare(platforms(b),'ru')
         : state.sort === 'status' ? (STATUS_RANK[statusOf(a)] ?? 9) - (STATUS_RANK[statusOf(b)] ?? 9)
         : state.sort === 'number' ? number.get(a.ideaId) - number.get(b.ideaId) : 0;
@@ -185,7 +186,7 @@
        Публикаций план не знает, поэтому граница — по дате и этапу, а не «вышло на площадке». */
     const todayKey = todayIn(tzName(ctx, mentor));
     /* Новый сервер знает публикации (plan.stageFacts, idea.stage): выше — опубликованные и снятые с публикации. */
-    const staged = Boolean(mentor.plan?.stageFacts) || allDays.some((idea) => serverStage(idea));
+    const staged = Boolean(mentor.plan?.stageFacts) || currentDays.some((idea) => serverStage(idea));
     state.aboveLabel = staged ? '↑ выше — опубликованные' : '↑ выше — прошедшие даты';
     const above = staged ? (idea) => ['published', 'unpublished'].includes(serverStage(idea))
       : (idea) => String(idea.date || '') < todayKey && statusOf(idea) === 'approved';
@@ -227,7 +228,7 @@
       <div id="cp-sort-menu" role="group" aria-label="Сортировка" ${state.sortOpen ? '' : 'hidden'}>${SORTS.map(({id, label}) => `<button type="button" data-cp-sort="${id}" aria-pressed="${state.sort === id}">${state.sort === id ? '✓ ' : ''}${esc(label)}</button>`).join('')}</div></div></div></div>`;
     const plan = state.tab === 'archive' ? archiveList(archivedIdeas, edit) : `<section class="cp-plan" id="cp-publications" role="tabpanel" aria-label="${state.tab === 'drafts' ? 'Черновики' : 'Контент-план'}">${listHead}
       ${!days.length ? `<p class="cp-note">${allDays.length ? 'В этом списке пока нет публикаций.' : 'Плана пока нет. Нажмите «+ Новый», чтобы заполнить анкету и сформировать план.'}</p>` : ''}
-      ${state.view === 'full' ? sheet(days, platforms, status) : `${days.length ? '<div class="cp-thead" aria-hidden="true"><span>Дата</span><span>Тема</span><span>Площадки</span><span>Статус</span><span></span></div>' : ''}
+      ${state.view === 'full' ? (days.length ? sheet(days, platforms, status) : '') : `${days.length ? '<div class="cp-thead" aria-hidden="true"><span>Дата</span><span>Тема</span><span>Площадки</span><span>Статус</span><span></span></div>' : ''}
       <ol class="cp-list">${days.map((idea) => {
         /* Макет Влада 07.11: дата и статус; тема со стрелкой ▾/▴ (не кнопка-стрелка — раскрывает вся карточка, кроме кнопок);
            ниже «Сменить статус ▾» и значки площадок. На ПК те же элементы стоят колонками таблицы. */
@@ -238,9 +239,15 @@
           ${open ? full(idea, edit, st, status, archiving) : ''}
           <div class="cp-acts"><span class="cp-btns">${owner && mentor.plan?.revision && st !== 'empty' && st !== 'excluded' ? `<button type="button" class="cp-act" data-cp-menu${hasIdeaId(idea) ? '' : ' disabled'} aria-haspopup="menu" aria-expanded="${rowOpen('menuOpen', idea)}">Сменить статус ▾</button>` : ''}${archiving ? `<button type="button" class="cp-act cp-remove" data-cp-remove${hasIdeaId(idea) ? '' : ' disabled'} aria-expanded="${rowOpen('removeOpen', idea)}" aria-label="${esc('Убрать «' + idea.topic + '» в архив')}">Убрать</button>` : ''}</span>${nets(idea, platformLabel)}</div>
           ${owner && rowOpen('menuOpen', idea) ? rowMenu(idea, st) : ''}${archiving && rowOpen('removeOpen', idea) ? removeForm(idea) : ''}</li>`; }).join('')}</ol>`}</section>`;
+    // Прежние темы доступны для чтения, но не получают фиктивные ключи или действия строки.
+    const legacy = state.tab === 'plan' && legacyDays.length ? `<details class="cp-card" data-cp-legacy${state.legacyOpen ? ' open' : ''}>
+      <summary>Старые темы без номера (${legacyDays.length})</summary>
+      <p class="cp-note">Эти темы созданы до обновления плана; изменить их нельзя</p>
+      <ol class="cp-archive-list">${legacyDays.map(idea => `<li class="cp-arow"><div class="cp-arow-main"><span class="cp-date">${esc(day(idea.date))}</span>
+        <b class="cp-arow-topic">${esc(idea.topic || 'Без темы')}</b><span class="cp-note">${esc(platforms(idea))}</span></div></li>`).join('')}</ol></details>` : '';
     const keepScroll = container.querySelector('.cp-list')?.scrollTop || 0;
     container.innerHTML = `<section class="cp" data-cp-layout="plan">${head}
-      ${plan}${approve}
+      ${plan}${approve}${legacy}
       <p class="cp-error" data-cp-error role="alert" hidden></p>${questionnaire}</section>`;
     container.querySelectorAll('[data-edit] textarea').forEach(n => { const key = n.closest('[data-edit]').dataset.edit + ':' + n.name; if (drafts.has(key)) n.value = drafts.get(key); });
     wire();
@@ -703,6 +710,9 @@
     root.querySelector('[data-cp="generate"]')?.addEventListener('click', (event) => void generate(event.currentTarget));
     root.querySelector('[data-cp="settings"]')?.addEventListener('click', () => ctx.navigate('settings/content'));
     root.querySelector('.cp-approve')?.addEventListener('toggle', (event) => { state.approveOpen = event.currentTarget.open; });
+    root.querySelector('[data-cp-legacy]')?.addEventListener('toggle', (event) => {
+      if (state?.container === root && root.querySelector('[data-cp-legacy]') === event.currentTarget) state.legacyOpen = event.currentTarget.open;
+    });
     root.querySelectorAll('[data-cp-tab]').forEach(button => button.onclick = () => { state.tab = button.dataset.cpTab; state.feedReset = true; draw(); root.querySelector(`[data-cp-tab="${state.tab}"]`)?.focus(); });
     root.querySelector('[data-cp-sort-toggle]')?.addEventListener('click', () => { state.sortOpen = !state.sortOpen; draw(); root.querySelector('[data-cp-sort-toggle]')?.focus(); });
     root.querySelectorAll('[data-cp-sort]').forEach(button => button.onclick = () => {
