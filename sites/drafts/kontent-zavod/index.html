@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>Контент-завод: инструкция · Монтаж с телефона</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap">
+<meta name="description" content="Пошаговая инструкция редактору ТайСабай: подключения, контент-план, съёмка, монтаж, постинг и статистика.">
+<title>Контент-завод: полная инструкция для редактора ТайСабай</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap">
 <style>
   *{box-sizing:border-box} body{margin:0} img{max-width:100%} [hidden]{display:none!important}
   :root {
@@ -34,7 +35,7 @@
   p { margin: 0 0 12px; max-width: 62ch; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
   .short { margin-top: 26px; }
-  .short h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+  .short h2, .short h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
   .short ol { margin: 0; padding-left: 22px; }
   .short li { margin: 6px 0; }
   .legend { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; padding: 14px 16px; background: var(--mark-soft); border-radius: 14px; }
@@ -45,7 +46,7 @@
   .step { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; margin-top: 44px; padding-top: 36px; border-top: 1px solid var(--line); }
   .step > div { min-width: 0; }
   .num { display: inline-block; font: 800 15px/1 Manrope, Inter, sans-serif; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 7px 12px; margin-bottom: 12px; }
-  .step h2 { font-size: clamp(22px, 4.2vw, 28px); font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+  .step h2, .step h3 { font-size: clamp(22px, 4.2vw, 28px); font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
   .step ul { margin: 0 0 12px; padding-left: 20px; max-width: 62ch; }
   .step li { margin: 6px 0; }
   .m { display: inline-block; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--mark); color: #fff; font: 700 13px/22px Inter, system-ui, sans-serif; text-align: center; vertical-align: 2px; }
@@ -77,27 +78,163 @@
     table { min-width: 0; font-size: 15px; }
     td:first-child { white-space: normal; }
   }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <p class="eyebrow">ТайСабай · Контент-завод · Монтаж</p>
-    <h1>Монтаж с телефона: как поправить ролик</h1>
-    <p class="lead">Вы решаете, какие фразы останутся в ролике, пишете пожелания и отправляете всё монтажёру одной кнопкой. Монтировать самому ничего не нужно.</p>
 
-    <nav class="card short parts" aria-label="Части инструкции">
-      <h2>Части инструкции</h2>
-      <ol>
-        <li>Контент-план — готовится</li>
-        <li>Съёмка — готовится</li>
-        <li><strong>Монтаж — на этой странице</strong></li>
-        <li>Постинг: текст, дата и площадки — готовится</li>
-        <li>Подключения и статистика — готовится</li>
-      </ol>
-    </nav>
-    <section class="card short">
-      <h2>Весь путь за минуту</h2>
+  a { color: var(--accent); text-underline-offset: .18em; overflow-wrap: anywhere; }
+  a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  [id] { scroll-margin-top: 20px; }
+  .current { margin-top: 24px; border-left: 5px solid var(--accent); }
+  .current h2 { font-size: 22px; line-height: 1.3; margin-bottom: 12px; }
+  .current p:last-child { margin-bottom: 0; }
+  .examples { margin-top: 16px; color: var(--muted); }
+  .toc-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
+  .toc-list a { display: block; padding-block: 6px; }
+  .chapter { margin-top: 64px; }
+  .chapter-head h2 { font-size: clamp(28px, 5.2vw, 36px); line-height: 1.2; margin-bottom: 14px; }
+  .chapter-head > p:last-child { margin-bottom: 0; color: var(--muted); }
+  .flow { font-family: Manrope, Inter, system-ui, sans-serif; font-weight: 700; margin: 18px 0; }
+  .roles { margin: 0; padding-left: 22px; }
+  .roles li { margin: 10px 0; max-width: 66ch; }
+  .owner { display: inline-block; margin: 0 0 12px 8px; padding: 7px 10px; border-radius: 999px; background: var(--note); border: 1px solid var(--note-line); font-size: 15px; line-height: 1; font-weight: 600; }
+  .back-top { position: fixed; z-index: 5; right: max(12px, env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 16px; font-weight: 600; text-decoration: none; }
+  .foot { padding-bottom: 24px; }
+  @media (max-width: 760px) { .toc-list { grid-template-columns: minmax(0, 1fr); } .owner { margin-left: 0; margin-right: 8px; } }
+  @media print { .back-top { display: none; } .step, figure { break-inside: avoid; } }
+</style>
+</head><body><main class="wrap">
+<header id="top">
+  <p class="eyebrow">ТайСабай · Контент-завод</p>
+  <h1>Контент-завод: инструкция</h1>
+  <p class="lead">От первой темы до выхода ролика: что нажимать и что вы увидите.</p>
+  <section class="card current" id="now" aria-labelledby="now-title"><h2 id="now-title">Что работает в ТайСабай уже сейчас</h2><p>Монтаж, правки и чат уже работают. Публикации на площадки пока выкладывает Claude после вашего «Берём». План через Хью, съёмка, постинг по расписанию и статистика показаны так, как они устроены; в ТайСабай они заработают после того, как владелец подключит площадки и утвердит план — об этом сообщим отдельно.</p></section>
+  <p class="examples">На снимках — учебные примеры</p>
+  <nav class="card short" aria-label="Оглавление"><h2>Оглавление</h2><ol class="toc-list" start="0"><li><a href="#overview">Как всё устроено</a></li><li><a href="#connections">Подключения</a></li><li><a href="#plan">Контент-план</a></li><li><a href="#shooting">Съёмка</a></li><li><a href="#montage">Монтаж с телефона</a></li><li><a href="#posting">Постинг: текст, площадки и время</a></li><li><a href="#stats">Статистика</a></li><li><a href="#help">Если что-то не получается</a></li></ol></nav>
+  <div class="legend"><span class="dot">1</span><p>Красные цифры и рамки на снимках показывают, куда нажимать. В самом кабинете их нет.</p></div>
+  <div class="where"><p><strong>Где это.</strong> Откройте <a href="https://synapse.synapsebusiness.ru/cabinet.html">кабинет</a>, выберите проект «ТайСабай» и найдите «Контент-завод» в меню.</p></div>
+</header>
+<section class="chapter card" id="overview" aria-labelledby="overview-title">
+  <header class="chapter-head"><p class="eyebrow">Раздел 0</p><h2 id="overview-title">Как всё устроено</h2></header>
+  <p class="flow">План → Съёмка → Монтаж → Постинг → Статистика</p>
+  <ul class="roles">
+    <li><strong>Вы, редактор:</strong> готовите темы и материалы, проверяете ролик, пишете правки и выбираете «Берём» для подходящей версии.</li>
+    <li><strong>Владелец:</strong> подключает площадки, согласовывает план и публикации; его действия ниже помечены «Делает владелец».</li>
+    <li><strong>Claude:</strong> отвечает на вопросы в общем чате компании и пока выкладывает публикации после вашего «Берём».</li>
+  </ul>
+  <div class="note"><p>В «Контент-плане» вы готовите темы и дни работы. Точная дата и час выхода ролика задаются отдельно — в карточке публикации в «Постинге».</p></div>
+</section>
+<section class="chapter" id="connections" aria-labelledby="connections-title">
+<header class="chapter-head"><p class="eyebrow">Раздел 1</p><h2 id="connections-title">Подключения</h2><p>Владелец настраивает площадки перед началом работы. Ссылка на аккаунт и надпись «Настроено, данных нет» сами по себе ещё не подтверждают возможность выпуска ролика.</p></header>
+
+  <section class="step" id="connections-01">
+    <div><span class="num">Шаг 1</span><span class="owner">Делает владелец</span><h3>Откройте «Подключения»</h3><p>Выберите «Подключения» в меню Контент-завода. Увидите карточки площадок и их состояние: подключено, частично или не подключено.</p></div>
+    <figure><img class="phone" src="img/c01-platforms.jpg" alt="Состояние площадок" width="780" height="1688" loading="lazy"><figcaption>Состояние площадок</figcaption></figure>
+  </section>
+  <section class="step" id="connections-02">
+    <div><span class="num">Шаг 2</span><span class="owner">Делает владелец</span><h3>Узнайте, чего не хватает</h3><p>Нажмите «Подробнее» у нужной площадки. В карточке раскроются причина текущего состояния и подсказка, что нужно сделать.</p></div>
+    <figure><img class="phone" src="img/c02-details.jpg" alt="Пояснение в карточке площадки" width="780" height="1688" loading="lazy"><figcaption>Пояснение в карточке площадки</figcaption></figure>
+  </section>
+  <section class="step" id="connections-03">
+    <div><span class="num">Шаг 3</span><span class="owner">Делает владелец</span><h3>Перейдите к подключению площадки</h3><p>Нажмите «Подключить» у нужной площадки и выполните подсказки открывшейся настройки. После подключения владелец проверяет доступ к нужному аккаунту и возможность выпуска роликов.</p></div>
+    <figure><img class="phone" src="img/c03-owner-connect.jpg" alt="Кнопка перехода к настройке" width="780" height="1688" loading="lazy"><figcaption>Кнопка перехода к настройке</figcaption></figure>
+  </section>
+</section>
+<section class="chapter" id="plan" aria-labelledby="plan-title">
+<header class="chapter-head"><p class="eyebrow">Раздел 2</p><h2 id="plan-title">Контент-план</h2><p>Здесь вы собираете темы, сценарии и тексты для площадок; Хью помогает предложить темы по анкете. Можно начать через Хью или добавить уже готовую таблицу.</p></header>
+
+  <section class="step" id="plan-01">
+    <div><span class="num">Шаг 1</span><h3>Начните новый план</h3><p>Откройте «Контент-план» и нажмите «+ Новый». Появится анкета для будущего плана.</p></div>
+    <figure><img class="phone" src="img/p01-plan.jpg" alt="Вход в анкету" width="780" height="1688" loading="lazy"><figcaption>Вход в анкету</figcaption></figure>
+  </section>
+  <section class="step" id="plan-02">
+    <div><span class="num">Шаг 2</span><h3>Расскажите о проекте</h3><p>Заполните цели, аудиторию, тон, рубрики, частоту публикаций, кто будет в кадре и ограничения. В заголовке увидите, сколько полей уже заполнено.</p></div>
+    <figure><img class="phone" src="img/p02-questionnaire.jpg" alt="Поля анкеты" width="780" height="1688" loading="lazy"><figcaption>Поля анкеты</figcaption></figure>
+  </section>
+  <section class="step" id="plan-03">
+    <div><span class="num">Шаг 3</span><h3>Выберите площадки для плана</h3><p>Отметьте площадки, для которых нужны темы, и дождитесь надписи «Сохранено». Анкета сохраняется сама; выбор площадки здесь ещё не подключает её аккаунт.</p></div>
+    <figure><img class="phone" src="img/p03-platforms.jpg" alt="Площадки и подтверждение сохранения" width="780" height="1688" loading="lazy"><figcaption>Площадки и подтверждение сохранения</figcaption></figure>
+  </section>
+  <section class="step" id="plan-04">
+    <div><span class="num">Шаг 4</span><h3>Попросите Хью предложить темы</h3><p>Укажите дату начала и выберите 7 или 14 дней, затем нажмите «Сформировать план через Хью». Под анкетой появится список предложений.</p></div>
+    <figure><img class="phone" src="img/p04-generate.jpg" alt="Начало, число дней и кнопка Хью" width="780" height="1688" loading="lazy"><figcaption>Начало, число дней и кнопка Хью</figcaption></figure>
+  </section>
+  <section class="step" id="plan-05">
+    <div><span class="num">Шаг 5</span><h3>Добавьте предложения в план</h3><p>Прочитайте темы и нажмите кнопку «Добавить … в план» под списком. Эти темы появятся в «Контент-плане».</p></div>
+    <figure><img class="phone" src="img/p05-proposals.jpg" alt="Добавление предложений" width="780" height="1688" loading="lazy"><figcaption>Добавление предложений</figcaption></figure>
+  </section>
+  <section class="step" id="plan-06">
+    <div><span class="num">Шаг 6</span><h3>Другой способ: загрузите готовую таблицу</h3><p>Если план уже готов, вместо создания через Хью раскройте «Импортировать план из CSV / XLSX» и выберите файл таблицы. В предпросмотре укажите, что находится в каждом столбце, проверьте строки и нажмите «Добавить в план».</p></div>
+    <figure><img class="phone" src="img/p06-import.jpg" alt="Выбор файла готового плана" width="780" height="1688" loading="lazy"><figcaption>Выбор файла готового плана</figcaption></figure>
+  </section>
+  <section class="step" id="plan-07">
+    <div><span class="num">Шаг 7</span><span class="owner">Делает владелец</span><h3>Сохраните ссылку на общую таблицу</h3><p>Нажмите «Указать таблицу». Откроются «Настройки → Контент»: сохраните там ссылку для команды, а сами темы добавьте через Хью или из файла.</p></div>
+    <figure><img class="phone" src="img/p07-sheet-link.jpg" alt="Переход к настройке ссылки" width="780" height="1688" loading="lazy"><figcaption>Переход к настройке ссылки</figcaption></figure>
+  </section>
+  <section class="step" id="plan-08">
+    <div><span class="num">Шаг 8</span><h3>Прочитайте сценарий темы</h3><p>Нажмите название темы в плане. Развернутся сценарий по сценам, реплики и сведения о подготовке ролика.</p></div>
+    <figure><img class="phone" src="img/p08-script.jpg" alt="Раскрытая тема со сценарием" width="780" height="1688" loading="lazy"><figcaption>Раскрытая тема со сценарием</figcaption></figure>
+  </section>
+  <section class="step" id="plan-09">
+    <div><span class="num">Шаг 9</span><h3>Исправьте сценарий, если нужно</h3><p>Раскройте «Изменить сценарий», отредактируйте реплики и сохраните изменения кнопкой в форме. Обновлённую тему снова передайте владельцу на согласование.</p></div>
+    <figure><img class="phone" src="img/p16-edit-script.jpg" alt="Форма изменения сценария" width="780" height="1688" loading="lazy"><figcaption>Форма изменения сценария</figcaption></figure>
+  </section>
+  <section class="step" id="plan-10">
+    <div><span class="num">Шаг 10</span><h3>Проверьте тексты для площадок</h3><p>В раскрытой теме найдите «Текст публикации» и выберите площадку. Увидите подпись, подготовленную именно для неё.</p></div>
+    <figure><img class="phone" src="img/p09-texts.jpg" alt="Подписи к ролику по площадкам" width="780" height="1688" loading="lazy"><figcaption>Подписи к ролику по площадкам</figcaption></figure>
+  </section>
+  <section class="step" id="plan-11">
+    <div><span class="num">Шаг 11</span><h3>Поправьте подпись</h3><p>Нажмите «Изменить текст», внесите правки и нажмите «Сохранить текст». Изменённую подпись нужно согласовать заново.</p></div>
+    <figure><img class="phone" src="img/p10-edit-text.jpg" alt="Редактирование подписи" width="780" height="1688" loading="lazy"><figcaption>Редактирование подписи</figcaption></figure>
+  </section>
+  <section class="step" id="plan-12">
+    <div><span class="num">Шаг 12</span><span class="owner">Делает владелец</span><h3>Согласуйте тему или верните её на правку</h3><p>Нажмите «Сменить статус» под темой и выберите «Согласовано» или «Внести правки». У темы появится новое состояние.</p></div>
+    <figure><img class="phone" src="img/p11-owner-decision.jpg" alt="Решение по теме" width="780" height="1688" loading="lazy"><figcaption>Решение по теме</figcaption></figure>
+  </section>
+  <section class="step" id="plan-13">
+    <div><span class="num">Шаг 13</span><span class="owner">Делает владелец</span><h3>Отметьте согласование всего плана</h3><p>После проверки тем раскройте «Согласование плана целиком» и поставьте свою отметку «Владелец». Когда собраны нужные согласования, одобренные видеотемы становятся доступны в «Съёмке».</p></div>
+    <figure><img class="phone" src="img/p12-signoff.jpg" alt="Отметка согласующего" width="780" height="1688" loading="lazy"><figcaption>Отметка согласующего</figcaption></figure>
+  </section>
+  <section class="step" id="plan-14">
+    <div><span class="num">Шаг 14</span><h3>Загляните в черновики</h3><p>Откройте вкладку «Черновики». Там собраны темы, которые пока хранятся как черновики, отдельно от основного списка.</p></div>
+    <figure><img class="phone" src="img/p13-drafts.jpg" alt="Вкладка черновиков" width="780" height="1688" loading="lazy"><figcaption>Вкладка черновиков</figcaption></figure>
+  </section>
+  <section class="step" id="plan-15">
+    <div><span class="num">Шаг 15</span><h3>Уберите ненужную тему в архив</h3><p>Нажмите «Убрать» у темы, прочитайте подтверждение и подтвердите действие. Тема перейдёт в «Архив» и больше не будет участвовать в текущем согласовании и съёмке.</p></div>
+    <figure><img class="phone" src="img/p14-archive-confirm.jpg" alt="Подтверждение переноса темы в архив" width="780" height="1688" loading="lazy"><figcaption>Подтверждение переноса темы в архив</figcaption></figure>
+  </section>
+  <section class="step" id="plan-16">
+    <div><span class="num">Шаг 16</span><h3>Верните тему из архива</h3><p>Откройте «Архив» и нажмите «Вернуть» у нужной темы. После восстановления проверьте её место в плане и необходимость нового согласования.</p></div>
+    <figure><img class="phone" src="img/p15-restore.jpg" alt="Восстановление темы" width="780" height="1688" loading="lazy"><figcaption>Восстановление темы</figcaption></figure>
+  </section>
+</section>
+<section class="chapter" id="shooting" aria-labelledby="shooting-title">
+<header class="chapter-head"><p class="eyebrow">Раздел 3</p><h2 id="shooting-title">Съёмка</h2><p>Здесь находятся согласованные видеотемы плана. Материалы загружайте в нужную тему или сцену — так они сохранят связь со сценарием.</p></header>
+<div class="note"><p>Если день съёмки и срок подготовки не заданы, попросите владельца заполнить их в «Настройки → Контент». Загрузка исходников ещё не означает, что новая версия ролика смонтирована.</p></div>
+  <section class="step" id="shooting-01">
+    <div><span class="num">Шаг 1</span><h3>Откройте тему для съёмки</h3><p>После согласования плана откройте «Съёмку» и нажмите название нужного ролика. Развернётся его сценарий.</p></div>
+    <figure><img class="phone" src="img/s01-reels.jpg" alt="Согласованные ролики" width="780" height="1688" loading="lazy"><figcaption>Согласованные ролики</figcaption></figure>
+  </section>
+  <section class="step" id="shooting-02">
+    <div><span class="num">Шаг 2</span><h3>Сверьтесь со сценами и сроками</h3><p>Пролистайте раскрытый сценарий: проверьте день съёмки, срок подготовки, кто в кадре и блок «До съёмки». У каждой сцены увидите реплику и описание того, что показать.</p></div>
+    <figure><img class="phone" src="img/s02-script.jpg" alt="Полный сценарий и подготовка" width="780" height="1688" loading="lazy"><figcaption>Полный сценарий и подготовка</figcaption></figure>
+  </section>
+  <section class="step" id="shooting-03">
+    <div><span class="num">Шаг 3</span><h3>Запустите суфлёр</h3><p>Нажмите «Суфлёр», затем кнопку запуска. Откроются реплики, по которым можно читать текст во время съёмки.</p></div>
+    <figure><img class="phone" src="img/s03-prompter.jpg" alt="Суфлёр с управлением" width="780" height="1688" loading="lazy"><figcaption>Суфлёр с управлением</figcaption></figure>
+  </section>
+  <section class="step" id="shooting-04">
+    <div><span class="num">Шаг 4</span><h3>Посмотрите раскадровку</h3><p>Нажмите «Раскадровка» и посмотрите, что должно попасть в каждый кадр. Кнопка «Загрузить» внутри кадра позволяет добавить дубль именно к нему.</p></div>
+    <figure><img class="phone" src="img/s04-board.jpg" alt="Раскадровка — тестовая версия" width="780" height="1688" loading="lazy"><figcaption>Раскадровка — тестовая версия</figcaption></figure>
+  </section>
+  <section class="step" id="shooting-05">
+    <div><span class="num">Шаг 5</span><h3>Добавьте видео к нужной теме</h3><p>Чтобы добавить материал к теме целиком, нажмите «Загрузить материал» в её карточке и выберите файл. Для отдельной сцены используйте её кнопку «Загрузить».</p></div>
+    <figure><img class="phone" src="img/s05-upload.jpg" alt="Загрузка материала в выбранную тему" width="780" height="1688" loading="lazy"><figcaption>Загрузка материала в выбранную тему</figcaption></figure>
+  </section>
+  <section class="step" id="shooting-06">
+    <div><span class="num">Шаг 6</span><h3>Проверьте, что файл принят</h3><p>Дождитесь завершения загрузки и откройте список файлов в этой же теме. Увидите имя принятого дубля; новую версию ролика затем готовит монтажёр.</p></div>
+    <figure><img class="phone" src="img/s06-files.jpg" alt="Принятый дубль" width="780" height="1688" loading="lazy"><figcaption>Принятый дубль</figcaption></figure>
+  </section>
+</section>
+<section class="chapter" id="montage" aria-labelledby="montage-title"><header class="chapter-head"><p class="eyebrow">Раздел 4</p><h2 id="montage-title">Монтаж с телефона: как поправить ролик</h2><p>Вы решаете, какие фразы останутся в ролике, пишете пожелания и отправляете всё монтажёру одной кнопкой. Монтировать самим ничего не нужно.</p></header>    <section class="card short">
+      <h3>Весь путь за минуту</h3>
       <ol>
         <li>Откройте ролик со статусом «Выберите фразы».</li>
         <li>Посмотрите его и уберите лишние фразы.</li>
@@ -105,15 +242,12 @@
         <li>Проверьте список «Что поменять» и нажмите «Отправить монтажёру».</li>
         <li>Ждите новую версию в этой же карточке.</li>
       </ol>
-      <div class="legend"><span class="dot">1</span><p>Красные цифры и рамки на снимках показывают, куда нажимать. В самом кабинете их нет.</p></div>
       <div class="where"><p><strong>Где это.</strong> Кабинет <span class="btn url">synapse.synapsebusiness.ru/cabinet.html</span> → проект «ТайСабай» → в меню «Контент-завод» → «Монтаж».</p></div>
     </section>
-  </header>
-
-  <section class="step">
+  <section class="step" id="montage-01" data-original-montage="1">
     <div>
       <span class="num">Шаг 1</span>
-      <h2>Откройте ролик</h2>
+      <h3>Откройте ролик</h3>
       <p>На экране «Монтаж» лежат ролики со съёмки. Под названием — статус. «Выберите фразы» значит, что ролик ждёт вас.</p>
       <ul>
         <li><span class="m">1</span> Нажмите на ролик — откроется его карточка.</li>
@@ -121,13 +255,12 @@
       <p>Статусы меняются так: «Выберите фразы» → «У монтажёра» → «Монтаж на согласовании».</p>
       <div class="note"><p>Кнопку «Убрать» справа от названия не трогайте: она убирает весь ролик в архив, а не фразу.</p></div>
     </div>
-    <figure><img class="phone" src="img/01-list.jpg" alt="Экран «Монтаж»: четыре ролика, первый обведён рамкой" width="780" height="1688" ><figcaption>Список роликов</figcaption></figure>
+    <figure><img class="phone" src="img/01-list.jpg" alt="Экран «Монтаж»: четыре ролика, первый обведён рамкой" width="780" height="1688" loading="lazy"><figcaption>Список роликов</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-02" data-original-montage="2">
     <div>
       <span class="num">Шаг 2</span>
-      <h2>Посмотрите ролик</h2>
+      <h3>Посмотрите ролик</h3>
       <p>Сверху закреплён плеер, он остаётся на месте, пока вы листаете фразы.</p>
       <ul>
         <li><span class="m">1</span> «Смотреть» проигрывает ролик так, как он получится: убранные фразы пропускаются. «С начала» возвращает к первой секунде.</li>
@@ -135,13 +268,12 @@
       </ul>
       <p>Строка «В ролике 20 из 30 фраз» показывает, сколько фраз сейчас оставлено.</p>
     </div>
-    <figure><img class="phone" src="img/02-card.jpg" alt="Карточка ролика: плеер, кнопка «Смотреть» и начало списка фраз" width="780" height="1688" ><figcaption>Карточка ролика</figcaption></figure>
+    <figure><img class="phone" src="img/02-card.jpg" alt="Карточка ролика: плеер, кнопка «Смотреть» и начало списка фраз" width="780" height="1688" loading="lazy"><figcaption>Карточка ролика</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-03" data-original-montage="3">
     <div>
       <span class="num">Шаг 3</span>
-      <h2>Уберите лишние фразы</h2>
+      <h3>Уберите лишние фразы</h3>
       <p>У каждой фразы справа две кнопки.</p>
       <ul>
         <li><span class="m">1</span> «−» убирает фразу из ролика. У убранной фразы кнопка меняется на «+» — он возвращает её обратно.</li>
@@ -150,13 +282,12 @@
       <p>Зелёная полоска слева — фраза в ролике. Серая строка — фраза убрана. Паузы и куски без слов убраны заранее, их можно вернуть тем же «+».</p>
       <div class="note"><p>Само видео при этом не режется и не портится. Это только пометки — любую можно отменить.</p></div>
     </div>
-    <figure><img class="phone" src="img/03-phrases.jpg" alt="Список фраз: у шестой фразы кнопка «плюс», у восьмой выключен звук" width="780" height="1688" ><figcaption>Фраза 6 убрана, у фразы 8 выключен звук</figcaption></figure>
+    <figure><img class="phone" src="img/03-phrases.jpg" alt="Список фраз: у шестой фразы кнопка «плюс», у восьмой выключен звук" width="780" height="1688" loading="lazy"><figcaption>Фраза 6 убрана, у фразы 8 выключен звук</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-04" data-original-montage="4">
     <div>
       <span class="num">Шаг 4</span>
-      <h2>Нажмите на текст фразы</h2>
+      <h3>Нажмите на текст фразы</h3>
       <p>Если нажать не на кнопки, а на сами слова, снизу выедет шторка этой фразы.</p>
       <ul>
         <li><span class="m">1</span> «Показать в плеере» — плеер перейдёт к этой фразе, даже если она убрана. Удобно, чтобы послушать и решить.</li>
@@ -164,13 +295,12 @@
       </ul>
       <p>Крестик в углу закрывает шторку.</p>
     </div>
-    <figure><img class="phone" src="img/04-phrase-sheet.jpg" alt="Шторка «Фраза 9» с кнопками «Показать в плеере» и «Пожелание к этой фразе»" width="780" height="1688" ><figcaption>Шторка фразы</figcaption></figure>
+    <figure><img class="phone" src="img/04-phrase-sheet.jpg" alt="Шторка «Фраза 9» с кнопками «Показать в плеере» и «Пожелание к этой фразе»" width="780" height="1688" loading="lazy"><figcaption>Шторка фразы</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-05" data-original-montage="5">
     <div>
       <span class="num">Шаг 5</span>
-      <h2>Добавьте пожелания к монтажу</h2>
+      <h3>Добавьте пожелания к монтажу</h3>
       <p>Пролистайте фразы до конца — под ними шесть плиток <span class="m">1</span>. Каждая открывает шторку с готовыми вариантами и полем для пояснения.</p>
       <div class="tbl">
         <table>
@@ -187,13 +317,12 @@
       </div>
       <p>Пожеланий может быть несколько, до двадцати на одну отправку.</p>
     </div>
-    <figure><img class="phone" src="img/05-tiles.jpg" alt="Шесть плиток пожеланий под списком фраз" width="780" height="1688" ><figcaption>Плитки пожеланий</figcaption></figure>
+    <figure><img class="phone" src="img/05-tiles.jpg" alt="Шесть плиток пожеланий под списком фраз" width="780" height="1688" loading="lazy"><figcaption>Плитки пожеланий</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-06" data-original-montage="6">
     <div>
       <span class="num">Шаг 6</span>
-      <h2>Пример: врезка поверх голоса</h2>
+      <h3>Пример: врезка поверх голоса</h3>
       <p>Нажмите плитку «Врезка». В шторке:</p>
       <ul>
         <li>«От фразы» и «До фразы» — на каком куске ролика показать врезку.</li>
@@ -204,28 +333,26 @@
       <p>Остальные плитки устроены так же: выбрали вариант, при желании дописали пояснение, нажали «Добавить пожелание».</p>
     </div>
     <div class="pair">
-      <figure><img class="phone" src="img/06-insert.jpg" alt="Шторка «Врезка»: выбраны фразы 9–10 и написано, что показать" width="780" height="1688" ><figcaption>Врезка на фразы 9–10</figcaption></figure>
-      <figure><img class="phone" src="img/06b-music.jpg" alt="Шторка «Музыка на фон» с вариантами: добавить, убрать, тише, громче" width="780" height="1688" ><figcaption>Музыка на фон</figcaption></figure>
+      <figure><img class="phone" src="img/06-insert.jpg" alt="Шторка «Врезка»: выбраны фразы 9–10 и написано, что показать" width="780" height="1688" loading="lazy"><figcaption>Врезка на фразы 9–10</figcaption></figure>
+      <figure><img class="phone" src="img/06b-music.jpg" alt="Шторка «Музыка на фон» с вариантами: добавить, убрать, тише, громче" width="780" height="1688" loading="lazy"><figcaption>Музыка на фон</figcaption></figure>
     </div>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-07" data-original-montage="7">
     <div>
       <span class="num">Шаг 7</span>
-      <h2>Проверьте, что уйдёт монтажёру</h2>
+      <h3>Проверьте, что уйдёт монтажёру</h3>
       <p>Под плитками собирается список «Что поменять» <span class="m">1</span>. В нём одной строкой написано, сколько фраз убрано и где выключен звук, а ниже — каждое пожелание.</p>
       <ul>
         <li><span class="m">2</span> Крестик справа снимает пожелание, если передумали.</li>
       </ul>
       <p>Прочитайте список целиком: монтажёр получит ровно это.</p>
     </div>
-    <figure><img class="phone" src="img/07-summary.jpg" alt="Список «Что поменять»: строка про фразы и три пожелания с крестиками" width="780" height="1688" ><figcaption>Список «Что поменять»</figcaption></figure>
+    <figure><img class="phone" src="img/07-summary.jpg" alt="Список «Что поменять»: строка про фразы и три пожелания с крестиками" width="780" height="1688" loading="lazy"><figcaption>Список «Что поменять»</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-08" data-original-montage="8">
     <div>
       <span class="num">Шаг 8</span>
-      <h2>Отправьте одной кнопкой</h2>
+      <h3>Отправьте одной кнопкой</h3>
       <p>Внизу экрана всегда видны две кнопки.</p>
       <ul>
         <li><span class="m">1</span> «Отправить монтажёру» — отправляет сразу и фразы, и все пожелания. Кнопка серая, пока вы ничего не изменили.</li>
@@ -233,58 +360,167 @@
       </ul>
       <div class="note"><p>Отправка ничего не публикует в соцсети. Ролик уходит только монтажёру.</p></div>
     </div>
-    <figure><img class="phone" src="img/08-send.jpg" alt="Кнопки «Отправить монтажёру» и «Вернуть как было» внизу экрана" width="780" height="1688" ><figcaption>Отправка</figcaption></figure>
+    <figure><img class="phone" src="img/08-send.jpg" alt="Кнопки «Отправить монтажёру» и «Вернуть как было» внизу экрана" width="780" height="1688" loading="lazy"><figcaption>Отправка</figcaption></figure>
   </section>
-
-  <section class="step">
+  <section class="step" id="montage-09" data-original-montage="9">
     <div>
       <span class="num">Шаг 9</span>
-      <h2>Что будет дальше</h2>
+      <h3>Что будет дальше</h3>
       <p>Внизу появится строка «Отправлено монтажёру…» с датой и временем <span class="m">1</span>. Статус ролика сменится на «У монтажёра».</p>
       <p>В блоке «Просьбы по этому ролику» видна ваша правка: что вы просили и её состояние — «принято», потом «в работе», потом «готово, посмотрите». Ответ монтажёра появится там же.</p>
       <ul>
         <li>Пока правка у монтажёра, менять фразы нельзя.</li>
-        <li>Ошиблись — нажмите «Отменить просьбу», поправьте и отправьте заново. Отмена срабатывает сразу, без вопроса.</li>
+        <li>Если ошиблись и кнопка «Отменить просьбу» доступна, нажмите её и подтвердите отмену — подробнее ниже.</li>
       </ul>
       <div class="note"><p>Новая версия появляется не сразу, срок на экране не показывается. Обновлять страницу каждую минуту не нужно.</p></div>
     </div>
     <div class="pair">
-      <figure><img class="phone" src="img/09-sent.jpg" alt="Строка «Отправлено монтажёру» внизу карточки" width="780" height="1688" ><figcaption>Подтверждение отправки</figcaption></figure>
-      <figure><img class="phone" src="img/09b-request.jpg" alt="Просьба «Правка монтажа» со статусом «принято» и списком пожеланий" width="780" height="1688" ><figcaption>Ваша правка и её статус</figcaption></figure>
+      <figure><img class="phone" src="img/09-sent.jpg" alt="Строка «Отправлено монтажёру» внизу карточки" width="780" height="1688" loading="lazy"><figcaption>Подтверждение отправки</figcaption></figure>
+      <figure><img class="phone" src="img/09b-request.jpg" alt="Просьба «Правка монтажа» со статусом «принято» и списком пожеланий" width="780" height="1688" loading="lazy"><figcaption>Ваша правка и её статус</figcaption></figure>
     </div>
   </section>
-
-  <section class="step">
-    <div>
-      <span class="num">Если сломалось</span>
-      <h2>Сообщите о проблеме</h2>
-      <p>Ролик не запускается, кнопка не нажимается, пропали фразы — это не к монтажёру.</p>
-      <ul>
-        <li><span class="m">1</span> Нажмите «Сообщить о проблеме» — кнопка есть в карточке ролика и вверху экрана «Монтаж».</li>
-        <li>Напишите коротко, что не работает, и нажмите «Отправить».</li>
-      </ul>
-      <p>Появится «Отправлено, задача №…». Сообщение уходит в поддержку кабинета, а не в очередь монтажа.</p>
-    </div>
-    <div class="pair">
-      <figure><img class="phone" src="img/10-problem-button.jpg" alt="Кнопка «Сообщить о проблеме» в карточке ролика" width="780" height="1688" ><figcaption>Кнопка в карточке</figcaption></figure>
-      <figure><img class="phone" src="img/11-problem-form.jpg" alt="Форма «Сообщить о проблеме» с полем «Что не работает?»" width="780" height="1688" ><figcaption>Форма сообщения</figcaption></figure>
-    </div>
+  <section class="step" id="montage-after-01">
+    <div><span class="num">После отправки · шаг 1</span><h3>Сверьте изменения в отправленной просьбе</h3><p>Откройте «Просьбы по этому ролику» и найдите свою просьбу. Строки «Возвращено фраз» и «Убрано фраз» показывают, что изменилось именно в ней, а не сколько всего фраз осталось в ролике.</p></div>
+    <figure><img class="phone" src="img/m01-request-changes.jpg" alt="Изменения фраз в отправленной просьбе" width="780" height="1688" loading="lazy"><figcaption>Изменения фраз в отправленной просьбе</figcaption></figure>
   </section>
-
-  <section class="faq">
-    <h2>Частые вопросы</h2>
-    <dl>
-      <div><dt>Я случайно убрал нужную фразу. Она пропала?</dt><dd>Нет. Нажмите «+» в её строке — фраза вернётся. До отправки можно сбросить всё кнопкой «Вернуть как было».</dd></div>
-      <div><dt>Закрыл карточку и не отправил. Всё потерялось?</dt><dd>Несохранённые пометки и пожелания остаются, пока открыта эта вкладка кабинета. Если вкладку закрыть, придётся отметить заново.</dd></div>
-      <div><dt>Можно отправить только пожелание, не трогая фразы?</dt><dd>Да. Достаточно одного пожелания — кнопка «Отправить монтажёру» станет активной.</dd></div>
-      <div><dt>Где публикация и «Берём / Не берём»?</dt><dd>Они появятся в этой же карточке под строкой «Публикация и решение», когда у ролика будет собранная версия монтажа. У исходника их нет, чтобы не мешали.</dd></div>
-      <div><dt>Уйдёт ли что-то в Instagram само?</dt><dd>Нет. На этом экране ничего не публикуется.</dd></div>
-    </dl>
+  <section class="step" id="montage-after-02">
+    <div><span class="num">После отправки · шаг 2</span><h3>Подтвердите отмену, если ошиблись</h3><p>Если у просьбы есть кнопка «Отменить просьбу», нажмите её и выберите «Да, отменить». Чтобы сохранить просьбу, нажмите «Оставить просьбу».</p></div>
+    <figure><img class="phone" src="img/m02-cancel-confirm.jpg" alt="Подтверждение отмены просьбы" width="780" height="1688" loading="lazy"><figcaption>Подтверждение отмены просьбы</figcaption></figure>
   </section>
+  <section class="step" id="montage-after-03">
+    <div><span class="num">После отправки · шаг 3</span><h3>Откройте ответ и новую версию</h3><p>Если рядом с «Монтажом» появилась цифра, откройте раздел и ролик с отметкой «Новая версия» или «Новый ответ». В карточке прочитайте ответ на свою просьбу и выберите новую версию, чтобы посмотреть результат.</p></div>
+    <figure><img class="phone" src="img/m03-new-version.jpg" alt="Ролик с отметкой «Новая версия»" width="780" height="1688" loading="lazy"><figcaption>Ролик с отметкой «Новая версия»</figcaption></figure>
+  </section>
+</section>
+<section class="chapter" id="posting" aria-labelledby="posting-title">
+<header class="chapter-head"><p class="eyebrow">Раздел 5</p><h2 id="posting-title">Постинг: от «Берём» до выхода</h2><p>Ниже — путь выпуска по расписанию после подключения площадок. Согласование темы в контент-плане и решение «Берём» не заменяют согласование конкретной публикации.</p></header>
+<div class="note"><p>Главное расписание для выхода ролика — дата и час в его карточке публикации. «Настройки модуля» задают режим и общие пожелания; кнопка «Поставить в план» добавляет конкретную карточку в очередь.</p></div>
+  <section class="step" id="posting-01">
+    <div><span class="num">Шаг 1</span><h3>Выберите «Берём» для готовой версии</h3><p>В «Монтаже» выберите готовую версию, раскройте «Публикация и решение», отметьте «Берём» и нажмите «Сохранить». Решение появится в карточке ролика.</p></div>
+    <figure><img class="phone" src="img/t00a-take.jpg" alt="Решение по готовой версии" width="780" height="1688" loading="lazy"><figcaption>Решение по готовой версии</figcaption></figure>
+  </section>
+  <section class="step" id="posting-02">
+    <div><span class="num">Шаг 2</span><h3>Создайте публикацию из ролика</h3><p>В этом же блоке отметьте площадки и нажмите «Создать публикацию». Появится отдельный черновик с выбранным видео; нажмите «Открыть в „Постинге“».</p></div>
+    <figure><img class="phone" src="img/t00b-create-post.jpg" alt="Площадки и создание черновика" width="780" height="1688" loading="lazy"><figcaption>Площадки и создание черновика</figcaption></figure>
+  </section>
+  <section class="step" id="posting-03">
+    <div><span class="num">Шаг 3</span><h3>Откройте созданный черновик</h3><p>В ленте «Постинга» нажмите название черновика или «Открыть публикацию». Откроется редактор, а под карточкой будет видно, чего ещё не хватает для выпуска.</p></div>
+    <figure><img class="phone" src="img/t01-draft.jpg" alt="Черновик в ленте" width="780" height="1688" loading="lazy"><figcaption>Черновик в ленте</figcaption></figure>
+  </section>
+  <section class="step" id="posting-04">
+    <div><span class="num">Шаг 4</span><h3>Проверьте название</h3><p>Посмотрите первое поле редактора и при необходимости исправьте название ролика. Для коротких видео YouTube это название используется в заголовке.</p></div>
+    <figure><img class="phone" src="img/t02-editor.jpg" alt="Название в редакторе публикации" width="780" height="1688" loading="lazy"><figcaption>Название в редакторе публикации</figcaption></figure>
+  </section>
+  <section class="step" id="posting-05">
+    <div><span class="num">Шаг 5</span><h3>Назначьте дату и час выхода</h3><p>Укажите нужную дату и время. Проверьте часовой пояс проекта — он указан рядом с полем времени.</p></div>
+    <figure><img class="phone" src="img/t03-datetime.jpg" alt="Дата, время и часовой пояс" width="780" height="1688" loading="lazy"><figcaption>Дата, время и часовой пояс</figcaption></figure>
+  </section>
+  <section class="step" id="posting-06">
+    <div><span class="num">Шаг 6</span><h3>Напишите общую подпись</h3><p>Введите текст, который должен выйти вместе с видео. Он будет общей подписью для площадок без своего отдельного текста.</p></div>
+    <figure><img class="phone" src="img/t04-text.jpg" alt="Общий текст публикации" width="780" height="1688" loading="lazy"><figcaption>Общий текст публикации</figcaption></figure>
+  </section>
+  <section class="step" id="posting-07">
+    <div><span class="num">Шаг 7</span><h3>Добавьте отдельные подписи, если нужны</h3><p>Разверните блок с подписями площадок и заполните текст для нужной площадки. Он заменит общую подпись только для неё.</p></div>
+    <figure><img class="phone" src="img/t05-captions.jpg" alt="Отдельные тексты для площадок" width="780" height="1688" loading="lazy"><figcaption>Отдельные тексты для площадок</figcaption></figure>
+  </section>
+  <section class="step" id="posting-08">
+    <div><span class="num">Шаг 8</span><h3>Проверьте, куда выйдет ролик</h3><p>Отметьте только нужные площадки. Для каждой из них должен быть подключён подходящий аккаунт компании.</p></div>
+    <figure><img class="phone" src="img/t06a-platforms.jpg" alt="Выбранные площадки публикации" width="780" height="1688" loading="lazy"><figcaption>Выбранные площадки публикации</figcaption></figure>
+  </section>
+  <section class="step" id="posting-09">
+    <div><span class="num">Шаг 9</span><h3>Выберите, кто увидит видео в TikTok</h3><p>В поле «Кто увидит» выберите нужную видимость. Если нужен публичный выпуск, проверьте, что выбран вариант для всех зрителей.</p></div>
+    <figure><img class="phone" src="img/t06-privacy.jpg" alt="Видимость видео в TikTok" width="780" height="1688" loading="lazy"><figcaption>Видимость видео в TikTok</figcaption></figure>
+  </section>
+  <section class="step" id="posting-10">
+    <div><span class="num">Шаг 10</span><h3>Сохраните черновик</h3><p>Нажмите «Сохранить черновик». Изменения сохранятся, но публикация ещё не уйдёт на площадки.</p></div>
+    <figure><img class="phone" src="img/t07-save.jpg" alt="Кнопка сохранения" width="780" height="1688" loading="lazy"><figcaption>Кнопка сохранения</figcaption></figure>
+  </section>
+  <section class="step" id="posting-11">
+    <div><span class="num">Шаг 11</span><h3>Посмотрите предпросмотр</h3><p>Нажмите «Предпросмотр» и проверьте видео, подписи и площадки. Здесь же увидите замечания, если для выпуска чего-то не хватает.</p></div>
+    <figure><img class="phone" src="img/t08-preview.jpg" alt="Проверка перед согласованием" width="780" height="1688" loading="lazy"><figcaption>Проверка перед согласованием</figcaption></figure>
+  </section>
+  <section class="step" id="posting-12">
+    <div><span class="num">Шаг 12</span><h3>Передайте публикацию на согласование</h3><p>После проверки нажмите «Отправить на согласование». Карточка будет ждать решения согласующего.</p></div>
+    <figure><img class="phone" src="img/t09-review.jpg" alt="Отправка на согласование" width="780" height="1688" loading="lazy"><figcaption>Отправка на согласование</figcaption></figure>
+  </section>
+  <section class="step" id="posting-13">
+    <div><span class="num">Шаг 13</span><span class="owner">Делает владелец</span><h3>Согласуйте именно эту публикацию</h3><p>Откройте подготовленную карточку и нажмите «Согласовать». Увидите подтверждение для текущего видео, текста и выбранных площадок.</p></div>
+    <figure><img class="phone" src="img/t10-owner.jpg" alt="Решение по публикации" width="780" height="1688" loading="lazy"><figcaption>Решение по публикации</figcaption></figure>
+  </section>
+  <section class="step" id="posting-14">
+    <div><span class="num">Шаг 14</span><h3>Найдите готовую карточку</h3><p>Вернитесь в ленту «Постинга» и найдите ролик в блоке «Готово к выходу». Эта отметка означает готовность, но ещё не постановку в очередь.</p></div>
+    <figure><img class="phone" src="img/t11-ready.jpg" alt="Готовность к выходу" width="780" height="1688" loading="lazy"><figcaption>Готовность к выходу</figcaption></figure>
+  </section>
+  <section class="step" id="posting-15">
+    <div><span class="num">Шаг 15</span><h3>Вернитесь в редактор готовой карточки</h3><p>Нажмите готовую карточку, затем «Открыть в редакторе». Снова увидите поля публикации и действия с её расписанием.</p></div>
+    <figure><img class="phone" src="img/t11b-open-editor.jpg" alt="Переход из просмотра в редактор" width="780" height="1688" loading="lazy"><figcaption>Переход из просмотра в редактор</figcaption></figure>
+  </section>
+  <section class="step" id="posting-16">
+    <div><span class="num">Шаг 16</span><h3>Выберите выпуск по расписанию</h3><p>Откройте «Постинг» → «Настройки модуля» → «Подготовка и выпуск» и выберите «По расписанию». В этом режиме согласованные публикации можно отдельно ставить в план.</p></div>
+    <figure><img class="phone" src="img/t15-workflow.jpg" alt="Режим выпуска" width="780" height="1688" loading="lazy"><figcaption>Режим выпуска</figcaption></figure>
+  </section>
+  <section class="step" id="posting-17">
+    <div><span class="num">Шаг 17</span><h3>Сохраните настройки выпуска</h3><p>Укажите желаемые часы публикаций, затем пролистайте блок до кнопки сохранения и нажмите её. Эти часы — общий ориентир: точное время каждого ролика задаётся в его карточке.</p></div>
+    <figure><img class="phone" src="img/t16-hours.jpg" alt="Общие пожелания по часам" width="780" height="1688" loading="lazy"><figcaption>Общие пожелания по часам</figcaption></figure>
+  </section>
+  <section class="step" id="posting-18">
+    <div><span class="num">Шаг 18</span><h3>Поставьте публикацию в очередь</h3><p>Вернитесь к согласованной карточке, проверьте её дату и время, откройте актуальный «Предпросмотр» и нажмите «Поставить в план». Появится подтверждение, что материал запланирован.</p></div>
+    <figure><img class="phone" src="img/t12-schedule.jpg" alt="Постановка в план" width="780" height="1688" loading="lazy"><figcaption>Постановка в план</figcaption></figure>
+  </section>
+  <section class="step" id="posting-19">
+    <div><span class="num">Шаг 19</span><h3>Сверьте очередь</h3><p>Откройте список запланированных публикаций и найдите свой ролик. Проверьте день, время и площадки именно в его карточке.</p></div>
+    <figure><img class="phone" src="img/t13-queue.jpg" alt="Запланированный выход" width="780" height="1688" loading="lazy"><figcaption>Запланированный выход</figcaption></figure>
+  </section>
+  <section class="step" id="posting-20">
+    <div><span class="num">Шаг 20</span><h3>Проверьте выход на площадки</h3><p>Когда наступит назначенное время, кабинет начнёт отправку запланированного материала. Откройте карточку и проверьте результат и ссылку для каждой площадки: один успешный выход ещё не означает, что ролик вышел везде.</p></div>
+    <figure><img class="phone" src="img/t14-published.jpg" alt="Результаты выхода и ссылки" width="780" height="1688" loading="lazy"><figcaption>Результаты выхода и ссылки</figcaption></figure>
+  </section>
+  <section class="step" id="posting-21">
+    <div><span class="num">Шаг 21</span><h3>Добавьте вводные для следующих тем</h3><p>В «Настройках модуля» раскройте «Уточнить план», добавьте частые вопросы покупателей и другие вводные, затем сохраните блок. Эти сведения не меняют назначенное время роликов в «Постинге».</p></div>
+    <figure><img class="phone" src="img/t17-refine.jpg" alt="Дополнительные вводные для плана" width="780" height="1688" loading="lazy"><figcaption>Дополнительные вводные для плана</figcaption></figure>
+  </section>
+</section>
+<section class="chapter" id="stats" aria-labelledby="stats-title">
+<header class="chapter-head"><p class="eyebrow">Раздел 6</p><h2 id="stats-title">Статистика</h2><p>Здесь смотрят результаты вышедших публикаций. Если раздел недоступен, попросите владельца проверить ваш доступ.</p></header>
 
-  <div class="foot">
-    <p>Снимки сделаны 21.11.2026 на версии экрана, выпущенной в рабочий кабинет в этот же день, с настоящими фразами ролика «Приехали на месяц — и не уехали». Время отправки и номер задачи на снимках условные.</p>
-  </div>
-</div>
-</body>
-</html>
+  <section class="step" id="stats-01">
+    <div><span class="num">Шаг 1</span><h3>Откройте общую статистику</h3><p>Откройте «Статистику»: на вкладке «Все» увидите общую сводку и список публикаций. Вкладки рядом позволяют выбрать отдельную площадку.</p></div>
+    <figure><img class="phone" src="img/x01-summary.jpg" alt="Общая сводка" width="780" height="1688" loading="lazy"><figcaption>Общая сводка</figcaption></figure>
+  </section>
+  <section class="step" id="stats-02">
+    <div><span class="num">Шаг 2</span><h3>Посмотрите сводку площадок</h3><p>Разверните «Площадки за период». Знак «—» означает, что данных пока нет, а не нулевой результат.</p></div>
+    <figure><img class="phone" src="img/x02-accounts.jpg" alt="Показатели площадок за период" width="780" height="1688" loading="lazy"><figcaption>Показатели площадок за период</figcaption></figure>
+  </section>
+  <section class="step" id="stats-03">
+    <div><span class="num">Шаг 3</span><h3>Выберите одну площадку</h3><p>Нажмите вкладку нужной площадки, например IG для Instagram. Список публикаций и показатели будут относиться к ней.</p></div>
+    <figure><img class="phone" src="img/x03-instagram.jpg" alt="Статистика выбранной площадки" width="780" height="1688" loading="lazy"><figcaption>Статистика выбранной площадки</figcaption></figure>
+  </section>
+  <section class="step" id="stats-04">
+    <div><span class="num">Шаг 4</span><h3>Смените период</h3><p>Нажмите значок календаря и выберите 7, 14, 30 или 90 дней. На экране появятся данные за выбранный промежуток.</p></div>
+    <figure><img class="phone" src="img/x04-period.jpg" alt="Выбор периода статистики" width="780" height="1688" loading="lazy"><figcaption>Выбор периода статистики</figcaption></figure>
+  </section>
+</section>
+<section class="chapter" id="help" aria-labelledby="help-title">
+<header class="chapter-head"><p class="eyebrow">Раздел 7</p><h2 id="help-title">Если что-то не получается</h2><p>Если проблема связана с роликом, используйте кнопку в «Монтаже»; вопросы по остальным разделам можно задать в общем чате компании.</p></header>
+
+  <section class="step" id="help-01">
+    <div><span class="num">Шаг 1</span><h3>Сообщите о проблеме с роликом</h3><p>Нажмите «Сообщить о проблеме» в карточке ролика или вверху «Монтажа», опишите, что не работает, и нажмите «Отправить». Появится подтверждение «Отправлено, задача №…».</p></div>
+    <div class="pair"><figure><img class="phone" src="img/10-problem-button.jpg" alt="Где сообщить о проблеме с роликом" width="780" height="1688" loading="lazy"><figcaption>Где сообщить о проблеме с роликом</figcaption></figure><figure><img class="phone" src="img/11-problem-form.jpg" alt="Описание проблемы и отправка" width="780" height="1688" loading="lazy"><figcaption>Описание проблемы и отправка</figcaption></figure></div>
+  </section>
+  <section class="step" id="help-02">
+    <div><span class="num">Шаг 2</span><h3>Напишите в общий чат компании</h3><p>Откройте «Чаты» → «Общий чат компании» и напишите, на каком шаге вы остановились. Ваш вопрос увидит команда; здесь отвечает Claude.</p></div>
+    <figure><img class="phone" src="img/h01-company-chat.jpg" alt="Общий чат компании" width="780" height="1688" loading="lazy"><figcaption>Общий чат компании</figcaption></figure>
+  </section>
+</section>
+<section class="faq" aria-labelledby="faq-title"><h2 id="faq-title">Частые вопросы</h2><dl>
+<div><dt>Случайно убрали нужную фразу?</dt><dd>Нажмите «+» в её строке — фраза вернётся. До отправки можно сбросить пометки и пожелания кнопкой «Вернуть как было».</dd></div>
+<div><dt>Можно отправить только пожелание, не меняя фразы?</dt><dd>Да. Добавьте хотя бы одно пожелание — кнопка «Отправить монтажёру» станет доступна.</dd></div>
+<div><dt>Не видите «Публикация и решение» и «Берём»?</dt><dd>Они появляются у собранной версии монтажа. У исходного видео этого блока нет.</dd></div>
+<div><dt>«Отправить монтажёру» сразу публикует ролик?</dt><dd>Нет. Эта кнопка передаёт правки монтажёру; выход на площадки — отдельное действие.</dd></div>
+<div><dt>В плане стоит дата — ролик точно выйдет в этот день?</dt><dd>Для выхода по расписанию нужны подключённые площадки, согласованная публикация с точной датой и часом и действие «Поставить в план». Одна дата темы в контент-плане этого не заменяет.</dd></div>
+<div><dt>«Поставить в план» недоступно?</dt><dd>Откройте «Предпросмотр» и прочитайте, чего не хватает. После изменения текста, видео или площадок сохраните карточку и заново проверьте согласование.</dd></div>
+<div><dt>Неясно, ушла ли публикация?</dt><dd>Посмотрите результат отдельно для каждой площадки в карточке. Если есть кнопка «Проверить результат в сервисе», используйте её; при непонятном результате напишите в общий чат компании.</dd></div>
+<div><dt>Нет нужного раздела или кнопки?</dt><dd>Напишите в общий чат компании, что хотели сделать и что видите. Подключения и согласования, помеченные «Делает владелец», выполняет владелец.</dd></div>
+</dl></section>
+<footer class="foot"><p>Инструкция обновлена 22 ноября 2026 года. В вашем кабинете будут ваши ролики, даты и результаты — ориентируйтесь на названия разделов и кнопок.</p></footer>
+</main><a class="back-top" href="#top" aria-label="Наверх, к началу инструкции">↑ Наверх</a></body></html>
