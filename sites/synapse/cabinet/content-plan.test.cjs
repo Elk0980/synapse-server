@@ -14,7 +14,7 @@ const idea = (n, extra = {}) => ({ ideaId: `s-${n}`, date: `2026-11-1${n}`, plat
   topic: `SAMPLE тема ${n}`, hook: 'SAMPLE хук', script: 'Мастер: Здравствуйте!\nКлиент: <b>Привет</b>\nПауза, смех',
   broll: 'SAMPLE руки', style: 'SAMPLE тёплый свет', props: 'SAMPLE халат', filmingBy: 'SAMPLE оператор', variants: { vk: { text: 'SAMPLE подпись', contentRevision: 1 } }, ...extra });
 
-function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null, withKit = false, variants = null, mentorExtra = {}, planExtra = {} } = {}) {
+function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stage = 'approval', withRegistry = true, settings = undefined, view = '', qPlatforms = ['vk'], briefPlatforms = ['vk'], suggest = null, withKit = false, variants = null, mentorExtra = {}, planExtra = {}, signoffsExtra = {} } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://cabinet.test/', runScripts: 'outside-only' });
   const { window } = dom, calls = [], opened = [];
   const db = {
@@ -24,7 +24,7 @@ function api({ plan = [idea(1), idea(2)], role = 'owner', permissions = [], stag
     questionnaire: { companyCode: 'alpha', revision: 3, filled: 1, total: 8, updatedAt: null, updatedBy: '', rules: ['Цены — только подтверждённые.'],
       fields: { goals: 'SAMPLE цель', audience: '', tone: '', rubrics: '', frequency: '', onCamera: '', constraints: '', platforms: qPlatforms } },
     signoffs: { companyCode: 'alpha', approversSource: 'stub', planRevision: plan.length ? 4 : 0, briefRevision: 2, stage: plan.length ? stage : 'none',
-      approvers: [{ slot: 'owner', label: 'Владелец', checked: false, actorName: '', canCheck: role === 'owner' }], ideas: 2, approvedIdeas: 1, emptyIdeas: [] },
+      approvers: [{ slot: 'owner', label: 'Владелец', checked: false, actorName: '', canCheck: role === 'owner' }], ideas: 2, approvedIdeas: 1, emptyIdeas: [], ...signoffsExtra },
   };
   const reply = (method, p, body) => {
     calls.push({ path: p, method, body: plain(body) });
@@ -72,12 +72,11 @@ test('№289: отсутствующий или пустой ideaId не рас�
     assert.equal(a.root.querySelectorAll('[aria-expanded="true"]').length, 0);
   };
   closed();
-  for (const row of [...a.root.querySelectorAll('.cp-row')].slice(0, 4)) {
-    for (const button of row.querySelectorAll('[data-cp-menu], [data-cp-remove]')) {
-      assert.equal(button.disabled, true);
-      button.click();
-    }
-  }
+  assert.equal(a.root.querySelectorAll('.cp-row').length,2);
+  const legacy=a.root.querySelector('[data-cp-legacy]');
+  assert.equal(legacy.open,false);assert.equal(legacy.querySelectorAll('li').length,4);
+  assert.equal(legacy.querySelectorAll('button, form, input, textarea, [data-idea]').length,0);
+  legacy.querySelector('li').click();
   closed();
   assert.equal(a.calls.some(c => c.method !== 'GET'), false);
   const click = (id, selector) => a.root.querySelector(`[data-idea="${id}"] ${selector}`).click();
@@ -94,6 +93,48 @@ test('№289: отсутствующий или пустой ideaId не рас�
   await a.mount();
   closed();
   a.def().unmount(); a.window.close();
+});
+
+test('№289/2257: только7 старых тем — пустой основной список, свёрнутый блок внизу, серверные счётчики0/0 и данные прежние',async t=>{
+  for(const view of ['', 'full']) {
+    const plan=[undefined,null,'','   ',0,42,false].map((ideaId,n)=>idea(n+1,{ideaId,topic:n===0?'<img src=x onerror=alert(1)>':'Старая тема '+n}));
+    const before=JSON.stringify(plan),a=api({plan,view,withKit:true,signoffsExtra:{ideas:0,approvedIdeas:0}});
+    t.after(()=>{a.def().unmount();a.window.close();});await a.mount();
+    assert.equal(a.root.querySelectorAll('.cp-row, .cp-sheet tbody tr').length,0);
+    const block=a.root.querySelector('[data-cp-legacy]');assert.equal(block.open,false);
+    assert.equal(block.querySelector('summary').textContent,'Старые темы без номера (7)');
+    assert.equal(block.querySelector('p').textContent,'Эти темы созданы до обновления плана; изменить их нельзя');
+    assert.equal(block.querySelectorAll('li').length,7);assert.equal(block.querySelector('img'),null);
+    assert.equal(block.querySelector('b').textContent,'<img src=x onerror=alert(1)>');
+    assert.equal(block.querySelectorAll('button, form, input, textarea, [data-idea]').length,0);
+    assert.ok(a.root.querySelector('.cp-approve').compareDocumentPosition(block)&a.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.match(a.root.querySelector('.cp-approve summary').textContent,/0 из 0/);
+    block.open=true;block.dispatchEvent(new a.window.Event('toggle'));block.querySelector('li').click();
+    assert.equal(a.calls.some(c=>c.method!=='GET'),false);assert.equal(JSON.stringify(plan),before);
+    await a.mount();assert.equal(a.root.querySelector('[data-cp-legacy]').open,false,'после восстановления экрана блок свёрнут');
+    block.dispatchEvent(new a.window.Event('toggle')); // запоздавшее событие прежнего экрана не открывает новый
+    a.root.querySelector('[data-cp-tab="plan"]').click();
+    assert.equal(a.root.querySelector('[data-cp-legacy]').open,false);
+  }
+});
+
+test('№289/2257: смешанный план/черновики/таблица и просмотр — без-ID только в старых темах, обычные строки работают',async t=>{
+  const plan=[idea(1,{ideaId:null}),idea(2),idea(3,{productionStatus:'draft'}),idea(4,{ideaId:' ',productionStatus:'draft'})];
+  const before=JSON.stringify(plan),a=api({plan,mentorExtra:{archivedIdeas:[]}});t.after(()=>{a.def().unmount();a.window.close();});await a.mount();
+  assert.deepEqual([...a.root.querySelectorAll('.cp-row')].map(r=>r.dataset.idea),['s-2']);
+  assert.equal(a.root.querySelector('[data-cp-legacy] summary').textContent,'Старые темы без номера (2)');
+  const legacy=a.root.querySelector('[data-cp-legacy]');legacy.open=true;legacy.dispatchEvent(new a.window.Event('toggle'));
+  a.root.querySelector('[data-idea="s-2"] [data-toggle]').click();
+  assert.ok(a.root.querySelector('[data-idea="s-2"] .cp-full'));assert.equal(a.root.querySelector('[data-cp-legacy]').open,true);
+  a.root.querySelector('[data-cp-tab="drafts"]').click();
+  assert.deepEqual([...a.root.querySelectorAll('.cp-row')].map(r=>r.dataset.idea),['s-3']);assert.equal(a.root.querySelector('[data-cp-legacy]'),null);
+  a.root.querySelector('[data-cp-tab="archive"]').click();assert.equal(a.root.querySelector('[data-cp-legacy]'),null);
+  a.root.querySelector('[data-cp-tab="plan"]').click();assert.equal(a.root.querySelector('[data-cp-legacy] li').textContent.includes('SAMPLE тема 1'),true);
+  const full=api({plan,view:'full',role:'editor',permissions:['autoposting.view']});t.after(()=>{full.def().unmount();full.window.close();});await full.mount();
+  assert.equal(full.root.querySelectorAll('.cp-sheet > tbody > tr').length,1);assert.equal(full.root.querySelector('[data-open-row]').textContent,'№1');
+  assert.equal(full.root.querySelectorAll('[data-cp-legacy] li').length,2);
+  assert.equal(JSON.stringify(plan),before);assert.equal(a.calls.some(c=>c.method!=='GET'),false);
+  assert.equal(full.calls.some(c=>c.method!=='GET'),false);
 });
 // №186: анкета открывается окном поверх (⚙ или «+ Новый»), на вкладке её нет.
 const openQ = (a, sel = '[data-cp="settings-plan"]') => a.root.querySelector(sel).click();
