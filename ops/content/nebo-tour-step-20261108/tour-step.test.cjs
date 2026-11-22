@@ -104,3 +104,40 @@ test('если видео не готово — плавная прокрутк�
   assert.equal(p.win.scrollY, 2247);
   assert.equal(p.video.paused, true);
 });
+
+// ── 15.11.2026: «после одного свайпа сразу начался двигаться кадр» ──
+test('шаг с блока: видео стартует без лишней перемотки (кадр уже на месте)', () => {
+  const p = page();
+  p.wheel(100); p.tick(14000);                     // стоим на втором блоке, кадр выставлен
+  const before = p.video.sets.length;
+  p.wheel(100);
+  assert.equal(p.video.paused, false, 'видео запущено тем же событием');
+  assert.equal(p.video.sets.length, before, 'перемотки перед стартом нет');
+  assert.equal(p.video.playbackRate, 2);
+});
+
+test('палец: шаг начинается на движении 24 px, отпускание не даёт второй шаг', () => {
+  const p = page();
+  const t = (y) => ({ touches: [{ clientY: y, clientX: 100 }], changedTouches: [{ clientY: y, clientX: 100 }] });
+  p.fire('touchstart', t(500));
+  p.fire('touchmove', t(490));
+  assert.equal(p.video.paused, true, '10 px — ещё не шаг');
+  p.fire('touchmove', t(470));
+  assert.equal(p.video.paused, false, '30 px — видео пошло, палец ещё на экране');
+  p.fire('touchmove', t(300));
+  p.fire('touchend', t(300));
+  p.tick(20000);
+  assert.equal(p.win.scrollY, 2247, 'ровно один блок');
+});
+
+test('новый свайп на хвосте инерции срабатывает, сама инерция — нет', () => {
+  const p = page();
+  p.wheel(100); p.tick(14000);                     // на втором блоке
+  p.wheel(100);                                    // свайп к третьему
+  for (const d of [80, 60, 40, 25, 15, 8]) { p.tick(48); p.fire('wheel', { deltaY: d, deltaX: 0 }); }   // затухание
+  p.tick(300);
+  for (const d of [6, 5, 4]) { p.tick(48); p.fire('wheel', { deltaY: d, deltaX: 0 }); }
+  p.tick(48); p.fire('wheel', { deltaY: 90, deltaX: 0 });   // новый свайп без паузы 300 мс
+  p.tick(30000);
+  assert.equal(p.win.scrollY, 6272, 'ушли к четвёртому блоку');
+});
