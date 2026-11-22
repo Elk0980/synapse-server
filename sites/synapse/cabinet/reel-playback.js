@@ -11,12 +11,14 @@ function previewUrl(media){
 function attach(player,media,{signal,onStatus=()=>{}}={}){
   sessions.get(player)?.destroy();
   const url=previewUrl(media);if(!url)return null;
-  let alive=true,timer=null,inflight=null,attempts=0,ready=false,fallback=false,api;
+  let alive=true,timer=null,inflight=null,attempts=0,ready=false,fallback=false,api,state='preparing';
+  const started=performance.now(),MAX_WAIT=60000;
   player.removeAttribute('src');
   const active=()=>alive&&player.isConnected&&!signal?.aborted;
-  const hint=()=>{if(active())onStatus(fallback?FULL_FILE:'Готовим видео для просмотра… После подготовки нажмите «Смотреть».',fallback);};
-  function destroy(){alive=false;clearTimeout(timer);inflight?.abort();signal?.removeEventListener('abort',destroy);player.removeEventListener('error',mediaError);if(sessions.get(player)===api)sessions.delete(player);}
-  function fail(){if(active()){clearTimeout(timer);ready=true;fallback=true;player.src=media;hint();}}
+  const hint=()=>{if(active())onStatus(fallback?FULL_FILE:
+    (state==='queued'||state==='busy'?'Просмотр ждёт очереди':'Готовим просмотр')+' — прошло '+Math.floor((performance.now()-started)/1000)+' с. После подготовки нажмите «Смотреть».',fallback);};
+  function destroy(){alive=false;clearTimeout(timer);clearInterval(progress);inflight?.abort();signal?.removeEventListener('abort',destroy);player.removeEventListener('error',mediaError);if(sessions.get(player)===api)sessions.delete(player);}
+  function fail(){if(active()){clearTimeout(timer);clearInterval(progress);ready=true;fallback=true;inflight?.abort();player.src=media;hint();}}
   function mediaError(){if(ready&&!fallback)fail();}
   async function poll(){
     if(!active()){destroy();return;}
@@ -27,12 +29,14 @@ function attach(player,media,{signal,onStatus=()=>{}}={}){
       if(!response.ok||!/^application\/json(?:;|$)/i.test(response.headers.get('content-type')||'')){
         await response.body?.cancel();throw Error('PREVIEW_STATUS_UNAVAILABLE');
       }
-      const state=await response.json();if(!active())return;
-      if(state.state==='ready'){ready=true;player.src=url;onStatus('',false);return;}
-      if(!['queued','preparing','busy'].includes(state.state)||++attempts>=90)throw Error('PREVIEW_FAILED');
+      const result=await response.json();if(!active()||ready)return;state=result.state;
+      if(state==='ready'){ready=true;clearInterval(progress);player.src=url;onStatus('',false);return;}
+      if(!['queued','preparing','busy'].includes(state)||++attempts>=30||performance.now()-started>=MAX_WAIT)throw Error('PREVIEW_FAILED');
+      hint();
       timer=setTimeout(poll,2000);
-    }catch{fail();}finally{clearTimeout(timeout);inflight=null;}
+    }catch{if(!ready)fail();}finally{clearTimeout(timeout);inflight=null;}
   }
+  const progress=setInterval(()=>{if(!active())destroy();else if(!ready){if(performance.now()-started>=MAX_WAIT)fail();else hint();}},1000);
   api={get ready(){return ready;},get fallback(){return fallback;},hint,destroy,retry:()=>{destroy();return attach(player,media,{signal,onStatus});}};
   sessions.set(player,api);player.addEventListener('error',mediaError);signal?.addEventListener('abort',destroy,{once:true});void poll();return api;
 }

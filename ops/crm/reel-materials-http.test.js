@@ -35,6 +35,20 @@ test('Материалы через настоящий CRM: ролик → пр�
   assert.equal((await request('POST',`/internal/reel-materials/edits/${edit.body.edit.id}/claim?companyCode=avokado`,{identity:null})).body.status,'in_progress');
   const v2=await request('POST',`/internal/reel-materials/reels/${reel.body.id}/versions?companyCode=avokado`,{identity:null,body:{mediaUrl:asset('avokado','b'),durationMs:8000,editId:edit.body.edit.id}});
   assert.equal(v2.body.version.version,2);
+  const prepared=[];
+  const previewWorker=require('../content/reel-preview-worker').createReelPreviewWorker({crmUrl:`http://127.0.0.1:${port}`,apiKey:key,
+    previews:{inspect:(code,name)=>{prepared.push({code,name});return {state:'ready'};}}});
+  await previewWorker.tick();previewWorker.close();
+  assert.deepEqual(prepared,[{code:'avokado',name:'b'.repeat(32)+'.mp4'}],'служебная новая версия попала в подготовку без просмотра');
+  const previews=await request('GET','/internal/reel-materials/previews?after=0',{identity:null});
+  assert.equal(previews.status,200);assert.equal(previews.body.items.length,1);
+  assert.equal(previews.body.items[0].fileName,'b'.repeat(32)+'.mp4','только текущая v2, без URL/переписки');
+  assert.deepEqual(Object.keys(previews.body.items[0]).sort(),['companyCode','cursor','fileName']);
+  const after=previews.body.items[0].cursor;
+  assert.deepEqual((await request('GET',`/internal/reel-materials/previews?after=${after}`,{identity:null})).body.items,[]);
+  assert.equal((await request('GET','/internal/reel-materials/previews',{identity:smm})).status,403);
+  assert.equal((await request('GET','/internal/reel-materials/previews?after=-1',{identity:null})).status,400);
+  assert.equal((await request('POST','/internal/reel-materials/previews',{identity:null})).status,405);
   const badVersion=await request('POST',`/internal/reel-materials/reels/${reel.body.id}/versions?companyCode=avokado`,{identity:null,body:{mediaUrl:'https://evil.example/content/publishing-assets/avokado/'+'c'.repeat(32)+'.mp4'}});
   assert.equal(badVersion.status,400,'агент монтажа не может записать версию с чужого хоста');
   assert.equal((await request('GET','/internal/reel-materials/hugh-log?companyCode=avokado&authorId=5',{identity:smm})).status,403,'лог только ключом сервиса');

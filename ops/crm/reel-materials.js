@@ -494,6 +494,22 @@ function createReelMaterials(db,{autoposting,information,mentor,now=Date.now,med
   ext=createReelRequests(db,{autoposting,maxMs:MAX_MS,maxClips:MAX_CLIPS,executor:MONTAGE_EXECUTOR,
     core:{rowFor,liveVersion,transaction,requestEdit,cancelEdit,createPublication,full:(owner,id)=>reelDto(rowAny(owner,id),owner,true)}});
   const notifications=require('./reel-notifications').createReelNotifications(db,{enabled:notificationsEnabled});
-  return {list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog,...ext.api,...notifications};
+  // Только имена локальных файлов текущих версий. Таблица версий — источник очереди и после рестарта content.
+  function previewQueue(after=0){
+    if(!Number.isSafeInteger(after)||after<0)fail(400,'Неверный курсор');
+    const rows=db.prepare(`SELECT v.rowid cursor,c.code companyCode,v.media_url mediaUrl FROM reel_versions v
+      JOIN reel_materials r ON r.id=v.reel_id JOIN companies c ON c.id=r.company_id
+      WHERE v.rowid>? AND c.is_deleted=0 AND r.archived_at IS NULL AND v.archived_at IS NULL
+      AND v.version=(SELECT MAX(current.version) FROM reel_versions current WHERE current.reel_id=r.id AND current.archived_at IS NULL)
+      ORDER BY v.rowid LIMIT 25`).all(after);
+    return {items:rows.map(({cursor,companyCode,mediaUrl})=>{
+      const code=companyCode.toLowerCase();let fileName=null;
+      try{const u=new URL(mediaUrl);if(allowedOrigins.includes(u.origin)&&u.pathname.startsWith('/content/publishing-assets/'+code+'/')){
+        const name=u.pathname.slice(('/content/publishing-assets/'+code+'/').length);if(/^[a-f0-9]{32}\.mp4$/.test(name))fileName=name;
+      }}catch{}
+      return {cursor,companyCode:code,fileName};
+    })};
+  }
+  return {previewQueue,list,get,archive,restore,archiveVersion,restoreVersion,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog,...ext.api,...notifications};
 }
 module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR,DEFAULT_MEDIA_ORIGINS};

@@ -22,6 +22,22 @@ function fixture(){
 }
 const editor={userId:7,userName:'СММ',role:'editor',permissions:new Set(['autoposting.view','autoposting.edit']),companyCodes:new Set(['avokado'])};
 
+test('preview feed: страницы25, новые служебные версии и старые записи, архив/удалённая компания исключены',()=>{
+ const f=fixture();try{
+  const reels=[];for(let i=0;i<27;i++)reels.push(f.materials.create('avokado',{title:'SAMPLE '+i,mediaUrl:asset('avokado')},editor));
+  const first=f.materials.previewQueue();assert.equal(first.items.length,25);
+  const next=f.materials.previewQueue(first.items.at(-1).cursor);assert.equal(next.items.length,2);
+  f.materials.addVersion('avokado',reels[0].id,{mediaUrl:asset('avokado','b')},'SAMPLE');
+  const fresh=f.materials.previewQueue(next.items.at(-1).cursor);assert.equal(fresh.items.length,1);assert.equal(fresh.items[0].fileName,'b'.repeat(32)+'.mp4');
+  f.db.prepare('UPDATE reel_versions SET archived_at=? WHERE reel_id=? AND version=2').run('2026-11-22',reels[0].id);
+  assert.equal(f.materials.previewQueue().items[0].fileName,'a'.repeat(32)+'.mp4','восстановлен прежний текущий файл');
+  f.db.prepare('UPDATE reel_materials SET archived_at=? WHERE id=?').run('2026-11-22',reels[0].id);
+  assert.equal(f.materials.previewQueue().items[0].cursor,2);
+  f.db.exec('UPDATE companies SET is_deleted=1 WHERE id=1');assert.deepEqual(f.materials.previewQueue().items,[]);
+  for(const bad of [-1,NaN,1.5,Infinity])assert.throws(()=>f.materials.previewQueue(bad),{status:400});
+ }finally{f.db.close();}
+});
+
 test('EDL: порядок, обрезка, громкость, титры, обложка и скорость проверяются; ошибки отклоняются',()=>{
   const out=validateEdl(edl(),10000);
   assert.deepEqual(out.video,[{inMs:0,outMs:4000},{inMs:6000,outMs:9000}]);

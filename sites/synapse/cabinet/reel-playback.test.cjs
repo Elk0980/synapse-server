@@ -45,7 +45,21 @@ test('preview fallback: истёк HTTP timeout; исчерпано ожидан
  f.w.setTimeout=(fn,ms)=>ms===2000?(queue.push(fn),23456):nativeSet(fn,ms);
  const ctl=f.api.attach(f.player,media('b'));await settle();
  while(queue.length&&!ctl.ready&&calls<100)await queue.shift()();
- assert.equal(ctl.fallback,true);assert.equal(f.player.src,media('b'));assert.equal(calls,90);assert.equal(queue.length,0);ctl.destroy();
+ assert.equal(ctl.fallback,true);assert.equal(f.player.src,media('b'));assert.equal(calls,30);assert.equal(queue.length,0);ctl.destroy();
+});
+
+test('подготовка: видны очередь и прошедшие секунды; потолок60с действует при зависшем status и защищён от позднего ready',async t=>{
+ let clock=0,progress,respond;const messages=[];
+ const f=fixture(t,async()=>json('queued'));f.w.performance.now=()=>clock;
+ f.w.setInterval=(fn)=>{progress=fn;return 34567;};
+ const ctl=f.api.attach(f.player,media('a'),{onStatus:(text,retry)=>messages.push({text,retry})});await settle();
+ assert.match(messages.at(-1).text,/Просмотр ждёт очереди.*0 с/);clock=12000;progress();assert.match(messages.at(-1).text,/12 с/);
+ f.w.fetch=()=>new Promise(r=>respond=r);
+ // Имитируем продолжение того же открытого сеанса: реальное время, а не число быстрых запросов.
+ clock=60001;progress();assert.equal(ctl.fallback,true);assert.equal(f.player.src,media('a'));assert.equal(messages.at(-1).retry,true);ctl.destroy();
+ const g=fixture(t,()=>new Promise(r=>respond=r));g.w.performance.now=()=>clock;g.w.setInterval=fn=>{progress=fn;return 45678;};
+ const late=g.api.attach(g.player,media('b'));clock+=60001;progress();respond(json('ready'));await settle();
+ assert.equal(late.fallback,true);assert.equal(g.player.src,media('b'),'поздний ready не затирает fallback');late.destroy();
 });
 
 test('preview fallback: ошибка загрузки готовой копии; миниатюра без кеша возвращается к оригиналу один раз',async t=>{

@@ -50,6 +50,12 @@ function createReelMaterialsHandler({materials,companyModuleContext,readJson,sen
       const result=materials.reportProblem(context.company.code,Number(problem[1]),await readJson(request),context.identity);
       send(response,result.duplicate?200:201,result,headers);return true;
     }
+    if(url.pathname==='/internal/reel-materials/previews'){
+      if(!trustedService(request))fail(403,'Только служебный обработчик');
+      if(request.method!=='GET')fail(405,'Метод не поддерживается');
+      const after=url.searchParams.get('after')||'0';if(!/^\d{1,15}$/.test(after))fail(400,'Неверный курсор');
+      send(response,200,materials.previewQueue(Number(after)),{...headers,'cache-control':'no-store'});return true;
+    }
     const agent=INTERNAL_REQUESTS.exec(url.pathname);
     if(agent){
       if(!trustedService(request))fail(403,'Только служебный обработчик');
