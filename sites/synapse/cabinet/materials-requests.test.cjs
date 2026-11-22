@@ -538,7 +538,7 @@ test('№320: неизвестная длительность не блокир�
 test('№320: карточка не назначает тяжёлый src до готовности серверной копии; черновик и плеер сохранены',async t=>{
  let done;const unmarked={version:2,mediaUrl:asset('b'),durationMs:10000};
  const f=fixture({reel:()=>full({currentVersion:unmarked,versions:[unmarked]}),playback:()=>new Promise(r=>done=r)});t.after(()=>f.w.close());
- await f.open();const player=f.el.querySelector('[data-player]');assert.equal(player.hasAttribute('src'),false);assert.match(f.el.querySelector('[data-playback-status]').textContent,/Готовим видео/);
+ await f.open();const player=f.el.querySelector('[data-player]');assert.equal(player.hasAttribute('src'),false);assert.match(f.el.querySelector('[data-playback-status]').textContent,/Готовим просмотр.*0 с/);
  let plays=0;player.play=()=>{plays++;return Promise.resolve();};await f.click('[data-live-play]');assert.equal(plays,0,'подготовка не превращается в отложенный autoplay');
  done({ok:true,headers:{get:()=> 'application/json'},json:async()=>({state:'ready'})});await settle();
  assert.equal(player.src,asset('b')+'?preview=mobile-v1');await f.click('[data-live-play]');assert.equal(plays,1);assert.equal(f.el.querySelector('[data-player]'),player);

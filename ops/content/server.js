@@ -66,6 +66,8 @@ const SESSION_SECRET = resolveSessionSecret({
 }).secret;
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
+const reelPreviewWorker=require('./reel-preview-worker').createReelPreviewWorker({crmUrl:CRM_URL,apiKey:CRM_API_KEY,
+  previews:reelPreviews,allowedCompany:code=>Object.hasOwn(COMPANIES,code),hasSources:()=>fs.existsSync(path.join(ASSETS_DIR,'publishing'))});
 const readCompanyLinks = createCompanyLinksReader({crmUrl: CRM_URL, apiKey: CRM_API_KEY, companies: CONTENT_COMPANIES});
 const publicEmailUnsubscribe = createEmailUnsubscribeProxy({crmUrl: CRM_URL, apiKey: CRM_API_KEY});
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
@@ -1557,12 +1559,14 @@ server.listen(PORT, () => {
   taskDispatchWorker.start();
   montageWatcher.start();
   montageNotifications.start();
+  reelPreviewWorker.start();
   if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
   economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
 });
 
 function shutdownContent() {
+  reelPreviewWorker.close();
   const previewsStopped=reelPreviews.close();
   clearInterval(economyTimer);
   projectChat.stopWorker();
