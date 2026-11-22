@@ -1,7 +1,8 @@
 # Спецификация: просмотр ролика и разметка любой версии
 
-**Ветка**: `codex/montage-phone-segments-320`  
-**Дата**: 2026-11-22  
+**Ветка**: `codex/montage-phone-segments-320`
+
+**Дата**: 2026-11-22
 **Статус**: в работе, задача №320; автор Codex, ревью Claude.
 
 ## User Scenarios & Testing
