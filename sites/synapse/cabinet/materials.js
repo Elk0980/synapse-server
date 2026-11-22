@@ -403,7 +403,7 @@ function create(el, ctx) {
   function cardHtml(item) {
     const media = hasCut(item) ? safeUrl(item.reel.currentVersion.mediaUrl) : "";
     const preview=media&&sb.reelPlayback?.previewUrl(media);
-    const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata" src="${esc(preview?preview+'&cached=1':media)}#t=0.5"></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
+    const thumb = media ? `<span class="mt-thumb"><video muted playsinline preload="metadata"${preview?` data-thumbnail-source="${esc(media)}"`:` src="${esc(media)}#t=0.5"`}></video></span>` : `<span class="mt-thumb mt-thumb--empty" aria-hidden="true">✂</span>`;
     const version = item.reel?.currentVersion ? ` · v${esc(item.reel.currentVersion.version ?? 1)}` : "";
     const when = item.date ? `${esc(dateShort(item.date))}${version}` : `${item.number ? "дата — по плану" : "без даты"}${version}`;
     const note = item.retired ? "" : AT_EDITOR.has(item.stage) ? "Идёт монтаж" : item.group === "ahead" ? "Материалы не загружены" : "";
@@ -430,6 +430,7 @@ function create(el, ctx) {
       box.querySelector("summary").textContent = `Отменённые и заменённые · ${retired.length}`;
       box.querySelector("[data-retired-list]").innerHTML = retired.slice().sort(byDate).map(cardHtml).join("");
     }
+    el.querySelectorAll('video[data-thumbnail-source]').forEach(video=>{sb.reelPlayback.thumbnail(video,video.dataset.thumbnailSource);video.removeAttribute('data-thumbnail-source');});
     if (!items.length) status("Пока нет рилсов: они появятся из контент-плана и после загрузки ролика.");
     const K = kit();
     if (K && items.length) {
@@ -931,13 +932,15 @@ function create(el, ctx) {
     return {total,elapsed:Math.min(total,(Number(player.currentTime)||0)*1000),count:0};
   }
   function playbackError(message="Видео не загрузилось. Проверьте соединение и повторите загрузку.",canRetry=true) {
+    const preview=sb.reelPlayback?.get(el.querySelector('[data-player]'));if(!message&&preview?.fallback){preview.hint();return;}
     setText("[data-playback-status]",message);
     const retry=el.querySelector('[data-playback-retry]');if(retry)retry.hidden=!message||!canRetry;
   }
   function playVideo(player) {
     const preview=sb.reelPlayback?.get(player);if(preview&&!preview.ready){preview.hint();return;}
+    const source=player.getAttribute('src');
     playbackError("");
-    try {player.play()?.catch?.(()=>{if(player.isConnected&&!ctx.signal.aborted)playbackError("Не удалось запустить видео. Нажмите «Повторить загрузку».");});}
+    try {player.play()?.catch?.(()=>{if(player.isConnected&&!ctx.signal.aborted&&source===player.getAttribute('src'))playbackError("Не удалось запустить видео. Нажмите «Повторить загрузку».");});}
     catch(_){playbackError();}
   }
   function paintPlayback(player) {
@@ -1402,7 +1405,7 @@ function create(el, ctx) {
     else if (target.hasAttribute("data-live-save")) void saveLive();
     else if (target.hasAttribute("data-playback-retry")) {
       const player=el.querySelector('[data-player]'),preview=sb.reelPlayback?.get(player);
-      if(preview&&!preview.ready)preview.retry();else if(player){player.load();playVideo(player);}
+      if(preview&&(!preview.ready||preview.fallback))preview.retry();else if(player){player.load();playVideo(player);}
     }
     else if (target.hasAttribute("data-live-play") || target.hasAttribute("data-live-start")) {
       const player = el.querySelector("[data-player]"), live = state.live;if (!player) return;

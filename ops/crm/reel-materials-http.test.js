@@ -63,6 +63,9 @@ test('Материалы через настоящий CRM: ролик → пр�
   const base=`/autoposting/reels/${reel.body.id}`,query='?companyCode=avokado';
   const segments=[{startMs:0,endMs:4000,label:'Начало'},{startMs:4000,endMs:8000,label:'Конец'}];
   assert.equal((await request('POST',`${base}/versions/2/segments${query}`,{identity:smm,body:{segments}})).status,200);
+  assert.equal((await request('POST',`${base}/versions/2/segments${query}`,{identity:smm,body:{segments:segments.slice(0,1)}})).status,400,'2318: кабинетная разметка передаёт полный список до конца ролика');
+  const unchanged=await request('GET',`${base}${query}`,{identity:smm});
+  assert.deepEqual(unchanged.body.versions.find(v=>v.version===2).segments,segments,'неполный список не портит прежнюю разметку');
   const wishes={clientRequestId:'http-wishes',baseVersion:2,segments:segments.map(s=>({startMs:s.startMs,endMs:s.endMs,enabled:true,sound:true})),notes:[{type:'volume',option:'quieter',from:2,to:2}]};
   assert.equal((await request('POST',`${base}/live-edit${query}`,{identity:smm,body:{...wishes,notes:[]}})).status,400);
   const viewer=encode({permissions:['autoposting.view'],companyCodes:['avokado']});

@@ -88,7 +88,7 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   root.innerHTML = `<header class="re-head"><h2 id="re-title" tabindex="-1" data-title></h2><button type="button" class="re-x" data-close aria-label="Закрыть редактор">✕</button></header>
     <div class="re-body">
       <div class="re-stage"><div class="re-screen"><video playsinline preload="metadata" data-player></video>
-        <span class="re-time" data-clock>0:00</span><button type="button" class="re-play" data-play aria-label="Смотреть">▶</button></div><p class="re-status" role="status" data-playback-status></p></div>
+        <span class="re-time" data-clock>0:00</span><button type="button" class="re-play" data-play aria-label="Смотреть">▶</button></div><p class="re-status" role="status" data-playback-status></p><button type="button" class="plain-button" data-playback-retry hidden>Повторить подготовку</button></div>
       <div class="re-side">
         <div class="re-row re-srcbar"><button type="button" class="plain-button" data-sources aria-expanded="false">Исходники ▾</button><span class="muted re-hint">дорожки с отснятыми дублями</span></div>
         <div class="re-tl" data-tl>
@@ -122,7 +122,10 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   host.append(root);
   const $ = selector => root.querySelector(selector), player = $("[data-player]");
   const status = text => {$("[data-status]").textContent = text;};
-  const playbackStatus = text => {$("[data-playback-status]").textContent = text;};
+  const playbackStatus = (text,canRetry=true) => {
+    const preview=sb.reelPlayback?.get(player);if(!text&&preview?.fallback){preview.hint();return;}
+    $("[data-playback-status]").textContent = text;$("[data-playback-retry]").hidden=!text||!canRetry;
+  };
   const play = () => {
     const preview=sb.reelPlayback?.get(player);if(preview&&!preview.ready){preview.hint();return;}
     const source=player.getAttribute('src');
@@ -383,6 +386,7 @@ function open(host, {ctx, reel, version, onChange, number = null, idea = null}) 
   root.addEventListener("click", event => {
     const button = event.target.closest("button");if (!button || !root.contains(button)) return;
     if (button.hasAttribute("data-close")) return close();
+    if (button.hasAttribute("data-playback-retry")) {const preview=sb.reelPlayback?.get(player);if(preview)preview.retry();else{player.load();play();}return;}
     if (button.hasAttribute("data-play")) {if (player.paused) {const preview=sb.reelPlayback?.get(player);if(preview&&!preview.ready)preview.retry();else{if(player.error)player.load();play();}}else player.pause();return;}
     if (button.hasAttribute("data-sources")) return toggleSources();
     if (button.hasAttribute("data-manual")) return toggleManual();

@@ -544,6 +544,27 @@ test('№320: карточка не назначает тяжёлый src до �
  assert.equal(player.src,asset('b')+'?preview=mobile-v1');await f.click('[data-live-play]');assert.equal(plays,1);assert.equal(f.el.querySelector('[data-player]'),player);
 });
 
+test('2318: карточка и миниатюра возвращаются к оригиналу; play не убирает подпись, повтор сохраняет черновик',async t=>{
+ let state='failed';const unmarked={version:2,mediaUrl:asset('b'),durationMs:10000};
+ const f=fixture({reel:()=>full({currentVersion:unmarked,versions:[unmarked]}),playback:async()=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({state})})});t.after(()=>f.w.close());
+ await f.open();const player=f.el.querySelector('[data-player]');let plays=0;player.play=()=>{plays++;player.dispatchEvent(new f.w.Event('playing'));return Promise.resolve();};
+ assert.equal(player.src,asset('b'));assert.equal(f.el.querySelector('[data-live-play]').disabled,false);assert.equal(f.el.querySelector('[data-playback-retry]').hidden,false);
+ const caption=f.el.querySelector('[data-review] textarea');if(caption)caption.value='Сохранённый черновик';
+ await f.click('[data-live-play]');assert.equal(plays,1);assert.equal(f.el.querySelector('[data-playback-status]').textContent,'Показываем полный файл — может грузиться дольше');
+ const thumb=f.el.querySelector('.mt-thumb video');assert.match(thumb.src,/preview=mobile-v1&cached=1/);thumb.dispatchEvent(new f.w.Event('error'));assert.equal(thumb.src,asset('b')+'#t=0.5');
+ state='ready';await f.click('[data-playback-retry]');assert.equal(f.el.querySelector('[data-player]'),player);assert.equal(player.src,asset('b')+'?preview=mobile-v1');
+ assert.equal(f.el.querySelector('[data-playback-status]').textContent,'');assert.equal(f.el.querySelector('[data-playback-retry]').hidden,true);
+ if(caption)assert.equal(caption.value,'Сохранённый черновик');assert.equal(f.calls.filter(c=>c.method!=='GET').length,0);
+});
+
+test('2318: отказ прежнего play копии не затирает подпись уже выбранного оригинала',async t=>{
+ const unmarked={version:2,mediaUrl:asset('b'),durationMs:10000};
+ const f=fixture({reel:()=>full({currentVersion:unmarked,versions:[unmarked]}),playback:async()=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({state:'ready'})})});t.after(()=>f.w.close());await f.open();
+ const player=f.el.querySelector('[data-player]');let reject;player.play=()=>new Promise((resolve,no)=>reject=no);
+ f.el.querySelector('[data-live-play]').click();player.dispatchEvent(new f.w.Event('error'));reject(Error('ABORT_OLD_SOURCE'));await settle();
+ assert.equal(player.src,asset('b'));assert.equal(f.el.querySelector('[data-playback-status]').textContent,'Показываем полный файл — может грузиться дольше');
+});
+
 test('только просмотр: решение, подпись, просьбы и отрезки видны, кнопок изменения нет', async () => {
   const f = fixture({permissions: ['autoposting.view'], reel: () => full({caption: 'Подпись ролика', decisionComment: 'Хороший дубль'})});
   await f.open();
