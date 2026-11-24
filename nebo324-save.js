@@ -32,7 +32,9 @@ async function main() {
   const store = createWorkspaceStore({ db, root: '/data/projects', companies: COMPANIES, audit: auth.audit, sources: {} });
   const row = db.prepare('SELECT * FROM site_workspaces WHERE hostname=?').get(HOST);
   if (!row || row.site_id !== SITE_ID) throw new Error('SITE_NOT_FOUND_OR_MISMATCH');
-  const files = walk(PAYLOAD).sort((a, b) => a.path.localeCompare(b.path));
+  const files = walk(PAYLOAD)
+    .filter((file) => file.path !== 'SHA256SUMS')
+    .sort((a, b) => a.path.localeCompare(b.path));
   if (files.length !== 32 || files.some((file) => file.path === 'SHA256SUMS' || !/^(index\.html|img\/[a-z0-9-]+\.(?:jpg|png|svg)|v\/[a-z0-9-]+\.mp4)$/.test(file.path))) {
     throw new Error(`PAYLOAD_INVALID:${files.length}`);
   }
