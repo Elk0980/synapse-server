@@ -2,8 +2,10 @@
 
 const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
-const { createAuthStore, COMPANIES } = require('/app/auth-store');
-const { createWorkspaceStore } = require('/app/site-workspaces');
+// The deployed content image does not retain the editor helper modules.  This
+// is the historical workspace store, copied alongside this one-off runner;
+// the actual mutation remains its normal `store.save` path.
+const { createWorkspaceStore } = require('/tmp/nebo324/site-workspaces');
 
 const HOST = 'nebo-draft-1.synapsebusiness.ru';
 const SITE_ID = 'site-77e4e3404d3af8980796';
@@ -13,10 +15,20 @@ const mode = process.argv[2] || 'dry';
 function main() {
   const db = new DatabaseSync('/data/content.sqlite');
   db.exec('PRAGMA busy_timeout=10000');
-  const auth = createAuthStore(db, '');
-  const user = auth.getByLogin('vladislav');
-  if (!user) throw new Error('RELEASE_USER_NOT_FOUND');
-  const store = createWorkspaceStore({ db, root: '/data/projects', companies: COMPANIES, audit: auth.audit, sources: {} });
+  const user = db.prepare('SELECT id, login, role FROM auth_users WHERE login=?').get('vladislav');
+  if (!user || user.role !== 'owner') throw new Error('RELEASE_OWNER_NOT_FOUND');
+  user.companyCodes = [];
+  user.permissions = [];
+  const audit = (actorId, targetId, action, details = {}) => db.prepare(
+    'INSERT INTO auth_audit (actor_user_id, target_user_id, action, details_json, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(actorId, targetId || null, action, JSON.stringify(details), new Date().toISOString());
+  const store = createWorkspaceStore({
+    db,
+    root: '/data/projects',
+    companies: { nebo: { name: 'Небо', contentSiteId: null } },
+    audit,
+    sources: {},
+  });
   const row = db.prepare('SELECT * FROM site_workspaces WHERE hostname=?').get(HOST);
   if (!row || row.site_id !== SITE_ID) throw new Error('SITE_NOT_FOUND_OR_MISMATCH');
   const content = fs.readFileSync(INDEX, 'utf8');
