@@ -15,6 +15,10 @@ const mode = process.argv[2] || 'dry';
 function main() {
   const db = new DatabaseSync('/data/content.sqlite');
   db.exec('PRAGMA busy_timeout=10000');
+  if (mode === 'tables') {
+    console.log(JSON.stringify(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()));
+    return;
+  }
   const user = db.prepare('SELECT id, login, role FROM auth_users WHERE login=?').get('vladislav');
   if (!user || user.role !== 'owner') throw new Error('RELEASE_OWNER_NOT_FOUND');
   user.companyCodes = [];
