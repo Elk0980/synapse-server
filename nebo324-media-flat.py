@@ -7,7 +7,20 @@ import stat
 import sys
 
 source = Path('/tmp/nebo324/release-nebo324')
-target = Path('/var/lib/docker/volumes/synapse_content_data/_data/nebo-project-20261020/static/tour-media')
+data = Path('/var/lib/docker/volumes/synapse_content_data/_data')
+site_id = 'site-77e4e3404d3af8980796'
+
+# The public route is served from the active workspace revision.  Resolve that
+# revision from the registry instead of guessing a legacy staging directory.
+import sqlite3
+with sqlite3.connect(data / 'content.sqlite') as db:
+    row = db.execute(
+        'SELECT current_revision FROM site_workspaces WHERE site_id = ?',
+        (site_id,),
+    ).fetchone()
+if not row or not row[0]:
+    raise SystemExit('ACTIVE_WORKSPACE_REVISION_MISSING')
+target = data / 'projects' / 'nebo' / 'sites' / site_id / 'versions' / row[0] / 'tour-media'
 reference = target / 'clouds-desktop.mp4'
 
 if not source.is_dir() or not target.is_dir() or not reference.is_file():
