@@ -16,7 +16,7 @@ function main() {
   const db = new DatabaseSync('/data/crm.sqlite');
   db.exec('PRAGMA busy_timeout=10000');
   if (mode === 'tables') {
-    console.log(JSON.stringify(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()));
+    console.log(JSON.stringify(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '%site%' OR name LIKE '%user%' OR name LIKE '%workspace%' OR name LIKE '%audit%') ORDER BY name").all()));
     return;
   }
   const user = db.prepare('SELECT id, login, role FROM auth_users WHERE login=?').get('vladislav');
