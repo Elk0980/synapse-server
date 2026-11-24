@@ -13,7 +13,7 @@ const INDEX = '/data/tmp/nebo324-index-flat.html';
 const mode = process.argv[2] || 'dry';
 
 function main() {
-  const db = new DatabaseSync('/data/content.sqlite');
+  const db = new DatabaseSync('/data/crm.sqlite');
   db.exec('PRAGMA busy_timeout=10000');
   if (mode === 'tables') {
     console.log(JSON.stringify(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()));
